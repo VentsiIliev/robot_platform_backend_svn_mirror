@@ -1,0 +1,450 @@
+"""
+Refactored Settings Service using Repository Pattern.
+
+This module provides a clean, extensible settings service that uses
+the repository pattern to manage different types of settings.
+"""
+
+from typing import Dict, Any, Optional
+import logging
+
+from core.SettingsRepositoryRegistry import get_settings_repository_registry
+from core.services.settings.interfaces.ISettingsRepository import ISettingsRepository, SettingsRepositoryError
+from core.application.interfaces.application_settings_interface import ApplicationSettingsRegistry
+from communication_layer.api.v1 import Constants
+
+
+class SettingsService:
+    """
+    Refactored settings service using repository pattern.
+    
+    This service provides a clean, extensible way to manage different
+    types of settings by using repositories for each settings type.
+    Adding new settings types is as simple as creating a new repository
+    and registering it.
+    """
+    
+    def __init__(self, settings_file_paths: Dict[str, str], 
+                 settings_registry: ApplicationSettingsRegistry):
+        """
+        Initialize the settings service.
+        
+        Args:
+            settings_file_paths: Dictionary mapping settings types to file paths
+            settings_registry: Registry for application-specific settings
+        """
+        self.settings_file_paths = settings_file_paths or {}
+        self.settings_registry = settings_registry
+        self.logger = logging.getLogger(self.__class__.__name__)
+        
+        # Cache for loaded settings objects - initialize early
+        self._settings_cache: Dict[str, Any] = {}
+        
+        # Get the repository registry
+        self.repository_registry = get_settings_repository_registry()
+        
+        # Create repositories for each configured settings type
+        self.repositories: Dict[str, ISettingsRepository] = {}
+        self._initialize_repositories()
+        
+        # Load all settings
+        self.load_all_settings()
+    
+    def _initialize_repositories(self) -> None:
+        """Initialize repositories for all configured settings types."""
+        for settings_type, file_path in self.settings_file_paths.items():
+            try:
+                if self.repository_registry.is_type_registered(settings_type):
+                    repository = self.repository_registry.create_repository(settings_type, file_path)
+                    self.repositories[settings_type] = repository
+                    print(f"Initialized repository for {settings_type} at {file_path}")
+                else:
+                    print(f"No repository registered for settings type: {settings_type}")
+            except Exception as e:
+                print(f"Failed to initialize repository for {settings_type}: {e}")
+
+
+    def load_all_settings(self) -> None:
+        """Load all settings from their repositories."""
+        for settings_type, repository in self.repositories.items():
+            try:
+                settings = repository.load()
+                self._settings_cache[settings_type] = settings
+                print(f"Loaded {settings_type} settings")
+            except SettingsRepositoryError as e:
+                print(f"Failed to load {settings_type} settings: {e}")
+    
+    def save_all_settings(self) -> None:
+        """Save all settings to their repositories."""
+        for settings_type, repository in self.repositories.items():
+            try:
+                settings = self._settings_cache.get(settings_type)
+                if settings is not None:
+                    repository.save(settings)
+                    self.logger.debug(f"Saved {settings_type} settings")
+            except SettingsRepositoryError as e:
+                print(f"Failed to save {settings_type} settings: {e}")
+    
+    def get_settings(self, settings_type: str) -> Optional[Any]:
+        """
+        Get settings object for a specific type.
+        
+        Args:
+            settings_type: The settings type identifier
+        
+        Returns:
+            Settings object or None if not found
+        """
+        return self._settings_cache.get(settings_type)
+    
+    def update_settings(self, settings_type: str, settings_data: Dict[str, Any]) -> None:
+        """
+        Update settings for a specific type.
+
+        Args:
+            settings_type: The settings type identifier
+            settings_data: Partial or complete settings data to update
+        """
+        repository = self.repositories.get(settings_type)
+        if repository is None:
+            raise ValueError(f"No repository found for settings type: {settings_type}")
+
+        try:
+            # Load current settings
+            current_settings = self.get_settings(settings_type)
+
+            if current_settings is None:
+                # No existing settings, create new from provided data
+                settings = repository.from_dict(settings_data)
+            else:
+                # Convert current settings to dict
+                current_dict = repository.to_dict(current_settings)
+
+                # Update with new data (handles nested keys and case conversion)
+                for key, value in settings_data.items():
+                    # Handle nested keys for robot_calibration_settings
+                    if settings_type == "robot_calibration_settings":
+                        # Check if this is an adaptive movement config setting
+                        adaptive_movement_keys = [
+                            "min_step_mm", "max_step_mm", "target_error_mm", 
+                            "max_error_ref", "k", "derivative_scaling"
+                        ]
+                        
+                        if key in adaptive_movement_keys:
+                            # Ensure adaptive_movement_config dict exists
+                            if "adaptive_movement_config" not in current_dict:
+                                current_dict["adaptive_movement_config"] = {}
+                            
+                            # Update nested value under adaptive_movement_config
+                            current_dict["adaptive_movement_config"][key] = value
+                        else:
+                            # Handle key mappings for robot calibration settings
+                            if key == "required_marker_ids":
+                                # Map to the expected model key
+                                actual_key = "required_ids"
+                            else:
+                                actual_key = key
+                            
+                            # Direct assignment for z_target, required_ids, axis_mapping_marker_id, etc.
+                            current_dict[actual_key] = value
+                    
+                    # Handle nested keys for robot_config
+                    elif settings_type == "robot_config" and '.' in key:
+                        # Handle nested keys properly
+                        parts = key.split('.')
+                        
+                        if len(parts) == 2:
+                            # Handle 2-level nesting: "safety_limits.x_min"
+                            parent_key = parts[0].upper()
+                            child_key = parts[1].lower()
+                            
+                            # Ensure parent dict exists
+                            if parent_key not in current_dict:
+                                current_dict[parent_key] = {}
+                            
+                            # Update nested value
+                            current_dict[parent_key][child_key] = value
+
+                        elif len(parts) == 3 and parts[0] == "movement_groups":
+                            # Handle 3-level nesting: "movement_groups.SLOT 0 PICKUP.points"
+                            parent_key = "MOVEMENT_GROUPS"  # Always uppercase
+                            group_name = parts[1]  # Keep original case (e.g., "SLOT 0 PICKUP")
+                            setting_key = parts[2]  # e.g., "points", "position", "velocity"
+
+                            # Ensure parent dict exists
+                            if parent_key not in current_dict:
+                                current_dict[parent_key] = {}
+
+                            # Ensure group dict exists
+                            if group_name not in current_dict[parent_key]:
+                                current_dict[parent_key][group_name] = {}
+
+                            # Update the specific setting for this group
+                            current_dict[parent_key][group_name][setting_key] = value
+                            print(f"📝 Updated {parent_key}.{group_name}.{setting_key} = {value}")
+
+                        else:
+                            # Fallback for other nested keys
+                            actual_key = key.upper()
+                            current_dict[actual_key] = value
+                    else:
+                        # Handle camera settings with nested sections
+                        if settings_type == "camera":
+                            # Map settings to their proper nested sections
+                            calibration_keys = ["Chessboard width", "Chessboard height", "Square size (mm)"]
+                            preprocessing_keys = ["Gaussian blur", "Blur kernel size", "Threshold type",
+                                                "Dilate enabled", "Dilate kernel size", "Dilate iterations",
+                                                "Erode enabled", "Erode kernel size", "Erode iterations"]
+                            brightness_keys = ["Enable auto adjust", "Kp", "Ki", "Kd", "Target brightness"]
+                            aruco_keys = ["Dictionary", "Flip image"]
+
+                            if key in calibration_keys:
+                                if "Calibration" not in current_dict:
+                                    current_dict["Calibration"] = {}
+                                current_dict["Calibration"][key] = value
+                            elif key in preprocessing_keys:
+                                if "Preprocessing" not in current_dict:
+                                    current_dict["Preprocessing"] = {}
+                                current_dict["Preprocessing"][key] = value
+                            elif key in brightness_keys:
+                                if "Brightness Control" not in current_dict:
+                                    current_dict["Brightness Control"] = {}
+                                current_dict["Brightness Control"][key] = value
+                            elif key in aruco_keys:
+                                if "Aruco" not in current_dict:
+                                    current_dict["Aruco"] = {}
+                                current_dict["Aruco"][key] = value
+                            elif key == "Enable detection":  # Special aruco key
+                                if "Aruco" not in current_dict:
+                                    current_dict["Aruco"] = {}
+                                current_dict["Aruco"][key] = value
+                            else:
+                                # Root-level camera settings
+                                current_dict[key] = value
+                        # Convert key to uppercase for robot_config (maintains compatibility)
+                        elif settings_type == "robot_config":
+                            actual_key = key.upper()
+                            current_dict[actual_key] = value
+                        else:
+                            # Other settings types
+                            current_dict[key] = value
+
+                # Create settings object from updated dict
+                settings = repository.from_dict(current_dict)
+
+            # Update cache
+            self._settings_cache[settings_type] = settings
+
+            # Save immediately
+            repository.save(settings)
+
+            print(f"✅ Updated and saved {settings_type} settings: {list(settings_data.keys())}")
+        except SettingsRepositoryError as e:
+            print(f"❌ Failed to update {settings_type} settings: {e}")
+            raise
+        except Exception as e:
+            print(f"❌ Error updating {settings_type} settings: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
+    
+    def get_settings_by_resource(self, key: str) -> Dict[str, Any]:
+        """
+        Get settings data by resource key (for backward compatibility).
+        
+        Args:
+            key: The resource key
+        
+        Returns:
+            Settings data as dictionary
+        """
+        # Handle core settings
+        print(f"SettingsService: Getting settings for key: {key}")
+        if key == Constants.REQUEST_RESOURCE_CAMERA:
+            settings = self.get_settings("camera")
+            if settings is not None:
+                repository = self.repositories.get("camera")
+                return repository.to_dict(settings) if repository else {}
+        
+        # Handle robot calibration settings
+        if key == "robot_calibration_settings":
+            settings = self.get_settings("robot_calibration_settings")
+            if settings is not None:
+                repository = self.repositories.get("robot_calibration_settings")
+                return repository.to_dict(settings) if repository else {}
+            return {}
+
+        if key == Constants.REQUEST_RESOURCE_ROBOT:
+            settings = self.get_settings("robot_config")
+            if settings is not None:
+                repository = self.repositories.get("robot_config")
+                return repository.to_dict(settings) if repository else {}
+
+        # Handle application-specific settings through registry
+        resource_map = {
+            "Glue": "glue",
+            "Paint": "paint",
+        }
+        
+        settings_type = resource_map.get(key, key.lower())
+        
+        if self.settings_registry.is_type_registered(settings_type):
+            try:
+                handler = self.settings_registry.get_handler(settings_type)
+                return handler.handle_get_settings()
+            except KeyError:
+                print(f"Settings handler not found for type: {settings_type}")
+                return {}
+        
+        print(f"Unknown settings key: {key}")
+        return {}
+    
+    def updateSettings(self, settings: Dict[str, Any]) -> None:
+        """
+        Update settings (for backward compatibility).
+        
+        Args:
+            settings: Settings dictionary with 'header' key
+        """
+        if 'header' not in settings:
+            raise ValueError("Settings dictionary must contain a 'header' key")
+        
+        header = settings['header']
+        
+        if header == Constants.REQUEST_RESOURCE_CAMERA:
+            # Remove header and update camera settings
+            camera_data = {k: v for k, v in settings.items() if k != 'header'}
+            self.update_settings("camera", camera_data)
+            return
+
+        if header == Constants.REQUEST_RESOURCE_ROBOT:
+            # Remove header and update robot settings
+            robot_data = {k: v for k, v in settings.items() if k != 'header'}
+            self.update_settings("robot_config", robot_data)
+            return
+
+        # Handle application-specific settings through registry
+        resource_map = {"Glue": "glue"}
+        settings_type = resource_map.get(header, header.lower())
+        
+        if self.settings_registry.is_type_registered(settings_type):
+            try:
+                handler = self.settings_registry.get_handler(settings_type)
+                # Remove header for handler
+                handler_data = {k: v for k, v in settings.items() if k != 'header'}
+                handler.handle_set_settings(handler_data)
+            except KeyError:
+                print(f"Settings handler not found for type: {settings_type}")
+        else:
+            print(f"Unknown settings type: {settings_type}")
+    
+    # Convenience methods for specific settings types
+    
+    def get_camera_settings(self):
+        """Get camera settings object."""
+        return self.get_settings("camera")
+    
+    def get_robot_config(self):
+        """Get robot configuration object."""
+        return self.get_settings("robot_config")
+
+    def get_robot_calibration_settings(self):
+        return self.get_settings("robot_calibration_settings")
+
+    def register_settings_type(self, settings_type: str, repository_class) -> None:
+        """
+        Register a new settings type with its repository.
+        
+        Args:
+            settings_type: Identifier for the settings type
+            repository_class: Repository class for this settings type
+        """
+        self.repository_registry.register_repository_class(settings_type, repository_class)
+        
+        # If we have a file path for this type, initialize the repository
+        file_path = self.settings_file_paths.get(settings_type)
+        if file_path:
+            try:
+                repository = self.repository_registry.create_repository(settings_type, file_path)
+                self.repositories[settings_type] = repository
+                
+                # Load settings for this type
+                settings = repository.load()
+                self._settings_cache[settings_type] = settings
+                
+                print(f"Registered and initialized new settings type: {settings_type}")
+            except Exception as e:
+                print(f"Failed to initialize repository for new type {settings_type}: {e}")
+    
+    def get_available_settings_types(self) -> list[str]:
+        """
+        Get list of all available settings types.
+        
+        Returns:
+            List of registered settings type identifiers
+        """
+        return self.repository_registry.get_registered_types()
+    
+    def reload_robot_config(self) -> None:
+        """Reload the robot configuration from its repository."""
+        try:
+            robot_config = self.get_settings("robot_config")
+            if robot_config:
+                repository = self.repositories.get("robot_config")
+                if repository:
+                    reloaded_config = repository.load()
+                    self._settings_cache["robot_config"] = reloaded_config
+                    print("Robot configuration reloaded successfully.")
+
+                    # Initialize Modbus controller with new settings
+                    try:
+                        from modules.modbusCommunication.ModbusController import ModbusController
+                        modbus_settings = {
+                            'enabled': reloaded_config.modbus_enabled,
+                            'port': reloaded_config.modbus_port,
+                            'baudrate': reloaded_config.modbus_baudrate,
+                            'slave_id': reloaded_config.modbus_slave_id,
+                            'byte_size': reloaded_config.modbus_byte_size,
+                            'parity': reloaded_config.modbus_parity,
+                            'stop_bits': reloaded_config.modbus_stop_bits,
+                            'timeout': reloaded_config.modbus_timeout
+                        }
+                        ModbusController.initialize(modbus_settings)
+                    except Exception as e:
+                        print(f"Warning: Failed to initialize ModbusController: {e}")
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"Failed to reload robot configuration: {e}")
+    
+    def updateCameraSettings(self, settings: Dict[str, Any]) -> None:
+        """
+        Update camera-specific settings and persist them to file.
+        
+        Args:
+            settings: Dictionary containing camera settings data
+        """
+        print(f"Updating Camera Settings: {settings}")
+        
+        try:
+            # Get current camera settings
+            camera_settings = self.get_settings("camera")
+            if camera_settings is None:
+                print("No camera settings found")
+                return
+            
+            # Update camera settings using the existing updateSettings method
+            # This will handle the flat and nested format conversion
+            camera_settings.updateSettings(settings)
+            
+            # Save the updated settings
+            repository = self.repositories.get("camera")
+            if repository:
+                repository.save(camera_settings)
+                print("Camera settings saved successfully")
+            else:
+                print("No camera repository found")
+                
+        except Exception as e:
+            print(f"Failed to update camera settings: {e}")
+            raise

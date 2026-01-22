@@ -1,0 +1,137 @@
+{
+  "ROBOT_IP": "192.168.2.50",
+  "ROBOT_TOOL": 0,
+  "ROBOT_USER": 0,
+  "TCP_X_OFFSET": 71.0,
+  "TCP_Y_OFFSET": -11.0,
+  "TCP_X_STEP_DISTANCE": 50.0,
+  "TCP_X_STEP_OFFSET": 0.1,
+  "TCP_Y_STEP_DISTANCE": 50.0,
+  "TCP_Y_STEP_OFFSET": 0.1,
+  "OFFSET_DIRECTION_MAP": {
+    "+X": true,
+    "-X": true,
+    "+Y": true,
+    "-Y": true
+  },
+  "MOVEMENT_GROUPS": {
+    "LOGIN_POS": {
+      "velocity": 20,
+      "acceleration": 20,
+      "iterations": 1,
+      "position": "[115.432, -388.332, 102.675, 0.016, 0.004, 90.002]"
+    },
+    "HOME_POS": {
+      "velocity": 20,
+      "acceleration": 20,
+      "iterations": 1,
+      "position": "[-298.888, -31.145, 200.416, 0.52, 0.001, 89.998]"
+    },
+    "CALIBRATION_POS": {
+      "velocity": 20,
+      "acceleration": 20,
+      "iterations": 1,
+      "position": "[-298.898, -31.105, 300.449, 0.512, -0.012, 90.001]"
+    },
+    "JOG": {
+      "velocity": 20,
+      "acceleration": 20,
+      "iterations": 1
+    },
+    "NOZZLE CLEAN": {
+      "velocity": 30,
+      "acceleration": 30,
+      "iterations": 1
+    },
+    "TOOL CHANGER": {
+      "velocity": 20,
+      "acceleration": 20,
+      "iterations": 1
+    },
+    "SLOT 0 PICKUP": {
+      "velocity": 5,
+      "acceleration": 5,
+      "iterations": 1,
+      "points": [
+        "[71.79, -447.513, 110.131, 0.616, 0.181, -5.02]",
+        "[70.878, -509.515, 103.887, 0.633, 0.258, -5.031]",
+        "[70.593, -509.56, 88.881, 0.607, 0.267, -5.032]",
+        "[69.874, -464.338, 89.825, 0.45, 0.328, -5.056]"
+      ]
+    },
+    "SLOT 0 DROPOFF": {
+      "velocity": 5,
+      "acceleration": 5,
+      "iterations": 1,
+      "points": [
+        "[69.863, -464.339, 89.82, 0.451, 0.328, -5.057]",
+        "[68.992, -508.727, 89.257, 0.522, 0.438, -5.015]",
+        "[68.277, -508.748, 110.263, 0.52, 0.515, -5.012]"
+      ]
+    },
+    "SLOT 1 PICKUP": {
+      "velocity": 0,
+      "acceleration": 0,
+      "iterations": 1
+    },
+    "SLOT 1 DROPOFF": {
+      "velocity": 0,
+      "acceleration": 0,
+      "iterations": 1
+    },
+    "SLOT 4 PICKUP": {
+      "velocity": 5,
+      "acceleration": 5,
+      "iterations": 1,
+      "points": [
+        "[-152.657, -488.801, 112.78, 0.36, 0.948, -8.143]",
+        "[-153.53, -488.585, 89.74, 0.331, 1.014, -8.234]",
+        "[-154.677, -447.781, 90.073, 0.295, 1.126, -8.288]"
+      ]
+    },
+    "SLOT 4 DROPOFF": {
+      "velocity": 5,
+      "acceleration": 5,
+      "iterations": 1,
+      "points": [
+        "[-151.365, -461.033, 90.768, 0.306, 0.806, -8.0]",
+        "[-152.285, -488.881, 90.587, 0.366, 0.907, -8.104]",
+        "[-152.653, -488.8, 112.773, 0.361, 0.948, -8.142]"
+      ]
+    },
+    "PAINTING_POS": {
+      "velocity": 20,
+      "acceleration": 20,
+      "iterations": 1,
+      "position": "[-448.882, -30.55, 225.5, 0.005, -0.03, 90.002]"
+    }
+  },
+  "SAFETY_LIMITS": {
+    "x_min": -500,
+    "x_max": 500,
+    "y_min": -500,
+    "y_max": 500,
+    "z_min": 100,
+    "z_max": 800,
+    "rx_min": 170,
+    "rx_max": 190,
+    "ry_min": -10,
+    "ry_max": 10,
+    "rz_min": -180,
+    "rz_max": 180
+  },
+  "GLOBAL_MOTION_SETTINGS": {
+    "global_velocity": 100,
+    "global_acceleration": 100,
+    "emergency_decel": 500,
+    "max_jog_step": 50
+  },
+  "MODBUS_ENABLED": true,
+  "MODBUS_PORT": "/dev/ttyUSB0",
+  "MODBUS_BAUDRATE": 57600,
+  "MODBUS_SLAVE_ID": 1,
+  "MODBUS_BYTE_SIZE": 8,
+  "MODBUS_PARITY": "EVEN",
+  "MODBUS_STOP_BITS": 1,
+  "MODBUS_TIMEOUT": 0.02
+}
