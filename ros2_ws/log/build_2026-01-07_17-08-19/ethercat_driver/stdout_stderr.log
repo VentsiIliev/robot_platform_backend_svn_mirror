@@ -1,0 +1,122 @@
+-- Found ament_cmake: 2.8.4 (/opt/ros/rolling/share/ament_cmake/cmake)
+-- Override CMake install command with custom implementation using symlinks instead of copying resources
+-- Found hardware_interface: 6.0.2 (/opt/ros/rolling/share/hardware_interface/cmake)
+-- Found rosidl_generator_c: 5.1.1 (/opt/ros/rolling/share/rosidl_generator_c/cmake)
+-- Found rosidl_generator_cpp: 5.1.1 (/opt/ros/rolling/share/rosidl_generator_cpp/cmake)
+-- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c
+-- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp
+-- Found rmw_implementation_cmake: 7.9.1 (/opt/ros/rolling/share/rmw_implementation_cmake/cmake)
+-- Found rmw_fastrtps_cpp: 9.4.4 (/opt/ros/rolling/share/rmw_fastrtps_cpp/cmake)
+-- Using RMW implementation 'rmw_fastrtps_cpp' as default
+CMake Deprecation Warning at /opt/ros/rolling/share/tinyxml2_vendor/cmake/tinyxml2_vendorConfig.cmake:34 (message):
+  Package 'tinyxml2_vendor' is deprecated (This package will be removed in
+  ROS 2 Lyrical Luth.  Instead, use
+
+        distributed package which provides same functionality.)
+Call Stack (most recent call first):
+  /opt/ros/rolling/share/hardware_interface/cmake/ament_cmake_export_dependencies-extras.cmake:21 (find_package)
+  /opt/ros/rolling/share/hardware_interface/cmake/hardware_interfaceConfig.cmake:41 (include)
+  CMakeLists.txt:10 (find_package)
+
+
+-- Found ethercat_interface: 1.2.0 (/home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/cmake)
+CMake Deprecation Warning at /opt/ros/rolling/share/ament_cmake_target_dependencies/cmake/ament_target_dependencies.cmake:87 (message):
+  ament_target_dependencies() is deprecated.  Use target_link_libraries()
+  with modern CMake targets instead.  Try replacing this call with:
+
+    target_link_libraries(ethercat_driver PUBLIC
+      hardware_interface::hardware_interface
+      hardware_interface::mock_components
+      pluginlib::pluginlib
+      rclcpp::rclcpp
+      rclcpp_lifecycle::rclcpp_lifecycle
+    )
+
+Call Stack (most recent call first):
+  CMakeLists.txt:27 (ament_target_dependencies)
+
+
+-- Found ament_cmake_gtest: 2.8.4 (/opt/ros/rolling/share/ament_cmake_gtest/cmake)
+-- Configuring done (1.2s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/zewy/ros2_ws/build/ethercat_driver
+[ 50%] Building CXX object CMakeFiles/ethercat_driver.dir/src/ethercat_driver.cpp.o
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp: In member function ‘virtual CallbackReturn ethercat_driver::EthercatDriver::on_activate(const rclcpp_lifecycle::State&)’:
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:318:32: error: expected primary-expression before ‘(’ token
+  318 |   control_thread_ = std::thread([this]() {
+      |                                ^
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:318:34: error: expected ‘)’ before ‘if’
+  318 |   control_thread_ = std::thread([this]() {
+      |                                ~ ^
+      |                                  )
+......
+  389 |     if (missed_cycles > 0) {
+      |     ~~                            
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp: At global scope:
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:395:4: error: expected unqualified-id before ‘)’ token
+  395 |   });
+      |    ^
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:401:3: error: expected unqualified-id before ‘while’
+  401 |   while (true) {
+      |   ^~~~~
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:430:3: error: ‘activated_’ does not name a type
+  430 |   activated_ = true;
+      |   ^~~~~~~~~~
+In file included from /opt/ros/rolling/include/rclcpp/rclcpp/copy_all_parameter_values.hpp:27,
+                 from /opt/ros/rolling/include/rclcpp/rclcpp/rclcpp.hpp:169,
+                 from /opt/ros/rolling/include/pal_statistics/pal_statistics/pal_statistics_utils.hpp:45,
+                 from /opt/ros/rolling/include/pal_statistics/pal_statistics/pal_statistics.hpp:38,
+                 from /opt/ros/rolling/include/pal_statistics/pal_statistics/pal_statistics_macros.hpp:36,
+                 from /opt/ros/rolling/include/hardware_interface/hardware_interface/introspection.hpp:23,
+                 from /opt/ros/rolling/include/hardware_interface/hardware_interface/handle.hpp:34,
+                 from /home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/include/ethercat_driver/ethercat_driver.hpp:23,
+                 from /home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:15:
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:431:3: error: expected unqualified-id before ‘do’
+  431 |   RCLCPP_INFO(rclcpp::get_logger("EthercatDriver"), "System started (modules operational)");
+      |   ^~~~~~~~~~~
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:431:3: error: expected unqualified-id before ‘while’
+  431 |   RCLCPP_INFO(rclcpp::get_logger("EthercatDriver"), "System started (modules operational)");
+      |   ^~~~~~~~~~~
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:432:3: error: expected unqualified-id before ‘return’
+  432 |   return CallbackReturn::SUCCESS;
+      |   ^~~~~~
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:435:16: error: ‘EthercatDriver’ has not been declared
+  435 | CallbackReturn EthercatDriver::on_deactivate(
+      |                ^~~~~~~~~~~~~~
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp: In function ‘CallbackReturn on_deactivate(const rclcpp_lifecycle::State&)’:
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:438:42: error: ‘ec_mutex_’ was not declared in this scope; did you mean ‘ec_master_t’?
+  438 |   const std::lock_guard<std::mutex> lock(ec_mutex_);
+      |                                          ^~~~~~~~~
+      |                                          ec_master_t
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:439:3: error: ‘activated_’ was not declared in this scope
+  439 |   activated_ = false;
+      |   ^~~~~~~~~~
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:441:3: error: ‘run_ctrl_’ was not declared in this scope
+  441 |   run_ctrl_.store(false);
+      |   ^~~~~~~~~
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:442:7: error: ‘control_thread_’ was not declared in this scope
+  442 |   if (control_thread_.joinable()) { control_thread_.join(); }
+      |       ^~~~~~~~~~~~~~~
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:443:3: error: ‘master_’ was not declared in this scope
+  443 |   master_.stop();
+      |   ^~~~~~~
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp: At global scope:
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:448:33: error: ‘EthercatDriver’ has not been declared
+  448 | hardware_interface::return_type EthercatDriver::read(
+      |                                 ^~~~~~~~~~~~~~
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:455:33: error: ‘EthercatDriver’ has not been declared
+  455 | hardware_interface::return_type EthercatDriver::write(
+      |                                 ^~~~~~~~~~~~~~
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:462:59: error: ‘EthercatDriver’ has not been declared
+  462 | std::vector<std::unordered_map<std::string, std::string>> EthercatDriver::getEcModuleParam(
+      |                                                           ^~~~~~~~~~~~~~
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:521:1: error: expected declaration before ‘}’ token
+  521 | }  // namespace ethercat_driver
+      | ^
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp: In member function ‘virtual CallbackReturn ethercat_driver::EthercatDriver::on_activate(const rclcpp_lifecycle::State&)’:
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:395:3: warning: control reaches end of non-void function [-Wreturn-type]
+  395 |   });
+      |   ^
+gmake[2]: *** [CMakeFiles/ethercat_driver.dir/build.make:76: CMakeFiles/ethercat_driver.dir/src/ethercat_driver.cpp.o] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:137: CMakeFiles/ethercat_driver.dir/all] Error 2
+gmake: *** [Makefile:146: all] Error 2

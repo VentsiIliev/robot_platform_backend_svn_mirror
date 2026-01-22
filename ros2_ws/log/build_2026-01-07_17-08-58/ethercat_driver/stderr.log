@@ -1,0 +1,79 @@
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:[m[K In member function ‘[01m[Kvirtual CallbackReturn ethercat_driver::EthercatDriver::[01;32m[Kon_activate[m[K(const rclcpp_lifecycle::State&)[m[K’:
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:318:32:[m[K [01;31m[Kerror: [m[Kexpected primary-expression before ‘[01m[K([m[K’ token
+  318 |   control_thread_ = std::thread[01;31m[K([m[K[this]() {
+      |                                [01;31m[K^[m[K
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:318:34:[m[K [01;31m[Kerror: [m[Kexpected ‘[01m[K)[m[K’ before ‘[01m[Kif[m[K’
+  318 |   control_thread_ = std::thread[34m[K([m[K[[01;31m[Kt[m[Khis]() {
+      |                                [34m[K~[m[K [01;31m[K^[m[K
+      |                                  [32m[K)[m[K
+......
+  389 |     [32m[Kif[m[K (missed_cycles > 0) {
+      |     [32m[K~~[m[K                            
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:[m[K At global scope:
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:395:4:[m[K [01;31m[Kerror: [m[Kexpected unqualified-id before ‘[01m[K)[m[K’ token
+  395 |   }[01;31m[K)[m[K;
+      |    [01;31m[K^[m[K
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:401:3:[m[K [01;31m[Kerror: [m[Kexpected unqualified-id before ‘[01m[Kwhile[m[K’
+  401 |   [01;31m[Kwhile[m[K (true) {
+      |   [01;31m[K^~~~~[m[K
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:430:3:[m[K [01;31m[Kerror: [m[K‘[01m[Kactivated_[m[K’ does not name a type
+  430 |   [01;31m[Kactivated_[m[K = true;
+      |   [01;31m[K^~~~~~~~~~[m[K
+In file included from [01m[K/opt/ros/rolling/include/rclcpp/rclcpp/copy_all_parameter_values.hpp:27[m[K,
+                 from [01m[K/opt/ros/rolling/include/rclcpp/rclcpp/rclcpp.hpp:169[m[K,
+                 from [01m[K/opt/ros/rolling/include/pal_statistics/pal_statistics/pal_statistics_utils.hpp:45[m[K,
+                 from [01m[K/opt/ros/rolling/include/pal_statistics/pal_statistics/pal_statistics.hpp:38[m[K,
+                 from [01m[K/opt/ros/rolling/include/pal_statistics/pal_statistics/pal_statistics_macros.hpp:36[m[K,
+                 from [01m[K/opt/ros/rolling/include/hardware_interface/hardware_interface/introspection.hpp:23[m[K,
+                 from [01m[K/opt/ros/rolling/include/hardware_interface/hardware_interface/handle.hpp:34[m[K,
+                 from [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/include/ethercat_driver/ethercat_driver.hpp:23[m[K,
+                 from [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:15[m[K:
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:431:3:[m[K [01;31m[Kerror: [m[Kexpected unqualified-id before ‘[01m[Kdo[m[K’
+  431 |   [01;31m[KRCLCPP_INFO[m[K(rclcpp::get_logger("EthercatDriver"), "System started (modules operational)");
+      |   [01;31m[K^~~~~~~~~~~[m[K
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:431:3:[m[K [01;31m[Kerror: [m[Kexpected unqualified-id before ‘[01m[Kwhile[m[K’
+  431 |   [01;31m[KRCLCPP_INFO[m[K(rclcpp::get_logger("EthercatDriver"), "System started (modules operational)");
+      |   [01;31m[K^~~~~~~~~~~[m[K
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:432:3:[m[K [01;31m[Kerror: [m[Kexpected unqualified-id before ‘[01m[Kreturn[m[K’
+  432 |   [01;31m[Kreturn[m[K CallbackReturn::SUCCESS;
+      |   [01;31m[K^~~~~~[m[K
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:435:16:[m[K [01;31m[Kerror: [m[K‘[01m[KEthercatDriver[m[K’ has not been declared
+  435 | CallbackReturn [01;31m[KEthercatDriver[m[K::on_deactivate(
+      |                [01;31m[K^~~~~~~~~~~~~~[m[K
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:[m[K In function ‘[01m[KCallbackReturn[01;32m[K on_deactivate[m[K(const rclcpp_lifecycle::State&)[m[K’:
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:438:42:[m[K [01;31m[Kerror: [m[K‘[01m[Kec_mutex_[m[K’ was not declared in this scope; did you mean ‘[01m[Kec_master_t[m[K’?
+  438 |   const std::lock_guard<std::mutex> lock([01;31m[Kec_mutex_[m[K);
+      |                                          [01;31m[K^~~~~~~~~[m[K
+      |                                          [32m[Kec_master_t[m[K
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:439:3:[m[K [01;31m[Kerror: [m[K‘[01m[Kactivated_[m[K’ was not declared in this scope
+  439 |   [01;31m[Kactivated_[m[K = false;
+      |   [01;31m[K^~~~~~~~~~[m[K
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:441:3:[m[K [01;31m[Kerror: [m[K‘[01m[Krun_ctrl_[m[K’ was not declared in this scope
+  441 |   [01;31m[Krun_ctrl_[m[K.store(false);
+      |   [01;31m[K^~~~~~~~~[m[K
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:442:7:[m[K [01;31m[Kerror: [m[K‘[01m[Kcontrol_thread_[m[K’ was not declared in this scope
+  442 |   if ([01;31m[Kcontrol_thread_[m[K.joinable()) { control_thread_.join(); }
+      |       [01;31m[K^~~~~~~~~~~~~~~[m[K
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:443:3:[m[K [01;31m[Kerror: [m[K‘[01m[Kmaster_[m[K’ was not declared in this scope
+  443 |   [01;31m[Kmaster_[m[K.stop();
+      |   [01;31m[K^~~~~~~[m[K
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:[m[K At global scope:
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:448:33:[m[K [01;31m[Kerror: [m[K‘[01m[KEthercatDriver[m[K’ has not been declared
+  448 | hardware_interface::return_type [01;31m[KEthercatDriver[m[K::read(
+      |                                 [01;31m[K^~~~~~~~~~~~~~[m[K
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:455:33:[m[K [01;31m[Kerror: [m[K‘[01m[KEthercatDriver[m[K’ has not been declared
+  455 | hardware_interface::return_type [01;31m[KEthercatDriver[m[K::write(
+      |                                 [01;31m[K^~~~~~~~~~~~~~[m[K
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:462:59:[m[K [01;31m[Kerror: [m[K‘[01m[KEthercatDriver[m[K’ has not been declared
+  462 | std::vector<std::unordered_map<std::string, std::string>> [01;31m[KEthercatDriver[m[K::getEcModuleParam(
+      |                                                           [01;31m[K^~~~~~~~~~~~~~[m[K
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:521:1:[m[K [01;31m[Kerror: [m[Kexpected declaration before ‘[01m[K}[m[K’ token
+  521 | [01;31m[K}[m[K  // namespace ethercat_driver
+      | [01;31m[K^[m[K
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:[m[K In member function ‘[01m[Kvirtual CallbackReturn ethercat_driver::EthercatDriver::[01;32m[Kon_activate[m[K(const rclcpp_lifecycle::State&)[m[K’:
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:395:3:[m[K [01;35m[Kwarning: [m[Kcontrol reaches end of non-void function [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wreturn-type-Wreturn-type]8;;[m[K]
+  395 |   [01;35m[K}[m[K);
+      |   [01;35m[K^[m[K
+gmake[2]: *** [CMakeFiles/ethercat_driver.dir/build.make:76: CMakeFiles/ethercat_driver.dir/src/ethercat_driver.cpp.o] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:137: CMakeFiles/ethercat_driver.dir/all] Error 2
+gmake: *** [Makefile:146: all] Error 2

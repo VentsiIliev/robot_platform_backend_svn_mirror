@@ -1,0 +1,6 @@
+[0.000000] (-) TimerEvent: {}
+[0.000117] (-) JobUnselected: {'identifier': 'erob_arm'}
+[0.000159] (pl25488) JobQueued: {'identifier': 'pl25488', 'dependencies': OrderedDict({'erob_arm': '/home/zewy/ros2_ws/eRob_moveit/install/erob_arm'})}
+[0.000581] (pl25488) JobStarted: {'identifier': 'pl25488'}
+[0.028407] (pl25488) JobEnded: {'identifier': 'pl25488', 'rc': 1}
+[0.039039] (-) EventReactorShutdown: {}

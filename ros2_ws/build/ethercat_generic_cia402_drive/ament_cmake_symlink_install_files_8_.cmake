@@ -1,0 +1,1 @@
+ament_cmake_symlink_install_files("/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_generic_plugins/ethercat_generic_cia402_drive" FILES "/home/zewy/ros2_ws/build/ethercat_generic_cia402_drive/ament_cmake_environment_hooks/path.dsv" "DESTINATION" "share/ethercat_generic_cia402_drive/environment")

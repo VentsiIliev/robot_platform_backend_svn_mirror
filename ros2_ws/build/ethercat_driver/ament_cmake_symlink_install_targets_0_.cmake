@@ -1,0 +1,1 @@
+ament_cmake_symlink_install_targets("TARGET_FILES" "/home/zewy/ros2_ws/build/ethercat_driver/libethercat_driver.so" "/home/zewy/ros2_ws/build/ethercat_driver/libethercat_driver.so" "/home/zewy/ros2_ws/build/ethercat_driver/libethercat_driver.so" "TARGETS" "ethercat_driver" "DESTINATION" "lib")

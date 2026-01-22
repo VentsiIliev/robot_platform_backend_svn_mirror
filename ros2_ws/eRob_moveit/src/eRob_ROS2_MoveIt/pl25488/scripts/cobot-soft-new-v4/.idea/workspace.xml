@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="fba3c7fd-0f0e-454d-bfe0-9d538dab11b0" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/backend/system/storage/settings/glue_settings.json" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/backend/system/storage/settings/glue_settings.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/backend/system/storage/settings/robot_config.json" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/backend/system/storage/settings/robot_config.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/backend/system/system_handlers/robot_calibration_handler.py" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/backend/system/system_handlers/robot_calibration_handler.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/backend/system/utils/utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/backend/system/utils/utils.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/communication_layer/api_gateway/handlers/robot_handler.py" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/communication_layer/api_gateway/handlers/robot_handler.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/frontend/pl_ui/contour_editor/ContourEditor.py" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/frontend/pl_ui/contour_editor/ContourEditor.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/frontend/pl_ui/contour_editor/services/SaveWorkpieceHandler.py" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/frontend/pl_ui/contour_editor/services/SaveWorkpieceHandler.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/frontend/pl_ui/controller/Controller.py" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/frontend/pl_ui/controller/Controller.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/frontend/pl_ui/ui/windows/mainWindow/MainWindow.py" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/frontend/pl_ui/ui/windows/mainWindow/MainWindow.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/frontend/pl_ui/ui/windows/mainWindow/appWidgets/TCPCalibrationAppWidget.py" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/frontend/pl_ui/ui/windows/mainWindow/appWidgets/TCPCalibrationAppWidget.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/frontend/pl_ui/ui/windows/settings/RobotConfigUI.py" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/frontend/pl_ui/ui/windows/settings/RobotConfigUI.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/VisionSystem/calibration/cameraCalibration/CameraCalibrationService.py" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/VisionSystem/calibration/cameraCalibration/CameraCalibrationService.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/VisionSystem/calibration/cameraCalibration/storage/calibration_result/calib_result_000.png" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/VisionSystem/calibration/cameraCalibration/storage/calibration_result/calib_result_000.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/VisionSystem/calibration/cameraCalibration/storage/calibration_result/calib_result_001.png" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/VisionSystem/calibration/cameraCalibration/storage/calibration_result/calib_result_001.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/VisionSystem/calibration/cameraCalibration/storage/calibration_result/calib_result_002.png" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/VisionSystem/calibration/cameraCalibration/storage/calibration_result/calib_result_002.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/VisionSystem/calibration/cameraCalibration/storage/calibration_result/calib_result_003.png" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/VisionSystem/calibration/cameraCalibration/storage/calibration_result/calib_result_003.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/VisionSystem/calibration/cameraCalibration/storage/calibration_result/calibration_data.npz" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/VisionSystem/calibration/cameraCalibration/storage/calibration_result/calibration_data.npz" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/VisionSystem/calibration/cameraCalibration/storage/calibration_result/cameraToRobotMatrix_camera_center.npy" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/VisionSystem/calibration/cameraCalibration/storage/calibration_result/cameraToRobotMatrix_camera_center.npy" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/VisionSystem/calibration/cameraCalibration/storage/calibration_result/camera_calibration.npz" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/VisionSystem/calibration/cameraCalibration/storage/calibration_result/camera_calibration.npz" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/VisionSystem/calibration/cameraCalibration/storage/calibration_result/pickupAreaPoints.npy" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/VisionSystem/calibration/cameraCalibration/storage/calibration_result/pickupAreaPoints.npy" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/VisionSystem/calibration/cameraCalibration/storage/calibration_result/sprayAreaPoints.npy" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/VisionSystem/calibration/cameraCalibration/storage/calibration_result/sprayAreaPoints.npy" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/robot/FairinoRobot.py" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/robot/FairinoRobot.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/robot/RobotController.py" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/robot/RobotController.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/robot/robotService/RobotService.py" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/robot/robotService/RobotService.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/shared/v1/Constants.py" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/shared/v1/Constants.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/shared/v1/topics.py" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/modules/shared/v1/topics.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/new_development/NewCalibrationMethod/aruco_detection_frame.png" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/new_development/NewCalibrationMethod/aruco_detection_frame.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/new_development/NewCalibrationMethod/chessboard_frame.png" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/new_development/NewCalibrationMethod/chessboard_frame.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/robot_application/glue_dispensing_application/GlueDispensingApplication.py" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/robot_application/glue_dispensing_application/GlueDispensingApplication.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/robot_application/glue_dispensing_application/handlers/create_workpiece_handler.py" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/robot_application/glue_dispensing_application/handlers/create_workpiece_handler.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/robot_application/glue_dispensing_application/handlers/workpieces_to_spray_paths_handler.py" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/robot_application/glue_dispensing_application/handlers/workpieces_to_spray_paths_handler.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/transformation_to_camera_center.json" beforeDir="false" afterPath="$PROJECT_DIR$/cobot-glue-dispensing-v3/src/transformation_to_camera_center.json" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 6
+}</component>
+  <component name="ProjectId" id="35b5dMQA6FvzddzudRYGsB95yUZ" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ASKED_SHARE_PROJECT_CONFIGURATION_FILES&quot;: &quot;true&quot;,
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/home/zewy/Desktop/cobot-soft-new-v4&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.lookFeel&quot;
+  }
+}</component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-python-sdk-aa308119b56d-b1aafe368c7f-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-253.28294.166" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="fba3c7fd-0f0e-454d-bfe0-9d538dab11b0" name="Changes" comment="" />
+      <created>1763366017222</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1763366017222</updated>
+    </task>
+    <servers />
+  </component>
+  <component name="github-copilot-workspace">
+    <instructionFileLocations>
+      <option value=".github/instructions" />
+    </instructionFileLocations>
+    <promptFileLocations>
+      <option value=".github/prompts" />
+    </promptFileLocations>
+  </component>
+</project>

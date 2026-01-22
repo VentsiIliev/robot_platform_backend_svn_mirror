@@ -1,0 +1,1 @@
+ament_cmake_symlink_install_targets("TARGET_FILES" "/home/zewy/ros2_ws/build/ethercat_interface/libethercat_interface.so" "/home/zewy/ros2_ws/build/ethercat_interface/libethercat_interface.so" "/home/zewy/ros2_ws/build/ethercat_interface/libethercat_interface.so" "TARGETS" "ethercat_interface" "DESTINATION" "lib")

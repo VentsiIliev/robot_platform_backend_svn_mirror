@@ -1,0 +1,53 @@
+CMake Deprecation Warning at /opt/ros/rolling/share/ament_cmake_target_dependencies/cmake/ament_target_dependencies.cmake:87 (message):
+  ament_target_dependencies() is deprecated.  Use target_link_libraries()
+  with modern CMake targets instead.  Try replacing this call with:
+
+    target_link_libraries(ethercat_interface PUBLIC
+      rclcpp::rclcpp
+    )
+
+Call Stack (most recent call first):
+  CMakeLists.txt:47 (ament_target_dependencies)
+
+
+CMake Deprecation Warning at /opt/ros/rolling/share/ament_cmake_target_dependencies/cmake/ament_target_dependencies.cmake:87 (message):
+  ament_target_dependencies() is deprecated.  Use target_link_libraries()
+  with modern CMake targets instead.  Try replacing this call with:
+
+    target_link_libraries(test_ec_pdo_channel_manager PUBLIC
+      
+    )
+
+Call Stack (most recent call first):
+  CMakeLists.txt:84 (ament_target_dependencies)
+
+
+In file included from /home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:15:
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_master.hpp:120:61: error: ‘ec_slave_state_t’ has not been declared
+  120 |   void requestSlaveState(uint16_t alias, uint16_t position, ec_slave_state_t state);
+      |                                                             ^~~~~~~~~~~~~~~~
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp: In destructor ‘virtual ethercat_interface::EcMaster::~EcMaster()’:
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:69:20: warning: unused variable ‘slave’ [-Wunused-variable]
+   69 |   for (SlaveInfo & slave : slave_info_) {
+      |                    ^~~~~
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp: In static member function ‘static void ethercat_interface::EcMaster::setThreadRealTime()’:
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:456:17: warning: ISO C++ forbids variable length array ‘dummy’ [-Wvla]
+  456 |   unsigned char dummy[MAX_SAFE_STACK];
+      |                 ^~~~~
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp: At global scope:
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:544:69: error: ‘ec_slave_state_t’ has not been declared
+  544 | void EcMaster::requestSlaveState(uint16_t alias, uint16_t position, ec_slave_state_t state)
+      |                                                                     ^~~~~~~~~~~~~~~~
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp: In member function ‘void ethercat_interface::EcMaster::requestSlaveState(uint16_t, uint16_t, int)’:
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:560:15: error: ‘ecrt_master_slave_state_request’ was not declared in this scope
+  560 |     int ret = ecrt_master_slave_state_request(master_, alias, position, state);
+      |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_slave.hpp:26,
+                 from /home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_master.hpp:25:
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_sdo_manager.hpp: In member function ‘size_t ethercat_interface::SdoConfigEntry::type2bytes(std::string)’:
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_sdo_manager.hpp:113:3: warning: control reaches end of non-void function [-Wreturn-type]
+  113 |   }
+      |   ^
+gmake[2]: *** [CMakeFiles/ethercat_interface.dir/build.make:76: CMakeFiles/ethercat_interface.dir/src/ec_master.cpp.o] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:176: CMakeFiles/ethercat_interface.dir/all] Error 2
+gmake: *** [Makefile:146: all] Error 2

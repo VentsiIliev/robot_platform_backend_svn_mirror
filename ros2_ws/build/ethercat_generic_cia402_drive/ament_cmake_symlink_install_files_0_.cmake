@@ -1,0 +1,1 @@
+ament_cmake_symlink_install_files("/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_generic_plugins/ethercat_generic_cia402_drive" FILES "ethercat_plugins.xml" "DESTINATION" "share/ethercat_generic_cia402_drive/")

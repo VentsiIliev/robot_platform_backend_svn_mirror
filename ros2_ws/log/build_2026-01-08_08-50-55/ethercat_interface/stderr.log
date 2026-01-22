@@ -1,0 +1,54 @@
+[0mCMake Deprecation Warning at /opt/ros/rolling/share/ament_cmake_target_dependencies/cmake/ament_target_dependencies.cmake:87 (message):
+  ament_target_dependencies() is deprecated.  Use target_link_libraries()
+  with modern CMake targets instead.  Try replacing this call with:
+
+    target_link_libraries(ethercat_interface PUBLIC
+      rclcpp::rclcpp
+    )
+
+Call Stack (most recent call first):
+  CMakeLists.txt:47 (ament_target_dependencies)
+
+[0m
+[0mCMake Deprecation Warning at /opt/ros/rolling/share/ament_cmake_target_dependencies/cmake/ament_target_dependencies.cmake:87 (message):
+  ament_target_dependencies() is deprecated.  Use target_link_libraries()
+  with modern CMake targets instead.  Try replacing this call with:
+
+    target_link_libraries(test_ec_pdo_channel_manager PUBLIC
+      
+    )
+
+Call Stack (most recent call first):
+  CMakeLists.txt:84 (ament_target_dependencies)
+
+[0m
+In file included from [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:15[m[K:
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_master.hpp:120:61:[m[K [01;31m[Kerror: [m[K‘[01m[Kec_slave_state_t[m[K’ has not been declared
+  120 |   void requestSlaveState(uint16_t alias, uint16_t position, [01;31m[Kec_slave_state_t[m[K state);
+      |                                                             [01;31m[K^~~~~~~~~~~~~~~~[m[K
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:[m[K In destructor ‘[01m[Kvirtual ethercat_interface::EcMaster::[01;32m[K~EcMaster[m[K()[m[K’:
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:69:20:[m[K [01;35m[Kwarning: [m[Kunused variable ‘[01m[Kslave[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wunused-variable-Wunused-variable]8;;[m[K]
+   69 |   for (SlaveInfo & [01;35m[Kslave[m[K : slave_info_) {
+      |                    [01;35m[K^~~~~[m[K
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:[m[K In static member function ‘[01m[Kstatic void ethercat_interface::EcMaster::[01;32m[KsetThreadRealTime[m[K()[m[K’:
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:456:17:[m[K [01;35m[Kwarning: [m[KISO C++ forbids variable length array ‘[01m[Kdummy[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wvla-Wvla]8;;[m[K]
+  456 |   unsigned char [01;35m[Kdummy[m[K[MAX_SAFE_STACK];
+      |                 [01;35m[K^~~~~[m[K
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:[m[K At global scope:
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:544:69:[m[K [01;31m[Kerror: [m[K‘[01m[Kec_slave_state_t[m[K’ has not been declared
+  544 | aster::requestSlaveState(uint16_t alias, uint16_t position, [01;31m[Kec_slave_state_t[m[K state)
+      |                                                             [01;31m[K^~~~~~~~~~~~~~~~[m[K
+
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:[m[K In member function ‘[01m[Kvoid ethercat_interface::EcMaster::[01;32m[KrequestSlaveState[m[K(uint16_t, uint16_t, int)[m[K’:
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:560:15:[m[K [01;31m[Kerror: [m[K‘[01m[Kecrt_master_slave_state_request[m[K’ was not declared in this scope
+  560 |     int ret = [01;31m[Kecrt_master_slave_state_request[m[K(master_, alias, position, state);
+      |               [01;31m[K^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[m[K
+In file included from [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_slave.hpp:26[m[K,
+                 from [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_master.hpp:25[m[K:
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_sdo_manager.hpp:[m[K In member function ‘[01m[Ksize_t ethercat_interface::SdoConfigEntry::[01;32m[Ktype2bytes[m[K(std::string)[m[K’:
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_sdo_manager.hpp:113:3:[m[K [01;35m[Kwarning: [m[Kcontrol reaches end of non-void function [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wreturn-type-Wreturn-type]8;;[m[K]
+  113 |   [01;35m[K}[m[K
+      |   [01;35m[K^[m[K
+gmake[2]: *** [CMakeFiles/ethercat_interface.dir/build.make:76: CMakeFiles/ethercat_interface.dir/src/ec_master.cpp.o] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:176: CMakeFiles/ethercat_interface.dir/all] Error 2
+gmake: *** [Makefile:146: all] Error 2

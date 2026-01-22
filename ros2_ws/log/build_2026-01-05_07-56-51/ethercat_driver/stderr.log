@@ -1,0 +1,51 @@
+[0mCMake Deprecation Warning at /opt/ros/rolling/share/tinyxml2_vendor/cmake/tinyxml2_vendorConfig.cmake:34 (message):
+  Package 'tinyxml2_vendor' is deprecated (This package will be removed in
+  ROS 2 Lyrical Luth.  Instead, use
+
+        distributed package which provides same functionality.)
+Call Stack (most recent call first):
+  /opt/ros/rolling/share/hardware_interface/cmake/ament_cmake_export_dependencies-extras.cmake:21 (find_package)
+  /opt/ros/rolling/share/hardware_interface/cmake/hardware_interfaceConfig.cmake:41 (include)
+  CMakeLists.txt:10 (find_package)
+
+[0m
+[0mCMake Deprecation Warning at /opt/ros/rolling/share/ament_cmake_target_dependencies/cmake/ament_target_dependencies.cmake:87 (message):
+  ament_target_dependencies() is deprecated.  Use target_link_libraries()
+  with modern CMake targets instead.  Try replacing this call with:
+
+    target_link_libraries(ethercat_driver PUBLIC
+      hardware_interface::hardware_interface
+      hardware_interface::mock_components
+      pluginlib::pluginlib
+      rclcpp::rclcpp
+      rclcpp_lifecycle::rclcpp_lifecycle
+    )
+
+Call Stack (most recent call first):
+  CMakeLists.txt:27 (ament_target_dependencies)
+
+[0m
+In file included from [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/include/ethercat_driver/ethercat_driver.hpp:32[m[K,
+                 from [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:15[m[K:
+[01m[K/home/zewy/ros2_ws/install/ethercat_interface/include/ethercat_interface/ec_master.hpp:160:46:[m[K [01;35m[Kwarning: [m[Kmissing initializer for member ‘[01m[Kec_slave_config_state_t::operational[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wmissing-field-initializers-Wmissing-field-initializers]8;;[m[K]
+  160 |     ec_slave_config_state_t config_state = {0[01;35m[K}[m[K;
+      |                                              [01;35m[K^[m[K
+[01m[K/home/zewy/ros2_ws/install/ethercat_interface/include/ethercat_interface/ec_master.hpp:160:46:[m[K [01;35m[Kwarning: [m[Kmissing initializer for member ‘[01m[Kec_slave_config_state_t::al_state[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wmissing-field-initializers-Wmissing-field-initializers]8;;[m[K]
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/include/ethercat_driver/ethercat_driver.hpp:47:18:[m[K [01;31m[Kerror: [m[K‘[01m[Krclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn ethercat_driver::EthercatDriver::[01;32m[Kon_init[m[K(const hardware_interface::HardwareInfo&)[m[K’ marked ‘[01m[Koverride[m[K’, but does not override
+   47 |   CallbackReturn [01;31m[Kon_init[m[K(const hardware_interface::HardwareInfo & info) override;
+      |                  [01;31m[K^~~~~~~[m[K
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:[m[K In member function ‘[01m[KCallbackReturn ethercat_driver::EthercatDriver::[01;32m[Kon_init[m[K(const hardware_interface::HardwareInfo&)[m[K’:
+[01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/src/ethercat_driver.cpp:31:52:[m[K [01;31m[Kerror: [m[Kcannot convert ‘[01m[Kconst hardware_interface::HardwareInfo[m[K’ to ‘[01m[Kconst hardware_interface::HardwareComponentInterfaceParams&[m[K’
+   31 |   if (hardware_interface::SystemInterface::on_init([01;31m[Kinfo[m[K) != CallbackReturn::SUCCESS) {
+      |                                                    [01;31m[K^~~~[m[K
+      |                                                    [01;31m[K|[m[K
+      |                                                    [01;31m[Kconst hardware_interface::HardwareInfo[m[K
+In file included from [01m[K/opt/ros/rolling/include/hardware_interface/hardware_interface/system_interface.hpp:18[m[K,
+                 from [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_driver/include/ethercat_driver/ethercat_driver.hpp:25[m[K:
+[01m[K/opt/ros/rolling/include/hardware_interface/hardware_interface/hardware_component_interface.hpp:323:66:[m[K [01;36m[Knote: [m[K  initializing argument 1 of ‘[01m[Kvirtual rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn hardware_interface::HardwareComponentInterface::[01;32m[Kon_init[m[K(const hardware_interface::HardwareComponentInterfaceParams&)[m[K’
+  323 |    [01;36m[Kconst hardware_interface::HardwareComponentInterfaceParams & params[m[K)
+      |    [01;36m[K~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~[m[K
+
+gmake[2]: *** [CMakeFiles/ethercat_driver.dir/build.make:76: CMakeFiles/ethercat_driver.dir/src/ethercat_driver.cpp.o] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:137: CMakeFiles/ethercat_driver.dir/all] Error 2
+gmake: *** [Makefile:146: all] Error 2

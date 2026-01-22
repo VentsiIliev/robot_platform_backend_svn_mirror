@@ -1,0 +1,154 @@
+[0.032s] Invoking command in '/home/zewy/ros2_ws/build/ethercat_interface': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/zewy/ws_moveit2/install/moveit_configs_utils:/opt/ros/rolling DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake /home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface -DCMAKE_INSTALL_PREFIX=/home/zewy/ros2_ws/install/ethercat_interface
+[0.295s] -- The C compiler identification is GNU 13.3.0
+[0.322s] -- The CXX compiler identification is GNU 13.3.0
+[0.355s] -- Detecting C compiler ABI info
+[0.499s] -- Detecting C compiler ABI info - done
+[0.508s] -- Check for working C compiler: /usr/bin/cc - skipped
+[0.508s] -- Detecting C compile features
+[0.509s] -- Detecting C compile features - done
+[0.523s] -- Detecting CXX compiler ABI info
+[0.675s] -- Detecting CXX compiler ABI info - done
+[0.684s] -- Check for working CXX compiler: /usr/bin/c++ - skipped
+[0.684s] -- Detecting CXX compile features
+[0.685s] -- Detecting CXX compile features - done
+[0.706s] -- Found ament_cmake: 2.8.4 (/opt/ros/rolling/share/ament_cmake/cmake)
+[0.991s] -- Found Python3: /usr/bin/python3 (found version "3.12.3") found components: Interpreter 
+[1.286s] -- Found ament_cmake_ros: 0.15.4 (/opt/ros/rolling/share/ament_cmake_ros/cmake)
+[1.371s] -- Found rclcpp: 30.1.3 (/opt/ros/rolling/share/rclcpp/cmake)
+[1.522s] -- Found rosidl_generator_c: 5.1.1 (/opt/ros/rolling/share/rosidl_generator_c/cmake)
+[1.571s] -- Found rosidl_generator_cpp: 5.1.1 (/opt/ros/rolling/share/rosidl_generator_cpp/cmake)
+[1.619s] -- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c
+[1.667s] -- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp
+[1.887s] -- Found rmw_implementation_cmake: 7.9.1 (/opt/ros/rolling/share/rmw_implementation_cmake/cmake)
+[1.905s] -- Found rmw_fastrtps_cpp: 9.4.4 (/opt/ros/rolling/share/rmw_fastrtps_cpp/cmake)
+[2.171s] -- Found OpenSSL: /usr/lib/x86_64-linux-gnu/libcrypto.so (found version "3.0.13")  
+[2.188s] -- Using RMW implementation 'rmw_fastrtps_cpp' as default
+[2.368s] -- Found yaml_cpp_vendor: 9.2.0 (/opt/ros/rolling/share/yaml_cpp_vendor/cmake)
+[2.368s] -- Setting yaml-cpp_DIR to: '/opt/ros/rolling/share/yaml_cpp_vendor/cmake/../../../opt/yaml_cpp_vendor/share/cmake/yaml-cpp'
+[2.371s] [0mCMake Deprecation Warning at /opt/ros/rolling/share/ament_cmake_target_dependencies/cmake/ament_target_dependencies.cmake:87 (message):
+[2.371s]   ament_target_dependencies() is deprecated.  Use target_link_libraries()
+[2.371s]   with modern CMake targets instead.  Try replacing this call with:
+[2.371s] 
+[2.371s]     target_link_libraries(ethercat_interface PUBLIC
+[2.371s]       rclcpp::rclcpp
+[2.371s]     )
+[2.371s] 
+[2.371s] Call Stack (most recent call first):
+[2.371s]   CMakeLists.txt:47 (ament_target_dependencies)
+[2.371s] 
+[2.372s] [0m
+[2.387s] -- Found ament_lint_auto: 0.20.3 (/opt/ros/rolling/share/ament_lint_auto/cmake)
+[2.626s] -- Found gmock sources under '/opt/ros/rolling/src/gmock_vendor': C++ tests using 'Google Mock' will be built
+[2.644s] -- Found gtest sources under '/opt/ros/rolling/src/gtest_vendor': C++ tests using 'Google Test' will be built
+[2.646s] [0mCMake Deprecation Warning at /opt/ros/rolling/share/ament_cmake_target_dependencies/cmake/ament_target_dependencies.cmake:87 (message):
+[2.646s]   ament_target_dependencies() is deprecated.  Use target_link_libraries()
+[2.646s]   with modern CMake targets instead.  Try replacing this call with:
+[2.646s] 
+[2.647s]     target_link_libraries(test_ec_pdo_channel_manager PUBLIC
+[2.647s]       
+[2.647s]     )
+[2.647s] 
+[2.647s] Call Stack (most recent call first):
+[2.647s]   CMakeLists.txt:84 (ament_target_dependencies)
+[2.647s] 
+[2.647s] [0m
+[2.653s] -- Added test 'copyright' to check source files copyright and LICENSE
+[2.657s] -- Added test 'cppcheck' to perform static code analysis on C / C++ code
+[2.657s] -- Configured cppcheck include dirs: /home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include
+[2.657s] -- Configured cppcheck exclude dirs and/or files: 
+[2.660s] -- Added test 'cpplint' to check C / C++ code against the Google style
+[2.661s] -- Configured cpplint exclude dirs and/or files: 
+[2.670s] -- Added test 'lint_cmake' to check CMake code style
+[2.674s] -- Added test 'uncrustify' to check C / C++ code style
+[2.674s] -- Configured uncrustify additional arguments: 
+[2.677s] -- Added test 'xmllint' to check XML markup files
+[2.685s] -- Configuring done (2.6s)
+[2.704s] -- Generating done (0.0s)
+[2.710s] -- Build files have been written to: /home/zewy/ros2_ws/build/ethercat_interface
+[2.723s] Invoked command in '/home/zewy/ros2_ws/build/ethercat_interface' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/zewy/ws_moveit2/install/moveit_configs_utils:/opt/ros/rolling DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake /home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface -DCMAKE_INSTALL_PREFIX=/home/zewy/ros2_ws/install/ethercat_interface
+[2.724s] Invoking command in '/home/zewy/ros2_ws/build/ethercat_interface': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/zewy/ws_moveit2/install/moveit_configs_utils:/opt/ros/rolling DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --build /home/zewy/ros2_ws/build/ethercat_interface -- -j12 -l12
+[2.823s] [ 11%] [32mBuilding CXX object gmock/CMakeFiles/gmock.dir/src/gmock-all.cc.o[0m
+[2.826s] [ 33%] [32mBuilding CXX object gmock/CMakeFiles/gmock.dir/opt/ros/rolling/src/gtest_vendor/src/gtest-all.cc.o[0m
+[2.826s] [ 33%] [32mBuilding CXX object gmock/CMakeFiles/gmock_main.dir/src/gmock_main.cc.o[0m
+[2.826s] [ 44%] [32mBuilding CXX object CMakeFiles/ethercat_interface.dir/src/ec_master.cpp.o[0m
+[3.688s] In file included from [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:15[m[K:
+[3.688s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_master.hpp:160:46:[m[K [01;35m[Kwarning: [m[Kmissing initializer for member ‘[01m[Kec_slave_config_state_t::operational[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wmissing-field-initializers-Wmissing-field-initializers]8;;[m[K]
+[3.688s]   160 |     ec_slave_config_state_t config_state = {0[01;35m[K}[m[K;
+[3.688s]       |                                              [01;35m[K^[m[K
+[3.688s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_master.hpp:160:46:[m[K [01;35m[Kwarning: [m[Kmissing initializer for member ‘[01m[Kec_slave_config_state_t::al_state[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wmissing-field-initializers-Wmissing-field-initializers]8;;[m[K]
+[3.693s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:[m[K In constructor ‘[01m[Kethercat_interface::EcMaster::DomainInfo::[01;32m[KDomainInfo[m[K(ec_master_t*)[m[K’:
+[3.693s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:43:38:[m[K [01;35m[Kwarning: [m[Kmissing initializer for member ‘[01m[Kec_pdo_entry_reg_t::position[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wmissing-field-initializers-Wmissing-field-initializers]8;;[m[K]
+[3.694s]    43 |   const ec_pdo_entry_reg_t empty = {0[01;35m[K}[m[K;
+[3.694s]       |                                      [01;35m[K^[m[K
+[3.694s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:43:38:[m[K [01;35m[Kwarning: [m[Kmissing initializer for member ‘[01m[Kec_pdo_entry_reg_t::vendor_id[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wmissing-field-initializers-Wmissing-field-initializers]8;;[m[K]
+[3.694s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:43:38:[m[K [01;35m[Kwarning: [m[Kmissing initializer for member ‘[01m[Kec_pdo_entry_reg_t::product_code[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wmissing-field-initializers-Wmissing-field-initializers]8;;[m[K]
+[3.694s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:43:38:[m[K [01;35m[Kwarning: [m[Kmissing initializer for member ‘[01m[Kec_pdo_entry_reg_t::index[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wmissing-field-initializers-Wmissing-field-initializers]8;;[m[K]
+[3.694s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:43:38:[m[K [01;35m[Kwarning: [m[Kmissing initializer for member ‘[01m[Kec_pdo_entry_reg_t::subindex[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wmissing-field-initializers-Wmissing-field-initializers]8;;[m[K]
+[3.695s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:43:38:[m[K [01;35m[Kwarning: [m[Kmissing initializer for member ‘[01m[Kec_pdo_entry_reg_t::offset[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wmissing-field-initializers-Wmissing-field-initializers]8;;[m[K]
+[3.695s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:43:38:[m[K [01;35m[Kwarning: [m[Kmissing initializer for member ‘[01m[Kec_pdo_entry_reg_t::bit_position[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wmissing-field-initializers-Wmissing-field-initializers]8;;[m[K]
+[3.697s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:[m[K In destructor ‘[01m[Kvirtual ethercat_interface::EcMaster::[01;32m[K~EcMaster[m[K()[m[K’:
+[3.697s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:69:20:[m[K [01;35m[Kwarning: [m[Kunused variable ‘[01m[Kslave[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wunused-variable-Wunused-variable]8;;[m[K]
+[3.697s]    69 |   for (SlaveInfo & [01;35m[Kslave[m[K : slave_info_) {
+[3.697s]       |                    [01;35m[K^~~~~[m[K
+[3.711s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:[m[K In member function ‘[01m[Kvoid ethercat_interface::EcMaster::[01;32m[KregisterPDOInDomain[m[K(uint16_t, uint16_t, std::vector<unsigned int>&, DomainInfo*, ethercat_interface::EcSlave*)[m[K’:
+[3.711s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:214:32:[m[K [01;35m[Kwarning: [m[Kmissing initializer for member ‘[01m[Kec_pdo_entry_reg_t::position[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wmissing-field-initializers-Wmissing-field-initializers]8;;[m[K]
+[3.711s]   214 |   ec_pdo_entry_reg_t empty = {0[01;35m[K}[m[K;
+[3.712s]       |                                [01;35m[K^[m[K
+[3.712s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:214:32:[m[K [01;35m[Kwarning: [m[Kmissing initializer for member ‘[01m[Kec_pdo_entry_reg_t::vendor_id[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wmissing-field-initializers-Wmissing-field-initializers]8;;[m[K]
+[3.712s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:214:32:[m[K [01;35m[Kwarning: [m[Kmissing initializer for member ‘[01m[Kec_pdo_entry_reg_t::product_code[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wmissing-field-initializers-Wmissing-field-initializers]8;;[m[K]
+[3.712s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:214:32:[m[K [01;35m[Kwarning: [m[Kmissing initializer for member ‘[01m[Kec_pdo_entry_reg_t::index[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wmissing-field-initializers-Wmissing-field-initializers]8;;[m[K]
+[3.712s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:214:32:[m[K [01;35m[Kwarning: [m[Kmissing initializer for member ‘[01m[Kec_pdo_entry_reg_t::subindex[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wmissing-field-initializers-Wmissing-field-initializers]8;;[m[K]
+[3.712s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:214:32:[m[K [01;35m[Kwarning: [m[Kmissing initializer for member ‘[01m[Kec_pdo_entry_reg_t::offset[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wmissing-field-initializers-Wmissing-field-initializers]8;;[m[K]
+[3.712s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:214:32:[m[K [01;35m[Kwarning: [m[Kmissing initializer for member ‘[01m[Kec_pdo_entry_reg_t::bit_position[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wmissing-field-initializers-Wmissing-field-initializers]8;;[m[K]
+[3.715s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:[m[K In static member function ‘[01m[Kstatic void ethercat_interface::EcMaster::[01;32m[KsetThreadRealTime[m[K()[m[K’:
+[3.715s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:452:17:[m[K [01;35m[Kwarning: [m[KISO C++ forbids variable length array ‘[01m[Kdummy[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wvla-Wvla]8;;[m[K]
+[3.715s]   452 |   unsigned char [01;35m[Kdummy[m[K[MAX_SAFE_STACK];
+[3.716s]       |                 [01;35m[K^~~~~[m[K
+[3.810s] [ 55%] [32m[1mLinking CXX static library libgmock_main.a[0m
+[3.890s] In file included from [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_slave.hpp:26[m[K,
+[3.890s]                  from [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_master.hpp:25[m[K:
+[3.890s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_sdo_manager.hpp:[m[K In member function ‘[01m[Ksize_t ethercat_interface::SdoConfigEntry::[01;32m[Ktype2bytes[m[K(std::string)[m[K’:
+[3.890s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_sdo_manager.hpp:113:3:[m[K [01;35m[Kwarning: [m[Kcontrol reaches end of non-void function [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wreturn-type-Wreturn-type]8;;[m[K]
+[3.890s]   113 |   [01;35m[K}[m[K
+[3.891s]       |   [01;35m[K^[m[K
+[4.150s] [ 55%] Built target gmock_main
+[4.151s] [ 66%] [32m[1mLinking CXX shared library libethercat_interface.so[0m
+[4.280s] [ 66%] Built target ethercat_interface
+[6.207s] [ 77%] [32m[1mLinking CXX static library libgmock.a[0m
+[6.357s] [ 77%] Built target gmock
+[6.406s] [ 88%] [32mBuilding CXX object CMakeFiles/test_ec_pdo_channel_manager.dir/test/test_ec_pdo_channel_manager.cpp.o[0m
+[7.828s] [100%] [32m[1mLinking CXX executable test_ec_pdo_channel_manager[0m
+[8.015s] [100%] Built target test_ec_pdo_channel_manager
+[8.044s] Invoked command in '/home/zewy/ros2_ws/build/ethercat_interface' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/zewy/ws_moveit2/install/moveit_configs_utils:/opt/ros/rolling DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --build /home/zewy/ros2_ws/build/ethercat_interface -- -j12 -l12
+[8.046s] Invoking command in '/home/zewy/ros2_ws/build/ethercat_interface': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/zewy/ws_moveit2/install/moveit_configs_utils:/opt/ros/rolling DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --install /home/zewy/ros2_ws/build/ethercat_interface
+[8.068s] -- Install configuration: ""
+[8.068s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/lib/libethercat_interface.so
+[8.069s] -- Set non-toolchain portion of runtime path of "/home/zewy/ros2_ws/install/ethercat_interface/lib/libethercat_interface.so" to "/usr/local/etherlab/lib:/opt/ros/rolling/lib"
+[8.069s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/include
+[8.070s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/include/ethercat_interface
+[8.070s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/include/ethercat_interface/ec_slave.hpp
+[8.070s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/include/ethercat_interface/ec_sync_manager.hpp
+[8.070s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/include/ethercat_interface/ec_pdo_channel_manager.hpp
+[8.070s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/include/ethercat_interface/ec_sdo_manager.hpp
+[8.070s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/include/ethercat_interface/ec_master.hpp
+[8.071s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/environment/library_path.sh
+[8.071s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/environment/library_path.dsv
+[8.071s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/share/ament_index/resource_index/package_run_dependencies/ethercat_interface
+[8.072s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/share/ament_index/resource_index/parent_prefix_path/ethercat_interface
+[8.072s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/environment/ament_prefix_path.sh
+[8.072s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/environment/ament_prefix_path.dsv
+[8.072s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/environment/path.sh
+[8.073s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/environment/path.dsv
+[8.073s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/local_setup.bash
+[8.073s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/local_setup.sh
+[8.074s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/local_setup.zsh
+[8.074s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/local_setup.dsv
+[8.074s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/package.dsv
+[8.074s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/share/ament_index/resource_index/packages/ethercat_interface
+[8.074s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/cmake/ament_cmake_export_include_directories-extras.cmake
+[8.074s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/cmake/ament_cmake_export_libraries-extras.cmake
+[8.075s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/cmake/ament_cmake_export_dependencies-extras.cmake
+[8.075s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/cmake/ethercat_interfaceConfig.cmake
+[8.075s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/cmake/ethercat_interfaceConfig-version.cmake
+[8.075s] -- Installing: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/package.xml
+[8.080s] Invoked command in '/home/zewy/ros2_ws/build/ethercat_interface' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/zewy/ws_moveit2/install/moveit_configs_utils:/opt/ros/rolling DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --install /home/zewy/ros2_ws/build/ethercat_interface

@@ -1,0 +1,1 @@
+ament_cmake_symlink_install_files("/home/zewy/ros2_ws/eRob_moveit/src/eRob_ROS2_MoveIt/pl25488" FILES "/home/zewy/ros2_ws/build/pl25488/ament_cmake_core/pl25488Config.cmake" "/home/zewy/ros2_ws/build/pl25488/ament_cmake_core/pl25488Config-version.cmake" "DESTINATION" "share/pl25488/cmake")

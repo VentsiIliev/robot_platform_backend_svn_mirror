@@ -1,0 +1,88 @@
+[0.036s] Invoking command in '/home/zewy/ros2_ws/build/ethercat_interface': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/zewy/ws_moveit2/install/moveit_configs_utils:/opt/ros/rolling DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake /home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface -DCMAKE_INSTALL_PREFIX=/home/zewy/ros2_ws/install/ethercat_interface
+[0.340s] -- Found ament_cmake: 2.8.4 (/opt/ros/rolling/share/ament_cmake/cmake)
+[0.341s] -- Override CMake install command with custom implementation using symlinks instead of copying resources
+[0.341s] -- Found ament_cmake_ros: 0.15.4 (/opt/ros/rolling/share/ament_cmake_ros/cmake)
+[0.341s] -- Found rclcpp: 30.1.3 (/opt/ros/rolling/share/rclcpp/cmake)
+[0.357s] -- Found rosidl_generator_c: 5.1.1 (/opt/ros/rolling/share/rosidl_generator_c/cmake)
+[0.362s] -- Found rosidl_generator_cpp: 5.1.1 (/opt/ros/rolling/share/rosidl_generator_cpp/cmake)
+[0.374s] -- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c
+[0.386s] -- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp
+[0.447s] -- Found rmw_implementation_cmake: 7.9.1 (/opt/ros/rolling/share/rmw_implementation_cmake/cmake)
+[0.452s] -- Found rmw_fastrtps_cpp: 9.4.4 (/opt/ros/rolling/share/rmw_fastrtps_cpp/cmake)
+[0.497s] -- Using RMW implementation 'rmw_fastrtps_cpp' as default
+[0.563s] -- Found yaml_cpp_vendor: 9.2.0 (/opt/ros/rolling/share/yaml_cpp_vendor/cmake)
+[0.563s] -- Setting yaml-cpp_DIR to: '/opt/ros/rolling/share/yaml_cpp_vendor/cmake/../../../opt/yaml_cpp_vendor/share/cmake/yaml-cpp'
+[0.563s] [0mCMake Deprecation Warning at /opt/ros/rolling/share/ament_cmake_target_dependencies/cmake/ament_target_dependencies.cmake:87 (message):
+[0.564s]   ament_target_dependencies() is deprecated.  Use target_link_libraries()
+[0.564s]   with modern CMake targets instead.  Try replacing this call with:
+[0.564s] 
+[0.564s]     target_link_libraries(ethercat_interface PUBLIC
+[0.564s]       rclcpp::rclcpp
+[0.564s]     )
+[0.564s] 
+[0.564s] Call Stack (most recent call first):
+[0.564s]   CMakeLists.txt:47 (ament_target_dependencies)
+[0.564s] 
+[0.564s] [0m
+[0.567s] -- Found ament_lint_auto: 0.20.3 (/opt/ros/rolling/share/ament_lint_auto/cmake)
+[0.671s] -- Found gmock sources under '/opt/ros/rolling/src/gmock_vendor': C++ tests using 'Google Mock' will be built
+[0.674s] -- Found gtest sources under '/opt/ros/rolling/src/gtest_vendor': C++ tests using 'Google Test' will be built
+[0.675s] [0mCMake Deprecation Warning at /opt/ros/rolling/share/ament_cmake_target_dependencies/cmake/ament_target_dependencies.cmake:87 (message):
+[0.675s]   ament_target_dependencies() is deprecated.  Use target_link_libraries()
+[0.676s]   with modern CMake targets instead.  Try replacing this call with:
+[0.676s] 
+[0.676s]     target_link_libraries(test_ec_pdo_channel_manager PUBLIC
+[0.676s]       
+[0.676s]     )
+[0.676s] 
+[0.676s] Call Stack (most recent call first):
+[0.676s]   CMakeLists.txt:84 (ament_target_dependencies)
+[0.676s] 
+[0.677s] [0m
+[0.681s] -- Added test 'copyright' to check source files copyright and LICENSE
+[0.682s] -- Added test 'cppcheck' to perform static code analysis on C / C++ code
+[0.683s] -- Configured cppcheck include dirs: /home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include
+[0.683s] -- Configured cppcheck exclude dirs and/or files: 
+[0.684s] -- Added test 'cpplint' to check C / C++ code against the Google style
+[0.684s] -- Configured cpplint exclude dirs and/or files: 
+[0.685s] -- Added test 'lint_cmake' to check CMake code style
+[0.686s] -- Added test 'uncrustify' to check C / C++ code style
+[0.687s] -- Configured uncrustify additional arguments: 
+[0.687s] -- Added test 'xmllint' to check XML markup files
+[0.690s] -- Configuring done (0.6s)
+[0.715s] -- Generating done (0.0s)
+[0.724s] -- Build files have been written to: /home/zewy/ros2_ws/build/ethercat_interface
+[0.734s] Invoked command in '/home/zewy/ros2_ws/build/ethercat_interface' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/zewy/ws_moveit2/install/moveit_configs_utils:/opt/ros/rolling DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake /home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface -DCMAKE_INSTALL_PREFIX=/home/zewy/ros2_ws/install/ethercat_interface
+[0.735s] Invoking command in '/home/zewy/ros2_ws/build/ethercat_interface': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/zewy/ws_moveit2/install/moveit_configs_utils:/opt/ros/rolling DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --build /home/zewy/ros2_ws/build/ethercat_interface -- -j12 -l12
+[0.853s] [ 11%] [32mBuilding CXX object CMakeFiles/ethercat_interface.dir/src/ec_master.cpp.o[0m
+[1.639s] In file included from [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:15[m[K:
+[1.639s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_master.hpp:120:61:[m[K [01;31m[Kerror: [m[K‘[01m[Kec_slave_state_t[m[K’ has not been declared
+[1.639s]   120 |   void requestSlaveState(uint16_t alias, uint16_t position, [01;31m[Kec_slave_state_t[m[K state);
+[1.639s]       |                                                             [01;31m[K^~~~~~~~~~~~~~~~[m[K
+[1.656s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:[m[K In destructor ‘[01m[Kvirtual ethercat_interface::EcMaster::[01;32m[K~EcMaster[m[K()[m[K’:
+[1.656s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:69:20:[m[K [01;35m[Kwarning: [m[Kunused variable ‘[01m[Kslave[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wunused-variable-Wunused-variable]8;;[m[K]
+[1.656s]    69 |   for (SlaveInfo & [01;35m[Kslave[m[K : slave_info_) {
+[1.656s]       |                    [01;35m[K^~~~~[m[K
+[1.671s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:[m[K In static member function ‘[01m[Kstatic void ethercat_interface::EcMaster::[01;32m[KsetThreadRealTime[m[K()[m[K’:
+[1.671s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:456:17:[m[K [01;35m[Kwarning: [m[KISO C++ forbids variable length array ‘[01m[Kdummy[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wvla-Wvla]8;;[m[K]
+[1.671s]   456 |   unsigned char [01;35m[Kdummy[m[K[MAX_SAFE_STACK];
+[1.671s]       |                 [01;35m[K^~~~~[m[K
+[1.672s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:[m[K At global scope:
+[1.672s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:544:69:[m[K [01;31m[Kerror: [m[K‘[01m[Kec_slave_state_t[m[K’ has not been declared
+[1.672s]   544 | aster::requestSlaveState(uint16_t alias, uint16_t position, [01;31m[Kec_slave_state_t[m[K state)
+[1.672s]       |                                                             [01;31m[K^~~~~~~~~~~~~~~~[m[K
+[1.672s] 
+[1.680s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:[m[K In member function ‘[01m[Kvoid ethercat_interface::EcMaster::[01;32m[KrequestSlaveState[m[K(uint16_t, uint16_t, int)[m[K’:
+[1.681s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:560:15:[m[K [01;31m[Kerror: [m[K‘[01m[Kecrt_master_slave_state_request[m[K’ was not declared in this scope
+[1.681s]   560 |     int ret = [01;31m[Kecrt_master_slave_state_request[m[K(master_, alias, position, state);
+[1.681s]       |               [01;31m[K^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[m[K
+[1.870s] In file included from [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_slave.hpp:26[m[K,
+[1.870s]                  from [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_master.hpp:25[m[K:
+[1.870s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_sdo_manager.hpp:[m[K In member function ‘[01m[Ksize_t ethercat_interface::SdoConfigEntry::[01;32m[Ktype2bytes[m[K(std::string)[m[K’:
+[1.871s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_sdo_manager.hpp:113:3:[m[K [01;35m[Kwarning: [m[Kcontrol reaches end of non-void function [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wreturn-type-Wreturn-type]8;;[m[K]
+[1.871s]   113 |   [01;35m[K}[m[K
+[1.871s]       |   [01;35m[K^[m[K
+[1.894s] gmake[2]: *** [CMakeFiles/ethercat_interface.dir/build.make:76: CMakeFiles/ethercat_interface.dir/src/ec_master.cpp.o] Error 1
+[1.894s] gmake[1]: *** [CMakeFiles/Makefile2:176: CMakeFiles/ethercat_interface.dir/all] Error 2
+[1.894s] gmake: *** [Makefile:146: all] Error 2
+[1.920s] Invoked command in '/home/zewy/ros2_ws/build/ethercat_interface' returned '2': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/zewy/ws_moveit2/install/moveit_configs_utils:/opt/ros/rolling DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --build /home/zewy/ros2_ws/build/ethercat_interface -- -j12 -l12

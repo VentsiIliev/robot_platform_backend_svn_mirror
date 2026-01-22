@@ -1,0 +1,15 @@
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp: In destructor ‘virtual ethercat_interface::EcMaster::~EcMaster()’:
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:69:20: warning: unused variable ‘slave’ [-Wunused-variable]
+   69 |   for (SlaveInfo & slave : slave_info_) {
+      |                    ^~~~~
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp: In static member function ‘static void ethercat_interface::EcMaster::setThreadRealTime()’:
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:452:17: warning: ISO C++ forbids variable length array ‘dummy’ [-Wvla]
+  452 |   unsigned char dummy[MAX_SAFE_STACK];
+      |                 ^~~~~
+In file included from /home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_slave.hpp:26,
+                 from /home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_master.hpp:25,
+                 from /home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:15:
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_sdo_manager.hpp: In member function ‘size_t ethercat_interface::SdoConfigEntry::type2bytes(std::string)’:
+/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_sdo_manager.hpp:113:3: warning: control reaches end of non-void function [-Wreturn-type]
+  113 |   }
+      |   ^

@@ -1,0 +1,53 @@
+[0.033s] Invoking command in '/home/zewy/ros2_ws/build/ethercat_interface': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/zewy/ws_moveit2/install/moveit_configs_utils:/opt/ros/rolling DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --build /home/zewy/ros2_ws/build/ethercat_interface -- -j12 -l12
+[0.309s] [ 33%] [32mBuilding CXX object CMakeFiles/ethercat_interface.dir/src/ec_master.cpp.o[0m
+[0.309s] [ 55%] Built target gmock_main
+[0.309s] [ 66%] Built target gmock
+[0.309s] [ 88%] Built target test_ec_pdo_channel_manager
+[0.852s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:[m[K In destructor ‘[01m[Kvirtual ethercat_interface::EcMaster::[01;32m[K~EcMaster[m[K()[m[K’:
+[0.852s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:69:20:[m[K [01;35m[Kwarning: [m[Kunused variable ‘[01m[Kslave[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wunused-variable-Wunused-variable]8;;[m[K]
+[0.852s]    69 |   for (SlaveInfo & [01;35m[Kslave[m[K : slave_info_) {
+[0.852s]       |                    [01;35m[K^~~~~[m[K
+[0.865s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:[m[K In static member function ‘[01m[Kstatic void ethercat_interface::EcMaster::[01;32m[KsetThreadRealTime[m[K()[m[K’:
+[0.866s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:452:17:[m[K [01;35m[Kwarning: [m[KISO C++ forbids variable length array ‘[01m[Kdummy[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wvla-Wvla]8;;[m[K]
+[0.866s]   452 |   unsigned char [01;35m[Kdummy[m[K[MAX_SAFE_STACK];
+[0.866s]       |                 [01;35m[K^~~~~[m[K
+[1.035s] In file included from [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_slave.hpp:26[m[K,
+[1.035s]                  from [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_master.hpp:25[m[K,
+[1.036s]                  from [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/src/ec_master.cpp:15[m[K:
+[1.036s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_sdo_manager.hpp:[m[K In member function ‘[01m[Ksize_t ethercat_interface::SdoConfigEntry::[01;32m[Ktype2bytes[m[K(std::string)[m[K’:
+[1.036s] [01m[K/home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include/ethercat_interface/ec_sdo_manager.hpp:113:3:[m[K [01;35m[Kwarning: [m[Kcontrol reaches end of non-void function [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wreturn-type-Wreturn-type]8;;[m[K]
+[1.036s]   113 |   [01;35m[K}[m[K
+[1.037s]       |   [01;35m[K^[m[K
+[1.250s] [100%] [32m[1mLinking CXX shared library libethercat_interface.so[0m
+[1.358s] [100%] Built target ethercat_interface
+[1.378s] Invoked command in '/home/zewy/ros2_ws/build/ethercat_interface' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/zewy/ws_moveit2/install/moveit_configs_utils:/opt/ros/rolling DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --build /home/zewy/ros2_ws/build/ethercat_interface -- -j12 -l12
+[1.380s] Invoking command in '/home/zewy/ros2_ws/build/ethercat_interface': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/zewy/ws_moveit2/install/moveit_configs_utils:/opt/ros/rolling DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --install /home/zewy/ros2_ws/build/ethercat_interface
+[1.395s] -- Install configuration: ""
+[1.395s] -- Execute custom install script
+[1.395s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/lib/libethercat_interface.so
+[1.396s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/include/ethercat_interface/ec_master.hpp
+[1.396s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/include/ethercat_interface/ec_pdo_channel_manager.hpp
+[1.396s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/include/ethercat_interface/ec_sdo_manager.hpp
+[1.396s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/include/ethercat_interface/ec_slave.hpp
+[1.397s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/include/ethercat_interface/ec_sync_manager.hpp
+[1.397s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/environment/library_path.sh
+[1.397s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/environment/library_path.dsv
+[1.397s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ament_index/resource_index/package_run_dependencies/ethercat_interface
+[1.397s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ament_index/resource_index/parent_prefix_path/ethercat_interface
+[1.398s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/environment/ament_prefix_path.sh
+[1.398s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/environment/ament_prefix_path.dsv
+[1.398s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/environment/path.sh
+[1.398s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/environment/path.dsv
+[1.399s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/local_setup.bash
+[1.399s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/local_setup.sh
+[1.399s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/local_setup.zsh
+[1.399s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/local_setup.dsv
+[1.400s] -- Symlinking: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/package.dsv
+[1.417s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ament_index/resource_index/packages/ethercat_interface
+[1.417s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/cmake/ament_cmake_export_include_directories-extras.cmake
+[1.417s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/cmake/ament_cmake_export_libraries-extras.cmake
+[1.417s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/cmake/ament_cmake_export_dependencies-extras.cmake
+[1.418s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/cmake/ethercat_interfaceConfig.cmake
+[1.418s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/cmake/ethercat_interfaceConfig-version.cmake
+[1.418s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/package.xml
+[1.420s] Invoked command in '/home/zewy/ros2_ws/build/ethercat_interface' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/zewy/ws_moveit2/install/moveit_configs_utils:/opt/ros/rolling DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --install /home/zewy/ros2_ws/build/ethercat_interface

@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="ac7725ca-cf95-4d86-a205-dfc3a86407a3" name="Changes" comment="" />
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="CopilotPersistence">
+    <persistenceIdMap>
+      <entry key="_/home/zewy/ros2_ws" value="34jMNMzbIqKGuB1TM65HyiLWu31" />
+    </persistenceIdMap>
+  </component>
+  <component name="EmbeddingIndexingInfo">
+    <option name="cachedIndexableFilesCount" value="4764" />
+    <option name="fileBasedEmbeddingIndicesEnabled" value="true" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="McpProjectServerCommands">
+    <commands />
+    <urls />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 6
+}</component>
+  <component name="ProjectId" id="34jMNMzbIqKGuB1TM65HyiLWu31" />
+  <component name="ProjectLevelVcsManager">
+    <ConfirmationsSetting value="1" id="Add" />
+  </component>
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.MCP Project settings loaded&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
+    &quot;ai.playground.ignore.import.keys.banner.in.settings&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/home/zewy/ros2_ws&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  }
+}</component>
+  <component name="RecapUselessUpdatesCounter">
+    <option name="suspendCountdown" value="0" />
+  </component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/eRob_moveit/src/eRob_ROS2_MoveIt/pl25488/config" />
+    </key>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-js-predefined-d6986cc7102b-9b0f141eb926-JavaScript-PY-253.29346.308" />
+        <option value="bundled-python-sdk-ca5e2b39c7df-6e1f45a539f7-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-253.29346.308" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="SvnConfiguration">
+    <configuration>$PROJECT_DIR$/../.subversion</configuration>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="ac7725ca-cf95-4d86-a205-dfc3a86407a3" name="Changes" comment="" />
+      <created>1761722490052</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1761722490052</updated>
+      <workItem from="1761722491161" duration="820000" />
+      <workItem from="1761723331740" duration="378000" />
+      <workItem from="1761723778987" duration="2766000" />
+      <workItem from="1761735273756" duration="3425000" />
+      <workItem from="1761738709300" duration="21641000" />
+      <workItem from="1761811753388" duration="21599000" />
+      <workItem from="1761836233125" duration="114000" />
+      <workItem from="1761836348863" duration="908000" />
+      <workItem from="1761845975158" duration="625000" />
+      <workItem from="1761846743867" duration="305000" />
+      <workItem from="1761847763313" duration="295000" />
+      <workItem from="1761850143314" duration="95000" />
+      <workItem from="1761852666889" duration="207000" />
+      <workItem from="1761852933035" duration="739000" />
+      <workItem from="1761889715154" duration="15436000" />
+      <workItem from="1761905253055" duration="2228000" />
+      <workItem from="1761908209766" duration="1834000" />
+      <workItem from="1761910209908" duration="91000" />
+      <workItem from="1761910346555" duration="137000" />
+      <workItem from="1761910500807" duration="9940000" />
+      <workItem from="1761920456451" duration="35000" />
+      <workItem from="1761920530127" duration="3935000" />
+      <workItem from="1762153178999" duration="3211000" />
+      <workItem from="1762156601053" duration="27028000" />
+      <workItem from="1762235823255" duration="1427000" />
+      <workItem from="1762241048002" duration="87000" />
+      <workItem from="1762241151188" duration="2243000" />
+      <workItem from="1762243996768" duration="784000" />
+      <workItem from="1762244800663" duration="1521000" />
+      <workItem from="1762250438421" duration="494000" />
+      <workItem from="1762250986978" duration="33000" />
+      <workItem from="1762251042651" duration="243000" />
+      <workItem from="1764578000495" duration="324000" />
+      <workItem from="1764578372361" duration="18072000" />
+      <workItem from="1764839131890" duration="2882000" />
+      <workItem from="1764924942092" duration="1933000" />
+      <workItem from="1765175004629" duration="1533000" />
+      <workItem from="1765430973927" duration="599000" />
+      <workItem from="1765781139392" duration="600000" />
+      <workItem from="1765783362880" duration="7826000" />
+      <workItem from="1766133089155" duration="619000" />
+      <workItem from="1766134012408" duration="1852000" />
+      <workItem from="1766383858982" duration="10609000" />
+      <workItem from="1766420183935" duration="36000" />
+      <workItem from="1767592741797" duration="3268000" />
+      <workItem from="1767682997059" duration="598000" />
+      <workItem from="1767797966611" duration="8264000" />
+      <workItem from="1767939359263" duration="664000" />
+      <workItem from="1768195887697" duration="2410000" />
+      <workItem from="1768283123559" duration="601000" />
+      <workItem from="1768297639534" duration="29000" />
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="github-copilot-workspace">
+    <instructionFileLocations>
+      <option value=".github/instructions" />
+    </instructionFileLocations>
+    <promptFileLocations>
+      <option value=".github/prompts" />
+    </promptFileLocations>
+  </component>
+</project>

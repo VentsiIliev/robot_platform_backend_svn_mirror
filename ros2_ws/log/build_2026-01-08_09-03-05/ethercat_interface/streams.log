@@ -1,0 +1,91 @@
+[0.067s] Invoking command in '/home/zewy/ros2_ws/build/ethercat_interface': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/zewy/ws_moveit2/install/moveit_configs_utils:/opt/ros/rolling DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake /home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface -DCMAKE_INSTALL_PREFIX=/home/zewy/ros2_ws/install/ethercat_interface
+[0.536s] -- Found ament_cmake: 2.8.4 (/opt/ros/rolling/share/ament_cmake/cmake)
+[0.763s] -- Override CMake install command with custom implementation using symlinks instead of copying resources
+[0.781s] -- Found ament_cmake_ros: 0.15.4 (/opt/ros/rolling/share/ament_cmake_ros/cmake)
+[0.787s] -- Found rclcpp: 30.1.3 (/opt/ros/rolling/share/rclcpp/cmake)
+[0.895s] -- Found rosidl_generator_c: 5.1.1 (/opt/ros/rolling/share/rosidl_generator_c/cmake)
+[0.902s] -- Found rosidl_generator_cpp: 5.1.1 (/opt/ros/rolling/share/rosidl_generator_cpp/cmake)
+[0.918s] -- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c
+[0.943s] -- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp
+[1.043s] -- Found rmw_implementation_cmake: 7.9.1 (/opt/ros/rolling/share/rmw_implementation_cmake/cmake)
+[1.052s] -- Found rmw_fastrtps_cpp: 9.4.4 (/opt/ros/rolling/share/rmw_fastrtps_cpp/cmake)
+[1.134s] -- Using RMW implementation 'rmw_fastrtps_cpp' as default
+[1.244s] -- Found yaml_cpp_vendor: 9.2.0 (/opt/ros/rolling/share/yaml_cpp_vendor/cmake)
+[1.244s] -- Setting yaml-cpp_DIR to: '/opt/ros/rolling/share/yaml_cpp_vendor/cmake/../../../opt/yaml_cpp_vendor/share/cmake/yaml-cpp'
+[1.245s] [0mCMake Deprecation Warning at /opt/ros/rolling/share/ament_cmake_target_dependencies/cmake/ament_target_dependencies.cmake:87 (message):
+[1.245s]   ament_target_dependencies() is deprecated.  Use target_link_libraries()
+[1.246s]   with modern CMake targets instead.  Try replacing this call with:
+[1.246s] 
+[1.246s]     target_link_libraries(ethercat_interface PUBLIC
+[1.246s]       rclcpp::rclcpp
+[1.246s]     )
+[1.246s] 
+[1.246s] Call Stack (most recent call first):
+[1.247s]   CMakeLists.txt:47 (ament_target_dependencies)
+[1.247s] 
+[1.247s] [0m
+[1.250s] -- Found ament_lint_auto: 0.20.3 (/opt/ros/rolling/share/ament_lint_auto/cmake)
+[1.605s] -- Found gmock sources under '/opt/ros/rolling/src/gmock_vendor': C++ tests using 'Google Mock' will be built
+[1.615s] -- Found gtest sources under '/opt/ros/rolling/src/gtest_vendor': C++ tests using 'Google Test' will be built
+[1.620s] [0mCMake Deprecation Warning at /opt/ros/rolling/share/ament_cmake_target_dependencies/cmake/ament_target_dependencies.cmake:87 (message):
+[1.620s]   ament_target_dependencies() is deprecated.  Use target_link_libraries()
+[1.621s]   with modern CMake targets instead.  Try replacing this call with:
+[1.621s] 
+[1.621s]     target_link_libraries(test_ec_pdo_channel_manager PUBLIC
+[1.621s]       
+[1.621s]     )
+[1.621s] 
+[1.621s] Call Stack (most recent call first):
+[1.621s]   CMakeLists.txt:84 (ament_target_dependencies)
+[1.621s] 
+[1.621s] [0m
+[1.634s] -- Added test 'copyright' to check source files copyright and LICENSE
+[1.636s] -- Added test 'cppcheck' to perform static code analysis on C / C++ code
+[1.636s] -- Configured cppcheck include dirs: /home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface/include
+[1.636s] -- Configured cppcheck exclude dirs and/or files: 
+[1.638s] -- Added test 'cpplint' to check C / C++ code against the Google style
+[1.638s] -- Configured cpplint exclude dirs and/or files: 
+[1.640s] -- Added test 'lint_cmake' to check CMake code style
+[1.642s] -- Added test 'uncrustify' to check C / C++ code style
+[1.643s] -- Configured uncrustify additional arguments: 
+[1.643s] -- Added test 'xmllint' to check XML markup files
+[1.649s] -- Configuring done (1.5s)
+[1.709s] -- Generating done (0.0s)
+[1.728s] -- Build files have been written to: /home/zewy/ros2_ws/build/ethercat_interface
+[1.752s] Invoked command in '/home/zewy/ros2_ws/build/ethercat_interface' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/zewy/ws_moveit2/install/moveit_configs_utils:/opt/ros/rolling DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake /home/zewy/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_interface -DCMAKE_INSTALL_PREFIX=/home/zewy/ros2_ws/install/ethercat_interface
+[1.757s] Invoking command in '/home/zewy/ros2_ws/build/ethercat_interface': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/zewy/ws_moveit2/install/moveit_configs_utils:/opt/ros/rolling DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --build /home/zewy/ros2_ws/build/ethercat_interface -- -j12 -l12
+[2.115s] [ 22%] Built target ethercat_interface
+[2.278s] [ 55%] Built target gmock
+[2.414s] [ 77%] Built target gmock_main
+[2.551s] [100%] Built target test_ec_pdo_channel_manager
+[2.612s] Invoked command in '/home/zewy/ros2_ws/build/ethercat_interface' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/zewy/ws_moveit2/install/moveit_configs_utils:/opt/ros/rolling DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --build /home/zewy/ros2_ws/build/ethercat_interface -- -j12 -l12
+[2.658s] Invoking command in '/home/zewy/ros2_ws/build/ethercat_interface': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/zewy/ws_moveit2/install/moveit_configs_utils:/opt/ros/rolling DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --install /home/zewy/ros2_ws/build/ethercat_interface
+[2.709s] -- Install configuration: ""
+[2.710s] -- Execute custom install script
+[2.711s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/lib/libethercat_interface.so
+[2.715s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/include/ethercat_interface/ec_master.hpp
+[2.715s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/include/ethercat_interface/ec_pdo_channel_manager.hpp
+[2.715s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/include/ethercat_interface/ec_sdo_manager.hpp
+[2.715s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/include/ethercat_interface/ec_slave.hpp
+[2.716s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/include/ethercat_interface/ec_sync_manager.hpp
+[2.716s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/environment/library_path.sh
+[2.717s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/environment/library_path.dsv
+[2.717s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ament_index/resource_index/package_run_dependencies/ethercat_interface
+[2.717s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ament_index/resource_index/parent_prefix_path/ethercat_interface
+[2.717s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/environment/ament_prefix_path.sh
+[2.718s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/environment/ament_prefix_path.dsv
+[2.718s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/environment/path.sh
+[2.718s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/environment/path.dsv
+[2.719s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/local_setup.bash
+[2.719s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/local_setup.sh
+[2.720s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/local_setup.zsh
+[2.720s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/local_setup.dsv
+[2.720s] -- Symlinking: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/package.dsv
+[2.760s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ament_index/resource_index/packages/ethercat_interface
+[2.760s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/cmake/ament_cmake_export_include_directories-extras.cmake
+[2.761s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/cmake/ament_cmake_export_libraries-extras.cmake
+[2.761s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/cmake/ament_cmake_export_dependencies-extras.cmake
+[2.761s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/cmake/ethercat_interfaceConfig.cmake
+[2.761s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/cmake/ethercat_interfaceConfig-version.cmake
+[2.765s] -- Up-to-date symlink: /home/zewy/ros2_ws/install/ethercat_interface/share/ethercat_interface/package.xml
+[2.766s] Invoked command in '/home/zewy/ros2_ws/build/ethercat_interface' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/zewy/ws_moveit2/install/moveit_configs_utils:/opt/ros/rolling DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --install /home/zewy/ros2_ws/build/ethercat_interface
