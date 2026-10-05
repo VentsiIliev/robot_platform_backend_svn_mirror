@@ -2,6 +2,7 @@
 """
 ROS2 Bridge Server - Exposes the shared MoveIt robot backend via REST API.
 """
+import os
 import logging
 import socket
 import sys
@@ -352,6 +353,7 @@ def start_rest_server(
     @app.route("/health", methods=["GET"])
     def health():
         status = get_startup_status()
+        status["robot_release"] = {"target": os.environ.get("ROBOT_RELEASE_TARGET"), "profile": os.environ.get("ZEROERR_ACTIVE_PROFILE")}
         http_status = 200 if status.get("error") is None else 500
         # Legacy GUI clients use /health.status == "ok" as their interaction
         # gate, so only report ok once the motion stack is ready.
@@ -361,6 +363,7 @@ def start_rest_server(
     @app.route("/startup/status", methods=["GET"])
     def startup_status():
         status = get_startup_status()
+        status["robot_release"] = {"target": os.environ.get("ROBOT_RELEASE_TARGET"), "profile": os.environ.get("ZEROERR_ACTIVE_PROFILE")}
         http_status = 200 if status.get("error") is None else 500
         return jsonify(status), http_status
 

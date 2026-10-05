@@ -101,6 +101,34 @@ class TestRosBackendLauncher(unittest.TestCase):
             popen.assert_not_called()
             run.assert_not_called()
 
+    def test_target_reuse_rejects_wrong_or_missing_identity(self):
+        import io
+        for payload in (b'{}', b'{"robot_release":{"target":"glue","profile":"paint"}}'):
+            with self.subTest(payload=payload), patch(
+                "src.bootstrap.ros_backend_launcher.urllib.request.urlopen",
+                return_value=io.BytesIO(payload),
+            ), patch("src.bootstrap.ros_backend_launcher.subprocess.Popen") as popen:
+                launcher = RosBackendLauncher(robot_target="paint_tray_dry", backend_profile="paint_short_links")
+                with self.assertRaises(RuntimeError):
+                    launcher.start()
+                popen.assert_not_called()
+
+    def test_target_reuse_accepts_matching_identity(self):
+        import io
+        response = io.BytesIO(b'{"robot_release":{"target":"paint_tray_dry","profile":"paint_short_links"}}')
+        with patch("src.bootstrap.ros_backend_launcher.urllib.request.urlopen", return_value=response):
+            launcher = RosBackendLauncher(robot_target="paint_tray_dry", backend_profile="paint_short_links")
+            self.assertTrue(launcher._backend_is_reachable())
+            self.assertEqual(launcher._launch_env()["ZEROERR_ACTIVE_PROFILE"], "paint_short_links")
+
+    def test_unmapped_target_cannot_autostart(self):
+        with self.assertRaisesRegex(RuntimeError, "Missing configuration: robot_systems"):
+            build_ros_backend_launcher_from_env(RosBackendConfig(), "glue")
+
+    def test_target_cannot_use_another_workspace(self):
+        with self.assertRaisesRegex(RuntimeError, "must reference"):
+            build_ros_backend_launcher_from_env(RosBackendConfig(launch_script="/tmp/wrong.sh"), "paint_tray_dry")
+
     def test_clean_env_removes_python_virtualenv_contamination(self) -> None:
         with patch.dict(
             os.environ,

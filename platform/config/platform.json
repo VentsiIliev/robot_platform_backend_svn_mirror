@@ -8,10 +8,10 @@
     "welding"
   ],
   "ros_backend": {
-    "auto_launch": false,
-    "auto_stop": false,
-    "launch_script": "~/ros2_ws/launch_zeroerr.sh",
-    "stop_script": "~/ros2_ws/stop_zeroerr.sh"
+    "auto_launch": true,
+    "auto_stop": true,
+    "launch_script": "../backend/ros2_ws/launch_zeroerr.sh",
+    "stop_script": "../backend/ros2_ws/stop_zeroerr.sh"
   },
   "ui": {
     "dev_skip_login": true,
@@ -22,5 +22,15 @@
     "fullscreen": false,
     "window_width": 1280,
     "window_height": 1024
+  },
+  "robot_systems": {
+    "paint_tray_dry": {
+      "robot_driver": "zeroerr",
+      "backend": "zeroerr",
+      "backend_profile": "paint_short_links",
+      "release_version": "1.0.0",
+      "platform_version": "1.0.0",
+      "backend_version": "1.0.0"
+    }
   }
 }

@@ -46,6 +46,7 @@ class StartupConfig:
     supported_robot_systems: tuple[str, ...]
     ros_backend: RosBackendConfig = field(default_factory=RosBackendConfig)
     ui: UiStartupConfig = field(default_factory=UiStartupConfig)
+    system_config: dict = field(default_factory=dict)
 
 
 def load_startup_config(config_path: Path = DEFAULT_CONFIG_PATH) -> StartupConfig:
@@ -78,12 +79,38 @@ def load_startup_config(config_path: Path = DEFAULT_CONFIG_PATH) -> StartupConfi
             "'supported_robot_systems'"
         )
 
+    selected = load_robot_system_config(payload, robot_system)
+
     return StartupConfig(
         robot_system=robot_system,
+        system_config=selected,
         supported_robot_systems=supported_robot_systems,
         ros_backend=_load_ros_backend_config(payload.get("ros_backend")),
         ui=_load_ui_startup_config(payload.get("ui")),
     )
+
+
+def load_robot_system_config(payload: dict, robot_system: str) -> dict:
+    """Require an explicit, complete configuration for the selected system."""
+    systems = payload.get("robot_systems")
+    if not isinstance(systems, dict) or robot_system not in systems:
+        raise RuntimeError(f"Missing configuration: robot_systems.{robot_system}")
+    selected = systems[robot_system]
+    if not isinstance(selected, dict):
+        raise RuntimeError(f"robot_systems.{robot_system} must be a JSON object")
+    for key in ("robot_driver", "backend", "backend_profile"):
+        _validate_system_name(selected.get(key), f"robot_systems.{robot_system}.{key}")
+    for key in ("release_version", "platform_version", "backend_version"):
+        value = selected.get(key)
+        if not isinstance(value, str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", value):
+            raise RuntimeError(f"robot_systems.{robot_system}.{key} must be major.minor.patch")
+    if selected["robot_driver"] not in ("zeroerr", "fairino"):
+        raise RuntimeError(f"Unknown robot_driver for robot_systems.{robot_system}")
+    if selected["backend"] not in ("zeroerr", "fairino"):
+        raise RuntimeError(f"Unknown backend for robot_systems.{robot_system}")
+    if selected["robot_driver"] != selected["backend"]:
+        raise RuntimeError(f"robot_systems.{robot_system}: robot_driver must match backend")
+    return dict(selected)
 
 
 def _load_ros_backend_config(raw_config: object) -> RosBackendConfig:
@@ -229,3 +256,10 @@ def load_bootstrap_provider(
             f"{module_name}.{_PROVIDER_FACTORY_NAME}() returned an invalid provider"
         )
     return provider
+
+
+def build_configured_robot(config: StartupConfig):
+    """Both supported ROS backends expose the same platform bridge contract."""
+    load_robot_system_config({"robot_systems": {config.robot_system: config.system_config}}, config.robot_system)
+    from src.engine.robot.drivers.ros2_robot import Ros2Robot
+    return Ros2Robot(server_url="http://localhost:5000")

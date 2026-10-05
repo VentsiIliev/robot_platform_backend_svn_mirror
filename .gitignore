@@ -36,3 +36,6 @@ backend/ros2_ws/eRob_moveit/src/eRob_ROS2_MoveIt/zeroerr/docs/temp_logs
 # Local placeholders and package metadata
 **/.codex
 backend/ros2_ws/5.149056
+
+# Generated robot releases
+/releases/

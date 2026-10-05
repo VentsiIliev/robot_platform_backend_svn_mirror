@@ -61,7 +61,17 @@ class ReleaseTargetTests(unittest.TestCase):
         products = set()
         for name in json.loads(targets.CATALOG.read_text()):
             with self.subTest(target=name):
-                target = targets.prepare_target(name, self.directory / name)
+                source_config = json.loads((ROOT / "config/platform.json").read_text())
+                selected = dict(robot_driver="zeroerr", backend="zeroerr", backend_profile="paint_short_links",
+                                release_version="1.0.0", platform_version="1.0.0", backend_version="1.0.0")
+                source_config["robot_systems"] = {name: selected}
+                original_read = Path.read_text
+                def read_config(path, *args, **kwargs):
+                    if path == ROOT / "config/platform.json":
+                        return json.dumps(source_config)
+                    return original_read(path, *args, **kwargs)
+                with patch.object(Path, "read_text", read_config):
+                    target = targets.prepare_target(name, self.directory / name)
                 self.assertNotIn(target["product"], products)
                 products.add(target["product"])
                 config = load_startup_config(self.directory / name / "platform.json")

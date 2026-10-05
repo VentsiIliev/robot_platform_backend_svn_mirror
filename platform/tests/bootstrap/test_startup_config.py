@@ -12,6 +12,8 @@ from src.bootstrap.startup_config import (
     UiStartupConfig,
     load_bootstrap_provider,
     load_startup_config,
+    load_robot_system_config,
+    build_configured_robot,
 )
 from src.robot_systems.robot_system_bootstrap_provider import (
     RobotSystemBootstrapProvider,
@@ -34,6 +36,38 @@ class _TestProvider(RobotSystemBootstrapProvider):
 
 
 class TestStartupConfig(unittest.TestCase):
+    @staticmethod
+    def system_config():
+        return dict(robot_driver="zeroerr", backend="zeroerr", backend_profile="paint_short_links",
+                    release_version="1.0.0", platform_version="1.0.0", backend_version="1.0.0")
+
+    def test_robot_driver_mismatch_fails(self):
+        selected = {**self.system_config(), "robot_driver": "fairino"}
+        with self.assertRaisesRegex(RuntimeError, "robot_driver must match backend"):
+            load_robot_system_config({"robot_systems": {"paint": selected}}, "paint")
+
+    def test_configured_robot_uses_bridge_without_provider_fallback(self):
+        config = StartupConfig(robot_system="paint", supported_robot_systems=("paint",), system_config=self.system_config())
+        with patch("src.engine.robot.drivers.ros2_robot.Ros2Robot") as robot:
+            result = build_configured_robot(config)
+        robot.assert_called_once_with(server_url="http://localhost:5000")
+        self.assertIs(result, robot.return_value)
+
+    def test_missing_selected_system_fails(self):
+        for systems in (None, {}, {"glue": self.system_config()}):
+            with self.subTest(systems=systems), TemporaryDirectory() as directory:
+                path = Path(directory) / "platform.json"
+                path.write_text(json.dumps(dict(robot_system="paint", supported_robot_systems=["paint"], robot_systems=systems)))
+                with self.assertRaisesRegex(RuntimeError, "Missing configuration: robot_systems.paint"):
+                    load_startup_config(path)
+
+    def test_incomplete_selected_system_fails(self):
+        for key in self.system_config():
+            selected = self.system_config()
+            del selected[key]
+            with self.subTest(key=key), self.assertRaisesRegex(RuntimeError, key):
+                load_robot_system_config({"robot_systems": {"paint": selected}}, "paint")
+
     def test_loads_selected_robot_system(self):
         with TemporaryDirectory() as tmp_dir:
             config_path = Path(tmp_dir) / "platform.json"
@@ -42,6 +76,7 @@ class TestStartupConfig(unittest.TestCase):
                     {
                         "robot_system": "paint",
                         "supported_robot_systems": ["glue", "paint", "welding"],
+                        "robot_systems": {"paint": self.system_config()},
                     }
                 ),
                 encoding="utf-8",
@@ -54,6 +89,7 @@ class TestStartupConfig(unittest.TestCase):
             StartupConfig(
                 robot_system="paint",
                 supported_robot_systems=("glue", "paint", "welding"),
+                system_config=self.system_config(),
             ),
         )
 
@@ -65,6 +101,7 @@ class TestStartupConfig(unittest.TestCase):
                     {
                         "robot_system": "paint",
                         "supported_robot_systems": ["paint"],
+                        "robot_systems": {"paint": self.system_config()},
                         "ros_backend": {
                             "auto_launch": False,
                             "auto_stop": False,
@@ -104,6 +141,7 @@ class TestStartupConfig(unittest.TestCase):
                     {
                         "robot_system": "paint",
                         "supported_robot_systems": ["paint"],
+                        "robot_systems": {"paint": self.system_config()},
                         "ui": {
                             "dev_skip_login": True,
                             "skip_splash": True,
@@ -141,6 +179,7 @@ class TestStartupConfig(unittest.TestCase):
                     {
                         "robot_system": "paint",
                         "supported_robot_systems": ["paint"],
+                        "robot_systems": {"paint": self.system_config()},
                         "ui": {"window_width": 0},
                     }
                 ),
@@ -158,6 +197,7 @@ class TestStartupConfig(unittest.TestCase):
                     {
                         "robot_system": "paint",
                         "supported_robot_systems": ["paint"],
+                        "robot_systems": {"paint": self.system_config()},
                         "ui": {"dev_skip_login": "false"},
                     }
                 ),
@@ -175,6 +215,7 @@ class TestStartupConfig(unittest.TestCase):
                     {
                         "robot_system": "paint",
                         "supported_robot_systems": ["paint"],
+                        "robot_systems": {"paint": self.system_config()},
                         "ros_backend": {"auto_launch": "false"},
                     }
                 ),
@@ -192,6 +233,7 @@ class TestStartupConfig(unittest.TestCase):
                     {
                         "robot_system": "paint",
                         "supported_robot_systems": ["paint"],
+                        "robot_systems": {"paint": self.system_config()},
                         "ros_backend": {"launch_script": ""},
                     }
                 ),
@@ -209,6 +251,7 @@ class TestStartupConfig(unittest.TestCase):
                     {
                         "robot_system": "src.robot_systems.paint",
                         "supported_robot_systems": ["paint"],
+                        "robot_systems": {"paint": self.system_config()},
                     }
                 ),
                 encoding="utf-8",

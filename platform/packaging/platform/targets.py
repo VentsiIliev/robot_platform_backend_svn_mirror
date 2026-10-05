@@ -18,11 +18,17 @@ def load_target(name: str) -> dict:
 def prepare_target(name: str, destination: Path) -> dict:
     target = load_target(name)
     destination.mkdir(parents=True, exist_ok=True)
-    (destination / "platform.json").write_text(json.dumps({
-        "robot_system": target["robot_system"],
-        "supported_robot_systems": [target["robot_system"]],
-        **({"ros_backend": {"auto_launch": False, "auto_stop": False}} if name == "twin_robot" else {}),
-    }, indent=2), encoding="utf-8")
+    # Runtime and component packaging share the selected system configuration.
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from src.bootstrap.startup_config import load_robot_system_config
+    payload = json.loads((ROOT / "config/platform.json").read_text())
+    selected = load_robot_system_config(payload, name)
+    payload.update(robot_system=name, supported_robot_systems=[name], robot_systems={name: selected})
+    payload["ros_backend"] = {**payload.get("ros_backend", {}), "auto_launch": True, "auto_stop": True}
+    payload["ros_backend"].pop("launch_script", None)
+    payload["ros_backend"].pop("stop_script", None)
+    (destination / "platform.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
     (destination / "release-target.json").write_text(json.dumps(target, indent=2), encoding="utf-8")
     factory = ROOT / "config/factory_defaults" / f"{name}.json"
     (destination / "factory-defaults.json").write_text(factory.read_text(encoding="utf-8"), encoding="utf-8")

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+import json
 import logging
 import os
 import subprocess
@@ -9,7 +11,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from src.bootstrap.startup_config import RosBackendConfig
+from src.bootstrap.startup_config import RosBackendConfig, load_robot_system_config
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -29,6 +31,8 @@ class RosBackendLauncher:
         status_timeout_s: float = 0.3,
         auto_launch: bool = True,
         auto_stop: bool = True,
+        robot_target: str | None = None,
+        backend_profile: str | None = None,
     ) -> None:
         self._launch_script = _expand_path(launch_script or _default_launch_script())
         self._stop_script = _expand_path(stop_script or _default_stop_script())
@@ -38,6 +42,8 @@ class RosBackendLauncher:
         self._status_timeout_s = float(status_timeout_s)
         self._auto_launch = bool(auto_launch)
         self._auto_stop = bool(auto_stop)
+        self._robot_target = robot_target
+        self._backend_profile = backend_profile
         self._log_handle = None
         self._process: subprocess.Popen | None = None
         self._owns_backend = False
@@ -60,7 +66,7 @@ class RosBackendLauncher:
             [str(self._launch_script)],
             cwd=str(self._launch_script.parent),
             start_new_session=True,
-            env=_clean_ros_process_env(),
+            env=self._launch_env(),
             stdout=self._log_handle,
             stderr=subprocess.STDOUT,
         )
@@ -82,12 +88,28 @@ class RosBackendLauncher:
             self._close_log_handle()
             self._owns_backend = False
 
+    def _launch_env(self) -> dict[str, str]:
+        env = _clean_ros_process_env()
+        if self._robot_target:
+            env["ROBOT_RELEASE_TARGET"] = self._robot_target
+            env["ZEROERR_ACTIVE_PROFILE"] = self._backend_profile
+        return env
+
     def _backend_is_reachable(self) -> bool:
         for url in self._status_urls:
             try:
-                with urllib.request.urlopen(url, timeout=self._status_timeout_s):
+                with urllib.request.urlopen(url, timeout=self._status_timeout_s) as response:
+                    if self._robot_target:
+                        try:
+                            identity = json.load(response).get("robot_release", {})
+                        except (ValueError, AttributeError) as error:
+                            raise RuntimeError("Running backend has no valid robot identity") from error
+                        if identity != {"target": self._robot_target, "profile": self._backend_profile}:
+                            raise RuntimeError(f"Backend target/profile mismatch: expected {self._robot_target}/{self._backend_profile}, received {identity}")
                     return True
-            except urllib.error.HTTPError:
+            except urllib.error.HTTPError as error:
+                if self._robot_target:
+                    raise RuntimeError("Backend responded with an error; refusing unverified reuse") from error
                 return True
             except (OSError, urllib.error.URLError):
                 continue
@@ -136,9 +158,39 @@ class RosBackendLauncher:
             raise RuntimeError(f"ROS backend script is not executable: {path}")
 
 
-def build_ros_backend_launcher_from_env(config: RosBackendConfig | None = None) -> RosBackendLauncher:
+def build_ros_backend_launcher_from_env(config: RosBackendConfig | None = None, robot_target: str | None = None) -> RosBackendLauncher:
     config = config or RosBackendConfig()
+    profile = None
+    if robot_target:
+        registry = Path(__file__).resolve().parents[2] / "config/platform.json"
+        selected = load_robot_system_config(json.loads(registry.read_text()), robot_target)
+        if selected["backend"] != "zeroerr":
+            raise RuntimeError(f"Backend launch is not implemented for {selected['backend']}")
+        profile = selected["backend_profile"]
+        if profile:
+            if getattr(sys, "frozen", False):
+                workspace = Path(sys.executable).resolve().parent.parent / "backend"
+                expected_launch = workspace / "launch.sh"
+                expected_stop = workspace / "stop.sh"
+            else:
+                workspace = Path(__file__).resolve().parents[3] / "backend/ros2_ws"
+                expected_launch = workspace / "launch_zeroerr.sh"
+                expected_stop = workspace / "stop_zeroerr.sh"
+            for variable, configured, expected in (
+                ("ROBOT_APP_BACKEND_LAUNCH_SCRIPT", config.launch_script, expected_launch),
+                ("ROBOT_APP_BACKEND_STOP_SCRIPT", config.stop_script, expected_stop),
+            ):
+                supplied = os.environ.get(variable, configured)
+                if supplied:
+                    actual = _expand_path(supplied)
+                    if not actual.is_absolute():
+                        actual = Path(__file__).resolve().parents[2] / actual
+                    if actual.resolve() != expected.resolve():
+                        raise RuntimeError(f"{variable} must reference this target's backend: {expected}")
+            config = replace(config, launch_script=str(expected_launch), stop_script=str(expected_stop))
     return RosBackendLauncher(
+        robot_target=robot_target if profile else None,
+        backend_profile=profile,
         launch_script=_value_from_env_or_config(
             "ROBOT_APP_BACKEND_LAUNCH_SCRIPT",
             config.launch_script,

@@ -23,7 +23,7 @@ from src.applications.base.robot_connection_notifier import RobotConnectionNotif
 from src.engine.localization.localization_service import LocalizationService
 from src.engine.auth.user_session import UserSession
 from src.robot_systems.system_builder import SystemBuilder
-from src.bootstrap.startup_config import load_bootstrap_provider, load_startup_config
+from src.bootstrap.startup_config import load_bootstrap_provider, load_startup_config, build_configured_robot
 from src.bootstrap.ros_backend_launcher import build_ros_backend_launcher_from_env
 from src.bootstrap.shell_session_controller import ShellSessionController
 from src.bootstrap.startup_splash_runtime import StartupSplashCoordinator
@@ -134,14 +134,14 @@ def main() -> None:
     # 1 — engine singletons
     ctx = EngineContext.build()
 
-    ros_backend = build_ros_backend_launcher_from_env(startup_config.ros_backend)
+    ros_backend = build_ros_backend_launcher_from_env(startup_config.ros_backend, startup_config.robot_system)
     ros_backend.start()
 
     # 2 — robot app (settings loaded, services wired)
     try:
         robot_app = (
             SystemBuilder()
-            .with_robot(bootstrap_provider.build_robot())
+            .with_robot(build_configured_robot(startup_config))
             .with_messaging_service(ctx.messaging_service)
             .with_development_mode(dev_skip_login)
             .build(bootstrap_provider.system_class)
