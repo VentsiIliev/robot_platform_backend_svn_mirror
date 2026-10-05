@@ -1,7 +1,8 @@
+from src.robot_systems.paint_tray_dry import paint_system_config
 from src.robot_systems.paint.bootstrap_provider import PaintBootstrapProvider
-from src.robot_systems.paint.paint_robot_system import TrayDryerPaintRobotSystem
+from src.robot_systems.paint.paint_robot_system import TrayDryerPaintRobotSystem, with_paint_system_overrides
 from src.robot_systems.robot_system_bootstrap_provider import RobotSystemBootstrapProvider
 
 
 def create_bootstrap_provider() -> RobotSystemBootstrapProvider:
-    return PaintBootstrapProvider(TrayDryerPaintRobotSystem)
+    return PaintBootstrapProvider(with_paint_system_overrides(TrayDryerPaintRobotSystem, paint_system_config))

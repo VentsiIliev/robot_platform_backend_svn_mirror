@@ -105,82 +105,82 @@ def _build_sub_zero_dropoff_corridor(corridor_id, dropoff_pose, dropoff_config):
     )
 
 
-def _build_application_specs():
-    """Return the Paint applications enabled by paint_system_config."""
+def _build_application_specs(config=paint_system_config):
+    """Return the Paint applications enabled by config."""
     configured_specs = [
-        (paint_system_config.PAINT_DASHBOARD_APP,
+        (config.PAINT_DASHBOARD_APP,
          ApplicationSpec(name="PaintDashboard", folder_id=1, icon="fa5s.tachometer-alt",
                          factory=application_wiring._build_dashboard_application)),
-        (paint_system_config.PAINT_ADJUSTMENT_APP,
+        (config.PAINT_ADJUSTMENT_APP,
          ApplicationSpec(name="PaintAdjustment", folder_id=1, icon="fa5s.paint-brush",
                          factory=application_wiring._build_paint_adjustment_application)),
-        (paint_system_config.WORKPIECE_LIBRARY_APP,
+        (config.WORKPIECE_LIBRARY_APP,
          ApplicationSpec(name="WorkpieceLibrary", folder_id=1, icon="fa5s.shapes",
                          factory=application_wiring._build_workpiece_library_application)),
-        (paint_system_config.WORKPIECE_EDITOR_APP,
+        (config.WORKPIECE_EDITOR_APP,
          ApplicationSpec(name="WorkpieceEditor", folder_id=1, icon="fa5s.draw-polygon",
                          factory=application_wiring._build_paint_contour_editor_application)),
-        (paint_system_config.ROBOT_SETTINGS_APP,
+        (config.ROBOT_SETTINGS_APP,
          ApplicationSpec(name="RobotSettings", folder_id=2, icon="mdi.robot-industrial",
                          factory=application_wiring._build_robot_settings_application)),
-        (paint_system_config.TOOL_SETTINGS_APP,
+        (config.TOOL_SETTINGS_APP,
          ApplicationSpec(name="ToolSettings", folder_id=2, icon="fa5s.tools",
                          factory=application_wiring._build_tool_settings_application)),
-        (paint_system_config.ETHERCAT_DIAGNOSTICS_APP,
+        (config.ETHERCAT_DIAGNOSTICS_APP,
          ApplicationSpec(name="EthercatDiagnostics", folder_id=2, icon="fa5s.network-wired",
                          factory=application_wiring._build_ethercat_diagnostics_application)),
-        (paint_system_config.MODBUS_SETTINGS_APP,
+        (config.MODBUS_SETTINGS_APP,
          ApplicationSpec(name="ModbusSettings", folder_id=2, icon="fa5s.network-wired",
                          factory=application_wiring._build_modbus_settings_application)),
         (True,
          ApplicationSpec(name="SoftwareUpdate", folder_id=3, icon="fa5s.download",
                          factory=application_wiring._build_software_update_application)),
-        (paint_system_config.NETWORK_SETTINGS_APP,
+        (config.NETWORK_SETTINGS_APP,
          ApplicationSpec(name="NetworkSettings", folder_id=2, icon="fa5s.wifi",
                          factory=application_wiring._build_network_settings_application)),
-        (paint_system_config.DEVICE_CONTROL_APP,
+        (config.DEVICE_CONTROL_APP,
          ApplicationSpec(name="DeviceControl", folder_id=2, icon="fa5s.sliders-h",
                          factory=application_wiring._build_device_control_application)),
-        (paint_system_config.WORK_AREA_SETTINGS_APP,
+        (config.WORK_AREA_SETTINGS_APP,
          ApplicationSpec(name="WorkAreaSettings", folder_id=2, icon="fa5s.vector-square",
                          factory=application_wiring._build_work_area_settings_application)),
-        (paint_system_config.CAMERA_SETTINGS_APP,
+        (config.CAMERA_SETTINGS_APP,
          ApplicationSpec(name="CameraSettings", folder_id=2, icon="fa5s.camera",
                          factory=application_wiring._build_camera_settings_application)),
-        (paint_system_config.CALIBRATION_SETTINGS_APP,
+        (config.CALIBRATION_SETTINGS_APP,
          ApplicationSpec(name="CalibrationSettings", folder_id=2, icon="fa5s.sliders-h",
                          factory=application_wiring._build_calibration_settings_application)),
-        (paint_system_config.PAINT_PROCESS_SETTINGS_APP,
+        (config.PAINT_PROCESS_SETTINGS_APP,
          ApplicationSpec(name="PaintProcessSettings", folder_id=2, icon="fa5s.cogs",
                          factory=application_wiring._build_paint_process_settings_application)),
-        (paint_system_config.CALIBRATION_APP,
+        (config.CALIBRATION_APP,
          ApplicationSpec(name="Calibration", folder_id=2, icon="fa5s.crosshairs",
                          factory=application_wiring._build_calibration_application)),
-        (paint_system_config.BROKER_DEBUG_APP,
+        (config.BROKER_DEBUG_APP,
          ApplicationSpec(name="BrokerDebug", folder_id=4, icon="fa5s.project-diagram",
                          factory=application_wiring._build_broker_debug_application)),
-        (paint_system_config.CONTOUR_MATCHING_TESTER_APP,
+        (config.CONTOUR_MATCHING_TESTER_APP,
          ApplicationSpec(name="ContourMatchingTester", folder_id=4, icon="fa6s.shapes",
                          factory=application_wiring._build_contour_matching_tester)),
-        (paint_system_config.USER_MANAGEMENT_APP,
+        (config.USER_MANAGEMENT_APP,
          ApplicationSpec(name="UserManagement", folder_id=3, icon="fa5s.users-cog",
                          factory=application_wiring._build_user_management_application)),
-        (paint_system_config.INTRINSIC_CAPTURE_APP,
+        (config.INTRINSIC_CAPTURE_APP,
          ApplicationSpec(name="IntrinsicCapture", folder_id=4, icon="fa5s.camera-retro",
                          factory=application_wiring._build_intrinsic_capture_application)),
-        (paint_system_config.HAND_EYE_CALIBRATION_APP,
+        (config.HAND_EYE_CALIBRATION_APP,
          ApplicationSpec(name="HandEyeCalibration", folder_id=4, icon="fa5s.hand-paper",
                          factory=application_wiring._build_hand_eye_calibration_application)),
-        (paint_system_config.PICK_TARGET_APP,
+        (config.PICK_TARGET_APP,
          ApplicationSpec(name="PickTarget", folder_id=4, icon="fa5s.crosshairs",
                          factory=application_wiring._build_pick_target_application)),
-        (paint_system_config.PAINT_MOTION_PLANE_SETUP_APP,
+        (config.PAINT_MOTION_PLANE_SETUP_APP,
          ApplicationSpec(name="PaintMotionPlaneSetup", folder_id=4, icon="fa5s.compass",
                          factory=application_wiring._build_paint_motion_plane_setup_application)),
-        (paint_system_config.PAINT_MOTION_RECIPE_APP,
+        (config.PAINT_MOTION_RECIPE_APP,
          ApplicationSpec(name="PaintMotionRecipe", folder_id=4, icon="fa5s.route",
                          factory=application_wiring._build_paint_motion_recipe_application)),
-        (paint_system_config.SHAFT_ALIGNMENT_APP,
+        (config.SHAFT_ALIGNMENT_APP,
          ApplicationSpec(name="ShaftAlignment", folder_id=4, icon="fa5s.bullseye",
                          factory=application_wiring._build_shaft_alignment_application)),
     ]
@@ -189,6 +189,39 @@ def _build_application_specs():
 
 # ── System ───────────────────────────────────────────────────────────────────────
 
+
+
+def _build_dashboard_ui_config(config, base=None):
+    return replace(base or PaintDashboardUiConfig(),
+        show_camera_preview=config.SHOW_DASHBOARD_CAMERA_PREVIEW,
+        show_tray_camera_tab=config.SHOW_TRAY_DASHBOARD_CAMERA_TAB,
+        use_collapsible_settings_panel=(
+            config.USE_COLLAPSIBLE_DASHBOARD_SETTINGS_PANEL
+        ),
+        use_combined_paint_speed_control=(
+            config.USE_COMBINED_PAINT_SPEED_CONTROL
+        ),
+        combined_paint_speed_minimum_percent=(
+            config.COMBINED_PAINT_SPEED_MINIMUM_PERCENT
+        ),
+        combined_paint_speed_maximum_percent=(
+            config.COMBINED_PAINT_SPEED_MAXIMUM_PERCENT
+        ),
+        combined_paint_acceleration_minimum_percent=(
+            config.COMBINED_PAINT_ACCELERATION_MINIMUM_PERCENT
+        ),
+        combined_paint_acceleration_maximum_percent=(
+            config.COMBINED_PAINT_ACCELERATION_MAXIMUM_PERCENT
+        ),
+        show_resolved_paint_speed_values=(
+            config.SHOW_RESOLVED_PAINT_SPEED_VALUES
+        ),
+        allow_running_paint_settings_updates=(
+            config.ALLOW_RUNNING_PAINT_SETTINGS_UPDATES
+        ),
+        use_tray_dry_duration=config.USE_TRAY_DRY_DURATION,
+        tray_dry_duration_minutes=config.TRAY_DRY_DURATION_MINUTES,
+    )
 
 
 class PaintRobotSystem(BaseRobotSystem):
@@ -209,36 +242,8 @@ class PaintRobotSystem(BaseRobotSystem):
             development_mode=self.development_mode,
         )
 
-    ui_config = PaintDashboardUiConfig(
-        show_camera_preview=paint_system_config.SHOW_DASHBOARD_CAMERA_PREVIEW,
-        show_tray_camera_tab=paint_system_config.SHOW_TRAY_DASHBOARD_CAMERA_TAB,
-        use_collapsible_settings_panel=(
-            paint_system_config.USE_COLLAPSIBLE_DASHBOARD_SETTINGS_PANEL
-        ),
-        use_combined_paint_speed_control=(
-            paint_system_config.USE_COMBINED_PAINT_SPEED_CONTROL
-        ),
-        combined_paint_speed_minimum_percent=(
-            paint_system_config.COMBINED_PAINT_SPEED_MINIMUM_PERCENT
-        ),
-        combined_paint_speed_maximum_percent=(
-            paint_system_config.COMBINED_PAINT_SPEED_MAXIMUM_PERCENT
-        ),
-        combined_paint_acceleration_minimum_percent=(
-            paint_system_config.COMBINED_PAINT_ACCELERATION_MINIMUM_PERCENT
-        ),
-        combined_paint_acceleration_maximum_percent=(
-            paint_system_config.COMBINED_PAINT_ACCELERATION_MAXIMUM_PERCENT
-        ),
-        show_resolved_paint_speed_values=(
-            paint_system_config.SHOW_RESOLVED_PAINT_SPEED_VALUES
-        ),
-        allow_running_paint_settings_updates=(
-            paint_system_config.ALLOW_RUNNING_PAINT_SETTINGS_UPDATES
-        ),
-        use_tray_dry_duration=paint_system_config.USE_TRAY_DRY_DURATION,
-        tray_dry_duration_minutes=paint_system_config.TRAY_DRY_DURATION_MINUTES,
-    )
+    system_config = paint_system_config
+    ui_config = _build_dashboard_ui_config(paint_system_config)
 
 
     movement_groups = [
@@ -867,3 +872,20 @@ class TrayDryerPaintRobotSystem(PaintRobotSystem):
             "profiles", "tray_dryer", "storage", "translations"
         ),
     )
+
+
+def with_paint_system_overrides(system_class, overrides):
+    """Compose a system's switches without mutating shared defaults/classes."""
+    from types import SimpleNamespace
+    defaults = {name: value for name, value in vars(paint_system_config).items() if name.isupper()}
+    values = {name: value for name, value in vars(overrides).items() if name.isupper()}
+    unknown = values.keys() - defaults.keys()
+    if unknown:
+        raise ValueError(f"Unknown paint configuration overrides: {', '.join(sorted(unknown))}")
+    config = SimpleNamespace(**{**defaults, **values})
+    return type(system_class.__name__, (system_class,), {
+        "__module__": system_class.__module__,
+        "system_config": config,
+        "ui_config": _build_dashboard_ui_config(config, system_class.ui_config),
+        "shell": replace(system_class.shell, applications=_build_application_specs(config)),
+    })

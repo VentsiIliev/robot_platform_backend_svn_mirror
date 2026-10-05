@@ -29,8 +29,9 @@ def _effective_camera_to_tcp_offsets(robot_system, robot_config=None, area_id: s
     )
 
 
-def _bypass_contour_preparation_enabled() -> bool:
-    return bool(paint_system_config.BYPASS_CONTOUR_PREPARATION)
+def _bypass_contour_preparation_enabled(robot_system=None) -> bool:
+    config = getattr(robot_system, "system_config", paint_system_config)
+    return bool(config.BYPASS_CONTOUR_PREPARATION)
 
 
 def _get_paint_process_config(robot_system=None):
@@ -457,7 +458,7 @@ def _build_paint_path_preparation_service(robot_system):
                 len(pts_px),
             )
             return np.asarray(pts_px, dtype=float)[:, :2].copy()
-        if _bypass_contour_preparation_enabled():
+        if _bypass_contour_preparation_enabled(robot_system):
             _logger.warning(
                 "[PAINT_DIAGNOSTIC_BYPASS] Pixel contour interpolation and smoothing "
                 "are DISABLED; using %d captured points directly",
@@ -496,7 +497,7 @@ def _build_paint_path_preparation_service(robot_system):
                 "prepared_xy": open_xy.tolist(),
                 "curve_xy": open_xy.tolist(),
             }
-        if _bypass_contour_preparation_enabled():
+        if _bypass_contour_preparation_enabled(robot_system):
             _logger.warning(
                 "[PAINT_DIAGNOSTIC_BYPASS] Robot-space 1 mm resampling, hairpin cleanup, "
                 "and bounded smoothing are DISABLED; using %d transformed points directly",
