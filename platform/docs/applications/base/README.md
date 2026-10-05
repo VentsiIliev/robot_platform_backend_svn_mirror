@@ -1,0 +1,472 @@
+# `src/applications/base/` — Application Infrastructure
+
+This package defines the abstract contracts and the generic wiring implementation shared by all applications. No application-specific logic lives here — only the interfaces and the template-method factory.
+
+It also contains reusable UI infrastructure that is safe to share across applications, such as styled dialogs, shared application styles, and the broker-backed user notification presenter.
+
+---
+
+## Class Hierarchy
+
+```
+IApplication (ABC)
+  └── WidgetApplication          ← generic shell; wraps any widget_factory callable
+
+IApplicationModel (ABC)
+  └── [application].Model        ← e.g. ModbusSettingsModel
+
+IApplicationView (AppWidget, ABC)
+  └── [application].View         ← e.g. RobotSettingsView
+
+IApplicationController (ABC)
+  └── [application].Controller   ← e.g. GlueCellSettingsController
+
+ApplicationFactory (ABC)
+  └── [application].Factory      ← template method: build(service) → IApplicationView
+```
+
+---
+
+## API Reference
+
+### `IApplication`
+
+**File:** `application_interface.py`
+
+```python
+class IApplication(ABC):
+    @abstractmethod
+    def register(self, messaging_service: IMessagingService) -> None: ...
+
+    @abstractmethod
+    def create_widget(self) -> AppWidget: ...
+```
+
+Called by the bootstrap in two phases:
+1. `register(messaging_service)` — called when the application is first resolved for opening; store the broker reference here
+2. `create_widget()` — called when the user opens the application's folder; must return the root widget
+
+---
+
+### `WidgetApplication`
+
+**File:** `widget_application.py`
+
+```python
+class WidgetApplication(IApplication):
+    def __init__(self, widget_factory: Callable[[IMessagingService], AppWidget]): ...
+    def register(self, messaging_service: IMessagingService) -> None: ...
+    def create_widget(self) -> AppWidget: ...
+```
+
+Generic `IApplication` adapter. Stores `widget_factory` and calls it with `messaging_service` in `create_widget()`. The `messaging_service` is captured in `register()`. In the current bootstrap flow, both happen lazily on first open rather than during shell startup.
+
+```python
+# Application does not need broker:
+WidgetApplication(widget_factory=lambda _ms: factory.build(service))
+
+# Application needs broker for live data subscriptions:
+WidgetApplication(widget_factory=lambda ms: factory.build(service, messaging=ms))
+
+# Application supports shared jog wiring:
+WidgetApplication(widget_factory=lambda ms: factory.build(service, messaging=ms, jog_service=jog_service))
+```
+
+---
+
+### `ApplicationFactory`
+
+**File:** `application_factory.py`
+
+```python
+class ApplicationFactory(ABC):
+    def build(self, *args, **kwargs) -> IApplicationView: ...   # template method
+
+    @abstractmethod
+    def _create_model(self, *args) -> IApplicationModel: ...
+
+    @abstractmethod
+    def _create_view(self) -> IApplicationView: ...
+
+    @abstractmethod
+    def _create_controller(self, model: IApplicationModel, view: IApplicationView) -> IApplicationController: ...
+```
+
+`build(service, messaging=None, jog_service=None)` calls the three abstract methods in order, then:
+1. Optionally auto-attaches `JogController` when the view enables jog and both shared dependencies are provided
+2. Calls `controller.load()` — populates the view from the model
+3. Assigns `view._controller = controller` — GC ownership fix (never write this yourself)
+4. Logs the build at DEBUG level
+5. Returns the `view`
+
+---
+
+### `IApplicationModel`
+
+**File:** `i_application_model.py`
+
+```python
+class IApplicationModel(ABC):
+    @abstractmethod
+    def load(self) -> Any: ...
+
+    @abstractmethod
+    def save(self, *args, **kwargs) -> None: ...
+```
+
+---
+
+### `IApplicationView`
+
+**File:** `i_application_view.py`
+
+```python
+class IApplicationView(AppWidget):
+    SHOW_JOG_WIDGET = False
+    JOG_FRAME_SELECTOR_ENABLED = False
+
+    jog_requested = pyqtSignal(str, str, str, float)
+    jog_started = pyqtSignal(str)
+    jog_stopped = pyqtSignal(str)
+
+    def enable_jog_widget(self, enabled: bool) -> None: ...
+    def set_jog_position(self, pos: list) -> None: ...
+    def set_jog_frame_options(self, names: list[str], default: str | None = None) -> None: ...
+    def set_jog_frame(self, name: str) -> None: ...
+    def get_jog_frame(self) -> str: ...
+
+    @abstractmethod
+    def setup_ui(self) -> None: ...
+
+    @abstractmethod
+    def clean_up(self) -> None: ...
+```
+
+Extends `AppWidget` from `pl_gui` and now owns the shared jog drawer lifecycle for all application views.
+
+Behavior:
+- every `IApplicationView` gets a `RobotJogWidget` and `DrawerToggle` installed automatically after `setup_ui()`
+- the drawer is hidden by default
+- views opt in by setting `SHOW_JOG_WIDGET = True`
+- views that need frame selection opt in with `JOG_FRAME_SELECTOR_ENABLED = True`
+- controllers can always call `view.set_jog_position(...)`
+- shared jog wiring can always call `view.set_jog_frame_options(...)` and `view.set_jog_frame(...)`
+- `JogController` can always ask `view.get_jog_frame()`
+- `ApplicationFactory.build(..., messaging=..., jog_service=...)` auto-attaches jog support when the view opts in
+
+This removes the need for each application view to manually create `_drawer` and `_jog_widget`.
+It also removes the need for application controllers to manually construct `JogController`.
+When a robot system exposes a targeting provider, the shared jog service can also be built generically with `build_robot_system_jog_service(robot_system, ...)` instead of per-system custom jog wiring.
+
+Typical view configuration:
+
+```python
+class PickTargetView(IApplicationView):
+    SHOW_JOG_WIDGET = True
+    JOG_FRAME_SELECTOR_ENABLED = True
+```
+
+If the active robot system provides dynamic jog-frame definitions, the shared jog controller populates the combo automatically from `jog_service.get_available_frames()` and refreshes it when targeting definitions change.
+
+Views should only use a private `_configure_jog_widget()` hook for presentation details or non-system-specific behavior, not to hardcode system frame names.
+
+If the view needs to react to frame changes, implement:
+
+```python
+def _on_jog_frame_changed(self, name: str) -> None:
+    ...
+```
+
+`setup_ui()` is still called by `AppWidget.__init__` after the subclass has initialized its own state. `clean_up()` remains the place for stopping timers or threads when the widget is destroyed.
+
+---
+
+### `IApplicationController`
+
+**File:** `i_application_controller.py`
+
+```python
+class IApplicationController(ABC):
+    @abstractmethod
+    def load(self) -> None: ...
+
+    @abstractmethod
+    def stop(self) -> None: ...
+```
+
+`load()` is called once by `ApplicationFactory.build()` after construction. `stop()` should unsubscribe from all broker topics and is typically connected to `view.destroyed`.
+
+---
+
+### `UserNotificationPresenter`
+
+**File:** `notification_presenter.py`
+
+Reusable application-layer presenter for user-facing notifications published on the message broker.
+
+Responsibilities:
+- subscribe to `NotificationTopics.USER`
+- resolve localization-ready notification keys into display text
+- fall back to provided English text when no translation is available
+- present the notification with the shared [styled message box](/home/ilv/Desktop/robot_app_platform/src/applications/base/styled_message_box.py)
+
+The presenter intentionally lives in `src/applications/base/` because it depends on Qt and dialog rendering. Backend layers must not import it.
+
+Use it from controllers:
+
+```python
+self._notifications = UserNotificationPresenter(self._view, broker, translate=self._t)
+self._notifications.start()
+...
+self._notifications.stop()
+```
+
+For now it shows modal dialogs via:
+- `show_info(...)`
+- `show_warning(...)`
+- `show_critical(...)`
+
+It also supports simple consecutive deduplication via `dedupe_key`.
+
+---
+
+### Styled message boxes with optional actions
+
+**File:** `styled_message_box.py`
+
+`show_warning(parent, title, text)` keeps the standard modal `QMessageBox`
+behavior. Callers that need an operator decision can pass `DialogAction` values
+to render a modal `ActionWarningDialog` instead:
+
+```python
+choice = show_warning(
+    view,
+    translated_title,
+    translated_message,
+    heading=translated_heading,
+    guidance=translated_guidance,
+    status=translated_status,
+    actions=(
+        DialogAction("retry", translated_retry, primary=True),
+        DialogAction("dismiss", translated_dismiss, full_width=True),
+    ),
+)
+```
+
+The return value is the selected action key, or `None` if the dialog is closed
+without choosing one. `heading`, `guidance`, and `status` are optional display
+text. `primary` uses the shared filled button style; `full_width` places that
+button on its own row. Translate labels before calling the shared helper, and
+handle the returned key in the owning view/controller. The shared dialog has no
+process or navigation dependencies.
+
+---
+
+### `NotificationTextResolver`
+
+**File:** `notification_presenter.py`
+
+Small helper used by `UserNotificationPresenter` to make the notification mechanism localization-ready.
+
+Resolution order:
+1. use `title_key` / `message_key` if a translation function returns a localized template
+2. otherwise use `fallback_title` / `fallback_message`
+3. apply `str.format(**params)` if formatting parameters are provided
+
+This keeps translation at the UI boundary instead of pushing localized strings into engine or robot-system code.
+
+---
+
+### `app_styles.py`
+
+**File:** `app_styles.py`
+
+Shared application-level style constants and helpers for views that need reusable cards, section text, state labels, and semantic button variants.
+
+Use it for:
+- app card panels
+- section labels and hints
+- primary / secondary / success / danger button styles
+- toggle button styles
+- state-label styles
+- shared divider widgets
+
+This sits above the lower-level `pl_gui.settings.settings_view.styles` palette:
+- `pl_gui...styles` remains the base design system
+- `src/applications/base/app_styles.py` is the shared application-facing composition layer
+
+Views should prefer importing shared application styles from `src/applications/base/app_styles.py` instead of creating new per-application style modules for common patterns.
+
+For page titles, use `APP_PAGE_TITLE_STYLE` from `pl_gui.settings.settings_view.styles` and place the title above tabs and content. Settings, Calibration, Paint Adjustment, and Workpiece Library follow this layout.
+
+---
+
+### Virtual Keyboard
+
+**Files:**
+- `widgets/custom_virtual_keyboard.py`
+- `widgets/virtual_keyboard_widget_factory.py`
+- `keyboard_settings_view.py`
+- `config/virtual_keyboard_config.py`
+
+The platform provides one shared virtual keyboard path for touch-oriented forms. Applications should not implement local keyboard popups.
+
+Use cases:
+- direct text/numeric fields: `KeyboardLineEdit`, `KeyboardSpinBox`, `KeyboardDoubleSpinBox`
+- schema-driven settings tabs: `KeyboardSettingsView`
+- direct `CollapsibleGroup` / `GenericSettingGroup` construction: `build_with_keyboard_setting_handlers(...)`
+- editor builders with widget-factory seams: `VirtualKeyboardWidgetFactory()`
+
+Behavior:
+- the keyboard docks to the active application/window, not to arbitrary child widgets
+- the nearest scroll area is padded while the keyboard is visible
+- the focused field is scrolled above the keyboard
+- scroll padding and original scroll position are restored when the keyboard hides
+- only one keyboard owner is active at a time
+
+Direct field example:
+
+```python
+from src.applications.base.widgets.custom_virtual_keyboard import (
+    KeyboardDoubleSpinBox,
+    KeyboardLineEdit,
+    KeyboardSpinBox,
+)
+
+name_edit = KeyboardLineEdit()
+count_spin = KeyboardSpinBox()
+offset_spin = KeyboardDoubleSpinBox()
+```
+
+Schema settings example:
+
+```python
+from src.applications.base.keyboard_settings_view import KeyboardSettingsView
+
+settings_view = KeyboardSettingsView(component_name="MySettings")
+settings_view.add_tab("General", [GENERAL_GROUP])
+```
+
+Raw group example:
+
+```python
+from src.applications.base.collapsible_settings_view import CollapsibleGroup
+from src.applications.base.keyboard_settings_view import build_with_keyboard_setting_handlers
+
+holder = []
+build_with_keyboard_setting_handlers(lambda: holder.append(CollapsibleGroup(MY_GROUP)))
+group = holder[0]
+```
+
+Dialog guidance:
+- pass the real parent widget when constructing a dialog so keyboard docking can resolve the application window
+- use keyboard field classes inside dialogs
+- wrap tall dialog forms in `QScrollArea`
+- when a dialog needs custom keyboard spacing, implement `_on_virtual_keyboard_shown(keyboard_rect)` and `_on_virtual_keyboard_hidden()` on the dialog or a parent form widget
+- keep hide handling symmetrical: any spacer, margin, or scroll adjustment added on show must be removed on hide
+
+Validation checklist:
+- compile touched UI modules with `python3 -m py_compile`
+- test a field near the top and near the bottom of the view
+- test keyboard close/hide restores scroll position and layout
+- test dialogs separately from full-page forms
+
+---
+
+## Data Flow
+
+```
+ApplicationFactory.build(service, messaging=..., jog_service=...)
+      │
+      ├─ _create_model(service) → model
+      ├─ _create_view()         → view
+      ├─ _create_controller(model, view) → controller
+      │
+      ├─ [optional] auto-create JogController when view enables jog
+      ├─ controller.load()          ← populate view from model
+      ├─ view._controller = controller  ← GC ownership fix
+      └─ return view
+```
+
+---
+
+## `RobotJogWidget`
+
+**File:** `robot_jog_widget.py`
+
+A reusable Qt widget that provides manual robot jogging controls with directional buttons, step-size selection, and frame/end-effector selection.
+
+### Frame Selector
+
+The widget has an optional `QComboBox` labeled **"Frame:"** in its bottom row. It is hidden by default and must be enabled explicitly by the host view.
+
+```python
+# Signals
+frame_changed = pyqtSignal(str)   # emitted when operator selects a different frame
+
+# Public API
+def enable_frame_selector(self, enabled: bool) -> None:
+    """Show or hide the optional frame selector."""
+
+def set_frame_options(self, names: List[str], default: Optional[str] = None) -> None:
+    """Populate the combo box with the given names; optionally set the active selection."""
+
+def set_frame(self, name: str) -> None:
+    """Programmatically select a frame without emitting frame_changed."""
+
+def get_frame(self) -> str:
+    """Return the currently selected frame name, or '' if not set."""
+```
+
+Typical usage:
+
+```python
+self._jog_widget = RobotJogWidget()
+self._jog_widget.enable_frame_selector(True)
+self._jog_widget.set_frame_options(["camera", "tool", "gripper"], default="tool")
+```
+
+`set_frame()` is intentionally signal-free so a parent widget can keep a button and the combo box in sync without triggering an infinite signal loop.
+
+### Integration in `PickTarget`
+
+`PickTargetView` enables the frame selector via the base view flags, populates the combo in `_configure_jog_widget()`, and reacts to selection changes in `_on_jog_frame_changed()`. The existing **Target:** button on the control panel does the same thing, so both selectors stay in sync via `_apply_target(sync_jog=True/False)`.
+
+### Shared Jog Path
+
+`JogController` now reads the active jog frame from the host view when the view exposes:
+
+```python
+def get_jog_frame(self) -> str: ...
+```
+
+and forwards that into `RobotJogService`.
+
+In the shared application path, you normally do not create `JogController` yourself anymore. The base factory does it automatically when:
+- the view sets `SHOW_JOG_WIDGET = True`
+- the factory `build(...)` call receives both `messaging` and `jog_service`
+
+In glue-system applications, the wiring can provide a target-aware jog service that converts a jog request into a corrected Cartesian pose move. That shared path lets jog moves respect:
+- TCP-delta correction
+- selected end-effector point (`camera`, `tool`, `gripper`)
+- robot tool/user settings from glue configuration
+
+Internally that shared jog path resolves the selected frame name through `PointRegistry` once and then works with the concrete registry point, matching the resolver API used by vision targeting.
+
+Applications that do not enable the frame selector continue to behave like normal raw jog UIs.
+
+---
+
+## Design Notes
+
+### Shared numeric control
+
+Use `KeyboardNumberField` from `src/applications/base/widgets/keyboard_number_field.py` for directly owned integer and decimal inputs. It combines typed entry and the shared virtual keyboard with large −/+ buttons, units, bounds, and press-and-hold stepping. Configure it with `decimal=True` when needed, then `setRange()`, `setSingleStep()`, `setDecimals()`, `setSuffix()`, and `setValue()`.
+
+Schema-based forms built through `KeyboardSettingsView` or `build_with_keyboard_setting_handlers()` use the same control for `spinbox` and `double_spinbox` fields. Widget providers that require an actual `QSpinBox` or `QDoubleSpinBox` subclass continue to use `VirtualKeyboardWidgetFactory`.
+
+- **GC ownership**: PyQt6 weak-references Python bound methods as signal slots. If no strong ref holds the controller, it is GC'd and all signal connections die silently. `ApplicationFactory.build()` assigns `view._controller = controller` to transfer ownership to the view.
+- **`IApplicationView` extends `AppWidget`**: Required for shell integration. `AppWidget` provides `on_language_changed()` and the hooks `AppShell` uses to show/hide panels.
+- **`WidgetApplication` is the universal adapter**: The bootstrap works with `IApplication` references. `WidgetApplication` decouples the typed factory from the bootstrap protocol, enabling lazy widget creation.
+- **`build()` is the only entry point**: Subclasses implement `_create_model`, `_create_view`, `_create_controller` only. The wiring order and GC fix are handled by the base class exactly once.
+- **Notifications stay out of backend layers**: Processes, coordinators, and services should publish typed notification events via the broker. Controllers render them through `UserNotificationPresenter`. This avoids Qt imports in engine or robot-system code and keeps the mechanism reusable across robot systems.

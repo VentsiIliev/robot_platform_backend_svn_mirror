@@ -1,0 +1,72 @@
+from typing import List, Optional, Protocol, Tuple
+import logging
+
+import numpy as np
+
+from src.engine.vision.i_capture_snapshot_service import ICaptureSnapshotService
+from src.applications.contour_matching_tester.service.i_contour_matching_tester_service import IContourMatchingTesterService
+
+_logger = logging.getLogger(__name__)
+
+
+def _close_contour(contour: np.ndarray) -> np.ndarray:
+    # np.array (not np.asarray) — forces a copy even when dtype already matches float32,
+    # so callers cannot accidentally mutate _latest_contours through a shared-memory view.
+    pts = np.array(contour, dtype=np.float32).reshape(-1, 2)
+    if len(pts) >= 2 and not np.allclose(pts[0], pts[-1], atol=0.5):
+        pts = np.vstack([pts, pts[0:1]])
+    return pts.reshape(-1, 1, 2)
+
+
+class MatchingWorkpieceStore(Protocol):
+    """Storage operations shared by glue and paint matching tests."""
+
+    def list_all(self) -> list[dict]: ...
+    def load(self, storage_id: str): ...
+    def get_thumbnail_bytes(self, storage_id: str) -> Optional[bytes]: ...
+
+
+class ContourMatchingTesterService(IContourMatchingTesterService):
+
+    def __init__(self, vision_service=None, workpiece_service: MatchingWorkpieceStore | None = None, capture_snapshot_service: ICaptureSnapshotService | None = None):
+        self._vision_service    = vision_service
+        self._workpiece_service = workpiece_service
+        self._capture_snapshot_service = capture_snapshot_service
+        self._metadata:         List[dict] = []   # parallel to the list returned by get_workpieces()
+
+    def get_workpieces(self) -> list:
+        if self._workpiece_service is None:
+            return []
+        all_meta   = self._workpiece_service.list_all()
+        workpieces = []
+        kept_meta  = []
+        for meta in all_meta:
+            wp = self._workpiece_service.load(meta["id"])
+            if wp is not None:
+                workpieces.append(wp)
+                kept_meta.append(meta)
+        self._metadata = kept_meta          # same order as returned workpieces
+        _logger.info("Found %d workpieces", len(workpieces))
+        return workpieces
+
+    def get_latest_contours(self) -> list:
+        if self._capture_snapshot_service is None and self._vision_service is None:
+            return []
+        if self._capture_snapshot_service is not None:
+            raw = self._capture_snapshot_service.capture_snapshot(source="contour_matching_tester").contours
+        else:
+            raw = self._vision_service.get_latest_contours()
+        closed = [_close_contour(c) for c in raw]
+        _logger.debug("get_latest_contours: %d contours (ensured closed)", len(closed))
+        return closed
+
+    def run_matching(self, workpieces: list, contours: list) -> Tuple[dict, int, List, List]:
+        if self._vision_service is None:
+            return {}, 0, [], []
+        return self._vision_service.run_matching(workpieces, contours)
+
+    def get_thumbnail(self, workpiece_index: int) -> Optional[bytes]:
+        if workpiece_index < 0 or workpiece_index >= len(self._metadata):
+            return None
+        storage_id = self._metadata[workpiece_index]["id"]
+        return self._workpiece_service.get_thumbnail_bytes(storage_id)

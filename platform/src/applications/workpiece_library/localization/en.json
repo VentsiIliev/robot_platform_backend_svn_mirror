@@ -1,0 +1,25 @@
+{
+  "__meta__": {
+    "display_name": "English"
+  },
+  "WorkpieceLibrary": {
+    "Delete Workpiece": "Delete Workpiece",
+    "Delete workpiece '{workpiece_id}'?": "Delete workpiece '{workpiece_id}'?",
+    "Delete Failed": "Delete Failed",
+    "Save Failed": "Save Failed",
+    "Open Failed": "Open Failed",
+    "Could not load workpiece '{storage_id}'": "Could not load workpiece '{storage_id}'",
+    "Selection": "Selection",
+    "All workpieces selected": "All workpieces selected",
+    "{count} workpiece(s) selected": "{count} workpiece(s) selected"
+  },
+  "WorkpieceLibraryView": {
+    "Workpiece Library": "Workpiece Library",
+    "Select": "Select",
+    "Shape": "Shape",
+    "Select All": "Select All",
+    "Show Selected": "Show Selected",
+    "Clear Selection": "Clear Selection",
+    "{count} selected": "{count} selected"
+  }
+}

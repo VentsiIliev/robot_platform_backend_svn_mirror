@@ -1,0 +1,64 @@
+# joint_limits.yaml allows the dynamics properties specified in the URDF to be overwritten or augmented as needed
+
+# Optimized for smooth motion - higher default scaling factors
+# Jerk limiting enables S-curve trajectory generation for smooth acceleration ramps
+default_velocity_scaling_factor: 0.6
+default_acceleration_scaling_factor: 0.4
+
+# Specific joint properties can be changed with the keys [max_position, min_position, max_velocity, max_acceleration]
+# Joint limits can be turned off with [has_velocity_limits, has_acceleration_limits]
+joint_limits:
+  j1:
+    has_velocity_limits: true
+    max_velocity: 3.15
+    has_acceleration_limits: true
+    max_acceleration: 10.0
+    max_deceleration: -10.0          # Symmetric deceleration for smooth stops
+    has_jerk_limits: true            # REQUIRED for MoveIt Ruckig to use jerk limits
+    max_jerk: 100.0                  # Relaxed for better Ruckig feasibility on dense paths
+    max_effort: 0.25
+  j2:
+    has_velocity_limits: true
+    max_velocity: 3.15
+    has_acceleration_limits: true
+    max_acceleration: 10.0
+    max_deceleration: -10.0
+    has_jerk_limits: true
+    max_jerk: 100.0
+    max_effort: 0.25
+  j3:
+    has_velocity_limits: true
+    max_velocity: 3.15
+    has_acceleration_limits: true
+    max_acceleration: 10.0
+    max_deceleration: -10.0
+    has_jerk_limits: true
+    max_jerk: 100.0
+    max_effort: 0.25
+  j4:
+    has_velocity_limits: true
+    max_velocity: 3.20
+    has_acceleration_limits: true
+    max_acceleration: 10.0
+    max_deceleration: -10.0
+    has_jerk_limits: true
+    max_jerk: 120.0                  # Relaxed for better Ruckig feasibility on dense paths
+    max_effort: 0.20
+  j5:
+    has_velocity_limits: true
+    max_velocity: 3.20
+    has_acceleration_limits: true
+    max_acceleration: 10.0
+    max_deceleration: -10.0
+    has_jerk_limits: true
+    max_jerk: 120.0
+    max_effort: 0.20
+  j6:
+    has_velocity_limits: true
+    max_velocity: 3.20
+    has_acceleration_limits: true
+    max_acceleration: 10.0
+    max_deceleration: -10.0
+    has_jerk_limits: true
+    max_jerk: 140.0                  # Relaxed for better Ruckig feasibility on dense paths
+    max_effort: 0.15

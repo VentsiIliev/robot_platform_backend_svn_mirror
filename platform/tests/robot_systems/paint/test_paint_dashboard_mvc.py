@@ -1,0 +1,759 @@
+from __future__ import annotations
+
+import unittest
+import time
+import os
+from types import SimpleNamespace
+from unittest.mock import ANY, MagicMock, patch
+
+from PyQt6.QtWidgets import QApplication
+
+from src.robot_systems.paint.applications.dashboard.controller.paint_dashboard_controller import (
+    PaintDashboardController,
+)
+from src.robot_systems.paint.applications.dashboard.dashboard_state import DashboardState
+from src.robot_systems.paint.applications.dashboard.model.paint_dashboard_model import (
+    PaintDashboardModel,
+)
+from src.robot_systems.paint.processes.paint.dashboard_live_view_events import (
+    PaintDashboardLiveViewEvent,
+    PaintDashboardLiveViewTopics,
+    PaintDashboardMessageEvent,
+    PaintDashboardMessageTopics,
+)
+from src.shared_contracts.events.robot_events import RobotTopics
+from src.shared_contracts.events.shell_events import ApplicationShortcut, ShellTopics
+from src.shared_contracts.events.vision_events import CameraTopics
+
+
+def _signal() -> MagicMock:
+    sig = MagicMock()
+    sig.connect = MagicMock()
+    return sig
+
+
+class TestPaintDashboardModel(unittest.TestCase):
+    def test_load_and_save_contract(self) -> None:
+        service = MagicMock()
+        state = DashboardState(process_state="idle")
+        service.load_state.return_value = state
+        model = PaintDashboardModel(service)
+
+        self.assertIs(model.load(), state)
+        self.assertIsNone(model.save({"ignored": True}))
+
+    def test_start_stop_pause_resume_and_reset_delegate_through_service(self) -> None:
+        service = MagicMock()
+        running = DashboardState(process_state="running")
+        paused = DashboardState(process_state="paused")
+        idle = DashboardState(process_state="idle")
+        service.load_state.side_effect = [running, idle, running, paused, paused, running, idle]
+        model = PaintDashboardModel(service)
+
+        self.assertIs(model.start(), running)
+        self.assertIs(model.stop_process(), idle)
+        self.assertIs(model.toggle_pause(), paused)
+        self.assertIs(model.toggle_pause(), running)
+        self.assertIs(model.reset_errors(), idle)
+
+        service.start.assert_called_once_with()
+        service.stop.assert_called_once_with()
+        service.pause.assert_called_once_with()
+        service.resume.assert_called_once_with()
+        service.reset_errors.assert_called_once_with()
+
+    def test_scan_again_uses_dedicated_service_command(self) -> None:
+        service = MagicMock()
+        service.retry_unmatched_workpiece.return_value = True
+        model = PaintDashboardModel(service)
+
+        self.assertTrue(model.retry_unmatched_workpiece())
+        service.retry_unmatched_workpiece.assert_called_once_with()
+        service.start.assert_not_called()
+
+    def test_manual_controls_delegate_through_service(self) -> None:
+        service = MagicMock()
+        service.get_auxiliary_states.return_value = {"pump": True, "fan": False}
+        model = PaintDashboardModel(service)
+
+        self.assertEqual(model.get_auxiliary_states(), {"pump": True, "fan": False})
+        model.relieve_cable()
+        model.set_auxiliary_enabled("fan", True)
+
+        service.relieve_cable.assert_called_once_with()
+        service.set_auxiliary_enabled.assert_called_once_with("fan", True)
+
+    def test_paint_head_adjustment_delegates_through_service(self) -> None:
+        service = MagicMock()
+        service.is_paint_head_available.return_value = True
+        model = PaintDashboardModel(service)
+
+        self.assertTrue(model.is_paint_head_available())
+        model.adjust_paint_head("more", 3)
+        service.adjust_paint_head.assert_called_once_with("more", 3)
+
+    def test_model_maps_drying_mode_to_service(self):
+        service = MagicMock()
+        service.get_drying_mode.return_value = "manual"
+        model = PaintDashboardModel(service)
+
+        self.assertEqual("manual", model.get_drying_mode())
+        model.set_drying_mode("auto")
+        service.set_drying_mode.assert_called_once_with("auto")
+
+    def test_unmatched_paint_settings_delegate_through_service(self) -> None:
+        service = MagicMock()
+        settings = {"velocity_percent": 25.0, "acceleration_percent": 35.0, "offset_mm": -4.5}
+        service.get_unmatched_paint_settings.return_value = settings
+        model = PaintDashboardModel(service)
+
+        self.assertEqual(settings, model.get_unmatched_paint_settings())
+        model.save_unmatched_paint_settings(30.0, 40.0, -5.0)
+
+        service.save_unmatched_paint_settings.assert_called_once_with(30.0, 40.0, -5.0)
+
+
+class TestPaintDashboardController(unittest.TestCase):
+    def test_select_workpieces_action_opens_library(self) -> None:
+        broker = MagicMock()
+        controller = PaintDashboardController.__new__(PaintDashboardController)
+        controller._broker = broker
+
+        controller._on_action("select_workpieces")
+
+        broker.publish.assert_called_once_with(
+            ShellTopics.NAVIGATE, {"app": "WorkpieceLibrary"}
+        )
+
+    def test_scan_again_uses_recapture_command_without_normal_start(self) -> None:
+        controller = PaintDashboardController.__new__(PaintDashboardController)
+        controller._model = MagicMock()
+        controller._view = MagicMock()
+        controller._model.retry_unmatched_workpiece.return_value = True
+        controller._model.load.return_value = DashboardState(process_state="running")
+        controller._on_start = MagicMock()
+
+        controller._on_scan_again()
+
+        controller._model.retry_unmatched_workpiece.assert_called_once_with()
+        controller._model.reset_errors.assert_not_called()
+        controller._on_start.assert_not_called()
+        controller._view.apply_dashboard_state.assert_called_once_with(
+            controller._model.load.return_value
+        )
+
+    def test_scan_again_rejection_does_not_start_a_new_pickup_cycle(self) -> None:
+        controller = PaintDashboardController.__new__(PaintDashboardController)
+        controller._model = MagicMock()
+        controller._view = MagicMock()
+        controller._model.retry_unmatched_workpiece.return_value = False
+        controller._on_start = MagicMock()
+
+        controller._on_scan_again()
+
+        controller._on_start.assert_not_called()
+        controller._view.show_warning_dialog.assert_called_once()
+
+    def test_dashboard_refreshes_selection_indicator_after_gallery_return(self) -> None:
+        controller = PaintDashboardController.__new__(PaintDashboardController)
+        controller._model = MagicMock()
+        controller._view = MagicMock()
+        controller._model.get_unmatched_paint_settings.return_value = {
+            "matching_enabled": True,
+            "selected_workpiece_count": 0,
+        }
+
+        controller._refresh_workpiece_selection_indicator()
+
+        controller._view.set_workpiece_selection_indicator.assert_called_once_with(True, 0)
+
+    def _make_view(self) -> MagicMock:
+        view = MagicMock()
+        view.start_requested = _signal()
+        view.stop_requested = _signal()
+        view.pause_requested = _signal()
+        view.reset_requested = _signal()
+        view.destroyed = _signal()
+        view.isVisible.return_value = True
+        return view
+
+    def test_paint_head_command_is_independent_of_running_settings(self) -> None:
+        controller = PaintDashboardController.__new__(PaintDashboardController)
+        controller._model = MagicMock()
+        controller._view = MagicMock()
+        controller._paint_head_pending = False
+        controller._paint_head_held_direction = None
+        controller._paint_head_held_units = 0
+        controller._paint_head_hold_timer = MagicMock()
+        controller._run_background = MagicMock()
+        controller._model.load.return_value = DashboardState(process_state="running")
+
+        controller._on_paint_head_adjust("more", 3)
+
+        self.assertTrue(controller._paint_head_pending)
+        controller._view.set_paint_head_busy.assert_called_once_with(True)
+        command, callback = controller._run_background.call_args.args
+        command()
+        controller._model.adjust_paint_head.assert_called_once_with("more", 3)
+        self.assertEqual(callback, controller._on_paint_head_adjusted)
+
+    def test_held_paint_head_command_repeats_without_overlapping_and_stops_on_limit(self) -> None:
+        controller = PaintDashboardController.__new__(PaintDashboardController)
+        controller._view = MagicMock()
+        controller._view_ok = MagicMock(return_value=True)
+        controller._model = MagicMock()
+        controller._paint_head_pending = False
+        controller._paint_head_held_direction = None
+        controller._paint_head_held_units = 0
+        controller._paint_head_hold_timer = MagicMock()
+        controller._paint_head_hold_timer.interval.return_value = 400
+        controller._run_background = MagicMock()
+
+        controller._on_paint_head_adjust("more", 2)
+        controller._repeat_held_paint_head_adjust()
+        self.assertEqual(controller._run_background.call_count, 1)
+
+        controller._on_paint_head_adjusted(SimpleNamespace(success=True, message=""))
+        controller._repeat_held_paint_head_adjust()
+        self.assertEqual(controller._run_background.call_count, 2)
+        command, _callback = controller._run_background.call_args.args
+        command()
+        controller._model.adjust_paint_head.assert_called_once_with("more", 2)
+
+        controller._on_paint_head_adjusted(
+            SimpleNamespace(success=False, message="Paint head is at its configured limit.")
+        )
+        controller._repeat_held_paint_head_adjust()
+        self.assertEqual(controller._run_background.call_count, 2)
+        self.assertIsNone(controller._paint_head_held_direction)
+        controller._paint_head_hold_timer.stop.assert_called_once_with()
+
+    def test_finished_worker_cleanup_does_not_query_deleted_threads(self) -> None:
+        controller = PaintDashboardController.__new__(PaintDashboardController)
+        finished = MagicMock()
+        other = MagicMock()
+        other.isRunning.side_effect = RuntimeError("wrapped C/C++ object has been deleted")
+        controller._workers = [(finished, MagicMock()), (other, MagicMock())]
+
+        controller._cleanup_finished_worker(finished)
+
+        self.assertEqual([thread for thread, _worker in controller._workers], [other])
+        other.isRunning.assert_not_called()
+
+    def test_background_worker_is_removed_before_qt_deletes_thread(self) -> None:
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        app = QApplication.instance() or QApplication([])
+        controller = PaintDashboardController.__new__(PaintDashboardController)
+        controller._workers = []
+        results = []
+
+        controller._run_background(lambda: "done", results.append)
+
+        deadline = time.monotonic() + 2.0
+        while controller._workers and time.monotonic() < deadline:
+            app.processEvents()
+            time.sleep(0.005)
+        app.processEvents()
+        self.assertEqual(results, ["done"])
+        self.assertEqual(controller._workers, [])
+
+    def test_camera_selection_subscribes_to_selected_topic_and_stops_on_hide(self) -> None:
+        app = QApplication.instance() or QApplication([])
+        self.assertIsNotNone(app)
+        model = MagicMock()
+        view = self._make_view()
+        view.is_camera_feed_visible.return_value = True
+        broker = MagicMock()
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(model, view, broker)
+        controller._active = True
+        controller._on_camera_feed_visible(True)
+
+        controller._on_camera_selected("auxiliary")
+        topic = CameraTopics.frame("auxiliary")
+        broker.subscribe.assert_called_once_with(topic, controller._on_auxiliary_camera_frame)
+        self.assertFalse(controller._dashboard_camera_feed_updates_enabled())
+
+        controller._on_auxiliary_camera_frame({"image": "aux-frame"})
+        controller._show_selected_camera_frame()
+        view.set_trajectory_image.assert_called_once_with({"image": "aux-frame"})
+
+        controller._on_camera_feed_visible(False)
+        broker.unsubscribe.assert_called_once_with(topic, controller._on_auxiliary_camera_frame)
+        self.assertFalse(controller._camera_display_timer.isActive())
+
+    def test_compact_dashboard_starts_without_destination_semantics(self):
+        model = MagicMock()
+        model.get_drying_mode.return_value = "auto"
+        model.get_production_start_guard_state.return_value = {
+            "required": False,
+            "ready": True,
+        }
+        running = DashboardState(process_state="running")
+        model.start.return_value = running
+        view = self._make_view()
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(model, view, MagicMock())
+
+        controller._on_start()
+
+        model.start.assert_called_once_with()
+        view.ask_production_start_confirmation.assert_not_called()
+        view.apply_dashboard_state.assert_called_once_with(running)
+
+    def test_auto_mode_selection_does_not_require_connected_dryer(self):
+        model = MagicMock()
+        model.get_dryer_state.return_value = {
+            "available": True,
+            "enabled": False,
+            "healthy": False,
+            "message": "",
+        }
+        view = self._make_view()
+        broker = MagicMock()
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(model, view, broker)
+
+        with patch.object(controller, "_run_background") as run_background:
+            controller._on_drying_mode("auto")
+
+        view.ask_enable_dryer.assert_not_called()
+        view.set_drying_mode_busy.assert_called_once_with(True)
+        run_background.assert_called_once_with(
+            ANY,
+            controller._on_drying_mode_finished,
+        )
+        run_background.call_args.args[0]()
+        model.set_drying_mode.assert_called_once_with("auto")
+
+    def test_auto_mode_selection_ignores_initializing_dryer(self):
+        model = MagicMock()
+        model.get_dryer_state.return_value = {
+            "available": True,
+            "enabled": True,
+            "healthy": False,
+            "message": "Dryer initialization is in progress",
+        }
+        view = self._make_view()
+        broker = MagicMock()
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(model, view, broker)
+
+        with patch.object(controller, "_run_background") as run_background:
+            controller._on_drying_mode("auto")
+
+        view.ask_enable_dryer.assert_not_called()
+        view.show_warning.assert_not_called()
+        run_background.assert_called_once()
+
+    def test_start_in_auto_mode_prompts_for_unprepared_destination(self):
+        model = MagicMock()
+        model.get_drying_mode.return_value = "auto"
+        model.get_production_start_guard_state.return_value = {
+            "required": True,
+            "available": True,
+            "enabled": False,
+            "ready": False,
+            "message": "",
+        }
+        view = self._make_view()
+        view.ask_production_start_confirmation.return_value = True
+        broker = MagicMock()
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(model, view, broker)
+
+        with patch.object(controller, "_run_background") as run_background:
+            controller._on_start()
+
+        model.start.assert_not_called()
+        view.ask_production_start_confirmation.assert_called_once()
+        view.set_action_enabled.assert_called_once_with("start", False)
+        run_background.assert_called_once_with(
+            ANY,
+            controller._on_production_start_prepared,
+        )
+
+    def test_successful_destination_prepare_continues_pending_start(self):
+        model = MagicMock()
+        running = DashboardState(process_state="running")
+        model.start.return_value = running
+        view = self._make_view()
+        broker = MagicMock()
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(model, view, broker)
+        controller._active = True
+
+        controller._on_production_start_prepared(SimpleNamespace(success=True, message=""))
+
+        model.start.assert_called_once_with()
+        view.apply_dashboard_state.assert_called_once_with(running)
+
+    def test_development_mode_can_bypass_unavailable_destination(self):
+        model = MagicMock()
+        model.get_drying_mode.return_value = "auto"
+        model.get_production_start_guard_state.return_value = {
+            "required": True,
+            "available": False,
+            "enabled": False,
+            "ready": False,
+            "message": "",
+            "bypass_allowed": True,
+        }
+        running = DashboardState(process_state="running")
+        model.start.return_value = running
+        view = self._make_view()
+        view.ask_production_start_confirmation.return_value = True
+        broker = MagicMock()
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(model, view, broker)
+
+        controller._on_start()
+
+        view.ask_production_start_confirmation.assert_called_once()
+        model.start.assert_called_once_with()
+        view.apply_dashboard_state.assert_called_once_with(running)
+
+    def test_init_wires_signals_and_mixin_setup(self) -> None:
+        model = MagicMock()
+        view = self._make_view()
+        broker = MagicMock()
+
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed") as init_camera,
+            patch.object(PaintDashboardController, "_init_dashboard_process_state") as init_process,
+        ):
+            controller = PaintDashboardController(model, view, broker)
+
+        self.assertIs(controller._model, model)
+        self.assertIs(controller._view, view)
+        self.assertIs(controller._broker, broker)
+        self.assertFalse(controller._active)
+        init_camera.assert_called_once_with()
+        init_process.assert_called_once_with()
+        view.start_requested.connect.assert_called_once_with(controller._on_start)
+        view.stop_requested.connect.assert_called_once_with(controller._on_stop)
+        view.pause_requested.connect.assert_called_once_with(controller._on_pause)
+        view.reset_requested.connect.assert_called_once_with(controller._on_reset)
+
+    def test_load_and_stop_manage_subscriptions_and_view_state(self) -> None:
+        state = DashboardState(process_state="idle")
+        model = MagicMock()
+        model.load.return_value = state
+        view = self._make_view()
+
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+            patch.object(PaintDashboardController, "_subscribe_dashboard_camera_feed") as sub_camera,
+            patch.object(PaintDashboardController, "_subscribe_dashboard_process_state") as sub_process,
+            patch.object(PaintDashboardController, "_subscribe_dashboard_robot_state") as sub_robot,
+            patch.object(PaintDashboardController, "_subscribe_dashboard_live_view_state") as sub_live_view,
+            patch.object(PaintDashboardController, "_subscribe_dashboard_messages") as sub_messages,
+            patch.object(PaintDashboardController, "_unsubscribe_all") as unsub_all,
+        ):
+            controller = PaintDashboardController(model, view, MagicMock())
+            controller.load()
+
+            self.assertTrue(controller._active)
+            sub_camera.assert_called_once_with()
+            sub_process.assert_called_once_with()
+            sub_robot.assert_called_once_with()
+            sub_live_view.assert_called_once_with()
+            sub_messages.assert_called_once_with()
+            view.apply_dashboard_state.assert_called_once_with(state)
+            view.destroyed.connect.assert_called_once_with(controller.stop)
+
+            controller._dashboard_live_view_paused = True
+            controller.stop()
+            self.assertFalse(controller._active)
+            self.assertFalse(controller._dashboard_live_view_paused)
+            model.resume_vision_for_dashboard_exit.assert_called_once_with()
+            unsub_all.assert_called_once_with()
+
+    def test_action_handlers_apply_updated_state(self) -> None:
+        model = MagicMock()
+        start_state = DashboardState(process_state="running")
+        stop_state = DashboardState(process_state="stopped")
+        pause_state = DashboardState(process_state="paused")
+        reset_state = DashboardState(process_state="idle")
+        model.start.return_value = start_state
+        model.stop_process.return_value = stop_state
+        model.toggle_pause.return_value = pause_state
+        model.reset_errors.return_value = reset_state
+        view = self._make_view()
+
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(model, view, MagicMock())
+
+        controller._on_start()
+        controller._on_stop()
+        controller._on_pause()
+        controller._on_reset()
+
+        model.start.assert_called_once_with()
+        model.stop_process.assert_called_once_with()
+        model.toggle_pause.assert_called_once_with()
+        model.reset_errors.assert_called_once_with()
+        self.assertEqual(
+            view.apply_dashboard_state.call_args_list,
+            [
+                unittest.mock.call(start_state),
+                unittest.mock.call(stop_state),
+                unittest.mock.call(pause_state),
+                unittest.mock.call(reset_state),
+            ],
+        )
+
+    def test_saved_unmatched_settings_are_reloaded_from_runtime_snapshot(self) -> None:
+        model = MagicMock()
+        result = SimpleNamespace(success=True, message="saved")
+        refreshed = {"velocity_percent": 30.0, "acceleration_percent": 40.0, "offset_mm": -5.0}
+        model.save_unmatched_paint_settings.return_value = result
+        model.get_unmatched_paint_settings.return_value = refreshed
+        view = self._make_view()
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(model, view, MagicMock())
+
+        controller._on_unmatched_paint_settings(30.0, 40.0, -5.0)
+
+        model.save_unmatched_paint_settings.assert_called_once_with(30.0, 40.0, -5.0)
+        model.get_unmatched_paint_settings.assert_called_once_with()
+        view.set_unmatched_paint_settings.assert_called_once_with(refreshed)
+
+    def test_shortcuts_use_visible_shell_apps_and_normal_navigation_topic(self) -> None:
+        view = self._make_view()
+        view.application_shortcuts_enabled = True
+        view.shortcut_application_names = ("RobotSettings",)
+        broker = MagicMock()
+        robot_settings = ApplicationShortcut("RobotSettings", "RobotSettings", "mdi.robot-industrial")
+        hidden_by_config = ApplicationShortcut("CameraSettings", "CameraSettings", "fa5s.camera")
+        broker.request.return_value = [robot_settings, hidden_by_config]
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(MagicMock(), view, broker)
+
+        controller._load_application_shortcuts()
+        controller._on_application_shortcut("RobotSettings")
+
+        broker.request.assert_called_once_with(
+            ShellTopics.VISIBLE_APPLICATIONS,
+            {"exclude": ["PaintDashboard"]},
+        )
+        view.set_application_shortcuts.assert_called_once_with([robot_settings])
+        broker.publish.assert_called_once_with(
+            ShellTopics.NAVIGATE,
+            {"app": "RobotSettings"},
+        )
+
+    def test_view_ok_requires_active_visible_view(self) -> None:
+        view = self._make_view()
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(MagicMock(), view, MagicMock())
+
+        self.assertFalse(controller._view_ok())
+        controller._active = True
+        self.assertTrue(controller._view_ok())
+
+        view.isVisible.side_effect = RuntimeError("deleted")
+        self.assertFalse(controller._view_ok())
+
+    def test_status_refresh_updates_even_when_view_reports_not_visible(self) -> None:
+        state = DashboardState(process_state="idle")
+        model = MagicMock()
+        model.load.return_value = state
+        view = self._make_view()
+        view.isVisible.return_value = False
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(model, view, MagicMock())
+
+        controller._active = True
+        controller._refresh_dashboard_status()
+
+        view.apply_dashboard_state.assert_called_once_with(state)
+
+    def test_robot_state_event_refreshes_dashboard_state(self) -> None:
+        state = DashboardState(
+            process_state="idle",
+            card_states={
+                1: SimpleNamespace(title="Robot Status", value="IDLE", note="Robot service healthy")
+            },
+        )
+        model = MagicMock()
+        model.load.return_value = state
+        view = self._make_view()
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(model, view, MagicMock())
+        controller._dashboard_process_bridge = MagicMock()
+
+        controller._active = True
+        controller._on_dashboard_robot_state_raw(
+            SimpleNamespace(
+                state="disconnected",
+                extra={
+                    "last_error": "HTTPConnectionPool: Failed to establish a new connection: Connection refused"
+                },
+            )
+        )
+
+        controller._dashboard_process_bridge.state_ready.emit.assert_called_once_with(state)
+        self.assertEqual(state.card_states[1].value, "DISCONNECTED")
+        self.assertEqual(state.card_states[1].note, "ROS2 bridge is not reachable")
+
+    def test_robot_state_event_reports_starting_state(self) -> None:
+        state = DashboardState(
+            process_state="idle",
+            card_states={
+                1: SimpleNamespace(title="Robot Status", value="IDLE", note="Robot service healthy")
+            },
+        )
+        model = MagicMock()
+        model.load.return_value = state
+        view = self._make_view()
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(model, view, MagicMock())
+        controller._dashboard_process_bridge = MagicMock()
+
+        controller._active = True
+        controller._on_dashboard_robot_state_raw(
+            SimpleNamespace(
+                state="starting",
+                extra={"startup": {"message": "ROS runtime is initializing"}},
+            )
+        )
+
+        controller._dashboard_process_bridge.state_ready.emit.assert_called_once_with(state)
+        self.assertEqual(state.card_states[1].value, "STARTING")
+        self.assertEqual(state.card_states[1].note, "ROS runtime is initializing")
+
+    def test_subscribe_dashboard_robot_state_uses_robot_state_topic(self) -> None:
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(MagicMock(), self._make_view(), MagicMock())
+        controller._subscribe = MagicMock()
+
+        controller._subscribe_dashboard_robot_state()
+
+        controller._subscribe.assert_called_once_with(RobotTopics.STATE, controller._on_dashboard_robot_state_raw)
+
+    def test_subscribe_dashboard_live_view_state_uses_paint_live_view_topic(self) -> None:
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(MagicMock(), self._make_view(), MagicMock())
+        controller._subscribe = MagicMock()
+
+        controller._subscribe_dashboard_live_view_state()
+
+        controller._subscribe.assert_called_once_with(
+            PaintDashboardLiveViewTopics.STATE,
+            controller._on_dashboard_live_view_state_raw,
+        )
+
+    def test_unknown_workpiece_message_is_forwarded_as_dashboard_warning(self) -> None:
+        view = self._make_view()
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(MagicMock(), view, MagicMock())
+        controller._dashboard_notice_bridge.unknown_workpiece_ready = MagicMock()
+
+        controller._on_dashboard_message_raw(
+            PaintDashboardMessageEvent(
+                level="warning",
+                title="Unknown Workpiece",
+                message="No saved workpiece matched the captured contour.",
+            )
+        )
+
+        controller._dashboard_notice_bridge.unknown_workpiece_ready.emit.assert_called_once_with(
+            "Unknown Workpiece",
+            "No saved workpiece matched the captured contour.",
+        )
+
+    def test_subscribe_dashboard_messages_uses_paint_message_topic(self) -> None:
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(MagicMock(), self._make_view(), MagicMock())
+        controller._subscribe = MagicMock()
+
+        controller._subscribe_dashboard_messages()
+
+        controller._subscribe.assert_called_once_with(
+            PaintDashboardMessageTopics.MESSAGE,
+            controller._on_dashboard_message_raw,
+        )
+
+    def test_dashboard_live_view_state_freezes_capture_frame_and_blocks_live_updates(self) -> None:
+        view = self._make_view()
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(MagicMock(), view, MagicMock())
+        controller._active = True
+        controller._dashboard_camera_bridge = MagicMock()
+
+        controller._on_dashboard_live_view_state_raw(
+            PaintDashboardLiveViewEvent(paused=True, image="capture-frame")
+        )
+
+        self.assertFalse(controller._dashboard_camera_feed_updates_enabled())
+        controller._dashboard_camera_bridge.frame_ready.emit.assert_called_once_with({"image": "capture-frame"})
+
+        controller._on_dashboard_camera_frame_raw({"image": "live-frame"})
+        controller._dashboard_camera_bridge.frame_ready.emit.assert_called_once_with({"image": "capture-frame"})
+
+        controller._on_dashboard_live_view_state_raw(PaintDashboardLiveViewEvent(paused=False))
+
+        self.assertTrue(controller._dashboard_camera_feed_updates_enabled())
+
+
+if __name__ == "__main__":
+    unittest.main()

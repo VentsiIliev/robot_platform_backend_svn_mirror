@@ -1,0 +1,272 @@
+from __future__ import annotations
+
+import math
+import logging
+from dataclasses import dataclass
+from typing import Dict, Optional, Tuple
+
+from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
+from src.engine.robot.plane_pose_mapper import PlanePoseMapper
+from src.engine.robot.targeting.end_effector_point import EndEffectorPoint
+from src.engine.robot.targeting.point_registry import PointRegistry
+from src.engine.robot.targeting.target_frame import TargetFrame
+from src.engine.robot.targeting.target_point_geometry import (
+    command_xyz_from_selected_xyz,
+    rotate_offset_xyz,
+    tcp_delta_xyz,
+)
+from src.engine.robot.targeting.vision_pose_request import VisionPoseRequest
+
+_logger = logging.getLogger(__name__)
+TRACE_LOG_LEVEL = logging.DEBUG - 5
+
+
+@dataclass(frozen=True)
+class TargetTransformResult:
+    calibration_xy: Tuple[float, float]
+    plane_xy: Tuple[float, float]
+    final_xy: Tuple[float, float]
+    rx: float = 0.0
+    ry: float = 0.0
+    rz: float = 0.0
+    z: float = 0.0
+    pickup_plane_reference_delta_xy: Tuple[float, float] = (0.0, 0.0)
+    target_delta_xy: Tuple[float, float] = (0.0, 0.0)
+    reference_rz: Optional[float] = None
+
+    def robot_pose(self) -> Tuple[float, float, float, float, float, float]:
+        x, y = self.final_xy
+        return (x, y, self.z, self.rx, self.ry, self.rz)
+
+
+class VisionTargetResolver:
+    """Resolve an image target into a final robot pose for a chosen end-effector point."""
+
+    def __init__(
+        self,
+        base_transformer: ICoordinateTransformer,
+        registry: PointRegistry,
+        camera_to_tcp_x_offset: float = 0.0,
+        camera_to_tcp_y_offset: float = 0.0,
+        camera_to_tcp_rotation_residuals=None,
+        frames: Optional[Dict[str, TargetFrame]] = None,
+        calibration_mode: str = "global",
+        profile_transformers: Optional[Dict[str, ICoordinateTransformer]] = None,
+        work_area_profile_ids: Optional[Dict[str, str]] = None,
+        profile_reference_frames: Optional[Dict[str, str]] = None,
+        global_reference_frame: str = "calibration",
+        area_registries: Optional[Dict[str, PointRegistry]] = None,
+        area_tcp: Optional[Dict[str, tuple[float, float, list[dict]]]] = None,
+    ) -> None:
+        self._base = base_transformer
+        self._registry = registry
+        self._tcp_x = float(camera_to_tcp_x_offset)
+        self._tcp_y = float(camera_to_tcp_y_offset)
+        self._tcp_rotation_residuals = list(camera_to_tcp_rotation_residuals or [])
+        self._frames: Dict[str, TargetFrame] = {
+            str(name).strip().lower(): value for name, value in (frames or {}).items()
+        }
+        self._calibration_mode = str(calibration_mode or "global").strip().lower()
+        self._profile_transformers = {
+            str(name).strip(): value for name, value in (profile_transformers or {}).items()
+        }
+        self._work_area_profile_ids = {
+            str(area).strip(): str(profile).strip()
+            for area, profile in (work_area_profile_ids or {}).items()
+        }
+        self._profile_reference_frames = {
+            str(profile).strip(): str(reference).strip().lower()
+            for profile, reference in (profile_reference_frames or {}).items()
+        }
+        self._global_reference_frame = str(global_reference_frame or "calibration").strip().lower()
+        self._area_registries = dict(area_registries or {})
+        self._area_tcp = dict(area_tcp or {})
+
+    def resolve(
+        self,
+        target: VisionPoseRequest,
+        point: EndEffectorPoint,
+        *,
+        frame: str = "",
+        mapper: Optional[PlanePoseMapper] = None,
+        area_id: str = "",
+    ) -> TargetTransformResult:
+        frame_obj = self._frames.get(str(frame or "").strip().lower())
+        area_id = str(area_id or getattr(frame_obj, "work_area_id", "") or "").strip()
+        if frame_obj is None and area_id:
+            frame_obj = next(
+                (candidate for candidate in self._frames.values() if candidate.work_area_id == area_id),
+                None,
+            )
+        area_registry = self._area_registries.get(area_id)
+        if area_registry is not None:
+            point = area_registry.by_name(point.name)
+        tcp_x, tcp_y, tcp_residuals = self._area_tcp.get(
+            area_id, (self._tcp_x, self._tcp_y, self._tcp_rotation_residuals)
+        )
+        base_transformer = self._base
+        active_mapper = mapper if mapper is not None else (frame_obj.mapper if frame_obj else None)
+        if self._calibration_mode == "per_area":
+            if frame_obj is None or not frame_obj.work_area_id:
+                raise RuntimeError(
+                    f"Per-area calibration requires a declared target frame with a work area; got {frame!r}"
+                )
+            profile_id = self._work_area_profile_ids.get(frame_obj.work_area_id)
+            if not profile_id:
+                raise RuntimeError(
+                    f"Work area {frame_obj.work_area_id!r} has no assigned calibration profile"
+                )
+            base_transformer = self._profile_transformers.get(profile_id)
+            if base_transformer is None:
+                raise RuntimeError(f"Calibration profile {profile_id!r} is not configured")
+            reference_frame = self._profile_reference_frames.get(
+                profile_id, self._global_reference_frame
+            )
+            if reference_frame == str(frame_obj.name).strip().lower():
+                active_mapper = None
+            elif reference_frame != self._global_reference_frame:
+                raise RuntimeError(
+                    f"Calibration profile {profile_id!r} references frame {reference_frame!r}, "
+                    f"which cannot be mapped to target frame {frame_obj.name!r}"
+                )
+        current_rz = target.rz_degrees
+
+        # _logger.info(
+        #     "[CALIB] Resolve using transformer=%s available=%s frame=%s point=%s tcp_offset=(%.3f, %.3f)",
+        #     self._base.__class__.__name__,
+        #     bool(getattr(self._base, "is_available", lambda: False)()),
+        #     str(frame or ""),
+        #     str(point.name),
+        #     float(self._tcp_x),
+        #     float(self._tcp_y),
+        # )
+
+        calibration_xy = base_transformer.transform(target.x_pixels, target.y_pixels)
+        plane_xy = _map_plane(calibration_xy, active_mapper)
+        # Always apply the TCP-rotation delta so that the camera center lands on
+        # the target regardless of the robot's current rz.  The calibration matrix
+        # was built at rz≈0; at any other angle the 103 mm camera-to-TCP offset
+        # sweeps ~103 mm in the plane, producing a large landing error when the
+        # correction is skipped.  Camera points have offset=(0,0) so this path is
+        # equivalent to the previous behaviour at rz=0 (delta==0) while being
+        # correct for all other angles.
+        reference_rz = _reference_rz(active_mapper)
+        reference_orientation = (target.rx_degrees, target.ry_degrees, reference_rz)
+        # First correct the camera-centre pose for the remaining verified sweep
+        # error, then add the selected point's rotated camera->point offset.
+        # The named tool point is the operator-taught camera->TCP command point;
+        # use that same vector for its sweep.  This preserves the empirically
+        # correct cancellation without replacing the automatic camera sweep used
+        # by camera targets.
+        is_taught_tool = str(point.name).strip().lower() == "tool"
+        sweep_offset_x = float(point.offset_x) if is_taught_tool else tcp_x
+        sweep_offset_y = float(point.offset_y) if is_taught_tool else tcp_y
+        rotation_residuals = [] if is_taught_tool else tcp_residuals
+        final_x, final_y, final_z = command_xyz_from_selected_xyz(
+            plane_xy[0],
+            plane_xy[1],
+            target.z_mm,
+            orientation=(target.rx_degrees, target.ry_degrees, current_rz),
+            point_offset_x=point.offset_x,
+            point_offset_y=point.offset_y,
+            camera_to_tcp_x_offset=sweep_offset_x,
+            camera_to_tcp_y_offset=sweep_offset_y,
+            reference_orientation=reference_orientation,
+            camera_to_tcp_rotation_residuals=rotation_residuals,
+        )
+        final_xy = (final_x, final_y)
+        tcp_delta = tcp_delta_xyz(
+            sweep_offset_x,
+            sweep_offset_y,
+            current_orientation=(target.rx_degrees, target.ry_degrees, current_rz),
+            reference_orientation=reference_orientation,
+        )
+        if point.offset_x == 0.0 and point.offset_y == 0.0:
+            target_delta = (0.0, 0.0, 0.0)
+        else:
+            target_delta = rotate_offset_xyz(
+                point.offset_x,
+                point.offset_y,
+                0.0,
+                rx_degrees=target.rx_degrees,
+                ry_degrees=target.ry_degrees,
+                rz_degrees=current_rz,
+            )
+
+        _logger.log(
+            TRACE_LOG_LEVEL,
+            "[TARGETING] point=%s frame=%s pixels=(%.3f, %.3f) calibration_xy=(%.3f, %.3f) plane_xy=(%.3f, %.3f) "
+            "orientation=(%.3f, %.3f, %.3f) reference_rz=%.3f sweep_offset=(%.3f, %.3f) tcp_delta=(%.3f, %.3f, %.3f) point_offset_local=(%.3f, %.3f) "
+            "point_delta_rotated=(%.3f, %.3f, %.3f) final_xyz=(%.3f, %.3f, %.3f)",
+            str(point.name),
+            str(frame or ""),
+            float(target.x_pixels),
+            float(target.y_pixels),
+            float(calibration_xy[0]),
+            float(calibration_xy[1]),
+            float(plane_xy[0]),
+            float(plane_xy[1]),
+            float(target.rx_degrees),
+            float(target.ry_degrees),
+            float(current_rz),
+            float(reference_rz),
+            sweep_offset_x,
+            sweep_offset_y,
+            float(tcp_delta[0]),
+            float(tcp_delta[1]),
+            float(tcp_delta[2]),
+            float(point.offset_x),
+            float(point.offset_y),
+            float(target_delta[0]),
+            float(target_delta[1]),
+            float(target_delta[2]),
+            float(final_xy[0]),
+            float(final_xy[1]),
+            float(final_z),
+        )
+
+        z_correction = (
+            frame_obj.get_z_correction(final_xy[0], final_xy[1])
+            if frame_obj is not None and frame else 0.0
+        )
+
+        return TargetTransformResult(
+            calibration_xy=calibration_xy,
+            plane_xy=plane_xy,
+            final_xy=final_xy,
+            rx=target.rx_degrees,
+            ry=target.ry_degrees,
+            rz=current_rz,
+            z=final_z + z_correction,
+            pickup_plane_reference_delta_xy=(tcp_delta[0], tcp_delta[1]),
+            target_delta_xy=(target_delta[0], target_delta[1]),
+            reference_rz=reference_rz,
+        )
+
+    @property
+    def registry(self) -> PointRegistry:
+        return self._registry
+
+    def get_frame(self, name: str) -> Optional[TargetFrame]:
+        return self._frames.get(str(name or "").strip().lower())
+
+    def registry_for_area(self, area_id: str) -> PointRegistry:
+        return self._area_registries.get(str(area_id or "").strip(), self._registry)
+
+    def registry_for_frame(self, frame_name: str) -> PointRegistry:
+        frame = self.get_frame(frame_name)
+        return self.registry_for_area(getattr(frame, "work_area_id", ""))
+
+def _map_plane(xy: Tuple[float, float], mapper: Optional[PlanePoseMapper]) -> Tuple[float, float]:
+    if mapper is None:
+        return xy
+    return mapper.map_point(xy[0], xy[1])
+
+
+def _reference_rz(mapper: Optional[PlanePoseMapper]) -> float:
+    if mapper is None:
+        return 0.0
+    return float(mapper.target_pose.rz)
+
+def _is_camera_point(point: EndEffectorPoint) -> bool:
+    return str(point.name).strip().lower() == "camera"

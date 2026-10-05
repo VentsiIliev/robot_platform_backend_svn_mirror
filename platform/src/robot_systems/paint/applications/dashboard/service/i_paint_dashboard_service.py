@@ -1,0 +1,102 @@
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+
+from src.robot_systems.paint.applications.dashboard.dashboard_state import DashboardState
+
+
+@dataclass(frozen=True)
+class ContourTransformDebugResult:
+    success: bool
+    message: str
+    image_path: str | None = None
+
+
+@dataclass(frozen=True)
+class DashboardCommandResult:
+    success: bool
+    message: str
+    device_id: str | None = None
+    enabled: bool | None = None
+
+
+class IPaintDashboardService(ABC):
+
+    @abstractmethod
+    def get_process_id(self) -> str: ...
+
+    @abstractmethod
+    def load_state(self) -> DashboardState: ...
+
+    @abstractmethod
+    def start(self) -> None: ...
+
+    @abstractmethod
+    def stop(self) -> None: ...
+
+    @abstractmethod
+    def pause(self) -> None: ...
+
+    @abstractmethod
+    def resume(self) -> None: ...
+
+    @abstractmethod
+    def reset_errors(self) -> None: ...
+
+    @abstractmethod
+    def retry_unmatched_workpiece(self) -> bool: ...
+
+    @abstractmethod
+    def get_unmatched_paint_settings(self) -> dict: ...
+
+    @abstractmethod
+    def save_unmatched_paint_settings(
+        self,
+        settings: dict,
+    ) -> DashboardCommandResult: ...
+
+    @abstractmethod
+    def get_acceleration_scale(self) -> float: ...
+
+    @abstractmethod
+    def save_acceleration_scale(self, scale_percent: float) -> DashboardCommandResult: ...
+
+    @abstractmethod
+    def is_paint_head_available(self) -> bool: ...
+
+    @abstractmethod
+    def adjust_paint_head(self, direction: str, units: int) -> DashboardCommandResult: ...
+
+    @abstractmethod
+    def relieve_cable(self) -> DashboardCommandResult: ...
+
+    @abstractmethod
+    def get_auxiliary_states(self) -> dict[str, bool]: ...
+
+    @abstractmethod
+    def set_auxiliary_enabled(self, device_id: str, enabled: bool) -> DashboardCommandResult: ...
+
+    @abstractmethod
+    def get_drying_mode(self) -> str: ...
+
+    @abstractmethod
+    def set_drying_mode(self, mode: str) -> DashboardCommandResult: ...
+
+    @abstractmethod
+    def get_production_start_guard_state(self, mode: str) -> dict[str, object]: ...
+
+    @abstractmethod
+    def prepare_production_start(self, mode: str) -> DashboardCommandResult: ...
+
+    @abstractmethod
+    def get_plate_layout_state(self) -> dict[str, object]: ...
+
+    @abstractmethod
+    def clear_plate_layout(self) -> DashboardCommandResult: ...
+
+    @abstractmethod
+    def remove_plate_placement(self, placement_id: int) -> DashboardCommandResult: ...
+
+    @abstractmethod
+    def capture_latest_contour_transform_debug(self) -> ContourTransformDebugResult: ...

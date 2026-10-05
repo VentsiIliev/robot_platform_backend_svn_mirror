@@ -1,0 +1,294 @@
+from dataclasses import dataclass, field
+from typing import Optional, List, Any, Dict
+
+from src.engine.repositories.interfaces.settings_serializer import ISettingsSerializer
+
+
+@dataclass
+class SafetyLimits:
+    x_min: int = -500
+    x_max: int = 500
+    y_min: int = -500
+    y_max: int = 500
+    z_min: int = 100
+    z_max: int = 800
+    rx_min: int = 170
+    rx_max: int = 190
+    ry_min: int = -10
+    ry_max: int = 10
+    rz_min: int = -180
+    rz_max: int = 180
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'SafetyLimits':
+        return cls(
+            x_min=data.get("x_min", -500),
+            x_max=data.get("x_max", 500),
+            y_min=data.get("y_min", -500),
+            y_max=data.get("y_max", 500),
+            z_min=data.get("z_min", 100),
+            z_max=data.get("z_max", 800),
+            rx_min=data.get("rx_min", 170),
+            rx_max=data.get("rx_max", 190),
+            ry_min=data.get("ry_min", -10),
+            ry_max=data.get("ry_max", 10),
+            rz_min=data.get("rz_min", -180),
+            rz_max=data.get("rz_max", 180),
+        )
+
+    def to_dict(self) -> Dict:
+        return {
+            "x_min": self.x_min, "x_max": self.x_max,
+            "y_min": self.y_min, "y_max": self.y_max,
+            "z_min": self.z_min, "z_max": self.z_max,
+            "rx_min": self.rx_min, "rx_max": self.rx_max,
+            "ry_min": self.ry_min, "ry_max": self.ry_max,
+            "rz_min": self.rz_min, "rz_max": self.rz_max,
+        }
+
+
+@dataclass
+class OffsetDirectionMap:
+    pos_x: bool = True
+    neg_x: bool = True
+    pos_y: bool = True
+    neg_y: bool = True
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'OffsetDirectionMap':
+        return cls(
+            pos_x=data.get("+X", True),
+            neg_x=data.get("-X", True),
+            pos_y=data.get("+Y", True),
+            neg_y=data.get("-Y", True),
+        )
+
+    def to_dict(self) -> dict:
+        return {"+X": self.pos_x, "-X": self.neg_x, "+Y": self.pos_y, "-Y": self.neg_y}
+
+
+@dataclass
+class MovementGroup:
+    velocity: int = 0
+    acceleration: int = 0
+    motion_type: str = "ptp"
+    position: Optional[str] = None
+    points: List[str] = field(default_factory=list)
+    iterations: int = 1
+    has_iterations: bool = False
+    has_trajectory_execution: bool = False
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'MovementGroup':
+        return cls(
+            velocity=data.get("velocity", 0),
+            acceleration=data.get("acceleration", 0),
+            motion_type=cls._normalize_motion_type(data.get("motion_type", data.get("type", "ptp"))),
+            position=data.get("position"),
+            points=data.get("points", []),
+            iterations=data.get("iterations", 1),
+            has_iterations=data.get("has_iterations", False),
+            has_trajectory_execution=data.get("has_trajectory_execution", False),
+        )
+
+    def parse_position(self) -> Optional[List[float]]:
+        if self.position is None:
+            return None
+        import json
+        return [float(v) for v in json.loads(self.position)]
+
+    def parse_points(self) -> List[List[float]]:
+        import json
+        return [[float(v) for v in json.loads(p)] for p in self.points]
+
+    def to_dict(self) -> Dict:
+        result = {
+            "velocity": self.velocity,
+            "acceleration": self.acceleration,
+            "motion_type": self._normalize_motion_type(self.motion_type),
+            "iterations": self.iterations,
+            "has_iterations": self.has_iterations,
+            "has_trajectory_execution": self.has_trajectory_execution,
+        }
+        if self.position:
+            result["position"] = self.position
+        if self.points:
+            result["points"] = self.points
+        return result
+
+    @staticmethod
+    def _normalize_motion_type(value: object) -> str:
+        motion_type = str(value or "ptp").strip().lower()
+        return motion_type if motion_type in {"ptp", "linear", "fast_lin"} else "ptp"
+
+
+
+@dataclass
+class GlobalMotionSettings:
+    global_velocity: int = 100
+    global_acceleration: int = 100
+    emergency_decel: int = 500
+    max_jog_step: int = 50
+    recovery_servo_linear_mm_s: float = 25.0
+    recovery_servo_angular_deg_s: float = 5.0
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'GlobalMotionSettings':
+        return cls(
+            global_velocity=data.get("global_velocity", 100),
+            global_acceleration=data.get("global_acceleration", 100),
+            emergency_decel=data.get("emergency_decel", 500),
+            max_jog_step=data.get("max_jog_step", 50),
+            recovery_servo_linear_mm_s=data.get("recovery_servo_linear_mm_s", 25.0),
+            recovery_servo_angular_deg_s=data.get("recovery_servo_angular_deg_s", 5.0),
+        )
+
+    def to_dict(self) -> Dict:
+        return {
+            "global_velocity": self.global_velocity,
+            "global_acceleration": self.global_acceleration,
+            "emergency_decel": self.emergency_decel,
+            "max_jog_step": self.max_jog_step,
+            "recovery_servo_linear_mm_s": self.recovery_servo_linear_mm_s,
+            "recovery_servo_angular_deg_s": self.recovery_servo_angular_deg_s,
+        }
+
+
+@dataclass
+class RobotSettings:
+    robot_ip: str = "192.168.58.2"
+    robot_tool: int = 0
+    robot_user: int = 0
+    use_automatic_camera_to_tcp_offset: bool = True
+    camera_to_tcp_x_offset: float = 0.0
+    camera_to_tcp_y_offset: float = 0.0
+    camera_to_tcp_rotation_residuals: List[Dict[str, float]] = field(default_factory=list)
+    camera_to_tcp_mode: str = "global"
+    camera_to_tcp_by_area: Dict[str, Dict] = field(default_factory=dict)
+    camera_z_shift_x_per_mm_px: float = 0.0
+    camera_z_shift_y_per_mm_px: float = 0.0
+    camera_z_shift_x_per_mm: float = 0.0
+    camera_z_shift_y_per_mm: float = 0.0
+    tcp_x_step_distance: float = 50.0
+    tcp_x_step_offset: float = 0.1
+    tcp_y_step_distance: float = 50.0
+    tcp_y_step_offset: float = 0.1
+    offset_direction_map: OffsetDirectionMap = field(default_factory=OffsetDirectionMap)
+    movement_groups: Dict[str, MovementGroup] = field(default_factory=dict)
+    safety_limits: SafetyLimits = field(default_factory=SafetyLimits)
+    global_motion_settings: GlobalMotionSettings = field(default_factory=GlobalMotionSettings)
+
+    def camera_to_tcp_for_area(self, area_id: str = "") -> tuple[float, float, list[dict]]:
+        values = (
+            self.camera_to_tcp_by_area.get(str(area_id or "").strip(), {})
+            if self.camera_to_tcp_mode == "per_area" else {}
+        )
+        return (
+            float(values.get("x_mm", self.camera_to_tcp_x_offset)),
+            float(values.get("y_mm", self.camera_to_tcp_y_offset)),
+            list(values.get("rotation_residuals", self.camera_to_tcp_rotation_residuals)),
+        )
+
+    def save_camera_to_tcp_for_area(
+        self, area_id: str, x_mm: float, y_mm: float, residuals: list[dict]
+    ) -> None:
+        area = str(area_id or "").strip()
+        if self.camera_to_tcp_mode == "per_area" and area:
+            self.camera_to_tcp_by_area[area] = {
+                "x_mm": float(x_mm), "y_mm": float(y_mm),
+                "rotation_residuals": list(residuals),
+            }
+        else:
+            self.camera_to_tcp_x_offset = float(x_mm)
+            self.camera_to_tcp_y_offset = float(y_mm)
+            self.camera_to_tcp_rotation_residuals = list(residuals)
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'RobotSettings':
+        movement_groups = {
+            name: MovementGroup.from_dict(group_data)
+            for name, group_data in data.get("MOVEMENT_GROUPS", {}).items()
+        }
+        return cls(
+            robot_ip=data.get("ROBOT_IP", "192.168.58.2"),
+            robot_tool=data.get("ROBOT_TOOL", 0),
+            robot_user=data.get("ROBOT_USER", 0),
+            use_automatic_camera_to_tcp_offset=data.get(
+                "USE_AUTOMATIC_CAMERA_TO_TCP_OFFSET", True
+            ),
+            camera_to_tcp_x_offset=data.get("CAMERA_TO_TCP_X_OFFSET", 0.0),
+            camera_to_tcp_y_offset=data.get("CAMERA_TO_TCP_Y_OFFSET", 0.0),
+            camera_to_tcp_rotation_residuals=[
+                {
+                    "angle_deg": float(item.get("angle_deg", 0.0)),
+                    "x_mm": float(item.get("x_mm", 0.0)),
+                    "y_mm": float(item.get("y_mm", 0.0)),
+                }
+                for item in (data.get("CAMERA_TO_TCP_ROTATION_RESIDUALS", []) or [])
+                if isinstance(item, dict)
+            ],
+            camera_to_tcp_mode=(
+                "per_area" if data.get("CAMERA_TO_TCP_MODE") == "per_area" else "global"
+            ),
+            camera_to_tcp_by_area={
+                str(area).strip(): dict(values)
+                for area, values in (data.get("CAMERA_TO_TCP_BY_AREA", {}) or {}).items()
+                if str(area).strip() and isinstance(values, dict)
+            },
+            camera_z_shift_x_per_mm_px=data.get("CAMERA_Z_SHIFT_X_PER_MM_PX", 0.0),
+            camera_z_shift_y_per_mm_px=data.get("CAMERA_Z_SHIFT_Y_PER_MM_PX", 0.0),
+            camera_z_shift_x_per_mm=data.get("CAMERA_Z_SHIFT_X_PER_MM", 0.0),
+            camera_z_shift_y_per_mm=data.get("CAMERA_Z_SHIFT_Y_PER_MM", 0.0),
+            tcp_x_step_distance=data.get("TCP_X_STEP_DISTANCE", 50.0),
+            tcp_x_step_offset=data.get("TCP_X_STEP_OFFSET", 0.1),
+            tcp_y_step_distance=data.get("TCP_Y_STEP_DISTANCE", 50.0),
+            tcp_y_step_offset=data.get("TCP_Y_STEP_OFFSET", 0.1),
+            offset_direction_map=OffsetDirectionMap.from_dict(data.get("OFFSET_DIRECTION_MAP", {})),
+            movement_groups=movement_groups,
+            safety_limits=SafetyLimits.from_dict(data.get("SAFETY_LIMITS", {})),
+            global_motion_settings=GlobalMotionSettings.from_dict(data.get("GLOBAL_MOTION_SETTINGS", {})),
+        )
+
+    def to_dict(self) -> Dict:
+        return {
+            "ROBOT_IP": self.robot_ip,
+            "ROBOT_TOOL": self.robot_tool,
+            "ROBOT_USER": self.robot_user,
+            "USE_AUTOMATIC_CAMERA_TO_TCP_OFFSET": self.use_automatic_camera_to_tcp_offset,
+            "CAMERA_TO_TCP_X_OFFSET": self.camera_to_tcp_x_offset,
+            "CAMERA_TO_TCP_Y_OFFSET": self.camera_to_tcp_y_offset,
+            "CAMERA_TO_TCP_ROTATION_RESIDUALS": self.camera_to_tcp_rotation_residuals,
+            "CAMERA_TO_TCP_MODE": self.camera_to_tcp_mode,
+            "CAMERA_TO_TCP_BY_AREA": self.camera_to_tcp_by_area,
+            "CAMERA_Z_SHIFT_X_PER_MM_PX": self.camera_z_shift_x_per_mm_px,
+            "CAMERA_Z_SHIFT_Y_PER_MM_PX": self.camera_z_shift_y_per_mm_px,
+            "CAMERA_Z_SHIFT_X_PER_MM": self.camera_z_shift_x_per_mm,
+            "CAMERA_Z_SHIFT_Y_PER_MM": self.camera_z_shift_y_per_mm,
+            "TCP_X_STEP_DISTANCE": self.tcp_x_step_distance,
+            "TCP_X_STEP_OFFSET": self.tcp_x_step_offset,
+            "TCP_Y_STEP_DISTANCE": self.tcp_y_step_distance,
+            "TCP_Y_STEP_OFFSET": self.tcp_y_step_offset,
+            "OFFSET_DIRECTION_MAP": self.offset_direction_map.to_dict(),
+            "SAFETY_LIMITS": self.safety_limits.to_dict(),
+            "GLOBAL_MOTION_SETTINGS": self.global_motion_settings.to_dict(),
+        }
+
+    def __str__(self):
+        import json
+        return json.dumps(self.to_dict(), indent=4)
+
+
+class RobotSettingsSerializer(ISettingsSerializer[RobotSettings]):
+
+    @property
+    def settings_type(self) -> str:
+        return "robot_config"
+
+    def get_default(self) -> RobotSettings:
+        return RobotSettings()
+
+    def to_dict(self, settings: RobotSettings) -> Dict[str, Any]:
+        return settings.to_dict()
+
+    def from_dict(self, data: Dict[str, Any]) -> RobotSettings:
+        return RobotSettings.from_dict(data)

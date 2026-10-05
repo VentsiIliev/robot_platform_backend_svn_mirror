@@ -1,0 +1,469 @@
+import logging
+import os
+from typing import TYPE_CHECKING, Callable, List, Optional, Tuple
+from datetime import datetime
+
+import cv2
+
+if TYPE_CHECKING:
+    from src.engine.robot.height_measuring.i_height_correction_service import IHeightCorrectionService
+
+import numpy as np
+
+from src.applications.pick_target.service.i_pick_target_service import IPickTargetService
+from src.engine.robot.height_measuring.i_height_measuring_service import IHeightMeasuringService
+from src.engine.robot.interfaces.i_robot_service import IRobotService
+from src.engine.vision.i_capture_snapshot_service import ICaptureSnapshotService
+from src.engine.vision.i_vision_service import IVisionService
+from src.engine.vision.implementation.VisionSystem.core.models.contour import Contour
+from src.engine.robot.targeting import VisionPoseRequest, VisionTargetResolver
+
+_logger = logging.getLogger(__name__)
+
+_Z = 300.0
+_DEBUG_CAPTURE_DIR = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "bootstrap", "debug_plots")
+)
+
+
+def _rounded(values) -> list[float] | None:
+    if values is None:
+        return None
+    return [round(float(value), 6) for value in values]
+
+
+class PickTargetApplicationService(IPickTargetService):
+
+    def __init__(
+        self,
+        vision_service:  Optional[IVisionService],
+        capture_snapshot_service: Optional[ICaptureSnapshotService],
+        robot_service:   Optional[IRobotService],
+        resolver:        Optional[VisionTargetResolver],
+        resolver_getter=None,
+        robot_config=None,
+        robot_config_getter=None,
+        navigation=None,
+        height_measuring: Optional[IHeightMeasuringService] = None,
+        default_target_name: str = "",
+        calibration_frame_name: str = "",
+        pickup_frame_name: str = "",
+        active_frame_name_getter: Optional[Callable[[], str]] = None,
+        active_capture_group_getter: Optional[Callable[[], str]] = None,
+    ):
+        self._vision        = vision_service
+        self._capture_snapshot_service = capture_snapshot_service
+        self._robot         = robot_service
+        self._resolver      = resolver
+        self._resolver_getter = resolver_getter
+        self._robot_config  = robot_config
+        self._robot_config_getter = robot_config_getter
+        self._navigation    = navigation
+        self._height_measuring  = height_measuring
+        self._use_pickup_plane = False
+        self._pickup_plane_rz = 90.0
+        self._default_target_name = str(default_target_name or "").strip().lower()
+        self._calibration_frame_name = str(calibration_frame_name or "").strip().lower()
+        self._pickup_frame_name = str(pickup_frame_name or "").strip().lower()
+        self._active_frame_name_getter = active_frame_name_getter
+        self._active_capture_group_getter = active_capture_group_getter
+
+        self._registry = None
+        self._target_point = self._resolve_target_point(self._default_target_name)
+
+    def _current_resolver(self) -> Optional[VisionTargetResolver]:
+        if self._resolver_getter is not None:
+            return self._resolver_getter()
+        return self._resolver
+
+    def _current_registry(self):
+        resolver = self._current_resolver()
+        return resolver.registry if resolver is not None else None
+
+    def _resolve_target_point(self, target_name: str):
+        registry = self._current_registry()
+        self._registry = registry
+        if registry is None or not target_name:
+            return None
+        return registry.by_name(target_name)
+
+    def _mapper_for_frame(self, frame_name: str):
+        resolver = self._current_resolver()
+        if resolver is None or not frame_name:
+            return None
+        frame = resolver.get_frame(frame_name)
+        return frame.mapper if frame is not None else None
+
+    def _dynamic_active_frame_name(self) -> str:
+        if self._active_frame_name_getter is None:
+            return ""
+        try:
+            return str(self._active_frame_name_getter() or "").strip().lower()
+        except Exception:
+            _logger.debug("Failed to read active pick-target frame", exc_info=True)
+            return ""
+
+    def _active_capture_group_name(self) -> str:
+        if self._active_capture_group_getter is None:
+            return ""
+        try:
+            return str(self._active_capture_group_getter() or "").strip()
+        except Exception:
+            _logger.debug("Failed to read active pick-target capture group", exc_info=True)
+            return ""
+
+    def set_target(self, target: str) -> None:
+        self._target_point = self._resolve_target_point(target)
+
+    def set_use_pickup_plane(self, enabled: bool) -> None:
+        self._use_pickup_plane = enabled
+
+    def set_pickup_plane_rz(self, rz: float) -> None:
+        self._pickup_plane_rz = float(rz)
+
+    def _current_robot_config(self):
+        if self._robot_config_getter is not None:
+            return self._robot_config_getter()
+        return self._robot_config
+
+    def _tool(self) -> int:
+        config = self._current_robot_config()
+        return config.robot_tool if config else 0
+
+    def _user(self) -> int:
+        config = self._current_robot_config()
+        return config.robot_user if config else 0
+
+    @property
+    def _active_frame(self) -> str:
+        if self._use_pickup_plane and self._pickup_frame_name:
+            return self._pickup_frame_name
+        return self._dynamic_active_frame_name() or self._calibration_frame_name
+
+    def get_jog_reference_rz(self) -> float:
+        mapper = self._mapper_for_frame(self._active_frame)
+        if mapper is not None:
+            return float(mapper.target_pose.rz)
+        return 0.0
+
+    def _current_capture_orientation(self) -> Tuple[float, float]:
+        if self._robot is None:
+            return 180.0, 0.0
+        try:
+            current_pose = self._robot.get_current_position()
+        except Exception:
+            _logger.exception("Failed to read robot pose for pick-target capture orientation")
+            return 180.0, 0.0
+        if current_pose is None or len(current_pose) < 5:
+            _logger.warning(
+                "Robot pose unavailable for pick-target capture orientation; using default rx/ry"
+            )
+            return 180.0, 0.0
+        return float(current_pose[3]), float(current_pose[4])
+
+    def _pose_target(
+        self,
+        px: float,
+        py: float,
+        z_mm: float = 0.0,
+        rx_degrees: float = 180.0,
+        ry_degrees: float = 0.0,
+    ) -> VisionPoseRequest:
+        return VisionPoseRequest(
+            x_pixels=px,
+            y_pixels=py,
+            z_mm=z_mm,
+            rz_degrees=self._pickup_plane_rz,
+            rx_degrees=rx_degrees,
+            ry_degrees=ry_degrees,
+        )
+
+    def _transform_point(self, px: float, py: float) -> Tuple[float, float]:
+        resolver = self._current_resolver()
+        if resolver is None:
+            raise RuntimeError("Coordinate transformer is not available")
+        return resolver.resolve(
+            self._pose_target(px, py), self._target_point, frame=self._active_frame
+        ).final_xy
+
+    def capture(self) -> Tuple[Optional[np.ndarray], List[Tuple[float, float]], List[Tuple[float, float, float, float, float, float]]]:
+        if self._capture_snapshot_service is None:
+            _logger.warning("Capture snapshot service not available")
+            return None, [], []
+
+        capture_rx, capture_ry = self._current_capture_orientation()
+        _logger.info(
+            "[PICK_TARGET_CAPTURE_ORIENTATION] rx=%.3f ry=%.3f",
+            float(capture_rx),
+            float(capture_ry),
+        )
+        snapshot = self._capture_snapshot_service.capture_snapshot(source="pick_target.capture")
+        frame = snapshot.frame
+        self._save_debug_capture(frame)
+        raw_contours = snapshot.contours
+
+        from src.applications.pick_target.service.i_pick_target_service import RobotPose
+        pixel_centroids: List[Tuple[float, float]] = []
+        robot_targets:   List[RobotPose] = []
+
+        for raw in raw_contours:
+            try:
+                cnt = Contour(raw)
+                px, py = cnt.getCentroid()
+                pixel_centroids.append((px, py))
+                resolver = self._current_resolver()
+                if resolver is not None:
+                    result = resolver.resolve(
+                        self._pose_target(
+                            px,
+                            py,
+                            z_mm=_Z,
+                            rx_degrees=capture_rx,
+                            ry_degrees=capture_ry,
+                        ),
+                        self._target_point,
+                        frame=self._active_frame,
+                    )
+                    _logger.info(
+                        "[PICK_TARGET_RESOLVE] target=%s frame=%s rz=%.3f pixels=(%.3f, %.3f) "
+                        "calibration_xy=(%.3f, %.3f) plane_xy=(%.3f, %.3f) final_xy=(%.3f, %.3f)",
+                        str(getattr(self._target_point, "name", "")),
+                        self._active_frame,
+                        float(self._pickup_plane_rz),
+                        float(px),
+                        float(py),
+                        float(result.calibration_xy[0]),
+                        float(result.calibration_xy[1]),
+                        float(result.plane_xy[0]),
+                        float(result.plane_xy[1]),
+                        float(result.final_xy[0]),
+                        float(result.final_xy[1]),
+                    )
+                    robot_targets.append(result.robot_pose())
+            except Exception:
+                _logger.exception("Failed to process contour centroid")
+
+        return frame, pixel_centroids, robot_targets
+
+    def _save_debug_capture(self, frame: Optional[np.ndarray]) -> None:
+        if frame is None:
+            return
+        try:
+            os.makedirs(_DEBUG_CAPTURE_DIR, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            path = os.path.join(_DEBUG_CAPTURE_DIR, f"debug_{timestamp}.png")
+            if cv2.imwrite(path, frame):
+                _logger.info("Saved pick-target debug capture to %s", path)
+        except Exception:
+            _logger.exception("Failed to save pick-target debug capture")
+
+    def move_to(self, x: float, y: float, z: float, rx: float, ry: float, rz: float) -> bool:
+        if self._robot is None:
+            _logger.warning("Robot service not available — cannot move")
+            return False
+        try:
+            tool = self._tool()
+            success = self._robot.move_ptp(
+                [x, y, z, rx, ry, rz],
+                tool=tool,
+                user=self._user(),
+                velocity=20,
+                acceleration=10,
+                wait_to_reach=True,
+            )
+            if success:
+                self._log_tool_chain(tool, [x, y, z, rx, ry, rz])
+            return success
+        except Exception:
+            _logger.exception("move_to(%.1f, %.1f, %.1f) failed", x, y, z)
+            return False
+
+    def _log_tool_chain(self, tool_id: int, commanded_tcp: List[float]) -> None:
+        """Log the live frames used by a completed targeting move."""
+        if self._robot is None:
+            return
+        try:
+            registry = self._robot.get_tool_registry() or {}
+            id_map = registry.get("tool_id_map", {})
+            tool_name = id_map.get(
+                int(tool_id),
+                id_map.get(str(int(tool_id)), f"TOOL_{int(tool_id)}"),
+            )
+            tool_transform = registry.get("tool_registry", {}).get(tool_name)
+            flange_pose = self._robot.get_current_flange_position()
+            reported_tcp = self._robot.get_current_position()
+            _logger.info(
+                "[PICK_TARGET_TOOL_CHAIN] tool_id=%d tool_name=%s commanded_tcp=%s "
+                "registry_transform=%s source_pose=%s reported_tcp=%s",
+                int(tool_id),
+                str(tool_name),
+                _rounded(commanded_tcp),
+                _rounded(tool_transform),
+                _rounded(flange_pose),
+                _rounded(reported_tcp),
+            )
+        except Exception:
+            _logger.warning("Failed to capture pick-target tool-chain diagnostics", exc_info=True)
+
+    def move_to_base(self, robot_x: float, robot_y: float, rx: float, ry: float, rz: float, z: float | None = None) -> bool:
+        if self._robot is None:
+            _logger.warning("Robot service not available — cannot move")
+            return False
+        try:
+            target_z = float(_Z if z is None else z)
+            return self._robot.move_ptp(
+                [robot_x, robot_y, target_z, rx, ry, rz],
+                tool=self._tool(),
+                user=self._user(),
+                velocity=20,
+                acceleration=10,
+                wait_to_reach=True,
+            )
+        except Exception:
+            _logger.exception("move_to_base(%.1f, %.1f) failed", robot_x, robot_y)
+            return False
+
+    def move_to_with_live_height(self, robot_x: float, robot_y: float, rx: float, ry: float, rz: float, z: float | None = None) -> bool:
+        if self._robot is None:
+            _logger.warning("Robot service not available — cannot move")
+            return False
+        target_z = float(_Z if z is None else z)
+        if not self.move_to_base(robot_x, robot_y, rx, ry, rz, target_z):
+            return False
+        if self._height_measuring is None:
+            _logger.warning("Height measuring service not available — staying at base Z")
+            return True
+        try:
+            self._height_measuring.begin_measurement_session()
+            measured_z = self._height_measuring.measure_at(robot_x, robot_y)
+            self._height_measuring.end_measurement_session()
+        except Exception:
+            _logger.exception("Live height measurement failed at (%.1f, %.1f)", robot_x, robot_y)
+            return True  # base move succeeded
+        if measured_z is None:
+            _logger.warning("Height measurement returned None at (%.1f, %.1f) — staying at base Z", robot_x, robot_y)
+            return True
+        adjusted_z = target_z + measured_z
+        _logger.debug(
+            "Live height correction at (%.1f, %.1f): base=%.1f measured=%.3f adjusted=%.3f",
+            robot_x, robot_y, target_z, measured_z, adjusted_z,
+        )
+        try:
+            return self._robot.move_ptp(
+                [robot_x, robot_y, adjusted_z, rx, ry, rz],
+                tool=self._tool(),
+                user=self._user(),
+                velocity=20,
+                acceleration=10,
+                wait_to_reach=True,
+            )
+        except Exception:
+            _logger.exception("move_to_with_live_height Z-adjust failed at (%.1f, %.1f)", robot_x, robot_y)
+            return False
+
+    def move_to_calibration_position(self) -> bool:
+        if self._navigation is None:
+            _logger.warning("Navigation service not available")
+            return False
+        try:
+            if self._use_pickup_plane:
+                return self._navigation.move_home()
+            active_group = self._active_capture_group_name()
+            if active_group and active_group.upper() != "CALIBRATION":
+                move_to_group = getattr(self._navigation, "move_to_group", None)
+                if callable(move_to_group):
+                    return bool(move_to_group(active_group))
+                move_to = getattr(self._navigation, "move_to", None)
+                if callable(move_to):
+                    return bool(move_to(active_group))
+                _logger.warning("Navigation service cannot move to group %s", active_group)
+                return False
+            z_offset = self._vision.get_capture_pos_offset() if self._vision is not None else 0.0
+            return self._navigation.move_to_calibration_position(z_offset=z_offset)
+        except Exception:
+            _logger.exception("move_to_calibration_position failed")
+            return False
+
+    def capture_contour_trajectory(self) -> List[np.ndarray]:
+        if self._capture_snapshot_service is None:
+            return []
+        raw_contours = self._capture_snapshot_service.capture_snapshot(
+            source="pick_target.capture_contour_trajectory"
+        ).contours
+        result = []
+        for raw in raw_contours:
+            try:
+                cnt = Contour(raw)
+                pts_px = cnt.get()                           # (N, 2) float32 pixel coords
+                robot_pts: List[Tuple[float, float]] = []
+                for px, py in pts_px:
+                    rx, ry = self._transform_point(float(px), float(py))
+                    robot_pts.append((rx, ry))
+                if robot_pts:
+                    robot_arr = np.array(robot_pts, dtype=np.float32)
+                    result.append(robot_arr)
+                    _logger.info(
+                        "[PICK_TARGET_TRAJECTORY_MEASURE] index=%d points=%d %s",
+                        len(result),
+                        len(robot_arr),
+                        self._describe_robot_contour_size(robot_arr),
+                    )
+            except Exception:
+                _logger.exception("Failed to transform contour for trajectory")
+        return result
+
+    def execute_contour_trajectory(
+        self,
+        contour_robot_pts: List[np.ndarray],
+        z: float,
+        vel: float,
+        acc: float,
+    ) -> Tuple[bool, str]:
+        if self._robot is None:
+            return False, "Robot service unavailable"
+        exec_fn = getattr(self._robot, 'execute_trajectory', None)
+        if exec_fn is None:
+            return False, "execute_trajectory not supported by this robot driver"
+        if not contour_robot_pts:
+            return False, "No contour waypoints to execute"
+        try:
+            rx, ry = self._current_capture_orientation()
+            rz = self._pickup_plane_rz
+            total_pts = 0
+            for index, pts in enumerate(contour_robot_pts):
+                path = [[float(x), float(y), float(z)] for x, y in pts]
+                if not path:
+                    continue
+                _logger.info(
+                    "[PICK_TARGET_EXECUTE_TRAJECTORY_MEASURE] index=%d points=%d %s",
+                    index + 1,
+                    len(path),
+                    self._describe_robot_contour_size(np.asarray(pts, dtype=np.float32)),
+                )
+                result_code = exec_fn(path, rx=rx, ry=ry, rz=rz, vel=vel, acc=acc, blocking=True)
+                if result_code not in (0, True, None):
+                    return False, f"Trajectory failed with code {result_code}"
+                total_pts += len(path)
+            return True, f"Trajectory complete — {len(contour_robot_pts)} contour(s), {total_pts} waypoints"
+        except Exception:
+            _logger.exception("execute_contour_trajectory failed")
+            return False, "Trajectory error — see log"
+
+    @staticmethod
+    def _describe_robot_contour_size(points: np.ndarray) -> str:
+        arr = np.asarray(points, dtype=np.float32)
+        if arr.ndim != 2 or arr.shape[0] < 3 or arr.shape[1] < 2:
+            return "min_rect=unavailable bbox=unavailable"
+
+        xy = np.ascontiguousarray(arr[:, :2].reshape(-1, 1, 2), dtype=np.float32)
+        (_center, size, angle_deg) = cv2.minAreaRect(xy)
+        length_mm = max(float(size[0]), float(size[1]))
+        width_mm = min(float(size[0]), float(size[1]))
+        x_min = float(np.min(arr[:, 0]))
+        x_max = float(np.max(arr[:, 0]))
+        y_min = float(np.min(arr[:, 1]))
+        y_max = float(np.max(arr[:, 1]))
+        return (
+            f"min_rect=({length_mm:.3f} x {width_mm:.3f} mm angle={float(angle_deg):.3f}) "
+            f"bbox=({x_max - x_min:.3f} x {y_max - y_min:.3f} mm)"
+        )

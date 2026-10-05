@@ -1,0 +1,248 @@
+# Runtime backend identifier used by the shared runtime factory.
+ROBOT_BACKEND: zeroerr
+
+# Active robot profile. Profile-specific overrides live under config/<profile>/.
+ACTIVE_PROFILE: paint_short_links
+#ACTIVE_PROFILE: paint
+#ACTIVE_PROFILE: welding
+
+# Enables the EtherCAT OP-state watchdog before allowing motion.
+ETHERCAT_WATCHDOG_ENABLED: true
+
+# Request OP again when the watchdog sees slaves drop from OP. Motion remains
+# interlocked until all slaves are observed back in OP.
+ETHERCAT_RECOVERY_ENABLED: true
+ETHERCAT_RECOVERY_MIN_INTERVAL_S: 2.0
+ETHERCAT_RECOVERY_CMD_TIMEOUT_S: 2.0
+
+# Global collision checking toggle. Set to false to disable all collision
+# avoidance (useful for painting/welding where tool may be in contact).
+# When false, all avoid_collisions parameters default to False.
+ENABLE_COLLISION_CHECKING: true
+# Inflate every enabled robot-link collision shape by 10 mm in all MoveIt
+# planning-scene monitors. Visual geometry is unchanged. Collision pairs
+# disabled as mechanically adjacent in the SRDF remain disabled.
+MOVEIT_COLLISION_PADDING_M: 0.010
+MOVEIT_COLLISION_SCALE: 1.0
+
+# Enables the experimental sensorless joint-torque collision monitor. This is
+# independent of MoveIt/Servo geometric collision checking above. The monitor
+# is passive: it publishes diagnostics and warnings but does not stop motion.
+ENABLE_SENSORLESS_COLLISION_MONITOR: false
+SENSORLESS_COLLISION_MONITOR_PERIOD_SEC: 0.01
+# Generalized-momentum observer from Chen et al. (2018), equations 3-15.
+# Uses the installed PyKDL with the local URDF-chain parser; no kdl_parser_py
+# package or joint-acceleration measurement is required.
+SENSORLESS_COLLISION_OBSERVER_GAIN: 10.0
+# Require continuous operation_enabled status and zero error code from all six
+# drives before observer initialization begins.
+SENSORLESS_COLLISION_DRIVE_STABLE_SEC: 2.0
+# Keep the arm stationary after startup while the observer learns only the
+# drive/friction/model offset at the initial pose.
+SENSORLESS_COLLISION_WARMUP_SEC: 8.0
+SENSORLESS_COLLISION_LOG_ENABLED: false
+SENSORLESS_COLLISION_LOG_PATH: /home/ilv/ros2_ws/eRob_moveit/zeroerr_data/collision_detection/collision_training.csv
+# Log at 20 Hz while collision detection itself continues at 100 Hz. Each
+# accepted instant produces one row per joint (120 rows/s for six joints).
+SENSORLESS_COLLISION_LOG_PERIOD_SEC: 0.05
+SENSORLESS_COLLISION_GUI_ENABLED: false
+
+# MoveIt-validated, low-speed excitation sequence for collecting a compact and
+# varied sensorless-collision training set. The node starts idle and never
+# moves until its ~/start service is called. Keep dry-run true for the first
+# review; change it to false only with a clear, supervised robot workspace.
+COLLISION_CALIBRATION_RUNNER_ENABLED: false
+COLLISION_CALIBRATION_DRY_RUN: false
+COLLISION_CALIBRATION_JOINT_SWEEP_AMPLITUDES_RAD: [0.15, 0.15, 0.15, 0.15, 0.15, 0.15]
+COLLISION_CALIBRATION_SWEEP_LEVELS: 2
+# Conservative multi-joint motions around the known-safe starting posture.
+# Each joint is limited to 35% of its single-joint sweep amplitude (0.0525 rad
+# with the values above), and the robot returns to the anchor every four moves.
+# The old broad full-range workspace sampler is intentionally no longer used.
+COLLISION_CALIBRATION_COUPLED_SAMPLE_COUNT: 24
+COLLISION_CALIBRATION_COUPLED_AMPLITUDE_SCALE: 0.35
+COLLISION_CALIBRATION_COUPLED_RETURN_INTERVAL: 4
+# Dedicated J1 ring ensures coverage candidates around the robot base while
+# holding the other five joints at the run's known-valid anchor posture.
+COLLISION_CALIBRATION_BASE_ROTATION_SAMPLE_COUNT: 12
+COLLISION_CALIBRATION_BASE_ROTATION_MIN_RAD: -3.0
+COLLISION_CALIBRATION_BASE_ROTATION_MAX_RAD: 3.0
+COLLISION_CALIBRATION_MAX_INTERPOLATION_STEP_RAD: 0.015
+# Corresponding velocity/acceleration pairs. Single-joint sweeps are repeated
+# at every profile; workspace samples rotate through the same profiles.
+COLLISION_CALIBRATION_VELOCITY_SCALINGS: [0.04, 0.10, 0.20, 0.30, 0.40, 0.55, 0.70, 0.85, 1.00]
+COLLISION_CALIBRATION_ACCELERATION_SCALINGS: [0.04, 0.12, 0.30, 0.40, 0.50, 0.65, 0.80, 0.90, 1.00]
+# Broad practical sampling box. These are candidate bounds only: MoveIt joint
+# bounds and live-scene collision validation can reject any target or path.
+COLLISION_CALIBRATION_JOINT_SAMPLING_MIN_RAD: [-3.0, -1.5, -1.8, -2.5, -2.5, -3.0]
+COLLISION_CALIBRATION_JOINT_SAMPLING_MAX_RAD: [3.0, 1.5, 1.8, 2.0, 2.5, 3.0]
+COLLISION_CALIBRATION_SETTLE_TIME_SEC: 0.35
+COLLISION_CALIBRATION_COVERAGE_LOG_PERIOD_SEC: 0.05
+COLLISION_CALIBRATION_COVERAGE_VOXEL_SIZE_M: 0.05
+COLLISION_CALIBRATION_OUTPUT_DIRECTORY: /home/ilv/ros2_ws/eRob_moveit/zeroerr_data/collision_detection/calibration_runs
+
+# Number of controlled robot joints.
+NUM_JOINTS: 6
+
+# Joint names in controller and MoveIt trajectory order.
+JOINT_NAMES:
+- Joint_1
+- Joint_2
+- Joint_3
+- Joint_4
+- Joint_5
+- Joint_6
+
+# MoveIt planning group name.
+PLANNING_GROUP: manipulator
+
+# Trial: use the seeded Distance IK policy for /move/fast_lin to prefer
+# solutions near the live joint branch, including Joint_1 near +2pi.
+FAST_LIN_PLANNING_GROUP: manipulator
+
+# Root frame for planning and FK/IK requests.
+BASE_LINK: base_link
+
+# End-effector link used for IK, FK, and planning requests.
+EE_LINK: ee_link
+
+# Wrist link used by diagnostics and wrist-specific logic.
+WRIST_LINK: Link_6
+
+# TF link published on /cartesian_position before runtime tool transforms.
+# Keep separate from EE_LINK so MoveIt can plan with ee_link while current-pose
+# reporting and TCP calibration can use the physical tool/flange reference.
+CARTESIAN_SOURCE_LINK: ee_link
+
+# Link treated as the collision/tool tip for safety monitoring.
+COLLISION_TIP_LINK: ee_link
+
+# Robot URDF used by runtime helpers and dynamics/collision tools.
+#URDF_PATH: urdfs/erob_arm_family_motor_masses.urdf
+URDF_PATH: urdfs/erob_arm_small.urdf
+
+# FollowJointTrajectory action used by the low-level controller.
+ACTION_FOLLOW_TRAJECTORY: /manipulator_controller/follow_joint_trajectory
+
+# Real ZeroErr drives can briefly transition around adjacent controller goals.
+# Require a short stable enabled window before sending the next trajectory.
+EXECUTOR_DRIVE_ENABLE_STABLE_BEFORE_TRAJECTORY_S: 0.00
+# A successful controlled-stop result confirms trajectory completion, but the
+# drives need a brief stable window before accepting the following goal.
+EXECUTOR_POST_CONTROLLED_STOP_GOAL_ACCEPTANCE_STABLE_S: 0.07
+
+# Automatically request drive operation enable once EtherCAT is fully OP and
+# controller services are available. This makes /drive/status report
+# requested_enabled/actual_enabled without requiring the frontend to press
+# enable after every startup.
+STARTUP_AUTO_ENABLE_DRIVES: true
+STARTUP_AUTO_ENABLE_DRIVES_TIMEOUT_S: 30.0
+STARTUP_AUTO_ENABLE_DRIVES_RETRY_PERIOD_S: 1.0
+STARTUP_AUTO_ENABLE_DRIVES_VERIFY_TIMEOUT_S: 5.0
+
+# Default trajectory time-parameterization backend.
+TRAJECTORY_OPTIMIZER: RUCKIG
+
+# Log blended trajectory peak interval rates, but do not stretch timing here.
+# If a specific drive limit is proven necessary, add it under this map.
+ORDERED_BLEND_JOINT_RATE_GUARD_ENABLED: true
+ORDERED_BLEND_JOINT_RATE_LIMITS_RAD_S: {}
+
+# Keep verbose ROS INFO diagnostics without putting console/file I/O on motion,
+# planning, controller-dispatch, or optimizer callback threads.
+ASYNC_INFO_LOGGING_ENABLED: true
+ASYNC_INFO_LOGGING_SHUTDOWN_FLUSH_S: 1.0
+
+# Intermediate ordered trajectories settle tightly enough for a smooth handoff
+# without paying the full critical-endpoint settling cost at every segment.
+EXECUTOR_ORDERED_INTERMEDIATE_MATCH_TOL_RAD: 0.002
+# Final physical trajectories settle close enough for the following cycle to
+# reuse an exact movement-group endpoint. Grouped trajectories are final when
+# their logical members consume the end of the chain.
+EXECUTOR_ORDERED_END_MATCH_TOL_RAD: 0.001
+
+# Shared Cartesian path defaults. Profiles can override these for process-
+# specific dense paths such as paint contours.
+PATH_EEF_STEP_SCALE: 1.35
+PATH_EEF_STEP_MIN_M: 0.005
+PATH_EEF_STEP_MAX_M: 0.015
+PATH_WAYPOINT_SIMPLIFY_ENABLED: false
+PATH_WAYPOINT_SIMPLIFY_POSITION_TOL_MM: 0.35
+PATH_WAYPOINT_SIMPLIFY_ORIENTATION_TOL_DEG: 0.35
+PATH_WAYPOINT_SIMPLIFY_MAX_TRANSLATION_MM: 12.0
+PATH_WAYPOINT_SIMPLIFY_MAX_ORIENTATION_DEG: 4.0
+
+# Dense contour IK settings live in contour_ik_config.yaml.
+# Profiles can override them in config/<ACTIVE_PROFILE>/contour_ik_config.yaml.
+
+# Enables heavy Cartesian partial-failure diagnostics. When true, failed linear
+# moves probe failed poses with IK/collision/branch variants. Keep false during
+# normal operation because it adds extra MoveIt service calls and noisy logs.
+CARTESIAN_FAILURE_DIAGNOSTICS_ENABLED: false
+
+# PTP target selection and pre-execution check settings live in ptp_config.yaml.
+# Profiles can override them in config/<ACTIVE_PROFILE>/ptp_config.yaml.
+
+# Tool transforms keyed by tool name, [x, y, z, rx, ry, rz] in mm/degrees.
+TOOL_REGISTRY:
+  TOOL_0:
+  - 0
+  - 0
+  - 0
+  - 0
+  - 0
+  - 0
+
+# Numeric tool IDs accepted by the API mapped to TOOL_REGISTRY keys.
+TOOL_ID_MAP:
+  0: TOOL_0
+
+# REST server log file path.
+REST_LOG: /tmp/zeroerr_rest_server.log
+
+# Read-only WebSocket telemetry stream for GUI clients.
+REST_WS_STATE_ENABLED: true
+REST_WS_STATE_HOST: 0.0.0.0
+REST_WS_STATE_PORT: 5001
+REST_WS_STATE_RATE_HZ: 10.0
+REST_WS_EXECUTION_ENABLED: true
+REST_WS_EXECUTION_HOST: 0.0.0.0
+REST_WS_EXECUTION_PORT: 5002
+REST_WS_EXECUTION_RATE_HZ: 100.0
+
+# Publish /robot_status from the runtime controller.
+ROBOT_STATUS_PUBLISH_ENABLED: false
+
+# Publish interval for RViz/planning-scene marker updates.
+MARKER_PUBLISH_INTERVAL_S: 30.0
+
+# Active TCP/tool visualization marker rate. This is RViz/operator
+# visualization only; attached collision geometry is published separately when
+# the active tool changes/initializes.
+ACTIVE_TOOL_MARKER_PUBLISH_HZ: 1.0
+
+# Enables runtime safety wall collision objects around the extracted workspace.
+SAFETY_WALLS_ENABLED: false
+
+RUNTIME_HEADLESS: 1
+
+# Jacobian Cartesian fallback settings live in jacobian_config.yaml.
+# Profiles can override them in config/<ACTIVE_PROFILE>/jacobian_config.yaml.
+
+# REDUCE CPU LOAD
+
+# Debug-only SDO fault-code polling. Enable only while diagnosing drive errors.
+ZEROERR_ERROR_MONITOR_ENABLED: false
+
+# Low-rate SDO diagnostics for values intentionally kept out of fast PDOs.
+ZEROERR_DRIVE_DIAGNOSTICS_ENABLED: false
+ZEROERR_DRIVE_DIAGNOSTICS_POLL_PERIOD_S: 5.0
+
+MONITOR_UPDATE_RATE_HZ: 10.0
+
+STATE_PUBLISH_RATE_HZ: 10.0
+JOINT_DERIVATIVE_PUBLISH_RATE_HZ: 10.0
+JOINT_STATE_INPUT_RATE_HZ: 10.0
+
+RUNTIME_JOINT_STATE_INPUT_RATE_HZ: 10.0
+RUNTIME_DYNAMIC_STATE_INPUT_RATE_HZ: 10.0

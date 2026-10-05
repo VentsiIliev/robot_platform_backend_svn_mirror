@@ -1,0 +1,378 @@
+<robot name="eRobo3" version="1.0">
+  <joint name="Joint_1" type="revolute">
+    <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
+    <parent link="base_link"/>
+    <child link="Link_1"/>
+    <axis xyz="0.00000 0.00000 1.00000"/>
+    <limit effort="20.0" lower="-6.28318" upper="6.28318" velocity="1000.0" />
+    <safety_controller k_position="100.0" k_velocity="10.0" soft_lower_limit="-6.28" soft_upper_limit="6.28" />
+    <dynamics damping="0.7" friction="0.0"/>
+  </joint>
+  <joint name="Joint_2" type="revolute">
+    <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.05300 0.14050"/>
+    <parent link="Link_1"/>
+    <child link="Link_2"/>
+    <axis xyz="0.00000 -1.00000 0.00000"/>
+    <limit effort="20.0" lower="-3.14159" upper="3.14159" velocity="1000.0" />
+    <safety_controller k_position="100.0" k_velocity="10.0" soft_lower_limit="-3.14" soft_upper_limit="3.14" />
+    <dynamics damping="0.7" friction="0.0"/>
+  </joint>
+  <joint name="Joint_3" type="revolute">
+    <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00050 0.36350"/>
+    <parent link="Link_2"/>
+    <child link="Link_3"/>
+    <axis xyz="0.00000 -1.00000 0.00000"/>
+    <limit effort="20.0" lower="-3.14159" upper="3.14159" velocity="1000.0" />
+    <safety_controller k_position="100.0" k_velocity="10.0" soft_lower_limit="-3.14" soft_upper_limit="3.14" />
+    <dynamics damping="0.7" friction="0.0"/>
+  </joint>
+  <joint name="Joint_4" type="revolute">
+    <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 -0.01400 0.31100"/>
+    <parent link="Link_3"/>
+    <child link="Link_4"/>
+    <axis xyz="0.00000 -1.00000 0.00000"/>
+    <limit effort="10.5" lower="-4.88692" upper="3.14159" velocity="1000.0" />
+    <safety_controller k_position="100.0" k_velocity="10.0" soft_lower_limit="-4.88" soft_upper_limit="3.14" />
+    <dynamics damping="0.7" friction="0.0"/>
+  </joint>
+  <joint name="Joint_5" type="revolute">
+    <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.04700 0.03900"/>
+    <parent link="Link_4"/>
+    <child link="Link_5"/>
+    <axis xyz="0.00000 0.00000 1.00000"/>
+    <limit effort="10.5" lower="-3.14159" upper="3.14159" velocity="1000.0" />
+    <safety_controller k_position="100.0" k_velocity="10.0" soft_lower_limit="-3.14" soft_upper_limit="3.14" />
+    <dynamics damping="0.7" friction="0.0"/>
+  </joint>
+  <joint name="Joint_6" type="revolute">
+    <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.06080 0.04700"/>
+    <parent link="Link_5"/>
+    <child link="Link_6"/>
+    <axis xyz="0.00000 1.00000 0.00000"/>
+    <limit effort="40.0" lower="-12.5664" upper="12.5664" velocity="1000.0" />
+    <safety_controller k_position="100.0" k_velocity="100.0" soft_lower_limit="-12.56" soft_upper_limit="12.56" />
+    <dynamics damping="0.7" friction="0.0"/>
+  </joint>
+
+
+
+  <link name="Link_1">
+    <collision name="Link_1_collision">
+      <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
+      <geometry>
+        <mesh filename="package://zeroerr/meshes/paint/Link_1.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <inertia ixx="0.00054" ixy="0.00000" ixz="0.00000" iyy="0.00052" iyz="0.00000" izz="0.00054"/>
+      <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00308 0.13617"/>
+      <mass value="1.50622"/>
+    </inertial>
+    <visual name="Link_1_visual">
+      <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
+      <material name="#ffffffff"/>
+      <geometry>
+        <mesh filename="package://zeroerr/meshes/paint/Link_1.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Link_2">
+    <collision name="Link_2_collision">
+      <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
+      <geometry>
+        <mesh filename="package://zeroerr/meshes/paint/Link_2_extended.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <inertia ixx="0.00157" ixy="0.00000" ixz="0.00000" iyy="0.00156" iyz="0.00000" izz="0.00119"/>
+      <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.04217 0.11937"/>
+      <mass value="2.16203"/>
+    </inertial>
+    <visual name="Link_2_visual">
+      <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
+      <material name="#ffffffff"/>
+      <geometry>
+        <mesh filename="package://zeroerr/meshes/paint/Link_2_extended.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Link_3">
+    <collision name="Link_3_collision">
+      <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
+      <geometry>
+        <mesh filename="package://zeroerr/meshes/paint/Link_3_extended.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <inertia ixx="0.00081" ixy="0.00000" ixz="0.00000" iyy="0.00091" iyz="-0.00001" izz="0.00062"/>
+      <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 -0.05451 0.09532"/>
+      <mass value="1.77552"/>
+    </inertial>
+    <visual name="Link_3_visual">
+      <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
+      <material name="#ffffffff"/>
+      <geometry>
+        <mesh filename="package://zeroerr/meshes/paint/Link_3_extended.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Link_4">
+    <collision name="Link_4_collision">
+      <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
+      <geometry>
+        <mesh filename="package://zeroerr/meshes/paint/Link_4.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <inertia ixx="0.00025" ixy="0.00000" ixz="0.00000" iyy="0.00024" iyz="0.00000" izz="0.00026"/>
+      <origin rpy="0.00000 0.00000 0.00000" xyz="0.00001 0.04110 0.00150"/>
+      <mass value="1.31668"/>
+    </inertial>
+    <visual name="Link_4_visual">
+      <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
+      <material name="#ffffffff"/>
+      <geometry>
+        <mesh filename="package://zeroerr/meshes/paint/Link_4.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Link_5">
+    <collision name="Link_5_collision">
+      <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
+      <geometry>
+        <mesh filename="package://zeroerr/meshes/paint/Link_5.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <inertia ixx="0.00025" ixy="0.00000" ixz="0.00000" iyy="0.00026" iyz="0.00000" izz="0.00024"/>
+      <origin rpy="0.00000 0.00000 0.00000" xyz="-0.00001 0.00150 0.04110"/>
+      <mass value="1.31668"/>
+    </inertial>
+    <visual name="Link_5_visual">
+      <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
+      <material name="#ffffffff"/>
+      <geometry>
+        <mesh filename="package://zeroerr/meshes/paint/Link_5.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Link_6">
+    <collision name="Link_6_collision">
+      <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
+      <geometry>
+        <mesh filename="package://zeroerr/meshes/paint/Link_6.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <inertia ixx="0.00004" ixy="0.00000" ixz="0.00000" iyy="0.00007" iyz="0.00000" izz="0.00004"/>
+      <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 -0.00578 0.00013"/>
+      <mass value="1.10121"/>
+    </inertial>
+    <visual name="Link_6_visual">
+      <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
+      <material name="#ffffffff"/>
+      <geometry>
+        <mesh filename="package://zeroerr/meshes/paint/Link_6.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="base_link">
+    <!-- empty root link (no inertial element) -->
+  </link>
+
+  <!-- child link holding the physical representation and inertial properties -->
+  <link name="base_link_inertial">
+    <collision name="base_link_collision">
+      <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
+      <geometry>
+        <mesh filename="package://zeroerr/meshes/paint/base_link.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <inertia ixx="0.00083" ixy="0.00001" ixz="0.00001" iyy="0.00085" iyz="0.00003" izz="0.00110"/>
+      <origin rpy="0.00000 0.00000 0.00000" xyz="0.00095 -0.00172 0.03600"/>
+      <mass value="1.47602"/>
+    </inertial>
+    <visual name="base_link_visual">
+      <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
+      <material name="base"/>
+      <geometry>
+        <mesh filename="package://zeroerr/meshes/paint/base_link.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <!-- Fixed joint attaching the inertial child to the root -->
+  <joint name="base_link_fixed_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="base_link_inertial"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+
+
+  <material name="#ffffffff">
+    <color rgba="0.8000 0.40000 0 1.0000"/>
+  </material>
+    <material name="base">
+    <color rgba="0.40000 0.40000 0.40000 1.0000"/>
+  </material>
+    <!-- Compatibility end-effector frames expected by the existing MoveIt/SRDF/runtime config -->
+  <link name="ee_link"/>
+
+  <joint name="link6_to_ee" type="fixed">
+    <parent link="Link_6"/>
+    <child link="ee_link"/>
+    <origin xyz="0 0 0" rpy="-1.5708 0 0"/>
+  </joint>
+
+    <!-- Tool0 frame -->
+  <link name="tool0">
+    <visual>
+      <origin xyz="-0.000000 0.000877 0.019567" rpy="0.000000 0.000000 0.000000"/>
+      <geometry>
+        <mesh filename="package://zeroerr/meshes/paint/00035513_disk_origin_centered.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="tool_material">
+        <color rgba="0.7 0.7 0.7 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.000000 0.000877 0.019567" rpy="0.000000 0.000000 0.000000"/>
+      <geometry>
+        <mesh filename="package://zeroerr/meshes/paint/00035513_disk_origin_centered.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="tool0" type="fixed">
+    <parent link="ee_link"/>
+    <child link="tool0"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- TCP frame at the actual tool center point (tip of ToolPointer) -->
+  <link name="tcp">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <sphere radius="0.00050"/>
+      </geometry>
+      <material name="tool_marker">
+        <color rgba="1 0 0 1"/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="tcp_joint" type="fixed">
+    <parent link="tool0"/>
+    <child link="tcp"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <material name="tool_marker">
+    <color rgba="1 0 0 1"/>
+  </material>
+
+  <!-- Old 2m box table surface disabled while using the CAD mounting mesh. -->
+
+  <!-- Workspace extractor looks specifically for a link named mounting_surface. -->
+  <link name="mounting_surface">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://zeroerr/meshes/paint/latest_mounting.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="mounting_surface_debug_material">
+        <color rgba="1.0 1.0 1.0 1.0"/>
+      </material>
+    </visual>
+    <!--
+      Lightweight collision approximation of the horizontal 8 mm plate.
+
+      These boxes are a connected decomposition of the CAD top face on a 5 mm
+      grid, with a 2 mm inward boundary margin and 1 mm overlap at adjoining
+      edges. Small fastener holes are intentionally covered, while the large
+      workpiece drop opening and robot-side cutout remain open. Keep the
+      detailed STL visual-only: loading its 1.65 million triangles into every
+      MoveIt planning scene makes startup and Servo collision checks
+      unnecessarily expensive.
+
+      Coordinates are expressed in the mounting-surface mesh frame.
+    -->
+    <collision name="mounting_plate_01">
+      <origin xyz="0.0675 0.0100 -0.004" rpy="0 0 0"/>
+      <geometry><box size="0.307 0.462 0.008"/></geometry>
+    </collision>
+    <collision name="mounting_plate_02">
+      <origin xyz="0.5550 -0.0500 -0.004" rpy="0 0 0"/>
+      <geometry><box size="0.282 0.212 0.008"/></geometry>
+    </collision>
+    <collision name="mounting_plate_03">
+      <origin xyz="0.3175 0.2825 -0.004" rpy="0 0 0"/>
+      <geometry><box size="0.197 0.217 0.008"/></geometry>
+    </collision>
+    <collision name="mounting_plate_04">
+      <origin xyz="0.3725 -0.1875 -0.004" rpy="0 0 0"/>
+      <geometry><box size="0.307 0.067 0.008"/></geometry>
+    </collision>
+    <collision name="mounting_plate_05">
+      <origin xyz="0.5575 0.3625 -0.004" rpy="0 0 0"/>
+      <geometry><box size="0.287 0.057 0.008"/></geometry>
+    </collision>
+    <collision name="mounting_plate_06">
+      <origin xyz="0.2025 0.3150 -0.004" rpy="0 0 0"/>
+      <geometry><box size="0.037 0.152 0.008"/></geometry>
+    </collision>
+    <collision name="mounting_plate_07">
+      <origin xyz="0.3175 -0.1425 -0.004" rpy="0 0 0"/>
+      <geometry><box size="0.197 0.027 0.008"/></geometry>
+    </collision>
+    <collision name="mounting_plate_08">
+      <origin xyz="0.7025 0.1200 -0.004" rpy="0 0 0"/>
+      <geometry><box size="0.007 0.532 0.008"/></geometry>
+    </collision>
+    <collision name="mounting_plate_09">
+      <origin xyz="0.6975 -0.0475 -0.004" rpy="0 0 0"/>
+      <geometry><box size="0.007 0.207 0.008"/></geometry>
+    </collision>
+    <!-- Solid removable cover; its CAD top face is offset from the main plate. -->
+    <collision name="mounting_plate_cover">
+      <origin xyz="0.5550 0.1950 -0.004" rpy="0 0 0"/>
+      <geometry><box size="0.282 0.282 0.008"/></geometry>
+    </collision>
+    <!-- Conservative primitives for the fixture rising above the plate. -->
+    <collision name="mounting_fixture_housing">
+      <origin xyz="0.550 -0.105 0.100" rpy="0 0 0"/>
+      <geometry><box size="0.135 0.105 0.110"/></geometry>
+    </collision>
+    <collision name="mounting_fixture_upper_bracket">
+      <origin xyz="0.578 -0.100 0.1375" rpy="0 0 0"/>
+      <geometry><box size="0.185 0.050 0.035"/></geometry>
+    </collision>
+    <collision name="mounting_fixture_post">
+      <origin xyz="0.632 -0.100 0.155" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.017" length="0.300"/></geometry>
+    </collision>
+    <collision name="mounting_fixture_post_cap">
+      <origin xyz="0.632 -0.100 0.301" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.024" length="0.008"/></geometry>
+    </collision>
+  </link>
+
+  <joint name="mounting_surface_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="mounting_surface"/>
+    <origin xyz="-0.015219 0.015023 0.000000" rpy="0.000000 0.000000 2.856873"/>
+  </joint>
+
+  <material name="table_material">
+    <color rgba="1 1 1 1"/>
+  </material>
+
+  <material name="mounting_surface_debug_material">
+    <color rgba="1.0 1.0 1.0 1.0"/>
+  </material>
+
+  <!-- Ensure joint limits here match those in ros2_control.xacro and SRDF for correct planner behavior -->
+</robot>

@@ -1,0 +1,46 @@
+# Native C++ PTP planner.
+
+PTP_IK_TIMEOUT_S: 0.01
+
+# Test mode: use only the current-state seed. Candidate bounds, collision,
+# endpoint and orientation validation remain active; alternative IK branch
+# exploration is intentionally disabled for this latency/predictability test.
+PTP_IK_ATTEMPTS: 1
+
+# Candidate cost.
+#
+# Important:
+# J6 deliberately has very low cost.
+PTP_JOINT_WEIGHTS:
+  - 1.0
+  - 1.2
+  - 2.5
+  - 1.5
+  - 4.0
+  - 0.10
+
+PTP_AVOID_COLLISIONS: true
+
+# If target orientation is within this value of current
+# orientation, treat it as unchanged.
+PTP_LOCK_ORIENTATION_TOL_DEG: 2.0
+
+# Do NOT keep this at 2 degrees.
+#
+# PTP is joint interpolation, not Cartesian interpolation.
+# This is intended to catch a real wrist inversion, not
+# normal orientation movement.
+PTP_LOCKED_PATH_MAX_DRIFT_DEG: 30.0
+
+# Same principle for intentional reorientation.
+PTP_ORIENTED_PATH_MAX_DEVIATION_DEG: 35.0
+
+# Dense enough for local C++ collision checking.
+PTP_JOINT_INTERPOLATION_STEP_RAD: 0.05
+
+PTP_MIN_INTERPOLATION_SEGMENTS: 8
+PTP_MAX_INTERPOLATION_SEGMENTS: 80
+
+PTP_NOOP_JOINT_DELTA_RAD: 0.001
+
+SERVICE_PTP: "/compute_ptp"

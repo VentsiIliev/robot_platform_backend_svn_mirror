@@ -1,0 +1,364 @@
+from __future__ import annotations
+import logging
+from typing import Callable, List, Tuple
+
+from PyQt6.QtCore import QCoreApplication, QObject, QTimer, pyqtSignal
+
+from src.applications.base.background_worker import BackgroundWorker
+from src.applications.base.dashboard_camera_feed_mixin import DashboardCameraFeedMixin
+from src.applications.base.notification_presenter import UserNotificationPresenter
+from src.robot_systems.glue.component_ids import ProcessID
+from src.engine.core.i_messaging_service import IMessagingService
+from src.engine.system import SystemTopics
+from src.applications.base.i_application_controller import IApplicationController
+from src.shared_contracts.events.notification_events import (
+    NotificationSeverity,
+    NotificationTopics,
+    UserNotificationEvent,
+)
+from src.shared_contracts.events.process_events import ProcessState, ProcessTopics
+from src.shared_contracts.events.robot_events import RobotTopics
+from src.shared_contracts.events.weight_events import WeightTopics
+from src.shared_contracts.events.glue_overlay_events import GlueOverlayTopics
+from src.robot_systems.glue.applications.dashboard import (
+    ACTION_BUTTONS, BUTTON_STATE_MAP, GLUE_CELLS,
+    GlueCellTopics, MODE_TOGGLE_LABELS,
+)
+from src.robot_systems.glue.applications.dashboard.model.glue_dashboard_model import GlueDashboardModel
+from src.robot_systems.glue.applications.dashboard import GlueDashboardView
+from src.shared_contracts.events.vision_events import VisionTopics
+
+
+
+class _DashboardBridge(QObject):
+    weight_reading  = pyqtSignal(int, float)
+    cell_state      = pyqtSignal(int, str)
+    glue_type       = pyqtSignal(int, str)
+    robot_state     = pyqtSignal(str)
+    process_state = pyqtSignal(str, str, str)   # state, process_id, message
+    system_state    = pyqtSignal(str, str)
+    service_warning = pyqtSignal(str)
+    camera_image    = pyqtSignal(object)    # ← add this
+    overlay_loaded  = pyqtSignal(object)
+
+
+
+
+class GlueDashboardController(
+    IApplicationController,
+    BackgroundWorker,
+    DashboardCameraFeedMixin,
+):
+
+    def __init__(self, model: GlueDashboardModel, view: GlueDashboardView, broker: IMessagingService):
+        BackgroundWorker.__init__(self)
+        self._model         = model
+        self._view          = view
+        self._broker        = broker
+        self._subs:         List[Tuple[str, Callable]] = []
+        self._mode_index    = 0
+        self._current_state = ProcessState.IDLE.value
+        self._is_active     = False
+        self._logger        = logging.getLogger(self.__class__.__name__)
+        self._bridge        = _DashboardBridge()
+        self._init_dashboard_camera_feed()
+        self._notifications = UserNotificationPresenter(view, broker, translate=self._t)
+        self._progress_timer = QTimer()
+        self._progress_timer.setInterval(150)
+        self._progress_timer.timeout.connect(self._poll_preview_progress)
+
+    def load(self) -> None:
+        self._is_active = True
+        self._notifications.start()
+        self._wire_bridge()
+        self._subscribe()
+        self._connect_signals()
+        self._initialize_view()
+        self._progress_timer.start()
+        self._view.destroyed.connect(self.stop)
+
+    def stop(self) -> None:
+        self._is_active = False
+        try:
+            self._progress_timer.stop()
+        except RuntimeError:
+            pass
+        self._stop_threads()
+        self._notifications.stop()
+        for topic, cb in reversed(self._subs):
+            try: self._broker.unsubscribe(topic, cb)
+            except Exception: pass
+        self._subs.clear()
+        self._disconnect_signals()
+
+    # ── Guard ─────────────────────────────────────────────────────────
+
+    def _view_ok(self) -> bool:
+        if not self._is_active:
+            return False
+        try:
+            _ = self._view.isVisible()
+            return True
+        except RuntimeError:
+            return False
+
+    # ── Bridge wiring ─────────────────────────────────────────────────
+
+    def _wire_bridge(self) -> None:
+        self._bridge.weight_reading.connect(self._on_weight)
+        self._bridge.cell_state.connect(self._on_cell_state)
+        self._bridge.glue_type.connect(self._on_glue_type)
+        self._bridge.robot_state.connect(self._on_robot_state_str)
+        self._bridge.process_state.connect(self._on_process_state_str)
+        self._bridge.system_state.connect(self._on_system_state)      # ← was missing
+        self._bridge.service_warning.connect(self._on_service_warning)
+        self._bridge.overlay_loaded.connect(self._on_overlay_loaded)
+
+    # ── Broker → Bridge ───────────────────────────────────────────────
+
+    def _subscribe(self) -> None:
+        for cfg in GLUE_CELLS:
+            card_id = cfg.card_id
+            cell_id = card_id - 1
+            self._sub(WeightTopics.reading(cell_id),
+                      lambda r, cid=card_id: self._bridge.weight_reading.emit(cid, r.value))
+            self._sub(WeightTopics.state(cell_id),
+                      lambda e, cid=card_id: self._bridge.cell_state.emit(cid, e.state.value))
+            self._sub(GlueCellTopics.glue_type(card_id),
+                      lambda t, cid=card_id: self._bridge.glue_type.emit(cid, t))
+
+        self._sub(RobotTopics.STATE,
+                  lambda s: self._bridge.robot_state.emit(getattr(s, "state", "") or ""))
+        self._sub(ProcessTopics.ACTIVE,
+                  lambda e: self._bridge.process_state.emit(e.state.value, e.process_id, e.message))
+
+        self._sub(SystemTopics.STATE,                                  # ← was missing
+                  lambda e: self._bridge.system_state.emit(
+                      e.state.value, e.active_process or ""
+                  ))
+        for pid in ProcessID:
+            self._sub(
+                ProcessTopics.service_unavailable(pid),
+                lambda e: self._bridge.service_warning.emit(
+                    f"{e.process_id}: unavailable — {', '.join(e.missing_services)}"
+                ),
+            )
+
+        self._subscribe_dashboard_camera_feed()
+        self._sub(GlueOverlayTopics.JOB_LOADED,
+                  lambda event: self._bridge.overlay_loaded.emit(event))
+
+        self._sub(
+            ProcessTopics.busy(ProcessID.COORDINATOR),
+            lambda e: self._bridge.service_warning.emit(e.message),
+        )
+
+    # ── Bridge slots (main thread) ─────────────────────────────────────
+    def _on_overlay_loaded(self, event: object) -> None:
+        if not self._view_ok():
+            return
+        segments = [
+            {
+                "path_index": segment.path_index,
+                "workpiece_id": segment.workpiece_id,
+                "pattern_type": segment.pattern_type,
+                "segment_index": segment.segment_index,
+                "points": list(segment.points),
+            }
+            for segment in getattr(event, "segments", [])
+        ]
+        self._view.set_preview_overlay(getattr(event, "image", None), segments)
+        self._poll_preview_progress()
+
+    def _on_weight(self, card_id: int, grams: float) -> None:
+        if self._view_ok():
+            self._view.set_cell_weight(card_id, grams)
+
+    def _on_cell_state(self, card_id: int, state: str) -> None:
+        if self._view_ok():
+            self._view.set_cell_state(card_id, state)
+
+    def _on_glue_type(self, card_id: int, glue_type: str) -> None:
+        if self._view_ok():
+            self._view.set_cell_glue_type(card_id, glue_type)
+
+    def _on_robot_state_str(self, state: str) -> None:
+        if self._view_ok() and self._current_state in (ProcessState.IDLE.value, ProcessState.STOPPED.value) and state:
+            self._apply_button_state(state)
+
+    def _on_process_state_str(self, state: str, process_id: str, message: str) -> None:
+        if self._view_ok():
+            self._apply_button_state(state)
+            self._view.set_process_state(state)
+            self._view.set_active_process(process_id if state != ProcessState.IDLE.value else "")
+            if state == ProcessState.RUNNING.value:
+                self._view.set_service_warning("")
+            if state == ProcessState.ERROR.value:
+                self._broker.publish(
+                    NotificationTopics.USER,
+                    UserNotificationEvent(
+                        source=process_id,
+                        severity=NotificationSeverity.CRITICAL,
+                        title_key="notification.process_error.title",
+                        fallback_title=self._t("Process Error"),
+                        fallback_message=message or self._t("An unexpected error occurred."),
+                        dedupe_key=f"process-error:{process_id}:{message}",
+                    ),
+                )
+
+    def _on_system_state(self, state: str, active_process: str) -> None:  # ← was missing
+        if self._view_ok():
+            self._view.set_system_state(state)
+            self._view.set_active_process(active_process or "")
+
+    def _on_service_warning(self, message: str) -> None:
+        if self._view_ok():
+            self._view.set_service_warning(message)
+
+
+    # ── View signals → Model ──────────────────────────────────────────
+
+    def _connect_signals(self) -> None:
+        self._view.start_requested.connect(self._on_start)
+        self._view.stop_requested.connect(self._on_stop)
+        self._view.pause_requested.connect(self._on_pause)
+        self._view.action_requested.connect(self._on_action)
+        self._view.language_changed.connect(self._retranslate)
+        for cfg in GLUE_CELLS:
+            card = self._view.get_card(cfg.card_id)
+            if card and hasattr(card, "change_glue_requested"):
+                card.change_glue_requested.connect(self._on_glue_change)
+
+    def _disconnect_signals(self) -> None:
+        if not self._view_ok():
+            return
+        try:
+            self._view.start_requested.disconnect(self._on_start)
+            self._view.stop_requested.disconnect(self._on_stop)
+            self._view.pause_requested.disconnect(self._on_pause)
+            self._view.action_requested.disconnect(self._on_action)
+            self._view.language_changed.disconnect(self._retranslate)
+        except RuntimeError:
+            pass
+
+    def _on_start(self) -> None:
+        if not self._is_active: return
+        self._run_blocking(self._model.start)
+
+    def _on_stop(self) -> None:
+        if not self._is_active: return
+        self._model.stop()
+
+    def _on_pause(self) -> None:
+        if not self._is_active: return
+        if self._current_state == ProcessState.PAUSED.value:
+            self._model.start()
+        else:
+            self._model.pause()
+
+    def _on_action(self, action_id: str) -> None:
+        if not self._is_active: return
+        if action_id == "mode_toggle":
+            self._mode_index = 1 - self._mode_index
+            label = MODE_TOGGLE_LABELS[self._mode_index]
+            self._view.set_action_button_text("mode_toggle", self._t(label))
+            self._model.set_mode(label)
+        elif action_id == "clean":
+            self._model.clean()
+        elif action_id == "reset_errors":
+            self._model.reset_errors()
+
+    def _on_glue_change(self, card_id: int) -> None:
+        if not self._is_active: return
+        from PyQt6.QtWidgets import QDialog
+        from src.robot_systems.glue.applications.dashboard.ui.glue_change_guide_wizard import create_glue_change_wizard
+        cell_id    = int(card_id) - 1
+        glue_types = self._model.get_all_glue_types()
+        wizard     = create_glue_change_wizard(glue_type_names=glue_types)
+        wizard.setWindowTitle(f"Change Glue for Cell {card_id}")
+        if wizard.exec() != QDialog.DialogCode.Accepted:
+            return
+        page = wizard.page(6)
+        if page is None:
+            return
+        selected = page.get_selected_option() if hasattr(page, "get_selected_option") else None
+        if not selected:
+            return
+        self._model.change_glue(cell_id, selected)
+        self._view.set_cell_glue_type(card_id, selected)
+        self._broker.publish(GlueCellTopics.glue_type(card_id), selected)
+
+    # ── State machine ─────────────────────────────────────────────────
+
+    def _apply_button_state(self, state: str) -> None:
+        if not self._view_ok(): return
+        self._current_state = state
+        cfg = BUTTON_STATE_MAP.get(state)
+        if cfg:
+            self._view.set_start_enabled(cfg["start"])
+            self._view.set_stop_enabled(cfg["stop"])
+            self._view.set_pause_enabled(cfg["pause"])
+            self._view.set_pause_text(self._t(cfg["pause_text"]))
+            self._view.set_action_button_enabled("mode_toggle", cfg["mode_toggle"])
+            self._view.set_action_button_enabled("clean", cfg["clean"])
+            self._view.set_action_button_enabled("reset_errors", cfg["reset_errors"])
+
+    def _run_blocking(self, fn) -> None:
+        self._run_in_thread(
+            fn=fn,
+            on_done=lambda _result: None,
+            on_error=self._on_background_error,
+        )
+
+    def _on_background_error(self, message: str) -> None:
+        if not self._view_ok():
+            return
+        self._logger.error("Dashboard background task failed: %s", message)
+        self._view.set_service_warning(message)
+
+    # ── Initialize ────────────────────────────────────────────────────
+
+    def _initialize_view(self) -> None:
+        current_state = self._model.get_process_state()
+        self._apply_button_state(current_state)
+        self._view.set_process_state(current_state)
+        self._view.set_system_state("idle")
+        self._view.set_active_process("")
+        # sync runner mode with the initial button label — single source of truth is the label
+        self._model.set_mode(MODE_TOGGLE_LABELS[self._mode_index])
+        for cfg in GLUE_CELLS:
+            card_id = cfg.card_id
+            cell_id = card_id - 1
+            glue_type = self._model.get_cell_glue_type(cell_id)
+            if glue_type:
+                self._view.set_cell_glue_type(card_id, glue_type)
+            state = self._model.get_cell_connection_state(cell_id)
+            self._view.set_cell_state(card_id, state)
+        self._retranslate()
+
+    # ── Localization ──────────────────────────────────────────────────
+
+    def _retranslate(self) -> None:
+        if not self._view_ok(): return
+        for btn in ACTION_BUTTONS:
+            self._view.set_action_button_text(btn.action_id, self._t(btn.label))
+        self._view.set_action_button_text("mode_toggle", self._t(MODE_TOGGLE_LABELS[self._mode_index]))
+        cfg = BUTTON_STATE_MAP.get(self._current_state)
+        if cfg:
+            self._view.set_pause_text(self._t(cfg["pause_text"]))
+
+    def _sub(self, topic: str, cb: Callable) -> None:
+        self._broker.subscribe(topic, cb)
+        self._subs.append((topic, cb))
+
+    @staticmethod
+    def _t(text: str) -> str:
+        translated = QCoreApplication.translate("GlueDashboard", text)
+        return translated or text
+
+    def _poll_preview_progress(self) -> None:
+        if not self._view_ok():
+            return
+        snapshot = self._model.get_process_snapshot()
+        self._view.set_preview_progress(snapshot)
+        self._view.set_preview_robot_point(self._model.get_current_robot_image_position())

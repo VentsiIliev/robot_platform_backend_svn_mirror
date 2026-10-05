@@ -1,0 +1,355 @@
+import sys
+import unittest
+from unittest.mock import MagicMock
+
+from src.applications.calibration.controller.calibration_controller import CalibrationController
+from src.applications.calibration.service.i_calibration_service import RobotCalibrationPreview
+from src.applications.calibration.model.calibration_model import CalibrationModel
+from src.applications.calibration_settings.calibration_settings_data import CalibrationSettingsData
+from src.applications.intrinsic_calibration_capture.service.i_intrinsic_capture_service import IntrinsicCaptureConfig
+from src.shared_contracts.events.vision_events import VisionTopics
+from src.engine.robot.configuration import RobotCalibrationSettings
+from src.engine.robot.height_measuring.settings import HeightMeasuringModuleSettings
+from src.engine.vision.calibration_vision_settings import CalibrationVisionSettings
+
+
+def _make_calibration_settings():
+    return CalibrationSettingsData(
+        vision=CalibrationVisionSettings(chessboard_width=11),
+        robot=RobotCalibrationSettings(),
+        height=HeightMeasuringModuleSettings(),
+    )
+
+
+def _make_model(**overrides):
+    m = MagicMock(spec=CalibrationModel)
+    m.load_calibration_settings.return_value       = overrides.get("settings", _make_calibration_settings())
+    m.capture_calibration_image.return_value = overrides.get("capture",  (True,  "captured"))
+    m.calibrate_camera.return_value           = overrides.get("camera",   (True,  "cam ok"))
+    m.calibrate_robot.return_value            = overrides.get("robot",    (False, "not impl"))
+    m.select_robot_calibration_target.return_value = (True, "Calibration target selected: global")
+    m.validate_camera_tcp_calibration_target.return_value = (True, "Camera-to-TCP calibration target: magazine")
+    m.preview_robot_calibration.return_value = RobotCalibrationPreview(ok=True, message="ready")
+    m.calibrate_camera_and_robot.return_value = overrides.get("sequence", (True,  "all ok"))
+    return m
+
+
+def _make_view():
+    v = MagicMock()
+    v.destroyed = MagicMock()
+    v.destroyed.connect = MagicMock()
+    v.capture_requested = MagicMock()
+    v.capture_requested.connect = MagicMock()
+    v.calibrate_camera_requested = MagicMock()
+    v.calibrate_camera_requested.connect = MagicMock()
+    v.calibrate_robot_requested = MagicMock()
+    v.calibrate_robot_requested.connect = MagicMock()
+    v.calibrate_sequence_requested = MagicMock()
+    v.calibrate_sequence_requested.connect = MagicMock()
+    v.save_calibration_settings_requested = MagicMock()
+    v.save_calibration_settings_requested.connect = MagicMock()
+    v.prompt_robot_calibration_area.return_value = "global"
+    v.prompt_camera_tcp_calibration_area.return_value = "magazine"
+    v.confirm_robot_calibration_preview.return_value = True
+    return v
+
+
+def _make_broker():
+    b = MagicMock()
+    b.subscribe = MagicMock()
+    b.unsubscribe = MagicMock()
+    return b
+
+
+def _make_ctrl(**model_overrides):
+    model       = _make_model(**model_overrides)
+    view        = _make_view()
+    broker      = _make_broker()
+    ctrl        = CalibrationController(model, view, broker)
+    return ctrl, model, view, broker
+
+
+class TestCalibrationControllerInit(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        from PyQt6.QtWidgets import QApplication
+        cls._qt_app = QApplication.instance() or QApplication(sys.argv)
+
+    def test_not_active_before_load(self):
+        ctrl, *_ = _make_ctrl()
+        self.assertFalse(ctrl._active)
+
+
+
+class TestCalibrationControllerLoad(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        from PyQt6.QtWidgets import QApplication
+        cls._qt_app = QApplication.instance() or QApplication(sys.argv)
+
+    def test_load_sets_active(self):
+        ctrl, _, _, _ = _make_ctrl()
+        ctrl.load()
+        self.assertTrue(ctrl._active)
+
+    def test_load_subscribes_to_latest_image(self):
+        ctrl, _, _, broker = _make_ctrl()
+        ctrl.load()
+        subscribed_topics = [c[0][0] for c in broker.subscribe.call_args_list]
+        self.assertIn(VisionTopics.LATEST_IMAGE, subscribed_topics)
+
+    def test_wires_destroyed_signal(self):
+        ctrl, _, view, _ = _make_ctrl()
+        ctrl.load()
+        view.destroyed.connect.assert_called_once()
+
+    def test_wires_capture_signal(self):
+        ctrl, _, view, _ = _make_ctrl()
+        ctrl.load()
+        view.capture_requested.connect.assert_called_once()
+
+    def test_wires_calibrate_camera_signal(self):
+        ctrl, _, view, _ = _make_ctrl()
+        ctrl.load()
+        view.calibrate_camera_requested.connect.assert_called_once()
+
+    def test_wires_calibrate_robot_signal(self):
+        ctrl, _, view, _ = _make_ctrl()
+        ctrl.load()
+        view.calibrate_robot_requested.connect.assert_called_once()
+
+    def test_wires_calibrate_sequence_signal(self):
+        ctrl, _, view, _ = _make_ctrl()
+        ctrl.load()
+        view.calibrate_sequence_requested.connect.assert_called_once()
+
+    def test_wires_save_calibration_settings_signal(self):
+        ctrl, _, view, _ = _make_ctrl()
+        ctrl.load()
+        view.save_calibration_settings_requested.connect.assert_called_once()
+
+    def test_load_pushes_calibration_settings_into_view(self):
+        ctrl, model, view, _ = _make_ctrl(settings=_make_calibration_settings())
+        ctrl.load()
+        view.load_calibration_settings.assert_called_once()
+
+    def test_repeated_load_does_not_connect_calibrate_robot_twice(self):
+        ctrl, _, view, broker = _make_ctrl()
+
+        ctrl.load()
+        ctrl.load()
+
+        view.calibrate_robot_requested.connect.assert_called_once_with(ctrl._on_calibrate_robot)
+        self.assertEqual(
+            1,
+            sum(
+                call.args[0] == VisionTopics.LATEST_IMAGE
+                for call in broker.subscribe.call_args_list
+            ),
+        )
+
+
+class TestCalibrationControllerStop(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        from PyQt6.QtWidgets import QApplication
+        cls._qt_app = QApplication.instance() or QApplication(sys.argv)
+
+    def test_stop_sets_inactive(self):
+        ctrl, _, _, _ = _make_ctrl()
+        ctrl.load()
+        ctrl.stop()
+        self.assertFalse(ctrl._active)
+
+    def test_stop_unsubscribes_vision_topic(self):
+        ctrl, _, _, broker = _make_ctrl()
+        ctrl.load()
+        ctrl.stop()
+        unsubbed_topics = [c[0][0] for c in broker.unsubscribe.call_args_list]
+        self.assertIn(VisionTopics.LATEST_IMAGE, unsubbed_topics)
+
+    def test_stop_clears_subs_list(self):
+        ctrl, _, _, _ = _make_ctrl()
+        ctrl.load()
+        ctrl.stop()
+        self.assertEqual(ctrl._subs, [])
+
+    def test_stop_without_load_clears_runtime_state(self):
+        ctrl, _, _, _ = _make_ctrl()
+        ctrl.stop()
+        self.assertFalse(ctrl._running)
+        self.assertFalse(ctrl._active)
+        self.assertEqual(ctrl._subs, [])
+        self.assertEqual(ctrl._threads, [])
+
+
+class TestCalibrationControllerHandlers(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        from PyQt6.QtWidgets import QApplication
+        cls._qt_app = QApplication.instance() or QApplication(sys.argv)
+
+    def test_on_capture_calls_model(self):
+        ctrl, model, _, _ = _make_ctrl()
+        ctrl._on_capture()
+        model.capture_calibration_image.assert_called_once()
+
+    def test_on_calibrate_camera_calls_model(self):
+        ctrl, model, _, _ = _make_ctrl()
+        ctrl._on_calibrate_camera()
+        for thread, _ in list(ctrl._threads):
+            thread.wait(2000)
+        model.calibrate_camera.assert_called_once()
+
+    def test_on_calibrate_robot_calls_model(self):
+        ctrl, model, view, _ = _make_ctrl()
+        ctrl._on_calibrate_robot()
+        model.select_robot_calibration_target.assert_called_once_with("global")
+        view.prompt_robot_calibration_area.assert_called_once_with(
+            current_area_id="global",
+            configured_area_ids=set(),
+        )
+        model.calibrate_robot.assert_called_once()
+
+    def test_on_calibrate_robot_stops_when_area_selection_is_cancelled(self):
+        ctrl, model, view, _ = _make_ctrl()
+        view.prompt_robot_calibration_area.return_value = None
+
+        ctrl._on_calibrate_robot()
+
+        model.preview_robot_calibration.assert_not_called()
+        model.calibrate_robot.assert_not_called()
+
+    def test_on_calibrate_sequence_calls_model(self):
+        ctrl, model, _, _ = _make_ctrl()
+        ctrl._on_calibrate_sequence()
+        for thread, _ in list(ctrl._threads):
+            thread.wait(2000)
+        model.calibrate_camera_and_robot.assert_called_once()
+
+
+    def test_success_appends_tick_prefix(self):
+        ctrl, _, view, _ = _make_ctrl(capture=(True, "done"))
+        ctrl._on_capture()
+        view.append_log.assert_called_once_with("✓ done")
+
+    def test_failure_appends_cross_prefix(self):
+        ctrl, _, view, _ = _make_ctrl()
+        ctrl._log(False, "no cam")
+        view.append_log.assert_called_once_with("✗ no cam")
+
+    def test_log_helper_success(self):
+        ctrl, _, view, _ = _make_ctrl()
+        ctrl._log(True, "hello")
+        view.append_log.assert_called_once_with("✓ hello")
+
+    def test_log_helper_failure(self):
+        ctrl, _, view, _ = _make_ctrl()
+        ctrl._log(False, "oops")
+        view.append_log.assert_called_once_with("✗ oops")
+
+    def test_on_save_calibration_settings_updates_model_and_logs(self):
+        ctrl, model, view, _ = _make_ctrl(settings=_make_calibration_settings())
+        ctrl._on_save_calibration_settings({"calib_vision_chessboard_width": 12})
+        model.save_calibration_settings.assert_called_once()
+        view.append_log.assert_called_once_with("✓ Calibration settings saved")
+
+    def test_on_save_intrinsic_capture_config_updates_model(self):
+        ctrl, model, _, _ = _make_ctrl()
+        config = IntrinsicCaptureConfig(chessboard_width=12)
+
+        ctrl._on_save_intrinsic_capture_config(config)
+
+        model.save_intrinsic_capture_config.assert_called_once_with(config)
+
+
+class TestCalibrationControllerCameraFrame(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        from PyQt6.QtWidgets import QApplication
+        cls._qt_app = QApplication.instance() or QApplication(sys.argv)
+
+    def test_camera_frame_updates_view_when_active(self):
+        ctrl, _, view, _ = _make_ctrl()
+        ctrl._active = True
+        fake_frame = object()
+        ctrl._on_camera_frame(fake_frame)
+        view.update_camera_view.assert_called_once_with(fake_frame)
+
+    def test_camera_tcp_area_is_selected_and_saved_before_start(self):
+        settings = _make_calibration_settings()
+        ctrl, model, view, _ = _make_ctrl(settings=settings)
+        ctrl._run_in_thread = MagicMock()
+
+        ctrl._on_calibrate_camera_tcp_offset()
+
+        view.prompt_camera_tcp_calibration_area.assert_called_once_with(
+            current_area_id="global"
+        )
+        model.validate_camera_tcp_calibration_target.assert_called_once_with("magazine")
+        self.assertEqual(settings.vision.calibration_target_work_area, "magazine")
+        model.save_calibration_settings.assert_called_once_with(settings)
+        ctrl._run_in_thread.assert_called_once()
+
+    def test_camera_tcp_area_cancelled_before_motion(self):
+        ctrl, model, view, _ = _make_ctrl()
+        ctrl._run_in_thread = MagicMock()
+        view.prompt_camera_tcp_calibration_area.return_value = None
+
+        ctrl._on_calibrate_camera_tcp_offset()
+
+        model.save_calibration_settings.assert_not_called()
+        ctrl._run_in_thread.assert_not_called()
+
+    def test_unconfigured_camera_tcp_area_is_rejected_before_motion(self):
+        ctrl, model, view, _ = _make_ctrl()
+        ctrl._run_in_thread = MagicMock()
+        model.validate_camera_tcp_calibration_target.return_value = (False, "No profile")
+
+        ctrl._on_calibrate_camera_tcp_offset()
+
+        view.append_log.assert_called_with("✗ No profile")
+        model.save_calibration_settings.assert_not_called()
+        ctrl._run_in_thread.assert_not_called()
+
+    def test_camera_frame_ignored_when_inactive(self):
+        ctrl, _, view, _ = _make_ctrl()
+        ctrl._active = False
+        ctrl._on_camera_frame(object())
+        view.update_camera_view.assert_not_called()
+
+    def test_camera_frame_ignored_when_none(self):
+        ctrl, _, view, _ = _make_ctrl()
+        ctrl._active = True
+        ctrl._on_camera_frame(None)
+        view.update_camera_view.assert_not_called()
+
+    def test_latest_image_raw_forwards_image_from_dict(self):
+        ctrl, _, _, _ = _make_ctrl()
+        ctrl._active = True
+        fake_frame = object()
+        ctrl._bridge = MagicMock()
+        ctrl._on_latest_image_raw({"image": fake_frame})
+        ctrl._bridge.camera_frame.emit.assert_called_once_with(fake_frame)
+
+    def test_latest_image_raw_ignores_non_dict(self):
+        ctrl, _, view, _ = _make_ctrl()
+        ctrl._active = True
+        ctrl._on_latest_image_raw("not a dict")
+        view.update_camera_view.assert_not_called()
+
+    def test_latest_image_raw_ignores_dict_without_image_key(self):
+        ctrl, _, _, _ = _make_ctrl()
+        ctrl._active = True
+        ctrl._bridge = MagicMock()
+        ctrl._on_latest_image_raw({"other": "data"})
+        ctrl._bridge.camera_frame.emit.assert_not_called()
+
+
+if __name__ == "__main__":
+    unittest.main()

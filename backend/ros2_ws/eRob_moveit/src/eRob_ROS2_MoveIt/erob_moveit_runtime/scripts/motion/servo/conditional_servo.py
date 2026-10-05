@@ -1,0 +1,517 @@
+from __future__ import annotations
+
+import math
+import threading
+import time
+import uuid
+from copy import deepcopy
+from enum import Enum
+
+
+TERMINAL_STATES = {
+    "condition_met",
+    "boundary_reached",
+    "timeout",
+    "sensor_fault",
+    "cancelled",
+    "start_failed",
+    "stop_failed",
+}
+
+
+class ConditionalServoSupervisor:
+    """Own one event-driven Servo-until-condition operation in ROS 2."""
+
+    def __init__(self, robot_getter, *, logger, monitor_rate_hz: float = 50.0):
+        self._robot_getter = robot_getter
+        self._logger = logger
+        self._period_s = 1.0 / max(float(monitor_rate_hz), 1.0)
+        self._lock = threading.RLock()
+        self._operation = None
+        self._sensor_connected = False
+        self._previous_joint_positions = None
+        self._previous_joint_sample_ns = None
+        self._monitor_thread = threading.Thread(
+            target=self._monitor_loop,
+            daemon=True,
+            name="ConditionalServoMonitor",
+        )
+        self._monitor_thread.start()
+
+    def start(self, *, servo: dict, condition: dict, boundary: dict | None,
+              execution_mode: str = "servo", fast_lin: dict | None = None,
+              timeout_s: float, sensor_stale_timeout_s: float = 0.5,
+              restore_collision_checking: bool = True) -> dict:
+        execution_mode = str(execution_mode or "servo").strip().lower()
+        if execution_mode not in {"servo", "fast_lin"}:
+            raise ValueError("execution_mode must be servo or fast_lin")
+        fast_lin = dict(fast_lin or {})
+        timeout_s = float(timeout_s)
+        if not math.isfinite(timeout_s) or timeout_s <= 0.0:
+            raise ValueError("timeout_s must be finite and > 0")
+        sensor_stale_timeout_s = float(sensor_stale_timeout_s)
+        if not math.isfinite(sensor_stale_timeout_s) or sensor_stale_timeout_s <= 0.0:
+            raise ValueError("sensor_stale_timeout_s must be finite and > 0")
+        sensor = str(condition.get("source") or "").strip()
+        if not sensor:
+            raise ValueError("condition.source is required")
+        required_state = bool(condition.get("required_state", True))
+        require_fresh_transition = bool(condition.get("require_fresh_transition", True))
+        parsed_boundary = self._parse_boundary(boundary)
+        if parsed_boundary is not None:
+            servo_axis = str(getattr(servo.get("axis"), "name", servo.get("axis"))).strip().lower()
+            servo_direction = int(getattr(servo.get("direction"), "value", servo.get("direction")))
+            if servo_axis != parsed_boundary["axis"]:
+                raise ValueError("boundary.axis must match the commanded Servo axis")
+            expected_operator = "less_or_equal" if servo_direction < 0 else "greater_or_equal"
+            if parsed_boundary["operator"] != expected_operator:
+                raise ValueError("boundary.operator does not match the commanded Servo direction")
+            if parsed_boundary["user"] != int(servo.get("user", 0)):
+                raise ValueError("boundary.user must match servo.user")
+            if parsed_boundary["tool"] != int(servo.get("tool", 0)):
+                raise ValueError("boundary.tool must match servo.tool")
+
+        with self._lock:
+            if not self._sensor_connected:
+                raise RuntimeError("sensor websocket is not connected")
+            if self._operation is not None and self._operation["state"] not in TERMINAL_STATES:
+                raise RuntimeError("a conditional Servo operation is already active")
+
+            operation_id = str(uuid.uuid4())
+            now_ns = time.monotonic_ns()
+            operation = {
+                "operation_id": operation_id,
+                "state": "arming",
+                "reason": None,
+                "servo": dict(servo),
+                "execution_mode": execution_mode,
+                "fast_lin": fast_lin,
+                "task_id": None,
+                "condition": {
+                    "source": sensor,
+                    "required_state": required_state,
+                    "require_fresh_transition": require_fresh_transition,
+                },
+                "boundary": parsed_boundary,
+                "restore_collision_checking": bool(restore_collision_checking),
+                "armed_monotonic_ns": now_ns,
+                "started_monotonic_ns": None,
+                "trigger_monotonic_ns": None,
+                "stop_started_monotonic_ns": None,
+                "stopped_monotonic_ns": None,
+                "deadline_monotonic_ns": now_ns + int(timeout_s * 1_000_000_000),
+                "timeout_s": timeout_s,
+                "sensor_stale_timeout_s": sensor_stale_timeout_s,
+                "sensor_connected": self._sensor_connected,
+                "sensor_stream_id": None,
+                "sensor_baseline_sequence": None,
+                "sensor_last_sequence": None,
+                "sensor_ready": not require_fresh_transition,
+                "sensor_last_state": None,
+                "sensor_last_received_monotonic_ns": None,
+                "sensor_detected_monotonic_ns": None,
+                "final_pose": None,
+                "stop_result": None,
+                "stop_goal_succeeded_monotonic_ns": None,
+                "stationary_last_sample_monotonic_ns": None,
+            }
+            self._operation = operation
+
+        robot = self._robot_getter()
+        if robot is None:
+            self._finish_without_stop(operation_id, "start_failed", "robot runtime unavailable")
+            return self.snapshot()
+        try:
+            if execution_mode == "fast_lin":
+                position = [float(value) for value in fast_lin.get("position", [])]
+                if len(position) < 6:
+                    raise ValueError("fast_lin.position must contain six values")
+                result = robot.move_fast_lin(
+                    position[:6],
+                    tool=int(fast_lin.get("tool", servo.get("tool", 0))),
+                    user=int(fast_lin.get("user", servo.get("user", 0))),
+                    vel=float(fast_lin.get("vel", 10.0)),
+                    acc=float(fast_lin.get("acc", 30.0)),
+                    blocking=False,
+                    trajectory_optimizer=fast_lin.get("trajectory_optimizer", "TOTG"),
+                )
+            else:
+                result = robot.start_servo_jog(**servo)
+        except Exception as exc:
+            self._logger.exception("Conditional Servo start failed")
+            self._finish_without_stop(operation_id, "start_failed", str(exc))
+            return self.snapshot()
+
+        if execution_mode == "fast_lin":
+            task_id = getattr(getattr(robot, "node", None), "last_submitted_task_id", None)
+            accepted = bool(
+                isinstance(result, int)
+                and not isinstance(result, bool)
+                and result >= 0
+                and task_id is not None
+            )
+        else:
+            accepted = result == 0
+        if not accepted:
+            self._finish_without_stop(operation_id, "start_failed", f"servo_start_failed:{result}")
+            return self.snapshot()
+        with self._lock:
+            if self._matches_active(operation_id):
+                self._operation["state"] = "moving"
+                self._operation["started_monotonic_ns"] = time.monotonic_ns()
+                if execution_mode == "fast_lin":
+                    self._operation["task_id"] = task_id
+        self._log_transition(operation_id, "moving")
+        return self.snapshot()
+
+    def accept_sensor_event(self, event: dict) -> bool:
+        if not isinstance(event, dict) or "state" not in event:
+            return False
+        sensor = str(event.get("sensor") or "").strip()
+        stream_id = str(event.get("stream_id") or "").strip()
+        try:
+            sequence = int(event["sequence"])
+        except (KeyError, TypeError, ValueError):
+            return False
+        raw_state = event.get("state")
+        if isinstance(raw_state, str):
+            normalized = raw_state.strip().lower()
+            if normalized in {"active", "true", "on", "1"}:
+                state = True
+            elif normalized in {"inactive", "false", "off", "0"}:
+                state = False
+            else:
+                self._trigger_stop("sensor_fault", f"invalid_sensor_state:{raw_state}")
+                return False
+        else:
+            state = bool(raw_state)
+
+        should_trigger = False
+        with self._lock:
+            op = self._operation
+            if op is None or op["state"] != "moving" or sensor != op["condition"]["source"]:
+                return False
+            if stream_id:
+                if op["sensor_stream_id"] not in (None, stream_id):
+                    op["sensor_ready"] = False
+                    op["sensor_baseline_sequence"] = None
+                op["sensor_stream_id"] = stream_id
+            last_sequence = op["sensor_last_sequence"]
+            if last_sequence is not None and sequence <= last_sequence:
+                return False
+            op["sensor_last_sequence"] = sequence
+            received_ns = time.monotonic_ns()
+            op["sensor_last_received_monotonic_ns"] = received_ns
+            op["sensor_last_state"] = state
+            required = op["condition"]["required_state"]
+            if op["condition"]["require_fresh_transition"] and not op["sensor_ready"]:
+                if state != required:
+                    op["sensor_ready"] = True
+                    op["sensor_baseline_sequence"] = sequence
+                return True
+            should_trigger = state == required
+            if should_trigger:
+                detected_ns = event.get("detected_monotonic_ns")
+                if isinstance(detected_ns, int) and 0 < detected_ns <= received_ns:
+                    op["sensor_detected_monotonic_ns"] = detected_ns
+                    op["sensor_transport_latency_ms"] = (received_ns - detected_ns) / 1_000_000.0
+        if should_trigger:
+            self._trigger_stop("condition_met", "external condition met")
+        return True
+
+    def set_sensor_connected(self, connected: bool) -> None:
+        with self._lock:
+            self._sensor_connected = bool(connected)
+            if self._operation is not None:
+                self._operation["sensor_connected"] = self._sensor_connected
+            active = self._operation is not None and self._operation["state"] == "moving"
+        if not connected and active:
+            self._trigger_stop("sensor_fault", "sensor websocket disconnected")
+
+    def observe_joint_state(self, positions, velocities=None) -> None:
+        try:
+            current_positions = [float(value) for value in positions[:6]]
+        except (TypeError, ValueError):
+            return
+        if len(current_positions) < 6:
+            return
+        now_ns = time.monotonic_ns()
+        measured_velocities = None
+        try:
+            raw_velocities = [] if velocities is None else list(velocities)
+            candidate = [float(value) for value in raw_velocities[:6]]
+            if len(candidate) == 6 and all(math.isfinite(value) for value in candidate):
+                measured_velocities = candidate
+        except (TypeError, ValueError):
+            pass
+        with self._lock:
+            if measured_velocities is None and self._previous_joint_positions is not None:
+                dt_s = (now_ns - self._previous_joint_sample_ns) / 1_000_000_000.0
+                if dt_s > 1e-6:
+                    measured_velocities = [
+                        (current_positions[index] - self._previous_joint_positions[index]) / dt_s
+                        for index in range(6)
+                    ]
+            self._previous_joint_positions = current_positions
+            self._previous_joint_sample_ns = now_ns
+            op = self._operation
+            if op is None or op["state"] != "awaiting_stationary" or measured_velocities is None:
+                return
+            max_abs = max(abs(value) for value in measured_velocities)
+            previous_sample_ns = op.get("stationary_last_sample_monotonic_ns")
+            op["stationary_last_sample_monotonic_ns"] = now_ns
+            op["max_abs_joint_velocity_rad_s"] = max_abs
+            op["stationary_samples"] = op.get("stationary_samples", 0) + 1 if max_abs <= 0.01 else 0
+            operation_id = op["operation_id"]
+            stop_started_ns = op["stop_started_monotonic_ns"]
+            stationary_samples = op["stationary_samples"]
+            sample_interval_ms = (
+                None
+                if previous_sample_ns is None
+                else (now_ns - previous_sample_ns) / 1_000_000.0
+            )
+            self._logger.info(
+                "[CONDITIONAL_SERVO_STATIONARY_SAMPLE] "
+                f"operation_id={operation_id} "
+                f"stop_elapsed_ms={(now_ns - stop_started_ns) / 1_000_000.0:.3f} "
+                f"sample_interval_ms={sample_interval_ms if sample_interval_ms is not None else 'na'} "
+                f"max_abs_joint_velocity_rad_s={max_abs:.6f} "
+                f"stationary_samples={stationary_samples}/3"
+            )
+            if op["stationary_samples"] < 3:
+                return
+            op["state"] = op["trigger_state"]
+            op["stopped_monotonic_ns"] = now_ns
+            terminal_state = op["state"]
+            reason = op["reason"]
+        self._log_transition(operation_id, terminal_state, reason)
+
+    def notify_controlled_stop_goal_succeeded(self, monotonic_ns: int | None = None) -> bool:
+        """Complete a Fast LIN stop from its authoritative controller result.
+
+        Joint-velocity samples remain a fallback for runtimes that do not
+        deliver the stop action result to this supervisor.
+        """
+        completed_ns = int(monotonic_ns or time.monotonic_ns())
+        with self._lock:
+            op = self._operation
+            if (
+                op is None
+                or op.get("execution_mode") != "fast_lin"
+                or op.get("state") not in {"stopping", "awaiting_stationary"}
+            ):
+                return False
+            op["stop_goal_succeeded_monotonic_ns"] = completed_ns
+            operation_id = op["operation_id"]
+            stop_started_ns = op.get("stop_started_monotonic_ns")
+            if op["state"] == "stopping":
+                return True
+            op["state"] = op["trigger_state"]
+            op["stopped_monotonic_ns"] = completed_ns
+            terminal_state = op["state"]
+            reason = op["reason"]
+        elapsed_ms = (
+            (completed_ns - stop_started_ns) / 1_000_000.0
+            if stop_started_ns is not None
+            else None
+        )
+        self._logger.info(
+            "[CONDITIONAL_SERVO_STOP_ACTION_COMPLETE] "
+            f"operation_id={operation_id} stop_elapsed_ms={elapsed_ms}"
+        )
+        self._log_transition(operation_id, terminal_state, reason)
+        return True
+
+    def cancel(self) -> dict:
+        self._trigger_stop("cancelled", "cancel requested")
+        return self.snapshot()
+
+    def snapshot(self) -> dict:
+        with self._lock:
+            if self._operation is None:
+                return {"active": False, "state": "idle", "sensor_connected": self._sensor_connected}
+            result = deepcopy(self._operation)
+        result["active"] = result["state"] not in TERMINAL_STATES
+        return self._json_safe(result)
+
+    @classmethod
+    def _json_safe(cls, value):
+        """Return lifecycle data safe for both Flask and WebSocket JSON."""
+        if value is None or isinstance(value, (str, int, float, bool)):
+            return value
+        if isinstance(value, Enum):
+            return value.name
+        if isinstance(value, dict):
+            return {str(key): cls._json_safe(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [cls._json_safe(item) for item in value]
+        # Test doubles and ROS-adjacent enum-like types may expose name/value
+        # without deriving from enum.Enum.
+        name = getattr(value, "name", None)
+        if isinstance(name, str):
+            return name
+        return str(value)
+
+    def _monitor_loop(self) -> None:
+        while True:
+            time.sleep(self._period_s)
+            with self._lock:
+                op = deepcopy(self._operation)
+            if op is None:
+                continue
+            if op["state"] == "awaiting_stationary":
+                if time.monotonic_ns() - op["stop_started_monotonic_ns"] >= 2_000_000_000:
+                    with self._lock:
+                        if self._matches_active(op["operation_id"]) and self._operation["state"] == "awaiting_stationary":
+                            self._operation["state"] = "stop_failed"
+                            self._operation["reason"] = "stationary confirmation timeout"
+                    self._log_transition(op["operation_id"], "stop_failed", "stationary confirmation timeout")
+                continue
+            if op["state"] != "moving":
+                continue
+            if time.monotonic_ns() >= op["deadline_monotonic_ns"]:
+                self._trigger_stop("timeout", "operation timeout")
+                continue
+            # Servo startup may block while the runtime prepares/resumes MoveIt
+            # Servo. The producer cannot publish an event until start() returns,
+            # so its freshness window begins when motion actually starts rather
+            # than when the operation first enters the arming state.
+            last_sensor_ns = (
+                op.get("sensor_last_received_monotonic_ns")
+                or op.get("started_monotonic_ns")
+                or op["armed_monotonic_ns"]
+            )
+            if time.monotonic_ns() - last_sensor_ns >= int(op["sensor_stale_timeout_s"] * 1_000_000_000):
+                self._trigger_stop("sensor_fault", "sensor stream stale")
+                continue
+            boundary = op.get("boundary")
+            if boundary is None:
+                continue
+            robot = self._robot_getter()
+            try:
+                pose = robot.get_current_position(user_id=boundary["user"]) if robot is not None else None
+            except Exception:
+                self._logger.exception("Conditional Servo boundary pose read failed")
+                self._trigger_stop("sensor_fault", "boundary_pose_unavailable")
+                continue
+            if pose is None or len(pose) < 3:
+                continue
+            value = float(pose[boundary["axis_index"]])
+            reached = value <= boundary["value_mm"] if boundary["operator"] == "less_or_equal" else value >= boundary["value_mm"]
+            if reached:
+                self._trigger_stop("boundary_reached", f"{boundary['axis']}={value:.3f}", final_pose=pose)
+
+    def _trigger_stop(self, state: str, reason: str, final_pose=None) -> None:
+        with self._lock:
+            op = self._operation
+            if op is None or op["state"] != "moving":
+                return
+            operation_id = op["operation_id"]
+            op["state"] = "stopping"
+            op["reason"] = reason
+            op["trigger_state"] = state
+            op["trigger_monotonic_ns"] = time.monotonic_ns()
+            op["stop_started_monotonic_ns"] = time.monotonic_ns()
+            if final_pose is not None:
+                op["final_pose"] = [float(value) for value in final_pose[:6]]
+        self._log_transition(operation_id, "stopping", reason)
+        robot = self._robot_getter()
+        try:
+            if robot is None:
+                result = -1
+            elif op.get("execution_mode") == "fast_lin":
+                stop_result = robot.controlled_stop(
+                    op.get("task_id"),
+                    stop_duration_s=op.get("fast_lin", {}).get("controlled_stop_duration_s"),
+                )
+                stopped = bool(
+                    isinstance(stop_result, dict)
+                    and stop_result.get("success") is True
+                    and stop_result.get("stopped") is True
+                )
+                already_inactive = bool(
+                    isinstance(stop_result, dict)
+                    and stop_result.get("state") == "TASK_MISMATCH"
+                    and stop_result.get("current_task_id") is None
+                )
+                result = 0 if stopped or already_inactive else -1
+                op["controlled_stop_result"] = stop_result
+            else:
+                result = robot.stop_servo_jog(
+                    restore_collision_checking=bool(op["restore_collision_checking"])
+                )
+        except Exception as exc:
+            self._logger.exception("Conditional Servo local stop failed")
+            result = -1
+            reason = f"{reason}; stop_exception:{exc}"
+        stopped_ns = time.monotonic_ns()
+        completed_from_stop_goal = False
+        with self._lock:
+            if not self._matches_active(operation_id):
+                return
+            self._operation["stop_result"] = result
+            self._operation["reason"] = reason
+            stop_goal_succeeded_ns = self._operation.get("stop_goal_succeeded_monotonic_ns")
+            completed_from_stop_goal = result == 0 and stop_goal_succeeded_ns is not None
+            if completed_from_stop_goal:
+                self._operation["state"] = self._operation["trigger_state"]
+                self._operation["stopped_monotonic_ns"] = stop_goal_succeeded_ns
+            else:
+                self._operation["state"] = "awaiting_stationary" if result == 0 else "stop_failed"
+            self._operation["stop_command_completed_monotonic_ns"] = stopped_ns
+            self._operation["stationary_samples"] = 0
+            self._operation["stationary_last_sample_monotonic_ns"] = None
+            configured_stop_duration_s = op.get("fast_lin", {}).get("controlled_stop_duration_s")
+        self._logger.info(
+            "[CONDITIONAL_SERVO_STOP_SUBMITTED] "
+            f"operation_id={operation_id} execution_mode={op.get('execution_mode')} "
+            f"configured_stop_duration_s={configured_stop_duration_s} "
+            f"submission_elapsed_ms={(stopped_ns - op['stop_started_monotonic_ns']) / 1_000_000.0:.3f} "
+            f"result={result}"
+        )
+        transition_state = (
+            op["trigger_state"]
+            if completed_from_stop_goal
+            else "awaiting_stationary" if result == 0 else "stop_failed"
+        )
+        self._log_transition(operation_id, transition_state, reason)
+
+    def _finish_without_stop(self, operation_id: str, state: str, reason: str) -> None:
+        with self._lock:
+            if self._matches_active(operation_id):
+                self._operation["state"] = state
+                self._operation["reason"] = reason
+                self._operation["stopped_monotonic_ns"] = time.monotonic_ns()
+        self._log_transition(operation_id, state, reason)
+
+    def _matches_active(self, operation_id: str) -> bool:
+        return self._operation is not None and self._operation["operation_id"] == operation_id
+
+    def _log_transition(self, operation_id: str, state: str, reason: str | None = None) -> None:
+        self._logger.info(
+            f"[CONDITIONAL_SERVO] operation_id={operation_id} state={state} "
+            f"reason={reason} monotonic_ns={time.monotonic_ns()}"
+        )
+
+    @staticmethod
+    def _parse_boundary(boundary: dict | None) -> dict | None:
+        if boundary is None:
+            return None
+        axis = str(boundary.get("axis") or "").strip().lower()
+        if axis not in {"x", "y", "z"}:
+            raise ValueError("boundary.axis must be x, y, or z")
+        operator = str(boundary.get("operator") or "").strip().lower()
+        if operator not in {"less_or_equal", "greater_or_equal"}:
+            raise ValueError("boundary.operator must be less_or_equal or greater_or_equal")
+        value_mm = float(boundary["value_mm"])
+        if not math.isfinite(value_mm):
+            raise ValueError("boundary.value_mm must be finite")
+        return {
+            "frame": "user",
+            "user": int(boundary.get("user", 0)),
+            "tool": int(boundary.get("tool", 0)),
+            "axis": axis,
+            "axis_index": {"x": 0, "y": 1, "z": 2}[axis],
+            "operator": operator,
+            "value_mm": value_mm,
+        }

@@ -1,0 +1,4 @@
+from src.applications.contour_matching_tester.contour_matching_tester_factory import ContourMatchingTesterFactory
+from src.applications.contour_matching_tester.service.i_contour_matching_tester_service import IContourMatchingTesterService
+
+__all__ = ["ContourMatchingTesterFactory", "IContourMatchingTesterService"]

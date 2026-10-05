@@ -1,0 +1,65 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+
+# png
+*.png
+trajectory_points*.txt
+pivot_trajectory_execute*.txt
+cameraToRobotMatrix_camera_center_validation_homography.json
+cameraToRobotMatrix_camera_center_triangulation.json
+cameraToRobotMatrix_camera_center_model_report.json
+cameraToRobotMatrix_camera_center_homography_residual.json
+camera_z_shift_marker*.json
+capture_poses.json
+
+# Test / coverage output
+.coverage
+.coverage.*
+.pytest_cache/
+htmlcov/
+
+# Standalone application builds
+build/pyinstaller/
+dist/
+
+# IDE files
+.idea/
+*.iml
+
+# Runtime-generated debug artifacts
+src/bootstrap/robot_calibration_chessboard_detection_debug.png
+src/bootstrap/transformation_to_camera_center.json
+
+# Vision debug/runtime storage
+src/engine/vision/implementation/VisionSystem/features/contour_matching/alignment/debug/
+src/engine/vision/implementation/VisionSystem/features/contour_matching/storage/
+
+# Runtime-generated glue data
+src/robot_systems/glue/storage/users/
+src/robot_systems/glue/storage/workpieces/
+src/robot_systems/glue/storage/settings/height_measuring/
+src/robot_systems/glue/storage/settings/tools/
+src/robot_systems/glue/storage/settings/vision/data/*.npz
+src/robot_systems/glue/storage/settings/vision/data/*.npy
+
+/scripts/recording.avi
+
+# Keep shipped GUI resources and test fixtures despite the PNG debug exclusion.
+!pl_gui/**/resources/**/*.png
+!src/applications/**/resources/**/*.png
+!src/robot_systems/**/applications/**/assets/**/*.png
+!tests/**/*.png
+!src/**/tests/**/*.png
+
+# Machine settings stay local; releases use config/factory_defaults.
+/src/robot_systems/**/storage/settings/
+!/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/storage/settings/
+/src/robot_systems/**/storage/targeting/
+/src/robot_systems/**/storage/translations/.language_state.json
+/transformation_to_camera_center.json
+/src/robot_systems/paint/processes/paint/templogs.txt
+/src/engine/vision/implementation/plvision/*.egg-info/

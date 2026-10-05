@@ -1,0 +1,107 @@
+{
+  "__meta__": {
+    "display_name": "English"
+  },
+  "Shell": {
+    "folder.production": "Production",
+    "folder.service": "Service",
+    "folder.admin": "Administration",
+    "folder.tests": "Tests"
+  },
+  "Header": {
+    "Turn Off Platform": "Turn Off Platform"
+  },
+  "StartupSplashView": {
+    "Preparing runtime services": "Preparing runtime services",
+    "Loading applications": "Loading applications",
+    "Waiting for robot readiness": "Waiting for robot readiness",
+    "Connecting to robot runtime": "Connecting to robot runtime",
+    "Starting robot runtime": "Starting robot runtime",
+    "Checking EtherCAT communication": "Checking EtherCAT communication",
+    "Enabling robot drives": "Enabling robot drives",
+    "Preparing robot drives": "Preparing robot drives",
+    "Configuring robot tool": "Configuring robot tool",
+    "Checking robot status": "Checking robot status",
+    "Ready": "Ready",
+    "Robot App Platform": "Robot App Platform"
+  },
+  "SessionDrawer": {
+    "Session": "Session",
+    "Name": "Name",
+    "User ID": "User ID",
+    "Role": "Role",
+    "Email": "Email",
+    "Logout": "Logout",
+    "Not logged in": "Not logged in"
+  },
+  "ModbusSettingsView": {
+    "Modbus Settings": "Modbus Settings",
+    "SETTINGS": "SETTINGS",
+    "Connection": "Connection",
+    "Slaves": "Slaves",
+    "PORT": "PORT",
+    "SERIAL PORT": "SERIAL PORT",
+    "CONNECTION PROFILES": "CONNECTION PROFILES",
+    "MODBUS SLAVES": "MODBUS SLAVES",
+    "CONNECTION TOOLS": "CONNECTION TOOLS",
+    "Give permission": "Give permission",
+    "Allow this user to open the serial port": "Allow this user to open the serial port",
+    "Set low latency": "Set low latency",
+    "Reduce USB serial adapter latency": "Reduce USB serial adapter latency",
+    "Test connection": "Test connection",
+    "Send a test request using the selected port": "Send a test request using the selected port",
+    "Not tested": "Not tested",
+    "UNSAVED CHANGES": "UNSAVED CHANGES",
+    "●  ALL CHANGES SAVED": "●  ALL CHANGES SAVED",
+    "Detect Ports": "Detect Ports",
+    "Give Permission": "Give Permission",
+    "Test Connection": "Test Connection",
+    "Add Profile": "Add Profile",
+    "Edit Profile": "Edit Profile",
+    "Remove Profile": "Remove Profile",
+    "Add Slave": "Add Slave",
+    "Edit Slave": "Edit Slave",
+    "Remove Slave": "Remove Slave",
+    "Discard": "Discard",
+    "Save": "Save",
+    "Set Low Latency": "Set Low Latency",
+    "Low latency enabled — {count} port(s)": "Low latency enabled — {count} port(s)",
+    "Low latency update failed": "Low latency update failed"
+  },
+  "SettingsView": {
+    "SETTINGS": "SETTINGS",
+    "STEP": "STEP",
+    "AXIS": "AXIS",
+    "MINIMUM": "MINIMUM",
+    "MAXIMUM": "MAXIMUM",
+    "Save": "Save",
+    "Discard": "Discard",
+    "All changes saved": "All changes saved",
+    "Unsaved changes": "Unsaved changes"
+  },
+  "RobotJogWidget": {
+    "Cartesian": "Cartesian",
+    "Joint": "Joint",
+    "Current Position": "Current Position",
+    "Joint Positions": "Joint Positions",
+    "Linear Step": "Linear Step",
+    "Linear Speed": "Linear Speed",
+    "Rotation Step": "Rotation Step",
+    "Rotation Speed": "Rotation Speed",
+    "Joint Step": "Joint Step",
+    "J6 Full Turn": "J6 Full Turn",
+    "Linear": "Linear",
+    "Rotational": "Rotational",
+    "Joints": "Joints",
+    "Invert Z": "Invert Z",
+    "Mode": "Mode",
+    "Frame": "Frame",
+    "Step": "Step",
+    "Servo": "Servo",
+    "Recovery": "Recovery"
+  },
+  "StartupError": {
+    "Platform could not start": "Platform could not start",
+    "The platform stopped because an error occurred.": "The platform stopped because an error occurred."
+  }
+}

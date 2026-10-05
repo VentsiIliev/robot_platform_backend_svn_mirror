@@ -1,0 +1,249 @@
+import logging
+
+import numpy as np
+import logging
+from src.engine.core.i_health_checkable import IHealthCheckable
+from src.engine.vision.i_vision_service import IVisionService
+from src.engine.vision.i_exposure_control import IExposureControl
+from src.engine.work_areas.i_work_area_service import IWorkAreaService
+
+_logger = logging.getLogger(__name__)
+
+
+class VisionService(IVisionService, IHealthCheckable,IExposureControl):
+
+    def __init__(self, vision_system, work_area_service: IWorkAreaService | None = None):
+        self._vision_system = vision_system
+        self._work_area_service = work_area_service
+        self._running = False
+        self._processing_paused = False
+        self._logger = logging.getLogger(self.__class__.__name__)
+
+    def start(self) -> None:
+        self._vision_system.start_system()
+        self._running = True
+        self._processing_paused = False
+        self._logger.info("VisionService started")
+
+    def stop(self) -> None:
+        self._vision_system.stop_system()
+        self._running = False
+        self._processing_paused = False
+        self._logger.info("VisionService stopped")
+
+    def pause_processing(self) -> None:
+        self._vision_system.pause_processing()
+        self._processing_paused = True
+
+    def resume_processing(self) -> None:
+        self._vision_system.resume_processing()
+        self._processing_paused = False
+
+    def set_raw_mode(self, enabled: bool) -> None:
+        self._vision_system.rawMode = enabled
+
+    def set_camera_orientation(
+        self,
+        horizontal: bool,
+        vertical: bool,
+        rotate_degrees: int = 0,
+    ) -> None:
+        self._vision_system.frame_grabber.set_orientation(horizontal, vertical, rotate_degrees)
+
+    def capture_calibration_image(self) -> tuple[bool, str]:
+        return self._vision_system.captureCalibrationImage()
+
+    def calibrate_camera(self) -> tuple[bool, str]:
+        return self._vision_system.calibrateCamera()
+
+    def update_settings(self, settings: dict) -> tuple[bool, str]:
+        return self._vision_system.updateSettings(settings)
+
+    def is_healthy(self) -> bool:
+        details = self.get_health_details()
+        return bool(details.get("healthy"))
+
+    def get_health_details(self) -> dict:
+        if not self._running:
+            return {"healthy": False, "state": "stopped", "message": "Vision service is stopped"}
+
+        state_manager = self._vision_system.state_manager
+        state_ok = True
+        state_name = "running"
+        if state_manager is not None:
+            from src.engine.vision.implementation.VisionSystem.core.external_communication.system_state_management import ServiceState
+            state = state_manager.state
+            state_name = getattr(state, "name", str(state)).lower()
+            state_ok = state in (ServiceState.IDLE, ServiceState.STARTED)
+
+        camera_open = self._camera_is_open()
+        frame_fresh = self._latest_frame_is_fresh()
+        paused = bool(self._processing_paused)
+        # A stale frame is expected while processing is intentionally paused.
+        # Camera availability and the underlying service state must still be
+        # valid; a pause must not mask a real disconnection.
+        healthy = bool(state_ok and camera_open and (frame_fresh or paused))
+        if not state_ok:
+            message = f"Vision service state is {state_name}"
+        elif not camera_open:
+            message = "Camera is not open"
+        elif paused:
+            message = "Vision processing paused by paint process"
+        elif not frame_fresh:
+            message = "No fresh camera frame available"
+        else:
+            message = "Vision service healthy"
+        return {
+            "healthy": healthy,
+            "state": state_name,
+            "camera_open": camera_open,
+            "frame_fresh": frame_fresh,
+            "processing_paused": paused,
+            "message": message,
+        }
+
+    def _camera_is_open(self) -> bool:
+        camera = getattr(self._vision_system, "camera", None)
+        is_open = getattr(camera, "isOpened", None)
+        if callable(is_open):
+            try:
+                return bool(is_open())
+            except Exception:
+                return False
+        return camera is not None
+
+    def _latest_frame_is_fresh(self) -> bool:
+        grabber = getattr(self._vision_system, "frame_grabber", None)
+        snapshot_getter = getattr(grabber, "get_latest_snapshot", None)
+        if callable(snapshot_getter):
+            try:
+                return snapshot_getter() is not None
+            except Exception:
+                return False
+        return self.get_latest_frame() is not None
+
+    def save_work_area(self, area_type: str, pixel_points) -> tuple[bool, str]:
+        import numpy as np
+        data = {
+            "area_type": area_type,
+            "corners":   np.array(pixel_points, dtype=np.float32),
+        }
+        return self._vision_system.saveWorkAreaPoints(data)
+
+    def get_latest_contours(self) -> list:
+        return list(self._vision_system._latest_contours or [])
+
+    def compute_contours_for_latest_frame(self) -> tuple[np.ndarray | None, list]:
+        frame, contours = self._vision_system.compute_contours_for_latest_frame()
+        return frame, list(contours or [])
+
+    def get_latest_frame(self) -> np.ndarray:
+        corrected = self._vision_system.correctedImage
+        return corrected if corrected is not None else self._vision_system.rawImage
+
+    def get_latest_corrected_frame(self) -> np.ndarray | None:
+        return self._vision_system.correctedImage
+
+    def get_latest_raw_frame(self) -> np.ndarray | None:
+        return self._vision_system.rawImage
+
+    def detect_aruco_markers(self, image: np.ndarray) -> tuple:
+        return self._vision_system.detectArucoMarkers(image=image)
+
+    def get_camera_width(self) -> int:
+        if self._primary_frame_is_transposed():
+            return int(self._vision_system.camera_settings.get_camera_height())
+        return int(self._vision_system.camera_settings.get_camera_width())
+
+    def get_camera_height(self) -> int:
+        if self._primary_frame_is_transposed():
+            return int(self._vision_system.camera_settings.get_camera_width())
+        return int(self._vision_system.camera_settings.get_camera_height())
+
+    def _primary_frame_is_transposed(self) -> bool:
+        """True when the applied capture rotation swapped the frame dimensions.
+
+        The sensor resolution in ``camera_settings`` is unaffected by rotation,
+        so every pixel-to-millimetre conversion has to be told about the
+        transpose explicitly or it will read the wrong image centre.
+        """
+        grabber = getattr(self._vision_system, "frame_grabber", None)
+        checker = getattr(grabber, "is_transposed", None)
+        if not callable(checker):
+            return False
+        try:
+            return bool(checker())
+        except Exception:
+            self._logger.warning("Could not read the capture orientation", exc_info=True)
+            return False
+
+    def get_chessboard_width(self) -> int:
+        return self._vision_system.camera_settings.get_chessboard_width()
+
+    def get_chessboard_height(self) -> int:
+        return self._vision_system.camera_settings.get_chessboard_height()
+
+    def get_square_size_mm(self) -> float:
+        return self._vision_system.camera_settings.get_square_size_mm()
+
+    def set_draw_contours(self, enabled: bool) -> None:
+        self._vision_system.camera_settings.set_draw_contours(enabled)
+
+    def get_auto_brightness_enabled(self) -> bool:
+        return bool(self._vision_system.camera_settings.get_brightness_auto())
+
+    def set_auto_brightness_enabled(self, enabled: bool) -> None:
+        self._vision_system.camera_settings.set_brightness_auto(enabled)
+
+    def lock_auto_brightness_region(self) -> bool:
+        return bool(self._vision_system.lock_auto_brightness_region())
+
+    def unlock_auto_brightness_region(self) -> None:
+        self._vision_system.unlock_auto_brightness_region()
+
+    def lock_auto_brightness_adjustment(self) -> None:
+        self._vision_system.lock_auto_brightness_adjustment()
+
+    def unlock_auto_brightness_adjustment(self) -> None:
+        self._vision_system.unlock_auto_brightness_adjustment()
+
+    def get_perspective_matrix(self):
+        return self._vision_system.perspectiveMatrix
+
+    @property
+    def camera_to_robot_matrix_path(self) -> str:
+        return self._vision_system.camera_to_robot_matrix_path
+
+    def get_work_area(self, area_type: str) -> tuple[bool, str, any]:
+        return self._vision_system.getWorkAreaPoints(area_type)
+
+    def run_matching(self, workpieces: list, contours: list):
+        from src.engine.vision.implementation.VisionSystem.features.contour_matching import find_matching_workpieces
+        result, no_matches, matched_contours = find_matching_workpieces(workpieces, contours)
+        return (
+            result,
+            len(no_matches),
+            [c.get() for c in matched_contours],
+            [c.get() for c in no_matches],
+        )
+
+    def set_auto_exposure(self, enabled: bool) -> None:
+        camera = self._vision_system.camera
+        if hasattr(camera, "set_auto_exposure"):
+            camera.set_auto_exposure(enabled)
+        else:
+            _logger.debug("set_auto_exposure: camera does not support exposure control, skipping")
+
+    def set_detection_area(self, area: str) -> None:
+        self.set_active_work_area(area)
+
+    def set_active_work_area(self, area_id: str | None) -> None:
+        if self._work_area_service is not None:
+            try:
+                self._work_area_service.set_active_area_id(area_id)
+            except KeyError as exc:
+                self._logger.warning("Ignoring invalid active work area %r: %s", area_id, exc)
+        self._vision_system.on_threshold_update({"region": area_id or ""})
+
+    def get_capture_pos_offset(self) -> float:
+        return self._vision_system.camera_settings.get_capture_pos_offset()

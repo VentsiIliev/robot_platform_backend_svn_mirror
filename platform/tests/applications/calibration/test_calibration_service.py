@@ -1,0 +1,620 @@
+import unittest
+from unittest.mock import MagicMock
+from types import SimpleNamespace
+
+from src.applications.calibration_settings.calibration_settings_data import CalibrationSettingsData
+from src.applications.calibration.service.stub_calibration_service import StubCalibrationService
+from src.applications.calibration.service.calibration_application_service import CalibrationApplicationService
+from src.engine.common_settings_ids import CommonSettingsID
+from src.engine.robot.configuration import RobotCalibrationSettings
+from src.engine.robot.height_measuring.settings import HeightMeasuringModuleSettings
+from src.engine.vision.calibration_vision_settings import CalibrationVisionSettings
+from src.shared_contracts.declarations import WorkAreaDefinition
+
+
+def _make_calibration_settings():
+    return CalibrationSettingsData(
+        vision=CalibrationVisionSettings(chessboard_width=11),
+        robot=RobotCalibrationSettings(),
+        height=HeightMeasuringModuleSettings(),
+    )
+
+
+def _make_vision(capture=None, calibrate=None):
+    vs = MagicMock()
+    vs.capture_calibration_image.return_value = capture or (True, "ok")
+    vs.calibrate_camera.return_value = calibrate or (True, "ok")
+    vs.camera_to_robot_matrix_path = "/tmp/cameraToRobotMatrix_camera_center.npy"
+    return vs
+
+
+def _make_svc(
+    capture=None,
+    calibrate=None,
+    calibrator=None,
+    calibration_settings_service=None,
+    tool_tcp_calibrator=None,
+    robot_service=None,
+    robot_config=None,
+    settings_service=None,
+):
+    vs = _make_vision(capture=capture, calibrate=calibrate)
+    pc = MagicMock()
+    return (
+        CalibrationApplicationService(
+            vs,
+            pc,
+            robot_service=robot_service,
+            robot_config=robot_config,
+            camera_tcp_offset_calibrator=calibrator,
+            calibration_settings_service=calibration_settings_service,
+            tool_tcp_calibrator=tool_tcp_calibrator,
+            settings_service=settings_service,
+        ),
+        vs,
+        pc,
+    )
+
+
+class TestStubCalibrationService(unittest.TestCase):
+
+    def setUp(self):
+        self._stub = StubCalibrationService()
+
+    def test_capture_returns_success(self):
+        ok, msg = self._stub.capture_calibration_image()
+        self.assertTrue(ok)
+        self.assertIsInstance(msg, str)
+
+    def test_calibrate_camera_returns_success(self):
+        ok, msg = self._stub.calibrate_camera()
+        self.assertTrue(ok)
+        self.assertIsInstance(msg, str)
+
+    def test_calibrate_robot_returns_success(self):
+        ok, msg = self._stub.calibrate_robot()
+        self.assertTrue(ok)
+        self.assertIsInstance(msg, str)
+
+    def test_calibrate_camera_and_robot_returns_success(self):
+        ok, msg = self._stub.calibrate_camera_and_robot()
+        self.assertTrue(ok)
+        self.assertIsInstance(msg, str)
+
+    def test_calibrate_camera_tcp_offset_returns_success(self):
+        ok, msg = self._stub.calibrate_camera_tcp_offset()
+        self.assertTrue(ok)
+        self.assertIsInstance(msg, str)
+
+    def test_load_calibration_settings_returns_settings(self):
+        settings = self._stub.load_calibration_settings()
+        self.assertIsNotNone(settings)
+
+    def test_preview_robot_calibration_returns_successful_preview(self):
+        preview = self._stub.preview_robot_calibration()
+        self.assertTrue(preview.ok)
+        self.assertIn("preview", preview.message.lower())
+
+    def test_intrinsic_capture_config_returns_default_config(self):
+        config = self._stub.get_intrinsic_capture_config()
+        self.assertIsNotNone(config)
+
+    def test_intrinsic_auto_capture_is_not_running_by_default(self):
+        self.assertFalse(self._stub.is_intrinsic_auto_capture_running())
+
+
+class TestCalibrationApplicationServiceDelegation(unittest.TestCase):
+
+    def test_capture_delegates_to_vision(self):
+        svc, vs, _ = _make_svc(capture=(True, "captured"))
+        ok, msg = svc.capture_calibration_image()
+        vs.capture_calibration_image.assert_called_once()
+        self.assertTrue(ok)
+        self.assertEqual(msg, "captured")
+
+    def test_calibrate_camera_delegates_to_vision(self):
+        svc, vs, _ = _make_svc(calibrate=(True, "cam ok"))
+        ok, msg = svc.calibrate_camera()
+        vs.calibrate_camera.assert_called_once()
+        self.assertTrue(ok)
+        self.assertEqual(msg, "cam ok")
+
+    def test_calibrate_robot_calls_process_controller_and_returns_success(self):
+        svc, _, pc = _make_svc()
+        ok, msg = svc.calibrate_robot()
+        pc.calibrate.assert_called_once()
+        self.assertTrue(ok)
+
+    def test_select_robot_calibration_target_uses_configured_area_profile(self):
+        settings_service = MagicMock()
+        settings = _make_calibration_settings()
+        from src.engine.vision.calibration_vision_settings import CoordinateCalibrationProfile
+        settings.vision.work_area_calibration_profiles = {"paint": "paint_local"}
+        settings.vision.coordinate_calibration_profiles = {
+            "paint_local": CoordinateCalibrationProfile(
+                matrix_path="calibrations/paint/camera_to_robot.npy",
+                reference_frame="paint",
+            )
+        }
+        settings_service.load_settings.return_value = settings
+        work_area_service = MagicMock()
+        svc = CalibrationApplicationService(
+            _make_vision(),
+            MagicMock(),
+            calibration_settings_service=settings_service,
+            work_area_service=work_area_service,
+            work_area_definitions=[WorkAreaDefinition("paint", "Paint", "#000000")],
+        )
+
+        ok, _message = svc.select_robot_calibration_target("paint")
+
+        self.assertTrue(ok)
+        self.assertEqual(settings.vision.calibration_target_work_area, "paint")
+        profile_id = settings.vision.work_area_calibration_profiles["paint"]
+        profile = settings.vision.coordinate_calibration_profiles[profile_id]
+        self.assertEqual(profile.reference_frame, "paint")
+        self.assertEqual(profile.matrix_path, "calibrations/paint/camera_to_robot.npy")
+        settings_service.save_settings.assert_called_once_with(settings)
+        work_area_service.set_active_area_id.assert_called_once_with("paint")
+
+    def test_select_robot_calibration_target_rejects_shared_global_profile(self):
+        settings_service = MagicMock()
+        settings = _make_calibration_settings()
+        settings.vision.work_area_calibration_profiles = {"paint": "global"}
+        settings_service.load_settings.return_value = settings
+        svc = CalibrationApplicationService(
+            _make_vision(),
+            MagicMock(),
+            calibration_settings_service=settings_service,
+            work_area_definitions=[WorkAreaDefinition("paint", "Paint", "#000000")],
+        )
+
+        ok, message = svc.select_robot_calibration_target("paint")
+
+        self.assertFalse(ok)
+        self.assertIn("Robot Settings → Targeting", message)
+        settings_service.save_settings.assert_not_called()
+
+    def test_local_test_pose_uses_target_z_and_area_observer_orientation(self):
+        settings_service = MagicMock()
+        settings = _make_calibration_settings()
+        settings.vision.calibration_target_work_area = "magazine"
+        settings_service.load_settings.return_value = settings
+        observer = [10.0, 20.0, 150.0, -179.0, 1.0, 359.0]
+        svc = CalibrationApplicationService(
+            _make_vision(),
+            MagicMock(),
+            calibration_settings_service=settings_service,
+            calib_config=SimpleNamespace(z_target=150.0),
+            observer_group_provider=lambda area_id: "Magazine" if area_id == "magazine" else None,
+            observer_position_provider=lambda group_id: observer if group_id == "Magazine" else None,
+        )
+
+        ok, message, suffix = svc._test_motion_pose_suffix(
+            [11.0, 19.0, 151.0, 181.0, 1.5, -1.0]
+        )
+
+        self.assertTrue(ok, message)
+        self.assertEqual(suffix, [150.0, -179.0, 1.0, 359.0])
+
+    def test_local_test_pose_uses_calibration_target_z_not_observer_z(self):
+        settings_service = MagicMock()
+        settings = _make_calibration_settings()
+        settings.vision.calibration_target_work_area = "magazine"
+        settings_service.load_settings.return_value = settings
+        svc = CalibrationApplicationService(
+            _make_vision(),
+            MagicMock(),
+            calibration_settings_service=settings_service,
+            calib_config=SimpleNamespace(z_target=150.0),
+            observer_group_provider=lambda _area_id: "Magazine",
+            observer_position_provider=lambda _group_id: [42.5, -174.3, 251.436, -179.99, 0.0, 0.0],
+        )
+
+        ok, message, suffix = svc._test_motion_pose_suffix(
+            [42.5, -174.3, 251.436, -179.99, 0.0, 0.0]
+        )
+
+        self.assertTrue(ok, message)
+        self.assertEqual(suffix, [150.0, -179.99, 0.0, 0.0])
+
+    def test_local_test_pose_rejects_robot_away_from_area_observer(self):
+        settings_service = MagicMock()
+        settings = _make_calibration_settings()
+        settings.vision.calibration_target_work_area = "magazine"
+        settings_service.load_settings.return_value = settings
+        svc = CalibrationApplicationService(
+            _make_vision(),
+            MagicMock(),
+            calibration_settings_service=settings_service,
+            observer_group_provider=lambda _area_id: "Magazine",
+            observer_position_provider=lambda _group_id: [10, 20, 150, -179, 1, 0],
+        )
+
+        ok, message, suffix = svc._test_motion_pose_suffix([100, 20, 150, -179, 1, 0])
+
+        self.assertFalse(ok)
+        self.assertIn("Magazine", message)
+        self.assertIsNone(suffix)
+
+    def test_visual_test_routes_from_active_work_area_in_per_area_mode(self):
+        settings_service = MagicMock()
+        settings = _make_calibration_settings()
+        settings.vision.coordinate_calibration_mode = "per_area"
+        settings.vision.calibration_target_work_area = "paint"
+        settings.vision.work_area_calibration_profiles = {"magazine": "magazine_local"}
+        from src.engine.vision.calibration_vision_settings import CoordinateCalibrationProfile
+        settings.vision.coordinate_calibration_profiles = {
+            "magazine_local": CoordinateCalibrationProfile(
+                matrix_path="calibrations/magazine/camera_to_robot.npy",
+                reference_frame="magazine",
+            )
+        }
+        settings_service.load_settings.return_value = settings
+        work_area_service = MagicMock()
+        work_area_service.get_active_area_id.return_value = "magazine"
+        vision = _make_vision()
+        vision.camera_to_robot_matrix_path = "/tmp/calibrations/magazine/camera_to_robot.npy"
+        svc = CalibrationApplicationService(
+            vision,
+            MagicMock(),
+            calibration_settings_service=settings_service,
+            work_area_service=work_area_service,
+            work_area_definitions=[WorkAreaDefinition("magazine", "Magazine", "#000000")],
+        )
+
+        ok, message = svc._select_active_work_area_for_test()
+
+        self.assertTrue(ok, message)
+        self.assertEqual(settings.vision.calibration_target_work_area, "magazine")
+        settings_service.save_settings.assert_called_once_with(settings)
+
+    def test_visual_test_rejects_active_area_without_profile_in_per_area_mode(self):
+        settings_service = MagicMock()
+        settings = _make_calibration_settings()
+        settings.vision.coordinate_calibration_mode = "per_area"
+        settings_service.load_settings.return_value = settings
+        work_area_service = MagicMock()
+        work_area_service.get_active_area_id.return_value = "magazine"
+        svc = CalibrationApplicationService(
+            _make_vision(),
+            MagicMock(),
+            calibration_settings_service=settings_service,
+            work_area_service=work_area_service,
+            work_area_definitions=[WorkAreaDefinition("magazine", "Magazine", "#000000")],
+        )
+
+        ok, message = svc._select_active_work_area_for_test()
+
+        self.assertFalse(ok)
+        self.assertIn("no assigned calibration profile", message)
+        settings_service.save_settings.assert_not_called()
+
+    def test_calibrate_camera_and_robot_short_circuits_on_camera_failure(self):
+        svc, vs, _ = _make_svc(calibrate=(False, "no cam"))
+        ok, msg = svc.calibrate_camera_and_robot()
+        self.assertFalse(ok)
+        self.assertIn("Camera calibration failed", msg)
+        self.assertIn("no cam", msg)
+
+    def test_calibrate_camera_and_robot_starts_robot_on_camera_success(self):
+        svc, vs, pc = _make_svc(calibrate=(True, "cam ok"))
+        ok, msg = svc.calibrate_camera_and_robot()
+        self.assertTrue(ok)
+        pc.calibrate.assert_called_once()
+
+    def test_calibrate_camera_and_robot_calls_camera_first(self):
+        svc, vs, _ = _make_svc(calibrate=(False, "fail"))
+        svc.calibrate_camera_and_robot()
+        vs.calibrate_camera.assert_called_once()
+
+    def test_calibrate_camera_and_robot_does_not_call_controller_on_camera_failure(self):
+        svc, vs, pc = _make_svc(calibrate=(False, "fail"))
+        svc.calibrate_camera_and_robot()
+        pc.calibrate.assert_not_called()
+
+    def test_calibrate_camera_tcp_offset_requires_existing_calibration(self):
+        svc, vs, _ = _make_svc()
+        ok, msg = svc.calibrate_camera_tcp_offset()
+        self.assertFalse(ok)
+        self.assertIn("System not calibrated", msg)
+
+    def test_camera_tcp_area_requires_per_area_mode(self):
+        calibration_settings_service = MagicMock()
+        calibration_settings_service.load_settings.return_value = _make_calibration_settings()
+        settings_service = MagicMock()
+        settings_service.get.return_value = SimpleNamespace(camera_to_tcp_mode="global")
+        svc = CalibrationApplicationService(
+            _make_vision(), MagicMock(),
+            calibration_settings_service=calibration_settings_service,
+            settings_service=settings_service,
+            work_area_definitions=[WorkAreaDefinition("paint", "Paint", "#000000")],
+        )
+
+        ok, message = svc.validate_camera_tcp_calibration_target("paint")
+
+        self.assertFalse(ok)
+        self.assertIn("Enable per-area", message)
+        self.assertTrue(svc.validate_camera_tcp_calibration_target("global")[0])
+
+    def test_camera_tcp_area_can_use_shared_global_vision_profile(self):
+        calibration_settings_service = MagicMock()
+        settings = _make_calibration_settings()
+        settings.vision.coordinate_calibration_mode = "per_area"
+        settings.vision.work_area_calibration_profiles = {"paint": "global"}
+        calibration_settings_service.load_settings.return_value = settings
+        settings_service = MagicMock()
+        settings_service.get.return_value = SimpleNamespace(camera_to_tcp_mode="per_area")
+        svc = CalibrationApplicationService(
+            _make_vision(), MagicMock(),
+            calibration_settings_service=calibration_settings_service,
+            settings_service=settings_service,
+            work_area_definitions=[WorkAreaDefinition("paint", "Paint", "#000000")],
+        )
+
+        self.assertTrue(svc.validate_camera_tcp_calibration_target("paint")[0])
+
+    def test_calibrate_camera_tcp_offset_delegates_to_calibrator_when_calibrated(self):
+        calibrator = MagicMock()
+        calibrator.calibrate.return_value = (True, "tcp ok")
+        svc, vs, _ = _make_svc(calibrator=calibrator)
+        svc.is_calibrated = MagicMock(return_value=True)
+
+        ok, msg = svc.calibrate_camera_tcp_offset()
+
+        self.assertTrue(ok)
+        self.assertEqual(msg, "tcp ok")
+        calibrator.calibrate.assert_called_once()
+
+    def test_stop_calibration_stops_camera_tcp_calibrator(self):
+        calibrator = MagicMock()
+        svc, _, pc = _make_svc(calibrator=calibrator)
+
+        svc.stop_calibration()
+
+        pc.stop_calibration.assert_called_once()
+        calibrator.stop.assert_called_once()
+
+    def test_tool_tcp_methods_delegate_to_calibrator(self):
+        result = SimpleNamespace(
+            tool_offset=[1.0, 2.0, 3.0, 0.0, 0.0, 0.0],
+            residual_rms_mm=0.1,
+            to_dict=MagicMock(return_value={
+                "tool_offset": [1.0, 2.0, 3.0, 0.0, 0.0, 0.0],
+                "sample_count": 6,
+            }),
+        )
+        tool_tcp = MagicMock()
+        tool_tcp.capture_sample.return_value = SimpleNamespace(flange_pose=[10.0, 20.0, 30.0, 0.0, 0.0, 0.0])
+        tool_tcp.solve.return_value = result
+        tool_tcp.save.return_value = (True, "saved")
+        svc, _, _ = _make_svc(tool_tcp_calibrator=tool_tcp)
+
+        self.assertEqual(svc.start_tool_tcp_calibration(3), (True, "Tool TCP calibration started for tool 3"))
+        ok, capture_msg = svc.capture_tool_tcp_sample()
+        self.assertTrue(ok)
+        self.assertIn("Captured Tool TCP sample", capture_msg)
+        ok, solve_msg, payload = svc.solve_tool_tcp_calibration()
+        self.assertTrue(ok)
+        self.assertIn("Tool TCP solved", solve_msg)
+        self.assertEqual(payload["sample_count"], 6)
+        self.assertEqual(svc.save_tool_tcp_calibration(), (True, "saved"))
+        self.assertEqual(svc.clear_tool_tcp_calibration(), (True, "Tool TCP samples cleared"))
+
+        tool_tcp.start.assert_called_once_with(3)
+        tool_tcp.capture_sample.assert_called_once()
+        tool_tcp.solve.assert_called_once()
+        tool_tcp.save.assert_called_once()
+        tool_tcp.clear_samples.assert_called_once()
+
+    def test_start_tool_tcp_calibration_refuses_nonzero_tool(self):
+        tool_tcp = MagicMock()
+        robot_service = MagicMock()
+        robot_config = SimpleNamespace(robot_tool=5, robot_user=3)
+        svc, _, _ = _make_svc(
+            tool_tcp_calibrator=tool_tcp,
+            robot_service=robot_service,
+            robot_config=robot_config,
+        )
+
+        ok, msg = svc.start_tool_tcp_calibration(4)
+
+        self.assertFalse(ok)
+        self.assertIn("Tool ID is 5", msg)
+        self.assertEqual(robot_config.robot_tool, 5)
+        self.assertEqual(robot_config.robot_user, 3)
+        robot_service.set_active_tool.assert_not_called()
+        robot_service.set_active_workobject.assert_not_called()
+        tool_tcp.start.assert_not_called()
+
+    def test_start_tool_tcp_calibration_refuses_nonzero_workobject(self):
+        tool_tcp = MagicMock()
+        robot_config = SimpleNamespace(robot_tool=0, robot_user=3)
+        svc, _, _ = _make_svc(
+            tool_tcp_calibrator=tool_tcp,
+            robot_config=robot_config,
+        )
+
+        ok, msg = svc.start_tool_tcp_calibration(4)
+
+        self.assertFalse(ok)
+        self.assertIn("WorkObject/User ID is 3", msg)
+        tool_tcp.start.assert_not_called()
+
+    def test_start_tool_tcp_calibration_checks_latest_saved_robot_settings(self):
+        tool_tcp = MagicMock()
+        injected_robot_config = SimpleNamespace(robot_tool=0, robot_user=0)
+        latest_robot_config = SimpleNamespace(robot_tool=1, robot_user=0)
+        settings_service = MagicMock()
+        settings_service.get.return_value = latest_robot_config
+        svc, _, _ = _make_svc(
+            tool_tcp_calibrator=tool_tcp,
+            robot_config=injected_robot_config,
+            settings_service=settings_service,
+        )
+
+        ok, msg = svc.start_tool_tcp_calibration(1)
+
+        self.assertFalse(ok)
+        self.assertIn("Tool ID is 1", msg)
+        settings_service.get.assert_called_once_with(CommonSettingsID.ROBOT_CONFIG)
+        tool_tcp.start.assert_not_called()
+
+    def test_tool_tcp_methods_report_not_configured(self):
+        svc, _, _ = _make_svc()
+
+        self.assertFalse(svc.start_tool_tcp_calibration(1)[0])
+        self.assertFalse(svc.capture_tool_tcp_sample()[0])
+        self.assertFalse(svc.solve_tool_tcp_calibration()[0])
+        self.assertFalse(svc.save_tool_tcp_calibration()[0])
+        self.assertFalse(svc.clear_tool_tcp_calibration()[0])
+
+    def test_stop_calibration_stops_tool_tcp_calibrator(self):
+        tool_tcp = MagicMock()
+        svc, _, _ = _make_svc(tool_tcp_calibrator=tool_tcp)
+
+        svc.stop_calibration()
+
+        tool_tcp.stop.assert_called_once()
+
+    def test_service_with_none_vision_raises_on_call(self):
+        svc = CalibrationApplicationService(None, MagicMock())
+        with self.assertRaises(Exception):
+            svc.capture_calibration_image()
+
+    def test_load_calibration_settings_delegates_to_bridge_service(self):
+        settings_service = MagicMock()
+        settings = _make_calibration_settings()
+        settings_service.load_settings.return_value = settings
+        svc, _, _ = _make_svc(calibration_settings_service=settings_service)
+
+        loaded = svc.load_calibration_settings()
+
+        settings_service.load_settings.assert_called_once()
+        self.assertIs(loaded, settings)
+
+    def test_save_calibration_settings_delegates_to_bridge_service(self):
+        settings_service = MagicMock()
+        settings = _make_calibration_settings()
+        svc, _, _ = _make_svc(calibration_settings_service=settings_service)
+
+        svc.save_calibration_settings(settings)
+
+        settings_service.save_settings.assert_called_once_with(settings)
+
+    def test_measure_area_grid_prefers_area_observer_pose(self):
+        marker_service = MagicMock()
+        marker_service.measure_area_grid.return_value = (True, "ok")
+        work_area_service = MagicMock()
+        work_area_service.get_active_area_id.return_value = "pickup"
+        height_service = MagicMock()
+        height_service.get_calibration_data.return_value = MagicMock(
+            robot_initial_position=[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+        )
+
+        svc = CalibrationApplicationService(
+            _make_vision(),
+            MagicMock(),
+            height_service=height_service,
+            work_area_service=work_area_service,
+            marker_height_mapping_service=marker_service,
+            observer_group_provider=lambda area_id: "HOME" if area_id == "pickup" else None,
+            observer_position_provider=lambda group: [10.0, 20.0, 30.0, 40.0, 50.0, 60.0] if group == "HOME" else None,
+        )
+        svc.is_calibrated = MagicMock(return_value=True)
+
+        ok, msg = svc.measure_area_grid("pickup", [(0.0, 0.0)] * 4, 2, 2)
+
+        self.assertTrue(ok)
+        self.assertEqual(msg, "ok")
+        marker_service.measure_area_grid.assert_called_once()
+        self.assertEqual(
+            marker_service.measure_area_grid.call_args.kwargs["measurement_pose"],
+            [10.0, 20.0, 30.0, 40.0, 50.0, 60.0],
+        )
+
+    def test_verify_height_model_prefers_area_observer_pose(self):
+        marker_service = MagicMock()
+        marker_service.verify_height_model.return_value = (True, "ok")
+        height_service = MagicMock()
+        height_service.get_calibration_data.return_value = MagicMock(
+            robot_initial_position=[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+        )
+
+        svc = CalibrationApplicationService(
+            _make_vision(),
+            MagicMock(),
+            height_service=height_service,
+            marker_height_mapping_service=marker_service,
+            observer_group_provider=lambda area_id: "HOME" if area_id == "pickup" else None,
+            observer_position_provider=lambda group: [10.0, 20.0, 30.0, 40.0, 50.0, 60.0] if group == "HOME" else None,
+        )
+
+        ok, msg = svc.verify_height_model("pickup")
+
+        self.assertTrue(ok)
+        self.assertEqual(msg, "ok")
+        marker_service.verify_height_model.assert_called_once_with(
+            "pickup",
+            measurement_pose=[10.0, 20.0, 30.0, 40.0, 50.0, 60.0],
+        )
+
+    def test_verify_area_grid_uses_height_measurement_pose_instead_of_observer_pose(self):
+        robot_service = MagicMock()
+        robot_service.get_current_position.return_value = [100.0, 200.0, 300.0, 10.0, 20.0, 30.0]
+        robot_service.are_safety_walls_enabled.return_value = False
+        robot_service.validate_pose.return_value = {"reachable": True, "success": True}
+
+        transformer = MagicMock()
+        transformer.is_available.return_value = True
+        transformer.transform.side_effect = [
+            (10.0, 20.0),
+            (30.0, 40.0),
+            (50.0, 60.0),
+            (70.0, 80.0),
+            (0.0, 0.0),
+            (1.0, 0.0),
+            (1.0, 1.0),
+            (0.0, 1.0),
+        ]
+
+        height_service = MagicMock()
+        height_service.is_calibrated.return_value = True
+        height_service.get_calibration_data.return_value = MagicMock(
+            robot_initial_position=[1.0, 2.0, 333.0, 44.0, 55.0, 66.0]
+        )
+
+        vision = _make_vision()
+        vision.get_camera_width.return_value = 1000.0
+        vision.get_camera_height.return_value = 1000.0
+
+        svc = CalibrationApplicationService(
+            vision,
+            MagicMock(),
+            robot_service=robot_service,
+            height_service=height_service,
+            transformer=transformer,
+            observer_group_provider=lambda area_id: "SPRAY_OBSERVER",
+            observer_position_provider=lambda group: [10.0, 20.0, 819.378, 179.915, 0.011, 0.001],
+        )
+        svc.is_calibrated = MagicMock(return_value=True)
+        svc.generate_area_grid = MagicMock(
+            return_value=[(0.1, 0.2), (0.3, 0.4), (0.5, 0.6), (0.7, 0.8)]
+        )
+
+        ok, _, _ = svc.verify_area_grid(
+            corners_norm=[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+            rows=2,
+            cols=2,
+        )
+
+        self.assertTrue(ok)
+        first_validate_call = robot_service.validate_pose.call_args_list[0]
+        self.assertEqual(
+            first_validate_call.args[1],
+            [10.0, 20.0, 333.0, 44.0, 55.0, 66.0],
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

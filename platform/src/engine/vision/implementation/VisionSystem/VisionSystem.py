@@ -1,0 +1,615 @@
+import threading
+import logging
+import os
+from typing import Optional
+
+import cv2
+import numpy as np
+
+from src.engine.vision.implementation.VisionSystem.core.camera.frame_grabber import FrameGrabber
+from src.engine.vision.implementation.VisionSystem.core.camera.remote_camera import RemoteCamera
+from src.engine.vision.implementation.VisionSystem.core.path_resolver import get_path_resolver
+from src.engine.vision.implementation.VisionSystem.core.external_communication.system_state_management import (
+    StateManager, ServiceState, MessagePublisher, SubscriptionManager,
+)
+from src.engine.vision.implementation.VisionSystem.core.service.internal_service import Service
+from src.engine.vision.implementation.plvision.PLVision.Camera import Camera
+from src.engine.vision.implementation.VisionSystem.camera_initialization import CameraInitializer
+from src.engine.vision.implementation.VisionSystem.services import (
+    ContourDetectionService, CalibrationService, ArucoDetectionService, BrightnessService, QrDetectionService,
+)
+from src.engine.vision.i_vision_service import VisionFrameUnavailableError
+from src.engine.work_areas.i_work_area_service import IWorkAreaService
+
+
+_logger = logging.getLogger(__name__)
+
+DEFAULT_STORAGE_PATH = str(get_path_resolver().vision_system_root / 'storage')
+
+
+class VisionSystem:
+
+    def __init__(self, storage_path=None, messaging_service=None, service=None,
+                 work_area_service: IWorkAreaService | None = None,
+                 camera_device: int | str | None = None,
+                 camera_resolution: tuple[int, int] | None = None,
+                 allow_camera_fallback: bool = True,
+                 camera_orientation: tuple[bool, bool, int] = (False, False, 0)):
+        self._configure_opencv_threads()
+        self.optimal_camera_matrix = None
+        self.roi = None
+        self.cameraMatrix = None
+        self.cameraDist = None
+        self._undistort_map1 = None
+        self._undistort_map2 = None
+        self._undistort_map_size = None
+
+        self.storage_path      = storage_path or DEFAULT_STORAGE_PATH
+        self.service           = service or Service(data_storage_path=self.storage_path)
+        self.messaging_service = messaging_service
+        self._work_area_service = work_area_service
+        self._camera_device = camera_device
+        self._camera_resolution = camera_resolution
+        self._allow_camera_fallback = bool(allow_camera_fallback)
+        self._active_area_id = work_area_service.get_active_area_id() if work_area_service is not None else ""
+        self.service_id        = "vision_service"
+
+        self.camera_settings = self.service.loadSettings()
+        self.camera = None
+        self.load_calibration_data()
+
+        # ── Services (no back-references to VisionSystem) ─────────────────────
+        self._brightness_service = BrightnessService(
+            self.camera_settings,
+            area_points_provider=self._get_active_brightness_area_points,
+            area_key_provider=self._get_active_area_id,
+        )
+        self._aruco_service      = ArucoDetectionService(self.camera_settings)
+        self._qr_service = QrDetectionService()
+
+        # ── Messaging (must come after _brightness_service is assigned) ───────
+        self.message_publisher = None
+        self.state_manager     = None
+        if self.messaging_service is not None:
+            self.setup_external_communication()
+
+        # ── Remaining services (need message_publisher) ───────────────────────
+        self._contour_service = ContourDetectionService(
+            camera_settings   = self.camera_settings,
+            message_publisher = self.message_publisher,
+        )
+        self._calibration_service = CalibrationService(
+            camera_settings   = self.camera_settings,
+            storage_path      = self.storage_path,
+            message_publisher = self.message_publisher,
+            messaging_service = self.messaging_service,
+        )
+
+        # ── Frame state ───────────────────────────────────────────────────────────
+        self.image          = None
+        self.rawImage       = None
+        self.correctedImage = None
+        self.rawMode        = False
+        self._latest_contours = []   # ← cached by run(), read by get_latest_contours()
+
+        self.current_skip_frames = 0
+        self.frame_grabber = FrameGrabber(
+            self.camera,
+            maxlen=5,
+            flip_horizontal=camera_orientation[0],
+            flip_vertical=camera_orientation[1],
+            rotate_degrees=camera_orientation[2],
+        )
+        self.frame_grabber.start()
+        self._last_processed_frame_sequence = 0
+        self._latest_frame_timestamp_s = 0.0
+        self._latest_contour_frame_sequence = 0
+        self._latest_contour_area_id = ""
+
+        self.stop_signal  = False
+        self.cameraThread = None
+        self._processing_resume_event = threading.Event()
+        self._processing_resume_event.set()
+        self._camera_init_thread = threading.Thread(
+            target=self._init_camera_in_background,
+            name="camera-init",
+            daemon=True,
+        )
+        self._camera_init_thread.start()
+
+    @staticmethod
+    def _configure_opencv_threads() -> None:
+        override = os.getenv("ROBOT_APP_OPENCV_THREADS", "").strip()
+        thread_count: int | None = None
+
+        if override:
+            try:
+                thread_count = max(1, int(override))
+            except ValueError:
+                _logger.warning(
+                    "Ignoring invalid ROBOT_APP_OPENCV_THREADS=%r; expected positive integer",
+                    override,
+                )
+                return
+        else:
+            cpu_count = os.cpu_count() or 1
+            if cpu_count <= 4:
+                thread_count = 2
+
+        if thread_count is None:
+            return
+
+        try:
+            cv2.setNumThreads(thread_count)
+            _logger.info("OpenCV worker threads capped at %d", thread_count)
+        except Exception:
+            _logger.exception("Failed to configure OpenCV worker thread count")
+
+    # ── Setup ─────────────────────────────────────────────────────────────────
+
+    def setup_external_communication(self) -> None:
+        self.message_publisher = MessagePublisher(self.messaging_service)
+        self.state_manager     = StateManager(
+            service_id        = self.service_id,
+            initial_state     = ServiceState.INITIALIZING,
+            message_publisher = self.message_publisher,
+        )
+        SubscriptionManager(self, self.messaging_service).subscribe_all()
+
+    def setup_camera(self, should_cancel=None) -> None:
+        configured_device = self._camera_device
+        if configured_device is None:
+            configured_device = self.camera_settings.get_camera_index()
+        width = self.camera_settings.get_camera_width()
+        height = self.camera_settings.get_camera_height()
+        if self._camera_resolution is not None:
+            width, height = self._camera_resolution
+            self.camera_settings.set_resolution(width, height)
+        camera_initializer = CameraInitializer(
+            width=width,
+            height=height,
+        )
+        self.camera, resolved_device = camera_initializer.initializeCameraWithRetry(
+            configured_device,
+            should_cancel=should_cancel,
+            allow_fallback=self._allow_camera_fallback,
+        )
+        if self.camera is None:
+            return
+        # TODO -- CHANGE CAMERA SOURCE HERE IF NEEDED (e.g. for remote camera)
+        # self.camera = RemoteCamera(url = "http://192.168.222.178:5000/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
+        # self.camera = RemoteCamera(url = "http://127.0.0.1:5000/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
+        # self.camera = RemoteCamera(url = "http://192.168.222.110:5000/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
+        # self.camera = RemoteCamera(url = "http://192.168.222.44:5005/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
+        # self.camera = RemoteCamera(url = "http://localhost:5005/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
+        self._configure_hardware_auto_exposure()
+        # Preserve the legacy Index field only when it remains the source of
+        # camera selection. Device-role configuration is persisted separately.
+        if self._camera_device is None:
+            self.camera_settings.set_camera_index(resolved_device)
+
+    def _configure_hardware_auto_exposure(self) -> None:
+        """Apply the persisted UVC automatic-exposure mode at camera startup."""
+        camera = self.camera
+        setter = getattr(camera, "set_auto_exposure", None)
+        if not callable(setter):
+            _logger.warning(
+                "Camera backend does not support hardware auto-exposure control"
+            )
+            return
+        try:
+            enabled = bool(self.camera_settings.get_hardware_auto_exposure())
+            reported_value = setter(enabled)
+        except Exception:
+            _logger.exception("Failed to configure camera hardware auto-exposure")
+            return
+        _logger.info(
+            "Camera hardware auto-exposure configured enabled=%s; driver reported value=%s",
+            enabled,
+            reported_value,
+        )
+
+    def _init_camera_in_background(self) -> None:
+        try:
+            self.setup_camera(should_cancel=lambda: self.stop_signal)
+        except Exception:
+            _logger.exception("Background camera initialization failed")
+            return
+        if self.stop_signal or self.camera is None:
+            return
+        if self.frame_grabber is not None:
+            self.frame_grabber.set_camera(self.camera)
+
+    def load_calibration_data(self) -> None:
+        self.service.loadPerspectiveMatrix()
+        self.service.loadCameraCalibrationData()
+        self.service.loadCameraToRobotMatrix()
+        if self.service.cameraData is not None:
+            self.cameraMatrix = self.service.get_camera_matrix()
+            self.cameraDist = self.service.get_distortion_coefficients()
+        else:
+            self.cameraMatrix = None
+            self.cameraDist = None
+        self._clear_undistortion_cache()
+
+    def _clear_undistortion_cache(self) -> None:
+        self.optimal_camera_matrix = None
+        self.roi = None
+        self._undistort_map1 = None
+        self._undistort_map2 = None
+        self._undistort_map_size = None
+
+    # ── Properties ────────────────────────────────────────────────────────────
+
+    @property
+    def camera_to_robot_matrix_path(self):
+        return self.service.camera_to_robot_matrix_path
+
+    @property
+    def cameraToRobotMatrix(self):
+        return self.service.cameraToRobotMatrix
+
+    @cameraToRobotMatrix.setter
+    def cameraToRobotMatrix(self, value):
+        self.service.cameraToRobotMatrix = value
+
+    @property
+    def perspectiveMatrix(self):
+        return self.service.perspectiveMatrix
+
+    @perspectiveMatrix.setter
+    def perspectiveMatrix(self, value):
+        self.service.perspectiveMatrix = value
+
+    @property
+    def stateTopic(self):
+        return self.message_publisher.stateTopic if self.message_publisher else None
+
+    @property
+    def threshold_by_area(self) -> str:
+        return self._get_active_area_id()
+
+    @threshold_by_area.setter
+    def threshold_by_area(self, value: str) -> None:
+        self._active_area_id = str(value or "")
+        if self._work_area_service is not None:
+            self._work_area_service.set_active_area_id(value)
+
+    # ── Main loop ─────────────────────────────────────────────────────────────
+
+    def run(self):
+        snapshot = self.frame_grabber.get_latest_snapshot_since(
+            self._last_processed_frame_sequence,
+            timeout_s=0.25,
+        )
+        if snapshot is None:
+            return None, None, None
+
+        self._last_processed_frame_sequence = snapshot.sequence
+        self._latest_frame_timestamp_s = snapshot.timestamp_s
+        self.image = snapshot.frame
+
+        if self.current_skip_frames < self.camera_settings.get_skip_frames():
+            self.current_skip_frames += 1
+            return None, None, None
+
+        if self.image is None:
+            return None, None, None
+
+        if self.state_manager is not None:
+            self.state_manager.update_state(ServiceState.IDLE)
+
+        if self.camera_settings.get_brightness_auto():
+            self.image = self._brightness_service.adjust(self.image)
+
+        self.rawImage = self.image.copy()
+        if self.message_publisher:
+            self.message_publisher.publish_camera_frame(self.rawImage)
+
+        if self.rawMode:
+            if self.message_publisher:
+                self.message_publisher.publish_latest_image(self.rawImage)
+            return None, self.rawImage, None
+
+        if self.camera_settings.get_contour_detection():
+            active_area = self._get_active_area_id()
+            contours, self.correctedImage, _ = self._contour_service.detect(
+                image             = self.image,
+                threshold         = self._get_thresh_by_area(active_area),
+                is_calibrated     = self.cameraMatrix is not None,
+                correct_image_fn  = self.correctImage,
+                spray_area_points = self._get_area_points_by_region(active_area),
+            )
+            # `detect()` returns None when no contours pass the area filter.
+            # Guard here so get_latest_contours() never returns None to callers.
+            self._latest_contours = contours or []
+            self._latest_contour_frame_sequence = snapshot.sequence
+            self._latest_contour_area_id = active_area
+            return contours, self.correctedImage, None
+
+        self._latest_contours = []
+        if self.cameraMatrix is None:
+            self.correctedImage = None
+            display_image = self.image
+        else:
+            self.correctedImage = self.correctImage(self.image)
+            display_image = self.correctedImage
+
+        if self.message_publisher:
+            self.message_publisher.publish_latest_image(display_image)
+        return None, display_image, None
+
+    def compute_contours_for_latest_frame(self) -> tuple[np.ndarray | None, list]:
+        snapshot = self.frame_grabber.get_latest_snapshot()
+        if snapshot is None or snapshot.frame is None:
+            raise VisionFrameUnavailableError(
+                "No fresh camera frame is available. Check the camera stream before capturing."
+            )
+
+        active_area = self._get_active_area_id()
+        if self.camera_settings.get_contour_detection():
+            cached_area = getattr(self, "_latest_contour_area_id", "")
+            if snapshot.sequence == self._latest_contour_frame_sequence and active_area == cached_area:
+                return self.get_latest_frame_for_snapshot(), list(self._latest_contours or [])
+
+        image = snapshot.frame
+        if self.camera_settings.get_brightness_auto():
+            image = self._brightness_service.adjust(image)
+
+        self.rawImage = image.copy()
+        contours, corrected, _ = self._contour_service.detect(
+            image=image,
+            threshold=self._get_thresh_by_area(active_area),
+            is_calibrated=self.cameraMatrix is not None,
+            correct_image_fn=self.correctImage,
+            spray_area_points=self._get_area_points_by_region(active_area),
+            publish_images=False,
+        )
+        self.correctedImage = corrected
+        self._latest_contours = contours or []
+        self._latest_contour_frame_sequence = snapshot.sequence
+        self._latest_contour_area_id = active_area
+
+        frame = corrected if corrected is not None else self.rawImage
+        return frame, list(self._latest_contours)
+
+    # ── Image correction ──────────────────────────────────────────────────────
+
+    def correctImage(self, image):
+        height, width = image.shape[:2]
+        self._ensure_undistortion_maps(width, height)
+        image = cv2.remap(image, self._undistort_map1, self._undistort_map2, cv2.INTER_LINEAR)
+        # if self.perspectiveMatrix is not None:
+        #     # _logger.debug(f"Perspective Matrix: {self.perspectiveMatrix}")
+        #     image = cv2.warpPerspective(
+        #         image, self.perspectiveMatrix,
+        #         (self.camera_settings.get_camera_width(), self.camera_settings.get_camera_height()),
+        #     )
+            # _logger.debug(f"Perspective Matrix: Applied!")
+        # else:
+        #     _logger.debug(f"Perspective Matrix: Not applied (None)")
+
+        return image
+
+    def _ensure_undistortion_maps(self, width: int, height: int) -> None:
+        image_size = (width, height)
+        if self.optimal_camera_matrix is None or self._undistort_map_size != image_size:
+            self.optimal_camera_matrix, self.roi = cv2.getOptimalNewCameraMatrix(
+                self.cameraMatrix,
+                self.cameraDist,
+                image_size,
+                0.5,
+                image_size,
+            )
+            self._undistort_map1, self._undistort_map2 = cv2.initUndistortRectifyMap(
+                self.cameraMatrix,
+                self.cameraDist,
+                None,
+                self.optimal_camera_matrix,
+                image_size,
+                cv2.CV_16SC2,
+            )
+            self._undistort_map_size = image_size
+
+    def get_latest_frame_for_snapshot(self):
+        return self.correctedImage if self.correctedImage is not None else self.rawImage
+
+    # ── Calibration ───────────────────────────────────────────────────────────
+
+    def captureCalibrationImage(self) -> tuple[bool, str]:
+        return self._calibration_service.capture_image(self.rawImage)
+
+    def calibrateCamera(self) -> tuple[bool, str]:
+        outcome = self._calibration_service.calibrate(self.rawImage)
+        if outcome.success:
+            self.cameraMatrix          = outcome.camera_matrix
+            self.cameraDist            = outcome.distortion_coefficients
+            self.perspectiveMatrix     = outcome.perspective_matrix
+            self._clear_undistortion_cache()
+            self.service.loadCameraCalibrationData()
+            # Note: do NOT reload perspectiveMatrix from disk here — the outcome
+            # already provides the correct value and the file may not exist yet.
+            self.service.loadCameraToRobotMatrix()
+            _logger.info("Camera calibration completed and vision_service recalibrated")
+        return outcome.success, outcome.message
+
+    # ── ArUco ─────────────────────────────────────────────────────────────────
+
+    def detectArucoMarkers(self, flip=False, image=None):
+        return self._aruco_service.detect(
+            corrected_image = self.correctedImage,
+            flip            = flip,
+            image           = image,
+        )
+
+    # ── QR ────────────────────────────────────────────────────────────────────
+
+    def detectQrCode(self) -> Optional[str]:
+        return self._qr_service.detect(self.rawImage)
+
+    # ── Settings ──────────────────────────────────────────────────────────────
+
+    def updateSettings(self, settings: dict) -> tuple[bool, str]:
+        def reinit_camera(width: int, height: int) -> None:
+            self.camera = Camera(width, height)
+
+        return self.service.updateSettings(
+            camera_settings       = self.camera_settings,
+            settings              = settings,
+            brightness_controller = self._brightness_service.brightness_controller,
+            reinit_camera         = reinit_camera,
+        )
+
+    def get_camera_settings(self):
+        return self.camera_settings
+
+    # ── Work area ─────────────────────────────────────────────────────────────
+
+    def saveWorkAreaPoints(self, data):
+        if self._work_area_service is None:
+            return False, "Work area service unavailable"
+        if not isinstance(data, dict):
+            return False, "Invalid work area payload"
+        area_type = str(data.get("area_type", "")).strip()
+        corners = data.get("corners")
+        if not area_type:
+            return False, "Area type is required"
+        if corners is None:
+            return False, "No points provided"
+        width, height = self._oriented_frame_size()
+        normalized = []
+        for point in np.asarray(corners).tolist():
+            if not isinstance(point, (list, tuple)) or len(point) != 2:
+                continue
+            normalized.append((float(point[0]) / width, float(point[1]) / height))
+        return self._work_area_service.save_work_area(area_type, normalized)
+
+    def getWorkAreaPoints(self, area_type):
+        if not area_type:
+            return False, "Area type is required", None
+        if self._work_area_service is None:
+            return False, "Work area service unavailable", None
+        points = self._work_area_service.get_work_area(area_type)
+        if not points:
+            return True, f"No saved points for {area_type}", None
+        width, height = self._oriented_frame_size()
+        pixel_points = [(x * width, y * height) for x, y in points]
+        return True, f"Work area points retrieved for {area_type}", pixel_points
+
+    # ── Threshold ─────────────────────────────────────────────────────────────
+
+    def on_threshold_update(self, message) -> None:
+        self._active_area_id = str(message.get("region", "") or "")
+        self._latest_contour_area_id = ""
+        if self._work_area_service is None:
+            return
+        try:
+            self._work_area_service.set_active_area_id(message.get("region", ""))
+        except KeyError as exc:
+            _logger.warning("Ignoring invalid active work area update: %s", exc)
+
+    def _get_thresh_by_area(self, area: str) -> int:
+        definition = (
+            self._work_area_service.get_area_definition(area)
+            if self._work_area_service is not None and area
+            else None
+        )
+        profile = definition.threshold_profile if definition is not None else "default"
+        if profile == "pickup":
+            return self.camera_settings.get_threshold_pickup_area()
+        return self.camera_settings.get_threshold()
+
+    def get_thresh_by_area(self, area: str) -> int:
+        return self._get_thresh_by_area(area)
+
+    # ── Lifecycle ─────────────────────────────────────────────────────────────
+
+    def start_system(self) -> None:
+        self.stop_signal  = False
+        self.cameraThread = threading.Thread(target=self._loop, name="_loop", daemon=True)
+        self.cameraThread.start()
+
+    def pause_processing(self) -> None:
+        """Suspend capture and image processing while keeping the camera open."""
+        self._processing_resume_event.clear()
+        if self.frame_grabber is not None:
+            self.frame_grabber.pause()
+        _logger.info("VisionSystem acquisition and processing paused")
+
+    def resume_processing(self) -> None:
+        """Resume capture and processing from fresh frames."""
+        if self.frame_grabber is not None:
+            self.frame_grabber.resume()
+        self._processing_resume_event.set()
+        _logger.info("VisionSystem acquisition and processing resumed")
+
+    def stop_system(self) -> None:
+        _logger.info("Stopping VisionSystem...")
+        self.stop_signal = True
+        self._processing_resume_event.set()
+        if self.frame_grabber is not None:
+            self.frame_grabber.stop()
+        if getattr(self, "_camera_init_thread", None) is not None:
+            self._camera_init_thread.join()
+            self._camera_init_thread = None
+        if self.cameraThread is not None:
+            self.cameraThread.join()
+            self.cameraThread = None
+        if self.camera is not None:
+            self.camera.stop_stream()
+            self.camera.stopCapture()
+
+    def _loop(self) -> None:
+        while not self.stop_signal:
+            self._processing_resume_event.wait()
+            if self.stop_signal:
+                break
+            self.run()
+
+    def _get_area_points_by_region(self, area: str):
+        if self._work_area_service is None or not area:
+            return None
+        width, height = self._oriented_frame_size()
+        return self._work_area_service.get_detection_roi_pixels(
+            area,
+            width,
+            height,
+        )
+
+    def _get_active_brightness_area_points(self):
+        active_area = self._get_active_area_id()
+        if self._work_area_service is None or not active_area:
+            return None
+        width, height = self._oriented_frame_size()
+        return self._work_area_service.get_brightness_roi_pixels(
+            active_area,
+            width,
+            height,
+        )
+
+    def _oriented_frame_size(self) -> tuple[int, int]:
+        """Return the dimensions of frames after the configured capture rotation."""
+        width = int(self.camera_settings.get_camera_width())
+        height = int(self.camera_settings.get_camera_height())
+        if self.frame_grabber.is_transposed():
+            return height, width
+        return width, height
+
+    def lock_auto_brightness_region(self) -> bool:
+        return self._brightness_service.lock_current_area()
+
+    def unlock_auto_brightness_region(self) -> None:
+        self._brightness_service.unlock_area()
+
+    def lock_auto_brightness_adjustment(self) -> None:
+        self._brightness_service.lock_adjustment()
+
+    def unlock_auto_brightness_adjustment(self) -> None:
+        self._brightness_service.unlock_adjustment()
+
+    def _get_active_area_id(self) -> str:
+        if self._work_area_service is not None:
+            active = self._work_area_service.get_active_area_id()
+            if active:
+                self._active_area_id = active
+        return str(self._active_area_id or "")

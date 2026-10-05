@@ -1,0 +1,205 @@
+"""
+Smoke tests for src/bootstrap/main.y_pixels.
+
+The startup sequence calls Qt, hardware drivers, and the full robot system —
+all of which are mocked here. Tests verify import integrity and step ordering,
+not full execution.
+"""
+import sys
+import unittest
+from pathlib import Path
+from unittest.mock import MagicMock, patch, call
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Import smoke test
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestMainImport(unittest.TestCase):
+
+    def test_localization_service_uses_robot_system_storage_paths(self):
+        import src.bootstrap.run_main as m
+
+        robot_app = MagicMock()
+        robot_app.metadata.translations_root = "storage/translations"
+        robot_app.metadata.settings_root = "storage/settings"
+        fake_module = MagicMock()
+        fake_module.__file__ = "/tmp/robot_systems/paint/paint_robot_system.py"
+
+        with (
+            patch.dict("sys.modules", {robot_app.__class__.__module__: fake_module}),
+            patch("src.bootstrap.run_main.py.LocalizationService") as localization_cls,
+        ):
+            localization = MagicMock()
+            localization_cls.return_value = localization
+            result = m._build_localization_service(robot_app, messaging_service=MagicMock())
+
+        self.assertIs(result, localization)
+        args = localization_cls.call_args.args
+        shared_translations = (
+            Path(m.__file__).resolve().parent.parent
+            / "applications"
+            / "localization"
+        )
+        self.assertEqual(
+            args[0],
+            [
+                str(shared_translations),
+                "/tmp/robot_systems/paint/storage/translations",
+            ],
+        )
+        self.assertEqual(localization_cls.call_args.kwargs["state_file"], "/tmp/robot_systems/paint/storage/settings/localization.json")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Startup sequence order
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestStartupSequenceOrder(unittest.TestCase):
+
+    def test_startup_sequence_order(self):
+        """
+        Patches all six startup steps and verifies they are invoked in the
+        documented order:
+          1. EngineContext.build()
+          2. SystemBuilder().with_robot(...).with_messaging_service(...).build(...)
+          3. ShellConfigurator.configure(...)
+          4. QApplication(sys.argv)
+          5. ApplicationLoader — spec.factory + loader.load + loader.build_registry
+          6. AppShell — show
+        """
+        call_order = []
+
+        # ── Patch targets ────────────────────────────────────────────────────
+        fake_ms   = MagicMock()
+        fake_ctx  = MagicMock()
+        fake_ctx.messaging_service = fake_ms
+
+        fake_robot_app = MagicMock()
+        fake_robot_app.stop = MagicMock()
+        fake_robot_app.shell = MagicMock()
+
+        # Specs with valid factories
+        fake_spec = MagicMock()
+        fake_spec.factory = MagicMock(return_value=MagicMock())
+        fake_spec.folder_id = 1
+        fake_spec.icon = "icon"
+        fake_spec.name = "TestApp"
+
+        from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
+        fake_provider = MagicMock()
+        fake_provider.system_class = GlueRobotSystem
+        fake_provider.build_robot.return_value = MagicMock()
+        fake_provider.build_authorization_service.return_value.get_visible_apps.return_value = [
+            fake_spec
+        ]
+
+        patches = {
+            "src.bootstrap.main.EngineContext.build":       MagicMock(side_effect=lambda: (call_order.append("engine"), fake_ctx)[1]),
+            "src.bootstrap.main.SystemBuilder":             None,   # handled below
+            "src.bootstrap.main.ShellConfigurator.configure": MagicMock(side_effect=lambda _: call_order.append("shell_cfg")),
+            "src.bootstrap.main.QApplication":              MagicMock(side_effect=lambda _: (call_order.append("qt"), MagicMock())[1]),
+            "src.bootstrap.main.ApplicationLoader":         None,   # handled below
+            "src.bootstrap.main.AppShell":                  None,   # handled below
+        }
+
+        fake_builder = MagicMock()
+        fake_builder.with_robot.return_value         = fake_builder
+        fake_builder.with_messaging_service.return_value = fake_builder
+        fake_builder.build.side_effect = lambda _: (call_order.append("system_build"), fake_robot_app)[1]
+
+        fake_loader = MagicMock()
+        fake_loader.build_registry.return_value = ([], MagicMock())
+
+        fake_shell = MagicMock()
+        fake_shell_instance = MagicMock()
+
+        with (
+            patch("src.bootstrap.run_main.py.EngineContext.build",
+                  side_effect=lambda: (call_order.append("engine"), fake_ctx)[1]),
+            patch("src.bootstrap.run_main.py.load_startup_config"),
+            patch("src.bootstrap.run_main.py.load_bootstrap_provider",
+                  return_value=fake_provider),
+            patch("src.bootstrap.run_main.py.build_ros_backend_launcher_from_env",
+                  return_value=MagicMock(start=MagicMock(side_effect=lambda: call_order.append("backend_start")))),
+            patch("src.bootstrap.run_main.py.SystemBuilder",
+                  return_value=fake_builder),
+            patch("src.bootstrap.run_main.py.ShellConfigurator.configure",
+                  side_effect=lambda _: call_order.append("shell_cfg")),
+            patch("src.bootstrap.run_main.py.QApplication",
+                  side_effect=lambda _: (call_order.append("qt"), MagicMock())[1]),
+            patch("src.bootstrap.run_main.py.ApplicationLoader",
+                  side_effect=lambda _: (call_order.append("loader"), fake_loader)[1]),
+            patch("src.bootstrap.run_main.py.AppShell",
+                  side_effect=lambda **kw: (call_order.append("shell"), fake_shell_instance)[1]),
+            patch.object(GlueRobotSystem, "shell", MagicMock(applications=[fake_spec])),
+            patch("sys.exit"),
+        ):
+            import src.bootstrap.run_main as m
+            try:
+                m.main()
+            except Exception:
+                pass   # sys.exit or Qt errors expected in test environment
+
+        self.assertIn("engine",      call_order)
+        self.assertIn("backend_start", call_order)
+        self.assertIn("system_build", call_order)
+        self.assertIn("shell_cfg",   call_order)
+        self.assertIn("qt",          call_order)
+
+        # engine must come before system_build
+        self.assertLess(
+            call_order.index("engine"),
+            call_order.index("backend_start"),
+        )
+        self.assertLess(
+            call_order.index("backend_start"),
+            call_order.index("system_build"),
+        )
+        # system_build must come before shell_cfg
+        self.assertLess(
+            call_order.index("system_build"),
+            call_order.index("shell_cfg"),
+        )
+        # shell_cfg must come before Qt
+        self.assertLess(
+            call_order.index("shell_cfg"),
+            call_order.index("qt"),
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Abort on engine build failure
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestStartupAbortOnFailure(unittest.TestCase):
+
+    def test_startup_aborts_cleanly_on_engine_build_failure(self):
+        """
+        If EngineContext.build() raises, main() must propagate (not swallow)
+        the exception and must not attempt to build the Qt application.
+        """
+        qt_called = []
+
+        with (
+            patch("src.bootstrap.run_main.py.load_startup_config"),
+            patch(
+                "src.bootstrap.run_main.py.load_bootstrap_provider",
+                return_value=MagicMock(),
+            ),
+            patch("src.bootstrap.run_main.py.EngineContext.build",
+                  side_effect=RuntimeError("engine init failed")),
+            patch("src.bootstrap.run_main.py.build_ros_backend_launcher_from_env") as backend_launcher,
+            patch("src.bootstrap.run_main.py.QApplication",
+                  side_effect=lambda _: qt_called.append("qt")),
+        ):
+            import src.bootstrap.run_main as m
+            with self.assertRaises(RuntimeError):
+                m.main()
+
+        self.assertEqual(qt_called, [], "QApplication must not be called after engine failure")
+        backend_launcher.assert_not_called()
+
+
+if __name__ == "__main__":
+    unittest.main()

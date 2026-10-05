@@ -1,0 +1,38 @@
+{
+  "__meta__": {
+    "display_name": "Български"
+  },
+  "CameraDevicesWidget": {
+    "Cameras": "Камери",
+    "Pick a camera to set it up and see its live image.": "Изберете камера, за да я настроите и да видите изображението ѝ на живо.",
+    "Connected": "Свързана",
+    "Not connected": "Не е свързана",
+    "{role} settings": "Настройки на {role}",
+    "Live preview — {role}": "Преглед на живо — {role}",
+    "Rotation": "Завъртане",
+    "↶ 90°": "↶ 90°",
+    "90° ↷": "90° ↷",
+    "Camera Assignments": "Разпределение на камерите",
+    "Live Preview": "Преглед на живо",
+    "Primary vision": "Основна камера",
+    "Auxiliary": "Помощна камера",
+    "Flip horizontally": "Обърни хоризонтално",
+    "Flip vertically": "Обърни вертикално",
+    "No rotation": "Без завъртане",
+    "Rotate 90° clockwise": "Завъртане 90° по часовниковата стрелка",
+    "Rotate 180°": "Завъртане 180°",
+    "Rotate 270° clockwise": "Завъртане 270° по часовниковата стрелка",
+    "Rotating a camera by 90 or 270 degrees transposes the image and invalidates the stored camera calibration. Re-run calibration before painting.": "Завъртането на камера с 90 или 270 градуса обръща размерите на изображението и обезсилва запазената калибровка на камерата. Извършете калибровка отново преди боядисване.",
+    "Refresh devices": "Обнови устройствата",
+    "Save assignments": "Запази разпределението",
+    "Preview primary vision": "Преглед на основната камера",
+    "Preview auxiliary": "Преглед на помощната камера",
+    "connected": "свързана",
+    "missing": "липсва",
+    "Camera assignments loaded.": "Разпределението на камерите е заредено.",
+    "No frame available from the selected camera.": "Няма наличен кадър от избраната камера.",
+    "Camera settings saved. Flip and rotation changes are live; device changes require a restart.": "Настройките на камерите са запазени. Обръщането и завъртането се прилагат веднага; промяната на устройство изисква рестарт.",
+    "Assign both camera roles before saving.": "Задайте и двете роли на камерите преди запазване.",
+    "Primary and auxiliary cameras must be different devices.": "Основната и помощната камера трябва да са различни устройства."
+  }
+}

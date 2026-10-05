@@ -1,0 +1,38 @@
+
+# Generated files and local development state
+**/build/
+**/install/
+**/log/
+**/dist/
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/.idea/
+**/.agents/
+**/.ai/
+**/.claude/
+**/.coverage
+**/htmlcov/
+platform/MagicMock/
+platform/bootstrap/debug_plots/
+platform/  .git/
+
+# Machine data and backup archives
+backend/ros2_ws/eRob_moveit/zeroerr_data/
+backend/ros2_ws/src/ethercat_driver_ros2_backup*.zip
+platform/src/robot_systems/**/storage/users/
+platform/src/robot_systems/**/storage/workpieces/
+platform/src/robot_systems/**/storage/settings/vision/data/
+platform/src/robot_systems/paint/storage*.zip
+
+# Temporary logs
+platform/TEMP_LOGS.txt
+platform/docs/logs
+platform/scripts/logs
+platform/scripts/debug_log.txt
+backend/ros2_ws/eRob_moveit/src/eRob_ROS2_MoveIt/zeroerr/docs/platform_logs
+backend/ros2_ws/eRob_moveit/src/eRob_ROS2_MoveIt/zeroerr/docs/temp_logs
+
+# Local placeholders and package metadata
+**/.codex
+backend/ros2_ws/5.149056

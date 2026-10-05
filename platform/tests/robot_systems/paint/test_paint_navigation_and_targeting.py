@@ -1,0 +1,589 @@
+import unittest
+from types import SimpleNamespace
+from unittest.mock import MagicMock, call, patch
+
+from src.engine.common_service_ids import CommonServiceID
+from src.engine.common_settings_ids import CommonSettingsID
+from src.engine.robot.targeting import TargetFrameDefinition
+from src.shared_contracts.declarations import WorkAreaDefinition
+from src.robot_systems.paint import application_wiring
+from src.robot_systems.paint.calibration.provider import PaintRobotSystemCalibrationProvider
+from src.robot_systems.paint.navigation import PaintNavigationService
+from src.robot_systems.paint.paint_robot_system import PaintRobotSystem
+from src.robot_systems.paint.targeting.frames import build_paint_target_frames
+from src.robot_systems.paint.targeting.provider import PaintRobotSystemTargetingProvider
+from src.robot_systems.paint.targeting.registry import build_paint_point_registry
+
+
+class TestPaintNavigationService(unittest.TestCase):
+    def test_paint_system_starts_with_unknown_active_work_area(self):
+        self.assertEqual("", PaintRobotSystem.default_active_work_area_id)
+
+    def test_paint_system_declares_magazine_group_area_and_observer_binding(self):
+        movement_group_ids = {definition.id for definition in PaintRobotSystem.movement_groups}
+        work_area_ids = {definition.id for definition in PaintRobotSystem.work_areas}
+        target_frames = {
+            definition.work_area_id: definition
+            for definition in PaintRobotSystem.target_frames
+        }
+        observer_bindings = {
+            binding.movement_group_id: binding.area_id
+            for binding in PaintRobotSystem.work_area_observers
+        }
+
+        self.assertIn("Magazine", movement_group_ids)
+        self.assertIn("magazine", work_area_ids)
+        self.assertEqual("magazine", observer_bindings.get("Magazine"))
+        self.assertIn("magazine", target_frames)
+        self.assertEqual("CALIBRATION", target_frames["magazine"].source_navigation_group)
+        self.assertEqual("Magazine", target_frames["magazine"].target_navigation_group)
+
+    def test_validate_active_capture_area_accepts_robot_at_declared_group(self):
+        navigation = MagicMock()
+        navigation.get_group_position.return_value = [100.0, 200.0, 300.0, 180.0, 0.0, 90.0]
+        robot_system = SimpleNamespace(
+            _navigation=navigation,
+            get_target_frame_for_work_area=MagicMock(
+                return_value=SimpleNamespace(target_navigation_group="Magazine")
+            ),
+            get_optional_service=MagicMock(return_value=None),
+        )
+
+        ok, message = application_wiring._validate_active_capture_area(
+            robot_system,
+            "magazine",
+            [104.0, 198.0, 302.0, 181.0, 1.0, 88.0],
+        )
+
+        self.assertTrue(ok, message)
+
+    def test_validate_active_capture_area_defaults_paint_area_to_calibration_group(self):
+        navigation = MagicMock()
+        navigation.get_group_position.return_value = [100.0, 200.0, 300.0, 180.0, 0.0, 0.0]
+        robot_system = SimpleNamespace(
+            _navigation=navigation,
+            get_target_frame_for_work_area=MagicMock(
+                return_value=SimpleNamespace(
+                    target_navigation_group="",
+                    source_navigation_group="",
+                )
+            ),
+            get_optional_service=MagicMock(return_value=None),
+        )
+
+        ok, message = application_wiring._validate_active_capture_area(
+            robot_system,
+            "paint",
+            [100.0, 200.0, 300.0, 180.0, 0.0, 0.0],
+        )
+
+        self.assertTrue(ok, message)
+        navigation.get_group_position.assert_called_once_with("CALIBRATION")
+
+    def test_validate_active_capture_area_rejects_stale_robot_pose(self):
+        navigation = MagicMock()
+        navigation.get_group_position.return_value = [100.0, 200.0, 300.0, 180.0, 0.0, 90.0]
+        robot_system = SimpleNamespace(
+            _navigation=navigation,
+            get_target_frame_for_work_area=MagicMock(
+                return_value=SimpleNamespace(target_navigation_group="Magazine")
+            ),
+            get_optional_service=MagicMock(return_value=None),
+        )
+
+        ok, message = application_wiring._validate_active_capture_area(
+            robot_system,
+            "magazine",
+            [140.0, 200.0, 300.0, 180.0, 0.0, 90.0],
+        )
+
+        self.assertFalse(ok)
+        self.assertIn("X differs by 40.0 mm", message)
+
+    def test_validate_active_capture_area_uses_canonical_observer_pose(self):
+        class ObserverNavigation:
+            def get_group_position(self, _group_name):
+                return [100.0, 200.0, 300.0, 180.0, 0.0, 90.0]
+
+            def get_current_observer_position(self, _group_name, *, fresh=False):
+                self.fresh = fresh
+                return [100.0, 200.0, 300.0, 180.0, 0.0, 90.0]
+
+        navigation = ObserverNavigation()
+        robot_system = SimpleNamespace(
+            _navigation=navigation,
+            get_target_frame_for_work_area=MagicMock(
+                return_value=SimpleNamespace(target_navigation_group="Magazine")
+            ),
+            get_optional_service=MagicMock(return_value=None),
+        )
+
+        ok, message = application_wiring._validate_active_capture_area(
+            robot_system,
+            "magazine",
+            [140.0, 200.0, 300.0, 180.0, 0.0, 90.0],
+        )
+
+        self.assertTrue(ok, message)
+        self.assertTrue(navigation.fresh)
+
+    def test_move_home_uses_capture_offset_and_sets_pickup_area(self):
+        navigation = MagicMock()
+        vision = MagicMock()
+        vision.get_capture_pos_offset.return_value = 12.5
+        work_area_service = MagicMock()
+        group = MagicMock()
+        group.parse_position.return_value = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+        navigation._get_group.return_value = group
+        navigation.move_to_position.return_value = True
+        service = PaintNavigationService(
+            navigation,
+            vision=vision,
+            work_area_service=work_area_service,
+        )
+
+        ok = service.move_home()
+
+        self.assertTrue(ok)
+        navigation.move_to_position.assert_called_once_with(
+            [1.0, 2.0, 15.5, 4.0, 5.0, 6.0],
+            "HOME",
+            wait_cancelled=None,
+        )
+        work_area_service.set_active_area_id.assert_called_once_with("pickup")
+
+    def test_move_to_group_sets_observed_area_only_on_success(self):
+        navigation = MagicMock()
+        work_area_service = MagicMock()
+        service = PaintNavigationService(
+            navigation,
+            work_area_service=work_area_service,
+            observed_area_by_group={"CALIBRATION": "paint"},
+        )
+        navigation.move_to_group.return_value = True
+
+        self.assertTrue(service.move_to_group("CALIBRATION"))
+        work_area_service.set_active_area_id.assert_called_once_with("paint")
+
+        work_area_service.reset_mock()
+        navigation.move_to_group.return_value = False
+        self.assertFalse(service.move_to_group("CALIBRATION"))
+        work_area_service.set_active_area_id.assert_not_called()
+
+    def test_move_to_calibration_position_unwinds_joint6_before_navigation(self):
+        navigation = MagicMock()
+        robot = MagicMock()
+        work_area_service = MagicMock()
+        robot.unwind_joint6.return_value = True
+        navigation.move_to_group.return_value = True
+        service = PaintNavigationService(
+            navigation,
+            robot_service=robot,
+            work_area_service=work_area_service,
+            observed_area_by_group={"CALIBRATION": "paint"},
+        )
+
+        self.assertTrue(service.move_to_calibration_position())
+
+        robot.unwind_joint6.assert_called_once_with(
+            blocking=True,
+            queue_if_busy=True,
+            vel=100.0,
+            acc=100.0,
+        )
+        navigation.move_to_group.assert_called_once_with(
+            "CALIBRATION",
+            wait_cancelled=None,
+            velocity=30.0,
+            acceleration=40.0,
+            motion_type="ptp",
+            blendR=0.0,
+        )
+        work_area_service.set_active_area_id.assert_called_once_with("paint")
+
+    def test_move_to_calibration_position_blocks_when_joint6_unwind_fails(self):
+        navigation = MagicMock()
+        robot = MagicMock()
+        robot.unwind_joint6.return_value = False
+        service = PaintNavigationService(navigation, robot_service=robot)
+
+        self.assertFalse(service.move_to_calibration_position())
+
+        robot.unwind_joint6.assert_called_once()
+        navigation.move_to_group.assert_not_called()
+
+    def test_move_to_calibration_position_blocks_without_robot_service(self):
+        navigation = MagicMock()
+        service = PaintNavigationService(navigation)
+
+        self.assertFalse(service.move_to_calibration_position())
+
+        navigation.move_to_group.assert_not_called()
+
+    def test_move_to_calibration_position_can_skip_pre_move_unwind(self):
+        navigation = MagicMock()
+        robot = MagicMock()
+        navigation.move_to_group.return_value = True
+        service = PaintNavigationService(navigation, robot_service=robot)
+
+        self.assertTrue(service.move_to_calibration_position(unwind_before_move=False))
+
+        robot.unwind_joint6.assert_not_called()
+        navigation.move_to_group.assert_called_once_with(
+            "CALIBRATION",
+            wait_cancelled=None,
+            velocity=30.0,
+            acceleration=40.0,
+            motion_type="ptp",
+            blendR=0.0,
+        )
+
+    def test_calibration_move_uses_calibration_tool_then_restores_configured_tool(self):
+        navigation = MagicMock()
+        navigation.move_to_group.return_value = True
+        robot = MagicMock()
+        robot.unwind_joint6.return_value = True
+        robot.set_active_tool.return_value = True
+        service = PaintNavigationService(
+            navigation,
+            robot_service=robot,
+            calibration_tool_id=1,
+            configured_tool_getter=lambda: 7,
+        )
+
+        self.assertTrue(service.move_to_calibration_position())
+
+        self.assertEqual(
+            [call(1), call(7)],
+            robot.set_active_tool.call_args_list,
+        )
+        self.assertEqual(1, navigation.move_to_group.call_args.kwargs["tool"])
+
+    def test_magazine_move_restores_configured_tool_when_move_fails(self):
+        navigation = MagicMock()
+        navigation.move_to_group.return_value = False
+        robot = MagicMock()
+        robot.set_active_tool.return_value = True
+        service = PaintNavigationService(
+            navigation,
+            robot_service=robot,
+            calibration_tool_id=1,
+            configured_tool_getter=lambda: 4,
+        )
+
+        self.assertFalse(service.move_to_group("Magazine"))
+
+        self.assertEqual(
+            [call(1), call(4)],
+            robot.set_active_tool.call_args_list,
+        )
+        self.assertEqual(1, navigation.move_to_group.call_args.kwargs["tool"])
+
+    def test_observer_pose_is_read_in_calibration_tool_frame_then_restored(self):
+        navigation = MagicMock()
+        robot = MagicMock()
+        robot.set_active_tool.return_value = True
+        robot.get_current_position_fresh.return_value = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+        service = PaintNavigationService(
+            navigation,
+            robot_service=robot,
+            calibration_tool_id=1,
+            configured_tool_getter=lambda: 2,
+        )
+
+        pose = service.get_current_observer_position("Magazine", fresh=True)
+
+        self.assertEqual([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], pose)
+        self.assertEqual([call(1), call(2)], robot.set_active_tool.call_args_list)
+        robot.get_current_position_fresh.assert_called_once_with()
+
+    def test_get_group_position_returns_none_on_lookup_or_parse_failure(self):
+        navigation = MagicMock()
+        service = PaintNavigationService(navigation)
+
+        navigation._get_group.side_effect = RuntimeError("boom")
+        self.assertIsNone(service.get_group_position("A"))
+
+        group = MagicMock()
+        group.parse_position.side_effect = RuntimeError("bad parse")
+        navigation._get_group.side_effect = None
+        navigation._get_group.return_value = group
+        self.assertIsNone(service.get_group_position("A"))
+
+    def test_move_with_z_offset_returns_false_when_group_has_no_position(self):
+        navigation = MagicMock()
+        group = MagicMock()
+        group.parse_position.return_value = None
+        navigation._get_group.return_value = group
+        service = PaintNavigationService(navigation)
+
+        self.assertFalse(service._move_with_z_offset("HOME", 5.0))
+        navigation.move_to_position.assert_not_called()
+
+    def test_simple_navigation_methods_delegate_and_set_observed_area_on_success(self):
+        navigation = MagicMock()
+        work_area_service = MagicMock()
+        service = PaintNavigationService(
+            navigation,
+            work_area_service=work_area_service,
+            observed_area_by_group={" PAINT ": " spray "},
+        )
+        navigation.move_to_group.return_value = True
+        navigation.move_linear_group.return_value = True
+        navigation.move_to_position.return_value = True
+
+        self.assertTrue(service.move_to_login_position())
+        self.assertTrue(service.move_to("PAINT"))
+        self.assertTrue(service.move_linear("PAINT"))
+        self.assertTrue(service.move_linear_group("PAINT"))
+        self.assertTrue(service.move_to_position([1, 2, 3], "PAINT"))
+
+        navigation.move_to_group.assert_any_call("LOGIN")
+        navigation.move_to_group.assert_any_call("PAINT", wait_cancelled=None)
+        navigation.move_linear_group.assert_any_call("PAINT")
+        navigation.move_to_position.assert_any_call([1, 2, 3], "PAINT", wait_cancelled=None)
+        self.assertEqual(work_area_service.set_active_area_id.call_count, 4)
+        work_area_service.set_active_area_id.assert_called_with("spray")
+
+    def test_move_to_uses_z_offset_path_and_get_group_names_delegates(self):
+        navigation = MagicMock()
+        navigation.get_group_names.return_value = ["A", "B"]
+        group = MagicMock()
+        group.parse_position.return_value = [1.0, 2.0, 3.0]
+        navigation._get_group.return_value = group
+        navigation.move_to_position.return_value = True
+        service = PaintNavigationService(navigation)
+
+        self.assertTrue(service.move_to("A", z_offset=2.5))
+        self.assertEqual(service.get_group_names(), ["A", "B"])
+        navigation.move_to_position.assert_called_once_with(
+            [1.0, 2.0, 5.5],
+            "A",
+            wait_cancelled=None,
+        )
+
+    def test_set_area_falls_back_to_vision_when_work_area_service_missing(self):
+        navigation = MagicMock()
+        vision = MagicMock()
+        service = PaintNavigationService(navigation, vision=vision)
+
+        service._set_area("paint")
+
+        vision.set_active_work_area.assert_called_once_with("paint")
+
+
+class TestPaintCalibrationProvider(unittest.TestCase):
+    def test_build_calibration_navigation_rejects_undefined_paint_area(self):
+        work_area_service = MagicMock()
+        navigation = MagicMock()
+        robot_system = MagicMock()
+        robot_system.get_work_area_definitions.return_value = [
+            WorkAreaDefinition(id="spray", label="Spray", color="#FF8C32")
+        ]
+        robot_system.get_service.side_effect = lambda service_id: {
+            CommonServiceID.WORK_AREAS: work_area_service,
+            CommonServiceID.NAVIGATION: navigation,
+        }[service_id]
+        provider = PaintRobotSystemCalibrationProvider(robot_system)
+
+        with self.assertRaisesRegex(ValueError, "Calibration area 'paint' is not declared"):
+            provider.build_calibration_navigation()
+
+        work_area_service.set_active_area_id.assert_not_called()
+        navigation.move_to_group.assert_not_called()
+
+    def test_build_calibration_navigation_sets_area_when_declared(self):
+        work_area_service = MagicMock()
+        navigation = MagicMock()
+        robot_system = MagicMock()
+        robot_system.get_work_area_definitions.return_value = [
+            WorkAreaDefinition(id="paint", label="Paint", color="#FF8C32")
+        ]
+        robot_system.get_service.side_effect = lambda service_id: {
+            CommonServiceID.WORK_AREAS: work_area_service,
+            CommonServiceID.NAVIGATION: navigation,
+        }[service_id]
+        provider = PaintRobotSystemCalibrationProvider(robot_system)
+
+        calibration_navigation = provider.build_calibration_navigation()
+        calibration_navigation.move_to_calibration_position()
+
+        work_area_service.set_active_area_id.assert_called_once_with("paint")
+
+
+class TestPaintTargetFrames(unittest.TestCase):
+    def test_build_frames_uses_navigation_positions_and_height_correction(self):
+        navigation = MagicMock()
+        navigation.get_group_position.side_effect = lambda name: {
+            "SRC": [1, 2, 3, 4, 5, 6],
+            "DST": [7, 8, 9, 10, 11, 12],
+        }[name]
+        definitions = [
+            TargetFrameDefinition(
+                name="frame_a",
+                work_area_id="paint",
+                source_navigation_group="SRC",
+                target_navigation_group="DST",
+                use_height_correction=True,
+            )
+        ]
+
+        frames = build_paint_target_frames(
+            definitions,
+            navigation,
+            height_correction=lambda area_id: f"hc:{area_id}",
+        )
+
+        frame = frames["frame_a"]
+        self.assertEqual("paint", frame.work_area_id)
+        self.assertEqual("hc:paint", frame.height_correction)
+        self.assertIsNotNone(frame.mapper)
+        self.assertEqual({"x": 1.0, "y": 2.0, "rz": 6.0}, vars(frame.mapper.source_pose))
+        self.assertEqual({"x": 7.0, "y": 8.0, "rz": 12.0}, vars(frame.mapper.target_pose))
+
+    def test_build_frames_returns_none_mapper_when_navigation_missing_or_invalid(self):
+        definitions = [
+            TargetFrameDefinition(name="frame_a", work_area_id="paint"),
+            TargetFrameDefinition(
+                name="frame_b",
+                work_area_id="paint",
+                source_navigation_group="SRC",
+                target_navigation_group="DST",
+            ),
+        ]
+        navigation = MagicMock()
+        navigation.get_group_position.return_value = None
+
+        frames = build_paint_target_frames(definitions, navigation)
+
+        self.assertIsNone(frames["frame_a"].mapper)
+        self.assertIsNone(frames["frame_b"].mapper)
+
+
+class TestPaintTargetRegistry(unittest.TestCase):
+    def test_build_point_registry_offsets_points_relative_to_camera(self):
+        registry = build_paint_point_registry(
+            [
+                {"name": "camera", "x_mm": 10.0, "y_mm": 20.0},
+                {"name": "tool", "x_mm": 16.0, "y_mm": 28.0},
+            ]
+        )
+
+        camera = registry.by_name("camera")
+        tool = registry.by_name("tool")
+        self.assertEqual((0.0, 0.0), (camera.offset_x, camera.offset_y))
+        self.assertEqual((6.0, 8.0), (tool.offset_x, tool.offset_y))
+
+
+class TestPaintTargetingProvider(unittest.TestCase):
+    def _make_robot_system(self):
+        targeting = SimpleNamespace(
+            frames=[
+                TargetFrameDefinition(
+                    name="frame_a",
+                    work_area_id="paint",
+                    source_navigation_group="persisted_src",
+                    target_navigation_group="persisted_dst",
+                    use_height_correction=True,
+                    display_name="Persisted",
+                ),
+                TargetFrameDefinition(
+                    name="frame_extra",
+                    work_area_id="extra",
+                    source_navigation_group="x",
+                    target_navigation_group="y",
+                    use_height_correction=False,
+                    display_name="Extra",
+                ),
+            ],
+            points=[
+                SimpleNamespace(name="tool", display_name="Tool Persisted", x_mm=3.0, y_mm=4.0),
+                SimpleNamespace(name="extra", display_name="Extra", x_mm=9.0, y_mm=10.0),
+            ],
+        )
+        settings_service = MagicMock()
+        settings_service.get.return_value = targeting
+        return SimpleNamespace(
+            _settings_service=settings_service,
+            _height_measuring_service="height-service",
+            _navigation="navigation-service",
+            get_target_frame_definitions=lambda: [
+                TargetFrameDefinition(
+                    name="frame_a",
+                    work_area_id="paint",
+                    source_navigation_group="src",
+                    target_navigation_group="dst",
+                    use_height_correction=False,
+                    display_name="Frame A",
+                )
+            ],
+            get_target_point_definitions=lambda: [
+                SimpleNamespace(name="tool", display_name="Tool"),
+                SimpleNamespace(name="camera", display_name="Camera"),
+            ],
+        )
+
+    def test_frame_definitions_merge_persisted_and_declared_data(self):
+        provider = PaintRobotSystemTargetingProvider(self._make_robot_system())
+
+        frames = provider._frame_definitions()
+
+        self.assertEqual(2, len(frames))
+        self.assertEqual("persisted_src", frames[0].source_navigation_group)
+        self.assertEqual("persisted_dst", frames[0].target_navigation_group)
+        self.assertTrue(frames[0].use_height_correction)
+        self.assertEqual("frame_extra", frames[1].name)
+
+    def test_point_definitions_merge_declared_and_persisted_data(self):
+        provider = PaintRobotSystemTargetingProvider(self._make_robot_system())
+
+        points = provider._point_definitions()
+
+        self.assertEqual("Tool Persisted", points[0]["display_name"])
+        self.assertEqual(3.0, points[0]["x_mm"])
+        self.assertEqual(4.0, points[0]["y_mm"])
+        self.assertEqual("camera", points[1]["name"])
+        self.assertEqual("extra", points[2]["name"])
+
+    def test_build_frames_and_lookup_helpers_delegate_to_shared_builders(self):
+        robot_system = self._make_robot_system()
+        provider = PaintRobotSystemTargetingProvider(robot_system)
+        built_frames = {
+            "frame_a": SimpleNamespace(work_area_id="paint"),
+            "frame_b": SimpleNamespace(work_area_id="extra"),
+        }
+
+        captured = {}
+
+        def _build_frames(definitions, navigation, height_correction):
+            captured["navigation"] = navigation
+            captured["height_correction"] = height_correction("paint")
+            return built_frames
+
+        with (
+            patch("src.robot_systems.paint.targeting.provider.build_paint_target_frames", side_effect=_build_frames) as build_frames,
+            patch("src.robot_systems.paint.targeting.provider.HeightCorrectionService", side_effect=lambda svc, area_id="": f"hc:{svc}:{area_id}"),
+        ):
+            frames = provider.build_frames()
+            frame = provider.get_frame_for_work_area("paint")
+            area = provider.get_work_area_for_frame("frame_b")
+
+        self.assertIs(frames, built_frames)
+        self.assertIs(frame, built_frames["frame_a"])
+        self.assertEqual("extra", area)
+        self.assertTrue(build_frames.called)
+        self.assertEqual("navigation-service", captured["navigation"])
+        self.assertEqual("hc:height-service:paint", captured["height_correction"])
+
+    def test_target_options_and_default_name_follow_definitions(self):
+        provider = PaintRobotSystemTargetingProvider(self._make_robot_system())
+
+        self.assertEqual(
+            [("Tool Persisted", "tool"), ("Camera", "camera"), ("Extra", "extra")],
+            provider.get_target_options(),
+        )
+        self.assertEqual("tool", provider.get_default_target_name())
+
+
+if __name__ == "__main__":
+    unittest.main()

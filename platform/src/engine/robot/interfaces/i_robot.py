@@ -1,0 +1,258 @@
+from abc import ABC, abstractmethod
+from typing import List
+
+from ..enums.axis import RobotAxis, Direction
+from ..motion_sequence import MotionSequenceSegment, OrderedMotionInput
+
+
+class IRobot(ABC):
+
+    @abstractmethod
+    def move_ptp(
+        self,
+        position: List[float],
+        tool: int,
+        user: int,
+        vel: float,
+        acc: float,
+        blocking: bool = True,
+    ) -> int:
+        """Point-to-point motion (fastest path). Returns 0 on success."""
+        ...
+
+    @abstractmethod
+    def move_linear(
+        self,
+        position: List[float],
+        tool: int,
+        user: int,
+        vel: float,
+        acc: float,
+        blend_radius: float = 0.0,
+        blocking: bool = True,
+        allow_collision_recovery: bool = False,
+    ) -> int:
+        """Straight-line TCP motion. Returns 0 on success."""
+        ...
+
+    @abstractmethod
+    def start_jog(
+        self,
+        axis: RobotAxis,
+        direction: Direction,
+        step: float,
+        vel: float,
+        acc: float,
+    ) -> int:
+        ...
+
+    def start_servo_jog(
+        self,
+        axis: RobotAxis,
+        direction: Direction,
+        linear_mm_s: float | None = None,
+        angular_deg_s: float | None = None,
+        *,
+        frame: str | int = "user",
+        tool: int = 0,
+        user: int = 0,
+        disable_collision_checking: bool = False,
+    ) -> int:
+        """Optional continuous ServoJog. Intended for UI press/release jog."""
+        return -1
+
+    def start_joint_jog(
+        self,
+        joint: str,
+        direction: Direction,
+        step: float,
+        vel: float,
+        acc: float,
+    ) -> int:
+        """Optional incremental joint jog. Step is in degrees."""
+        return -1
+
+    def stop_servo_jog(self, *, restore_collision_checking: bool = True, timing_trace_id: str | None = None) -> int:
+        """Optional stop for continuous ServoJog."""
+        return -1
+
+    def servo_jog_to_z(self, **kwargs) -> dict | None:
+        """Optional blocking target-bounded +Z ServoJog operation."""
+        return None
+
+    def move_fast_linear(self, **kwargs) -> dict | None:
+        """Optional blocking Pilz LIN operation with a final outcome payload."""
+        return None
+
+    def set_motion_passage_closed(self, passage_id: str, closed: bool) -> bool:
+        """Optionally add/remove a configured ROS planning-scene passage lid."""
+        return False
+
+    def set_active_workobject(self, user: int) -> bool:
+        """Optional active workobject selection for state/current-position reporting."""
+        return True
+
+    def get_workobject_registry(self):
+        return None
+
+    def update_workobject_registry(self, user_id, name=None, transform=None, persist=False):
+        return -1
+
+    @abstractmethod
+    def stop_motion(self) -> int:
+        ...
+
+    @abstractmethod
+    def get_current_position(self) -> List[float]:
+        ...
+
+    @abstractmethod
+    def get_current_velocity(self) -> float:
+        ...
+
+    @abstractmethod
+    def get_current_acceleration(self) -> float:
+        ...
+
+    @abstractmethod
+    def execute_trajectory(
+        self,
+        path,
+        rx: float = 180,
+        ry: float = 0,
+        rz: float = 0,
+        vel: float = 0.1,
+        acc: float = 0.1,
+        blocking: bool = False,
+        orientation_mode: str = "constant",
+    ) -> None:
+        ...
+
+    def execute_motion_sequence(
+        self,
+        segments: List[MotionSequenceSegment],
+        tool: int,
+        user: int,
+        blocking: bool = False,
+    ) -> int:
+        """Optional explicit segmented motion sequence. Returns >=0 on success/queued."""
+        return -1
+
+    def execute_custom_motion_sequence(
+        self,
+        segments: List[MotionSequenceSegment],
+        tool: int,
+        user: int,
+        blocking: bool = False,
+    ) -> int:
+        """Optional custom queued segmented motion sequence. Returns >=0 on success/queued."""
+        return -1
+
+    def execute_ordered_motion_chain(
+        self,
+        segments: list[OrderedMotionInput],
+        tool: int,
+        user: int,
+        blocking: bool = False,
+    ) -> int:
+        """Optional ordered motion chain with mixed segment types."""
+        return -1
+
+    def prepare_ordered_motion_chain(self, segments: list[OrderedMotionInput], start_position: list[float],
+                                     tool: int, user: int, *,
+                                     allow_servo_during_prepare: bool = False) -> dict | None:
+        return None
+
+    def execute_prepared_ordered_motion_chain(self, plan_id: str) -> dict | None:
+        return None
+
+    def discard_prepared_ordered_motion_chain(self, plan_id: str) -> dict | None:
+        return None
+
+    def get_prepared_ordered_motion_chain(self, plan_id: str) -> dict | None:
+        return None
+
+    @abstractmethod
+    def enable(self) -> None:
+        ...
+
+    @abstractmethod
+    def disable(self) -> None:
+        ...
+
+    def clone(self) -> 'IRobot':
+        """Return a new independent connection to the same robot endpoint.
+        Default: returns self (safe for stateless/HTTP transports).
+        Override in drivers that hold exclusive connections (e.g. TCP SDK).
+        """
+        return self
+
+    def get_execution_status(self):
+        """Optional execution/queue status from the underlying robot bridge."""
+        return None
+
+    def get_last_trajectory_command_info(self):
+        """Optional metadata about the last submitted trajectory command."""
+        return None
+
+    def unwind_joint6(
+        self,
+        blocking: bool = True,
+        queue_if_busy: bool = True,
+        vel: float | None = None,
+        acc: float | None = None,
+    ) -> int:
+        """Optional explicit Joint_6 unwind."""
+        return -1
+
+    def get_connection_state(self) -> str:
+        """Optional lifecycle/availability state for the underlying transport."""
+        return "idle"
+
+    def get_connection_details(self) -> dict:
+        """Optional diagnostic details about the underlying transport state."""
+        return {}
+
+    def enable_safety_walls(self) -> bool:
+        """Optional remote safety-wall control."""
+        return False
+
+    def disable_safety_walls(self) -> bool:
+        """Optional remote safety-wall control."""
+        return False
+
+    def are_safety_walls_enabled(self):
+        """Optional remote safety-wall status."""
+        status = self.get_safety_walls_status()
+        return status.get("enabled") if isinstance(status, dict) else None
+
+    def get_safety_walls_status(self) -> dict:
+        """Optional remote safety-wall status payload."""
+        return {"supported": False, "enabled": None}
+
+    def validate_pose(
+        self,
+        start_position: List[float],
+        target_position: List[float],
+        tool: int = 0,
+        user: int = 0,
+        start_joint_state: dict | None = None,
+    ) -> dict:
+        """Optional remote pose reachability validation."""
+        return {"supported": False, "reachable": False}
+
+    def set_active_tool(self, tool: int) -> bool:
+        """Optional remote active TCP selection for status/current-pose reporting."""
+        return False
+
+    def get_tool_registry(self):
+        """Return the remote tool registry payload when supported."""
+        return None
+
+    def prefers_incremental_jog(self) -> bool:
+        """Whether jog should prefer the robot's native incremental jog API over synthesized move commands."""
+        return False
+
+    def set_digital_output(self, port_id: int, value: bool) -> int:
+        """Optional robot-side digital output control."""
+        return -1

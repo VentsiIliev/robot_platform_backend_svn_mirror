@@ -1,0 +1,455 @@
+import logging
+import os
+from dataclasses import dataclass
+from typing import Callable, Optional
+from datetime import datetime
+
+from src.applications.workpiece_editor.editor_core.config import WorkpieceFormSchema
+from src.applications.workpiece_editor.editor_core.config.segment_editor_config import SegmentEditorConfig
+from src.applications.workpiece_editor.editor_core.adapters.i_workpiece_data_adapter import IWorkpieceDataAdapter
+from src.applications.workpiece_editor.service import IWorkpieceEditorService
+from src.applications.workpiece_editor.editor_core.handlers.SaveWorkpieceHandler import SaveWorkpieceHandler
+from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
+from src.engine.robot.path_preparation import (
+    IWorkpiecePathPreparationService,
+    WorkpieceExecutionPlan,
+)
+from src.engine.robot.path_preparation.geometry import (
+    has_valid_contour,
+)
+from src.engine.vision.i_capture_snapshot_service import ICaptureSnapshotService
+from src.engine.vision.capture_snapshot_service import ActiveWorkAreaVerificationError
+from src.applications.workpiece_editor.service.i_workpiece_path_executor import (
+    IWorkpiecePathExecutor,
+    WorkpieceProcessAction,
+)
+from src.applications.workpiece_editor.i_workpiece_matcher import IWorkpieceMatcher
+from contour_editor.persistence.data.editor_data_model import ContourEditorData
+
+_logger = logging.getLogger(__name__)
+_DEFAULT_WORKPIECE_HEIGHT_MM = 0.0
+
+
+@dataclass(frozen=True)
+class WorkpieceEditorStorage:
+    save_fn: Callable[[dict], tuple[bool, str]]
+    update_fn: Callable[[str, dict], tuple[bool, str]]
+    id_exists_fn: Optional[Callable[[str], bool]] = None
+
+
+@dataclass(frozen=True)
+class WorkpieceEditorServices:
+    vision_service: object = None
+    capture_snapshot_service: Optional[ICaptureSnapshotService] = None
+    robot_service: object = None
+    transformer: Optional[ICoordinateTransformer] = None
+    transformer_getter: Optional[Callable[[], Optional[ICoordinateTransformer]]] = None
+    path_executor: Optional[IWorkpiecePathExecutor] = None
+    path_preparation_service: Optional[IWorkpiecePathPreparationService] = None
+    matching_service: Optional[IWorkpieceMatcher] = None
+    workpiece_data_adapter: Optional[IWorkpieceDataAdapter] = None
+    process_execution_validator: Optional[Callable[[], tuple[bool, str]]] = None
+
+
+@dataclass(frozen=True)
+class WorkpieceEditorOptions:
+    debug_dump_dir: Optional[str] = None
+
+
+class WorkpieceEditorService(IWorkpieceEditorService):
+
+    def __init__(
+        self,
+        *,
+        storage: WorkpieceEditorStorage,
+        services: WorkpieceEditorServices,
+        form_schema: WorkpieceFormSchema,
+        segment_config: SegmentEditorConfig,
+        options: WorkpieceEditorOptions | None = None,
+    ):
+        options = options or WorkpieceEditorOptions()
+        self._vision = services.vision_service
+        self._capture_snapshot_service = services.capture_snapshot_service
+        self._save_fn = storage.save_fn
+        self._update_fn = storage.update_fn
+        self._id_exists_fn = storage.id_exists_fn
+        self._form_schema = form_schema
+        self._segment_config = segment_config
+        self._transformer = services.transformer
+        self._transformer_getter = services.transformer_getter
+        self._debug_dump_dir = options.debug_dump_dir
+        self._path_executor = services.path_executor
+        self._path_preparation_service = services.path_preparation_service
+        self._matching_service = services.matching_service
+        self._process_execution_validator = services.process_execution_validator
+        self._workpiece_data_adapter = services.workpiece_data_adapter
+        self._editing_storage_id = None
+        self._last_execution_plan: WorkpieceExecutionPlan | None = None
+
+    def get_workpiece_data_adapter(self) -> IWorkpieceDataAdapter:
+        if self._workpiece_data_adapter is None:
+            raise RuntimeError("No workpiece data adapter configured")
+        return self._workpiece_data_adapter
+
+    def _executor_process_plan(self) -> WorkpieceExecutionPlan | None:
+        if self._path_executor is None:
+            return None
+        try:
+            return self._path_executor.get_last_execution_plan()
+        except NotImplementedError:
+            return None
+        except Exception:
+            _logger.debug("Failed to query executor-owned execution plan", exc_info=True)
+            return None
+
+    def _active_process_plan(self) -> WorkpieceExecutionPlan | None:
+        return self._executor_process_plan() or self._last_execution_plan
+
+    def set_editing(self, storage_id) -> None:
+        self._editing_storage_id = storage_id
+        _logger.debug("WorkpieceEditorService: editing_storage_id=%s", storage_id)
+
+    def _schema(self) -> WorkpieceFormSchema:
+        return self._form_schema() if callable(self._form_schema) else self._form_schema
+
+    def get_form_schema(self) -> WorkpieceFormSchema:
+        return self._schema()
+
+    def get_segment_config(self) -> SegmentEditorConfig:
+        return self._segment_config
+
+    def can_match_saved_workpieces(self) -> bool:
+        return bool(self._matching_service is not None and self._matching_service.can_match_saved_workpieces())
+
+    def _current_transformer(self) -> Optional[ICoordinateTransformer]:
+        if self._transformer_getter is not None:
+            try:
+                return self._transformer_getter()
+            except Exception:
+                _logger.debug("Workpiece editor transformer lookup failed", exc_info=True)
+        return self._transformer
+
+    def match_saved_workpieces(self, contour) -> tuple[bool, dict | None, str]:
+        if self._matching_service is None:
+            return False, None, "Matching is not available in this editor."
+        return self._matching_service.match_saved_workpieces(contour)
+
+    def get_contours(self) -> list:
+        if self._capture_snapshot_service is None and self._vision is None:
+            _logger.warning("get_contours: no vision service")
+            return []
+        try:
+            if self._capture_snapshot_service is not None:
+                return self._capture_snapshot_service.capture_snapshot(source="workpiece_editor").contours
+            return self._vision.get_latest_contours()
+        except Exception as exc:
+            if isinstance(exc, ActiveWorkAreaVerificationError):
+                raise
+            _logger.error("get_contours failed: %s", exc)
+            return []
+
+    def save_workpiece(self, data: dict) -> tuple[bool, str]:
+        try:
+            form_data   = data.get("form_data", {})
+            editor_data = data.get("editor_data")
+            complete    = self._merge(form_data, editor_data) if editor_data else dict(form_data)
+            complete    = self._normalize_workpiece_metadata(complete)
+            required    = self._schema().get_required_keys()
+            is_valid, errors = SaveWorkpieceHandler.validate_form_data(complete, required)
+            if not is_valid:
+                return False, f"Validation failed: {', '.join(errors)}"
+
+            if not has_valid_contour(complete.get("contour")):
+                return False, (
+                    "No main workpiece contour found.\n"
+                    "Use the camera capture button to define the workpiece boundary first."
+                )
+
+            if self._editing_storage_id is not None:
+                storage_id = self._editing_storage_id
+                self._editing_storage_id = None
+                return self._update_fn(storage_id, complete)
+            else:
+                if self._id_exists_fn is not None:
+                    wp_id = str(complete.get("workpieceId", "")).strip()
+                    if wp_id and self._id_exists_fn(wp_id):
+                        return False, f"A workpiece with ID '{wp_id}' already exists"
+                return self._save_fn(complete)
+
+        except Exception as exc:
+            _logger.exception("save_workpiece failed")
+            return False, str(exc)
+
+    def execute_workpiece(self, data: dict, skip_debug_plot: bool = False) -> tuple[bool, str]:
+        self._last_execution_plan = None
+        form_data   = data.get("form_data", data)
+        editor_data = data.get("editor_data")
+        merged      = self._merge(form_data, editor_data) if editor_data else dict(form_data)
+        # _logger.debug(f"Execute workpiece: {merged}")
+        try:
+            if self._path_executor is not None:
+                try:
+                    execution_plan = self._path_executor.prepare_workpiece_execution_plan(merged, skip_debug_plot=skip_debug_plot)
+                except NotImplementedError:
+                    if self._path_preparation_service is None:
+                        return False, "Path preparation service is not available"
+                    execution_plan = self._path_preparation_service.build_execution_plan(merged, skip_debug_plot=skip_debug_plot)
+            else:
+                if self._path_preparation_service is None:
+                    return False, "Path preparation service is not available"
+                execution_plan = self._path_preparation_service.build_execution_plan(merged, skip_debug_plot=skip_debug_plot)
+        except Exception as exc:
+            _logger.exception("[EXECUTE] Failed to build preview package")
+            return False, str(exc)
+
+        if self._executor_process_plan() is None:
+            self._last_execution_plan = execution_plan
+        if not skip_debug_plot:
+            self._write_debug_path_dump(
+                raw_paths=execution_plan.raw_paths,
+                prepared_paths=execution_plan.prepared_paths,
+                curve_paths=execution_plan.curve_paths,
+                sampled_paths=execution_plan.sampled_paths,
+                execution_paths=execution_plan.execution_paths(),
+            )
+        _logger.info("[EXECUTE] Done — %d path(s), %d total spline waypoints",
+                     len(execution_plan.execution_jobs), execution_plan.total_spline_pts)
+        return True, f"Prepared process: {len(execution_plan.execution_jobs)} path(s), {execution_plan.total_spline_pts} interpolated waypoints"
+
+    @staticmethod
+    def _clone_paths(paths: list[list[list[float]]]) -> list[list[list[float]]]:
+        return [
+            [list(pt) for pt in path]
+            for path in paths
+        ]
+
+    def get_last_sampled_preview_paths(self) -> list:
+        execution_plan = self._active_process_plan()
+        if execution_plan is None:
+            return []
+        return self._clone_paths(execution_plan.sampled_paths)
+
+    def get_last_raw_preview_paths(self) -> list:
+        execution_plan = self._active_process_plan()
+        if execution_plan is None:
+            return []
+        return self._clone_paths(execution_plan.raw_paths)
+
+    def get_last_raw_pixel_preview_paths(self) -> list:
+        execution_plan = self._active_process_plan()
+        if execution_plan is None:
+            return []
+        return self._clone_paths(execution_plan.raw_pixel_paths)
+
+    def get_last_raw_homography_preview_paths(self) -> list:
+        execution_plan = self._active_process_plan()
+        if execution_plan is None:
+            return []
+        return self._clone_paths(execution_plan.raw_homography_paths)
+
+    def get_last_prepared_preview_paths(self) -> list:
+        execution_plan = self._active_process_plan()
+        if execution_plan is None:
+            return []
+        return self._clone_paths(execution_plan.prepared_paths)
+
+    def get_last_curve_preview_paths(self) -> list:
+        execution_plan = self._active_process_plan()
+        if execution_plan is None:
+            return []
+        return self._clone_paths(execution_plan.curve_paths)
+
+    def get_last_execution_preview_paths(self) -> list:
+        execution_plan = self._active_process_plan()
+        if execution_plan is None:
+            return []
+        return execution_plan.execution_paths()
+
+    def get_last_projection_source_camera_paths(self) -> list:
+        """Return the exact ordered contours consumed by paint projection, in pixels."""
+        execution_plan = self._active_process_plan()
+        transformer = self._current_transformer()
+        if execution_plan is None or transformer is None or not hasattr(transformer, "inverse_transform"):
+            return []
+        projection_sources = [
+            [list(point) for point in (
+                job.get("pivot_source_path")
+                or job.get("paint_contact_source_path")
+                or job.get("execution_path")
+                or []
+            )]
+            for job in execution_plan.execution_jobs
+        ]
+        return self._inverse_transform_paths(projection_sources, transformer)
+
+    def get_last_projection_source_paths(self) -> list:
+        """Return exact robot-space paths passed to paint-contact projection."""
+        execution_plan = self._active_process_plan()
+        if execution_plan is None:
+            return []
+        return [
+            [list(point) for point in (
+                job.get("pivot_source_path")
+                or job.get("paint_contact_source_path")
+                or job.get("execution_path")
+                or []
+            )]
+            for job in execution_plan.execution_jobs
+        ]
+
+    def get_last_camera_preview_paths(self) -> dict[str, list]:
+        execution_plan = self._active_process_plan()
+        transformer = self._current_transformer()
+        if execution_plan is None or transformer is None or not hasattr(transformer, "inverse_transform"):
+            return {}
+
+        return {
+            "raw": self._inverse_transform_paths(execution_plan.raw_paths, transformer),
+            "prepared": self._inverse_transform_paths(execution_plan.prepared_paths, transformer),
+            "curve": self._inverse_transform_paths(execution_plan.curve_paths, transformer),
+            "sampled": self._inverse_transform_paths(execution_plan.sampled_paths, transformer),
+            "execution": self._inverse_transform_paths(execution_plan.execution_paths(), transformer),
+        }
+
+    @staticmethod
+    def _inverse_transform_paths(paths: list[list[list[float]]], transformer) -> list[list[list[float]]]:
+        inverse_paths: list[list[list[float]]] = []
+        for path in paths:
+            batch_inverse = getattr(transformer, "inverse_transform_points", None)
+            if callable(batch_inverse) and path:
+                try:
+                    xy = np.asarray([[float(point[0]), float(point[1])] for point in path], dtype=float)
+                    pixels = np.asarray(batch_inverse(xy), dtype=float).reshape(-1, 2)
+                    inverse_paths.append([
+                        [float(pixel[0]), float(pixel[1]), *[float(value) for value in point[2:]]]
+                        for point, pixel in zip(path, pixels)
+                    ])
+                    continue
+                except Exception:
+                    _logger.debug("Batch inverse preview transform failed; using point fallback", exc_info=True)
+            inverse_path: list[list[float]] = []
+            for point in path:
+                if len(point) < 2:
+                    continue
+                try:
+                    px, py = transformer.inverse_transform(float(point[0]), float(point[1]))
+                except Exception:
+                    continue
+                inverse_point = [float(px), float(py)]
+                inverse_point.extend(float(value) for value in point[2:])
+                inverse_path.append(inverse_point)
+            inverse_paths.append(inverse_path)
+        return inverse_paths
+
+    def get_last_pivot_preview_paths(self) -> tuple[list[list[list[float]]], list[float] | None]:
+        if self._path_executor is None:
+            return [], None
+        execution_plan = self._active_process_plan()
+        if execution_plan is None:
+            return [], None
+        return self._path_executor.get_projected_pivot_paths(execution_plan)
+
+    def get_last_pivot_motion_preview(self):
+        if self._path_executor is None:
+            return [], None
+        execution_plan = self._active_process_plan()
+        if execution_plan is None:
+            return [], None
+        return self._path_executor.get_pivot_motion_snapshots(execution_plan)
+
+    def get_process_actions(self) -> tuple[WorkpieceProcessAction, ...]:
+        if self._path_executor is not None:
+            return tuple(self._path_executor.get_process_actions())
+        return ()
+
+    def execute_process_action(self, action_id: str) -> tuple[bool, str]:
+        execution_plan = self._active_process_plan()
+        if execution_plan is None:
+            return False, "No prepared process paths available to execute"
+        if self._path_executor is None:
+            return False, "No process executor is configured for this workpiece editor"
+        if self._process_execution_validator is not None:
+            ok, message = self._process_execution_validator()
+            if not ok:
+                return False, message or "Robot capture position is not verified."
+        return self._path_executor.execute_process_action(
+            execution_plan,
+            action_id=action_id,
+        )
+
+    def _write_debug_path_dump(
+        self,
+        *,
+        raw_paths: list[list[list[float]]],
+        prepared_paths: list[list[list[float]]],
+        curve_paths: list[list[list[float]]],
+        sampled_paths: list[list[list[float]]],
+        execution_paths: list[list[list[float]]],
+    ) -> None:
+        if not self._debug_dump_dir:
+            return
+
+        try:
+            os.makedirs(self._debug_dump_dir, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filepath = os.path.join(self._debug_dump_dir, f"trajectory_points_{timestamp}.txt")
+            sections = [
+                ("RAW", raw_paths),
+                ("PREPARED", prepared_paths),
+                ("CURVE", curve_paths),
+                ("SAMPLED", sampled_paths),
+                ("EXECUTION", execution_paths),
+            ]
+            with open(filepath, "w", encoding="utf-8") as handle:
+                handle.write(f"# Trajectory point dump\n# timestamp={timestamp}\n")
+                for section_name, paths in sections:
+                    handle.write(f"\n[{section_name}]\n")
+                    for path_index, path in enumerate(paths, start=1):
+                        handle.write(f"path {path_index} count={len(path)}\n")
+                        for point_index, point in enumerate(path):
+                            coords = ", ".join(f"{float(value):.6f}" for value in point)
+                            handle.write(f"  {point_index:04d}: [{coords}]\n")
+            _logger.info("[EXECUTE] Wrote trajectory debug dump to %s", filepath)
+        except Exception:
+            _logger.debug("[EXECUTE] Failed to write trajectory debug dump", exc_info=True)
+
+    def _merge(self, form_data: dict, editor_data) -> dict:
+        if not isinstance(editor_data, ContourEditorData):
+            return self._normalize_workpiece_metadata(dict(form_data))
+        segment_defaults = self._segment_config.schema.get_defaults()
+        editor_workpiece = self.get_workpiece_data_adapter().to_workpiece_data(editor_data, default_settings=segment_defaults)
+        form_payload = dict(form_data or {})
+
+        if not has_valid_contour(editor_workpiece.get("contour")) and has_valid_contour(form_payload.get("contour")):
+            editor_workpiece["contour"] = form_payload.get("contour")
+
+        editor_spray = editor_workpiece.get("sprayPattern") or {}
+        form_spray = form_payload.get("sprayPattern") or {}
+        editor_has_spray = any(editor_spray.get(key) for key in ("Contour", "Fill"))
+        form_has_spray = any(form_spray.get(key) for key in ("Contour", "Fill"))
+        if not editor_has_spray and form_has_spray:
+            editor_workpiece["sprayPattern"] = form_spray
+
+        merged = {**form_payload, **editor_workpiece}
+        combo_key = self._schema().combo_key
+        if combo_key:
+            val = form_data.get(combo_key) or form_data.get("glue_type") or form_data.get("glueType")
+            if val:
+                merged[combo_key] = val
+        return self._normalize_workpiece_metadata(merged)
+
+    @staticmethod
+    def _normalize_workpiece_metadata(data: dict) -> dict:
+        normalized = dict(data or {})
+        normalized["height_mm"] = _safe_float(
+            normalized.get("height_mm"),
+            _DEFAULT_WORKPIECE_HEIGHT_MM,
+        )
+        return normalized
+
+
+def _safe_float(value, default: float) -> float:
+    try:
+        return float(str(value).replace(",", "")) if value is not None else default
+    except (ValueError, TypeError):
+        return default

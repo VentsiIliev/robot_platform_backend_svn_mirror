@@ -1,0 +1,224 @@
+# `src/robot_systems/paint/applications/` — Paint Applications
+
+The paint robot system has paint-owned application packages plus shared applications wired with paint-specific services.
+
+The Paint Adjustment screen uses the shared page-title style and `KeyboardNumberField` for its register step and paint length and inspection offsets. This keeps its touch controls consistent with the Calibration and Settings screens.
+
+The shell registration happens in:
+
+- `src/robot_systems/paint/paint_robot_system.py`
+- `src/robot_systems/paint/application_wiring.py`
+
+At startup the paint shell receives only app metadata from those declarations. The builder functions in `application_wiring.py` are invoked lazily when the user first opens the app.
+
+---
+
+## Folder Layout
+
+| Folder | Applications |
+|--------|--------------|
+| Production | `PaintDashboard` |
+| Service | `RobotSettings`, `WorkAreaSettings`, `CameraSettings`, `CalibrationSettings`, `Calibration` |
+| Administration | `UserManagement` |
+| Tests | `WorkpieceLibrary`, `WorkpieceEditor`, `BrokerDebug`, `IntrinsicCapture`, `HandEyeCalibration`, `PickTarget` |
+
+---
+
+## Paint-Owned MVC Package
+
+### `dashboard/`
+
+**Files:** `applications/dashboard/`
+
+This is the only fully paint-owned application package in the system today.
+
+Key pieces:
+
+- `paint_dashboard_factory.py`
+- `service/paint_dashboard_service.py`
+- `model/paint_dashboard_model.py`
+- `controller/paint_dashboard_controller.py`
+- `view/paint_dashboard_view.py`
+
+The dashboard is a thin UI over `PaintDashboardService`, which is built in `PaintRobotSystem.on_start()` from the current `PaintProcess`.
+
+When workpiece matching finds no saved match, the process publishes an
+`Unknown Workpiece` warning. The dashboard records it in the message list and
+opens the shared action warning dialog with the title **Workpiece not
+recognized**. The dialog offers **Scan again**, **Open library**, and
+**Dismiss**. Scan again is accepted only for the unmatched-workpiece error.
+It resets that error and starts a new cycle directly at paint capture, using a
+fresh image at the current calibration/paint position. Magazine pickup and
+calibration navigation are skipped; matching, paint planning, and execution
+then follow the normal cycle. Open library uses the existing
+`ShellTopics.NAVIGATE` route to `WorkpieceLibrary`. Dismiss closes the dialog.
+Other warnings continue to use the standard styled warning box. The
+paint-specific actions are handled by the dashboard view and controller; the
+shared dialog only returns the chosen action key.
+
+Primary responsibility:
+
+- display paint-process state and operator-facing runtime status
+- show the live camera preview in automatic/demo drying modes
+- place Start, Pause, and Reset on the first process-control row when the camera preview is disabled, while Stop spans the full second row
+- give Start, Pause, and Reset equal one-third widths regardless of their label size
+- reduce the camera-disabled process-control section to 300 px so the settings/tray and status area receives more vertical space
+- let the camera-disabled status column and message panel expand to the full Quick Controls height
+- route the dashboard Fan control to the standard fan in Auto/Demo drying modes and to the tray fan in Manual Dry mode
+- display the selected fan's actual output-register state after switching drying modes instead of its communication-health state
+- normalize tray workpiece axes to a stable reversed robot-coordinate direction so identical physical orientations render consistently in the desired dashboard direction
+- retain each committed tray workpiece's painted timestamp and show a live drying duration while that workpiece is selected
+- optionally show a Tray Dry duration control and recolor workpieces when their painted timestamp reaches the configured duration
+- retain pass count and per-pass velocity, acceleration, and press-offset metadata; show only the pass count in the current tray UI
+- select tray workpieces with a single press instead of a press-and-hold gesture
+- allow individual tray workpieces to be removed during production so the shared layout planner reuses the freed space from the next cycle, while keeping New Tray locked
+- keep the Quick Controls vacuum-pump action OFF-only while retaining the fan's ON/OFF toggle
+- label manual drying as Tray Dry and show its New Tray action in Quick Controls only while that mode is active
+- optionally replace separate paint velocity/acceleration inputs with Speed (1–100), mapping velocity to Speed and acceleration to Speed²/100 while preserving the existing service payload
+- optionally show the resolved Velocity and Acceleration percentages below each combined Speed input as a commissioning aid
+- expose the independently addressed tray fan in the Device Control application
+- show the shared plate-layout state in manual drying mode, including committed and pending workpieces
+- allow stopped-state operators to confirm a new tray or press-and-hold a committed workpiece to remove it
+
+Tray edits are routed through `PaintDashboardService` to the same `PlateLayoutService`
+instance used by robot drop-off. They are rejected while the process is running or
+paused. Tray occupancy is runtime state and is not restored after an application restart.
+
+`PaintDashboardUiConfig.show_camera_preview` selects the dashboard composition.
+Its paint-system switch is `paint_system_config.SHOW_DASHBOARD_CAMERA_PREVIEW`.
+The default `True` preserves the camera-first layout unchanged. With `False`,
+the main area contains `Paint Settings` and `Tray` tabs, the existing two-pass
+paint editor and process-scaling controls move into `Paint Settings`, the duplicate quick
+controls are omitted, and Start/Pause/Stop use the full bottom width. Drying
+mode, pump, fan, and cable-relief actions remain immediately accessible in a
+dedicated column between the settings/tray area and the status cards.
+The expanded Paint Settings tab uses a compact composition: Number of Passes
+and Process Scaling share one row, and each pass places Velocity,
+Acceleration, and Press Offset together in one row. The camera-enabled drawer
+retains its original vertical composition.
+
+`PaintDashboardUiConfig.allow_running_paint_settings_updates` controls whether
+paint passes, per-pass Speed/velocity/acceleration/press offset, and process
+acceleration scaling remain editable while the process is running or paused.
+The paint-system switch is
+`paint_system_config.ALLOW_RUNNING_PAINT_SETTINGS_UPDATES`. When enabled, saves
+are persisted immediately but the active workpiece keeps its immutable settings
+snapshot; the updated settings are captured at the start of the next workpiece
+cycle. When disabled, the previous stopped-state-only editing behavior is kept.
+Drying-mode and tray-state edits remain locked during an active process.
+
+The dashboard also shows a separate Paint Control section directly below
+Apply All. Its +/− buttons move the paint head by the chosen register-unit step
+through the shared Paint Adjustment service. The step defaults to 1 and can be
+edited from the dashboard. Holding a button repeats the move without overlapping
+hardware commands, and reaching a configured paint-head limit stops repetition
+and shows a limit message. The buttons remain available while
+the paint process runs, provided the paint head is configured; paint-settings
+editability does not gate these commands. Hardware writes run in a background
+worker so the dashboard remains responsive.
+
+In Devices, the paint-head configuration panel sits on the Paint head page.
+Its spacing and setting-count inputs use the shared touch number field; the
+direction selector, calculated register range, and save command retain the
+existing paint-head settings service and controller.
+
+`PaintDashboardUiConfig.show_resolved_paint_speed_values`, configured by
+`paint_system_config.SHOW_RESOLVED_PAINT_SPEED_VALUES`, displays the live
+Velocity and Acceleration values derived from each combined Speed input. It is
+ignored when combined Speed control is disabled.
+`PaintDashboardUiConfig.combined_paint_speed_minimum_percent`, configured by
+`paint_system_config.COMBINED_PAINT_SPEED_MINIMUM_PERCENT`, linearly maps the UI
+Speed range 1–100 onto that internal Velocity minimum through 100. For example,
+a velocity minimum of 10 makes UI Speed 1 resolve to Velocity 10. Velocity and
+acceleration each have independent minimum and maximum settings. Velocity is
+linearly interpolated; acceleration preserves the curved response by linearly
+interpolating its square root and squaring the result. With acceleration bounds
+1–100, UI Speed 1 resolves to Acceleration 1 and UI Speed 100 resolves to 100.
+
+Drying-mode selection only persists the requested workflow mode; it does not
+gate navigation through Auto/Manual/Demo on live dryer availability. Automatic
+and demo dryer readiness is checked when Start is pressed, so a disconnected
+dryer cannot trap the operator on one mode while cycling the selector.
+
+---
+
+## Shared Applications With Paint Wiring
+
+Most UI screens are shared platform applications that receive paint-specific services, schemas, or repositories from `application_wiring.py`.
+
+### Workpiece editing and library
+
+| Application | Paint-specific dependency |
+|-------------|---------------------------|
+| `WorkpieceEditor` | `WorkpieceEditorService` with `PaintWorkpieceEditorAdapter`, paint schemas, paint matching, paint path prep, and paint executor |
+| `WorkpieceLibrary` | `PaintWorkpieceLibraryService` over `JsonPaintWorkpieceRepository` |
+
+### Robot, camera, and calibration settings
+
+| Application | Paint-specific dependency |
+|-------------|---------------------------|
+| `RobotSettings` | paint robot settings service wiring |
+| `WorkAreaSettings` | paint work-area declarations and vision integration |
+| `CameraSettings` | paint vision settings storage |
+| `CalibrationSettings` | paint calibration settings storage |
+| `Calibration` | paint calibration coordinator and observer bindings |
+
+The Paint calibration wiring hides the Laser and Height Mapping tabs because those workflows are not currently needed. Other systems retain the default calibration tabs.
+
+### Utility and test applications
+
+| Application | Paint-specific dependency |
+|-------------|---------------------------|
+| `BrokerDebug` | messaging only |
+| `IntrinsicCapture` | optional vision service |
+| `HandEyeCalibration` | paint calibration services |
+| `PickTarget` | paint targeting provider + robot/navigation context |
+| `UserManagement` | paint user schema and permission policy |
+
+---
+
+## Wiring Conventions
+
+`application_wiring.py` follows a few consistent rules:
+
+- all imports are lazy inside builder functions
+- paint-owned configuration comes from `PAINT_PROCESS_CONFIG`
+- robot-system storage paths come from `BaseRobotSystem` helpers
+- the workpiece editor is the main consumer of paint process services outside the background process itself
+
+When adding a new paint screen, prefer following the existing pattern:
+
+1. add a `_build_<app>()` function in `application_wiring.py`
+2. keep paint-specific composition there
+3. register the app in `PaintRobotSystem.shell`
+
+---
+
+## Workpiece Editor As The Main Paint UI
+
+The workpiece editor is the most paint-specialized screen even though it is built from the shared application package.
+
+It receives:
+
+- paint contour form schema
+- paint segment settings schema
+- DXF import behavior through `PaintDxfPathFormBehavior`
+- paint alignment and image-placement logic
+- paint matching service
+- paint path preparation service
+- paint path executor for preview and execution-oriented diagnostics
+
+That makes it the main authoring surface for paint workpieces and the main manual entry point into the same geometry pipeline later used by the background paint process.
+
+The Paint Process Settings application's `Sensor-Controlled Fast LIN` section
+exposes both `Controlled Stop Duration` (the requested deceleration duration)
+and `Stop Confirmation Timeout` (how long pickup waits for the stopped task to
+become inactive). The latter defaults to 3 seconds and applies to normal and
+magazine sensor-controlled pickup.
+
+For the tray/plate dropoff strategy, the four ordered corners are presented in
+a single table (Bottom Left, Bottom Right, Top Right, Top Left). Selecting a row
+and pressing `Set Current` captures the current robot pose and records the tool
+and user configured in Robot Settings; mixed-frame corner captures are rejected.
+Each selected corner can also be edited manually or sent to the robot through a
+low-speed PTP `Move To` action using that configured tool and user.

@@ -1,0 +1,1119 @@
+import logging
+import os
+from time import perf_counter
+from typing import List, Tuple, Callable
+import copy
+from datetime import datetime
+
+import numpy as np
+import cv2
+
+from PyQt6.QtCore import QCoreApplication, QObject, pyqtSignal
+from PyQt6.QtGui import QPixmap
+from PyQt6.QtWidgets import QDialog, QLabel, QScrollArea, QVBoxLayout, QPushButton, QHBoxLayout, QTabWidget
+
+from src.applications.base.i_application_controller import IApplicationController
+from src.applications.workpiece_editor.model import WorkpieceEditorModel
+from src.applications.workpiece_editor.service.i_workpiece_path_executor import WorkpieceProcessAction
+from src.applications.workpiece_editor.view.workpiece_editor_view import WorkpieceEditorView
+from src.engine.core.i_messaging_service import IMessagingService
+from src.shared_contracts.events.vision_events import VisionTopics
+from src.applications.base.styled_message_box import show_warning, show_info, show_critical
+from src.shared_contracts.events.workpiece_events import WorkpieceTopics
+
+_DEFAULT_WORKPIECE_HEIGHT_MM = 0.0
+_TEMPORARILY_SKIP_PREPARED_PROCESS_PREVIEW = True
+
+
+class _Bridge(QObject):
+    camera_frame = pyqtSignal(object)
+    load_workpiece_raw = pyqtSignal(dict)
+
+
+class WorkpieceEditorController(IApplicationController):
+
+    def __init__(self, model: WorkpieceEditorModel, view: WorkpieceEditorView,
+                 messaging: IMessagingService, custom_action_handler=None):
+        self._model = model
+        self._view = view
+        self._broker = messaging
+        self._custom_action_handler = custom_action_handler
+        self._bridge = _Bridge()
+        self._subs: List[Tuple[str, Callable]] = []
+        self._active = False
+        self._camera_active = True  # ← controls whether feed updates are forwarded
+        self._logger = logging.getLogger(self.__class__.__name__)
+        self._preview_dialog = None
+        self._latest_frame_shape = None
+        self._latest_frame_bgr = None
+        self._captured_pickup_point = None
+        self._captured_matching_contour = None
+        self._loaded_raw_workpiece = None
+
+    def load(self) -> None:
+        self._active = True
+        self._camera_active = True
+        self._bridge.camera_frame.connect(self._on_camera_frame)
+        self._bridge.load_workpiece_raw.connect(self._on_load_workpiece_raw)
+        self._view.set_capture_handler(self._on_capture)  # ← renamed
+        self._view.set_save_callback(self._on_form_submit)
+        self._install_optional_actions()
+        self._connect_signals()
+        self._subscribe()
+        self._view.destroyed.connect(self.stop)
+        self._connect_segment_added()
+
+    def stop(self) -> None:
+        self._active = False
+        try:
+            self._bridge.camera_frame.disconnect()
+        except (RuntimeError, TypeError):
+            pass
+
+        try:
+            self._bridge.load_workpiece_raw.disconnect()
+        except (RuntimeError, TypeError):
+            pass
+
+        for topic, cb in reversed(self._subs):
+            try:
+                self._broker.unsubscribe(topic, cb)
+            except Exception:
+                pass
+
+        try:
+            inner = self._view._editor.contourEditor.editor_with_rulers.editor
+            bus = getattr(inner, '_event_bus', None)
+            if bus is not None and hasattr(bus, 'segment_added'):
+                try:
+                    bus.segment_added.disconnect(self._on_segment_added)
+                except (RuntimeError, TypeError):
+                    pass
+        except Exception:
+            pass
+
+        self._subs.clear()
+
+    # ── Capture ───────────────────────────────────────────────────────
+
+    def _on_capture(self) -> list:
+        """Called by the editor's capture button. Picks the largest contour,
+        stops the live feed and loads the contour into the Workpiece layer."""
+        try:
+            contours = self._model.get_contours()
+        except RuntimeError as exc:
+            show_warning(self._view, self._t("Capture"), str(exc))
+            return []
+        self._logger.debug("Capture: got %d contours from vision", len(contours))
+        largest = self._pick_largest(contours)
+        if largest is None:
+            self._logger.warning("Capture: no usable contour found")
+            show_warning(
+                self._view,
+                self._t("Capture"),
+                self._t("No contour detected.\nMake sure the vision service is running."),
+            )
+            return []
+
+        self._logger.debug("Capture: largest contour has %d points", len(largest))
+
+        # Stop live camera feed so the captured frame stays visible
+        self._camera_active = False
+        self._captured_pickup_point = self._compute_contour_centroid(largest)
+        # Preserve the exact vision contour independently of anything the
+        # editor may close, split, simplify, or resample before saving.
+        self._captured_matching_contour = self._normalize_contour_points(largest).tolist()
+        self._save_pickup_debug_image(largest, self._captured_pickup_point)
+        self._clear_verification_overlay()
+
+        known_raw, match_payload, match_message = self._try_prepare_known_workpiece_capture(largest)
+        if known_raw is not None:
+            try:
+                self._load_raw_into_editor(known_raw, storage_id=None)
+                self._view._editor.set_verification_contours([self._normalize_contour_points(largest)])
+                show_info(
+                    self._view,
+                    self._t("Matched Workpiece"),
+                    self._capture_match_summary(match_payload or {}),
+                )
+                return [largest]
+            except Exception:
+                self._logger.exception("Capture: failed to load matched workpiece")
+        elif match_message:
+            show_warning(
+                self._view,
+                self._t("Match Workpiece"),
+                self._t("The captured contour did not match a saved workpiece.\n\n{details}").format(
+                    details=match_message,
+                ),
+            )
+
+        try:
+            self._load_capture_contour_into_editor(largest)
+            self._set_pickup_point_overlay()
+        except Exception:
+            self._logger.exception("Capture: failed to load contour into editor")
+
+        return [largest]
+
+    @staticmethod
+    def _pick_largest(contours: list):
+        import cv2
+        import numpy as np
+        if not contours:
+            return None
+        best, best_area = None, -1.0
+        for c in contours:
+            try:
+                arr = np.array(c, dtype=np.float32)
+                area = float(cv2.contourArea(arr))
+                if area > best_area:
+                    best_area = area
+                    best = arr
+            except Exception:
+                import traceback
+                traceback.print_exc()
+                continue
+        return best
+
+    # ── Broker → Bridge ───────────────────────────────────────────────
+
+    def _subscribe(self) -> None:
+        self._sub(VisionTopics.LATEST_IMAGE, self._on_latest_image_raw)
+        self._sub(WorkpieceTopics.OPEN_IN_EDITOR, self._on_open_in_editor_raw)
+
+    def _on_latest_image_raw(self, msg) -> None:
+        if isinstance(msg, dict):
+            frame = msg.get("image")
+            if frame is not None:
+                self._bridge.camera_frame.emit(frame)
+
+    def _on_camera_frame(self, frame) -> None:
+        if not self._active or not self._camera_active or frame is None:
+            return
+        try:
+            self._latest_frame_shape = tuple(frame.shape)
+        except Exception:
+            self._latest_frame_shape = None
+        try:
+            self._latest_frame_bgr = frame.copy()
+        except Exception:
+            self._latest_frame_bgr = None
+        try:
+            import cv2
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        except Exception:
+            rgb = frame
+        self._view.update_camera_feed(rgb)
+
+    # ── View → Model ──────────────────────────────────────────────────
+
+    def _on_form_submit(self, form_data: dict):
+        form_data = self._augment_form_data_with_editor_context(form_data)
+        try:
+            inner = self._view._editor.contourEditor.editor_with_rulers.editor
+            editor_data = inner.workpiece_manager.export_editor_data()
+        except Exception:
+            editor_data = None
+
+        data = {"form_data": form_data, "editor_data": editor_data}
+        ok, msg = self._model.save_workpiece(data)
+        self._logger.info("Save workpiece: %s — %s", ok, msg)
+        if not ok:
+            show_warning(self._view, self._t("Cannot Save"), msg)
+            return False, msg
+        # Resume live feed after successful save
+        self._camera_active = True
+        return True, msg
+
+    def _connect_signals(self) -> None:
+        self._view.save_requested.connect(self._on_save)
+        self._view.execute_requested.connect(self._on_execute)
+        self._view.custom_action_requested.connect(self._on_custom_action)
+
+    def _on_custom_action(self, action_id: str) -> None:
+        if self._custom_action_handler is not None:
+            inner = self._view._editor.contourEditor.editor_with_rulers.editor
+            ok, message = self._custom_action_handler(action_id, inner)
+            try:
+                self._view._editor.pointManagerWidget.refresh_points()
+            except (AttributeError, RuntimeError):
+                pass
+            if ok:
+                show_info(self._view, self._t("Paint Selection"), self._t(message))
+            else:
+                show_warning(self._view, self._t("Paint Selection"), self._t(message))
+
+    def _set_verification_overlay_from_raw(self, raw: dict) -> None:
+        try:
+            points = self._extract_raw_contour_points(raw)
+            overlays = [points] if len(points) >= 2 else []
+            pickup_point = self._parse_pickup_point((raw or {}).get("pickupPoint"))
+            if pickup_point is not None:
+                overlays.extend(self._build_pickup_point_overlay(pickup_point))
+            self._view._editor.set_verification_contours(overlays)
+        except Exception:
+            self._logger.debug("Failed to set verification overlay", exc_info=True)
+
+    def _resolve_image_size(self) -> tuple[float, float]:
+        if self._latest_frame_shape is not None and len(self._latest_frame_shape) >= 2:
+            return float(self._latest_frame_shape[1]), float(self._latest_frame_shape[0])
+        return 1280.0, 720.0
+
+    def _clear_verification_overlay(self) -> None:
+        try:
+            self._view._editor.clear_verification_contours()
+        except Exception:
+            self._logger.debug("Failed to clear verification overlay", exc_info=True)
+
+    def _set_pickup_point_overlay(self) -> None:
+        try:
+            if self._captured_pickup_point is None:
+                self._view._editor.set_verification_contours([])
+                return
+            self._view._editor.set_verification_contours(
+                self._build_pickup_point_overlay(self._captured_pickup_point)
+            )
+        except Exception:
+            self._logger.debug("Failed to set pickup point overlay", exc_info=True)
+
+    def _save_pickup_debug_image(self, contour, pickup_point: tuple[float, float] | None) -> None:
+        try:
+            frame = None if self._latest_frame_bgr is None else self._latest_frame_bgr.copy()
+            if frame is None:
+                return
+
+            contour_pts = self._normalize_contour_points(contour)
+            if len(contour_pts) >= 2:
+                contour_draw = np.asarray(contour_pts, dtype=np.int32).reshape(-1, 1, 2)
+                cv2.polylines(frame, [contour_draw], isClosed=True, color=(0, 255, 255), thickness=2)
+
+            if pickup_point is not None:
+                cx = int(round(float(pickup_point[0])))
+                cy = int(round(float(pickup_point[1])))
+                half = 12
+                cv2.line(frame, (cx - half, cy), (cx + half, cy), (0, 0, 255), 2)
+                cv2.line(frame, (cx, cy - half), (cx, cy + half), (0, 0, 255), 2)
+                cv2.circle(frame, (cx, cy), 4, (0, 255, 0), -1)
+                cv2.putText(
+                    frame,
+                    f"pickup=({float(pickup_point[0]):.1f}, {float(pickup_point[1]):.1f})",
+                    (max(10, cx + 10), max(25, cy - 10)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (0, 255, 0),
+                    2,
+                    cv2.LINE_AA,
+                )
+
+            # debug_dir = os.path.normpath(
+            #     os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "bootstrap", "debug_plots")
+            # )
+            # os.makedirs(debug_dir, exist_ok=True)
+            # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            # path = os.path.join(debug_dir, f"pickup_centroid_debug_{timestamp}.png")
+            # if cv2.imwrite(path, frame):
+            #     self._logger.info("Saved pickup centroid debug image to: %s", path)
+        except Exception:
+            self._logger.debug("Failed to save pickup centroid debug image", exc_info=True)
+
+    def _install_optional_actions(self) -> None:
+        layout = self._view.layout()
+        if layout is None:
+            return
+        row = QHBoxLayout()
+        row.addStretch(1)
+        match_button = QPushButton("Match Workpiece Test")
+        match_button.clicked.connect(self._on_match_workpiece_test)
+        # row.addWidget(match_button)
+        layout.insertLayout(0, row)
+
+    def _on_match_workpiece_test(self) -> None:
+        contours = self._model.get_contours()
+        largest = self._pick_largest(contours)
+        if largest is None:
+            show_warning(self._view, self._t("Match Workpiece"), self._t("No contour detected."))
+            return
+
+        if not self._model.can_match_saved_workpieces():
+            show_warning(
+                self._view,
+                self._t("Match Workpiece"),
+                self._t("Matching is not available in this editor."),
+            )
+            return
+
+        try:
+            ok, payload, msg = self._model.match_saved_workpieces(largest)
+            if not ok or not payload:
+                show_info(self._view, self._t("Match Workpiece"), msg)
+                return
+
+            self._camera_active = False
+            self._clear_verification_overlay()
+            self._on_load_workpiece_raw({"raw": payload["raw"], "storage_id": payload.get("storage_id")})
+            show_info(
+                self._view,
+                self._t("Matched Workpiece"),
+                self._t("Matched: {workpiece_id}").format(
+                    workpiece_id=payload.get("workpieceId") or self._t("(no id)")
+                )
+                + (
+                    "\n" + self._t("Name: {name}").format(name=payload.get("name"))
+                    if payload.get("name")
+                    else ""
+                )
+                + (
+                    "\n" + self._t("Confidence: {confidence:.2f}").format(
+                        confidence=float(payload.get("confidence"))
+                    )
+                    if payload.get("confidence") is not None
+                    else ""
+                )
+                + "\n"
+                + self._t("Saved workpieces checked: {count}").format(
+                    count=payload.get("candidate_count", 0)
+                )
+                + "\n"
+                + self._t("Unmatched contours: {count}").format(
+                    count=payload.get("no_match_count", 0)
+                ),
+            )
+        except Exception as exc:
+            self._logger.exception("Failed to match saved workpieces: %s", exc)
+            show_warning(self._view, self._t("Match Workpiece Failed"), str(exc))
+
+    def _get_current_editor_workpiece_contour(self) -> np.ndarray:
+        try:
+            workpiece_manager = self._view._editor.contourEditor.editor_with_rulers.editor.workpiece_manager
+            contours_by_layer = workpiece_manager.get_contours() or {}
+        except Exception:
+            return np.empty((0, 2), dtype=np.float64)
+
+        main_layer = contours_by_layer.get("Main") or contours_by_layer.get("Workpiece") or []
+        if isinstance(main_layer, dict):
+            main_layer = main_layer.get("contours") or []
+        if not main_layer:
+            return np.empty((0, 2), dtype=np.float64)
+        return self._normalize_contour_points(main_layer[0])
+
+    def _capture_editor_snapshot(self) -> dict | None:
+        try:
+            form = getattr(self._view._editor, "additional_data_form", None)
+            form_data = copy.deepcopy(form.get_data()) if form is not None and hasattr(form, "get_data") else {}
+            inner = self._view._editor.contourEditor.editor_with_rulers.editor
+            editor_data = copy.deepcopy(inner.workpiece_manager.export_editor_data())
+            return {
+                "form_data": form_data,
+                "editor_data": editor_data,
+                "loaded_raw_workpiece": copy.deepcopy(self._loaded_raw_workpiece),
+                "captured_matching_contour": copy.deepcopy(self._captured_matching_contour),
+            }
+        except Exception:
+            self._logger.debug("Failed to capture editor snapshot", exc_info=True)
+            return None
+
+    def _restore_editor_snapshot(self, snapshot: dict) -> None:
+        inner = self._view._editor.contourEditor.editor_with_rulers.editor
+        editor_data = snapshot.get("editor_data")
+        if editor_data is not None:
+            inner.workpiece_manager.clear_workpiece()
+            inner.workpiece_manager.load_editor_data(editor_data, close_contour=False)
+        form = getattr(self._view._editor, "additional_data_form", None)
+        form_data = snapshot.get("form_data") or {}
+        if form is not None:
+            for key, value in form_data.items():
+                if hasattr(form, "set_field_value"):
+                    form.set_field_value(key, value)
+        self._loaded_raw_workpiece = copy.deepcopy(snapshot.get("loaded_raw_workpiece"))
+        self._captured_matching_contour = copy.deepcopy(
+            snapshot.get("captured_matching_contour")
+        )
+        try:
+            self._view._editor.pointManagerWidget.refresh_points()
+            inner.update()
+        except Exception:
+            self._logger.debug("Failed to refresh editor after restoring snapshot", exc_info=True)
+
+    def _save_workpiece_alignment_debug_plot(self, original_raw: dict, aligned_raw: dict) -> None:
+        try:
+            from src.engine.robot.path_interpolation.new_interpolation.debug_plotting import plot_workpiece_alignment_debug
+
+            original = self._extract_raw_contour_points(original_raw)
+            aligned = self._extract_raw_contour_points(aligned_raw)
+            if len(original) < 2 or len(aligned) < 2:
+                return
+            image_path = plot_workpiece_alignment_debug(original, aligned)
+            if image_path:
+                self._logger.info("Saved workpiece alignment debug plot to: %s", image_path)
+        except Exception:
+            self._logger.debug("Failed to save workpiece alignment debug plot", exc_info=True)
+
+    @staticmethod
+    def _extract_raw_contour_points(raw: dict) -> np.ndarray:
+        contour = (raw or {}).get("contour")
+        if isinstance(contour, dict):
+            contour = contour.get("contour", [])
+        if contour is None:
+            return np.empty((0, 2), dtype=np.float64)
+
+        points: list[list[float]] = []
+        for point in contour:
+            if point is None:
+                continue
+            arr = np.asarray(point, dtype=np.float64)
+            if arr.size < 2:
+                continue
+            flat = arr.reshape(-1)
+            points.append([float(flat[0]), float(flat[1])])
+        if not points:
+            return np.empty((0, 2), dtype=np.float64)
+        return np.asarray(points, dtype=np.float64)
+
+    @staticmethod
+    def _normalize_contour_points(contour) -> np.ndarray:
+        array = np.asarray(contour, dtype=np.float64)
+        if array.ndim == 3 and array.shape[1] == 1:
+            array = array[:, 0, :]
+        if array.ndim != 2 or array.shape[1] < 2:
+            return np.empty((0, 2), dtype=np.float64)
+        return array[:, :2]
+
+    @staticmethod
+    def _resample_closed_path(points: np.ndarray, count: int) -> np.ndarray:
+        if len(points) < 2:
+            return points
+        closed_points = points
+        if np.linalg.norm(points[0] - points[-1]) > 1e-6:
+            closed_points = np.vstack([points, points[0]])
+        segment_lengths = np.linalg.norm(np.diff(closed_points, axis=0), axis=1)
+        total_length = float(np.sum(segment_lengths))
+        if total_length <= 1e-9:
+            return closed_points[:-1]
+        cumulative = np.concatenate([[0.0], np.cumsum(segment_lengths)])
+        samples = np.linspace(0.0, total_length, num=max(int(count), 3), endpoint=False)
+        resampled = []
+        seg_index = 0
+        for sample in samples:
+            while seg_index + 1 < len(cumulative) and cumulative[seg_index + 1] < sample:
+                seg_index += 1
+            seg_start = closed_points[seg_index]
+            seg_end = closed_points[seg_index + 1]
+            seg_len = segment_lengths[seg_index]
+            if seg_len <= 1e-9:
+                resampled.append(seg_start.copy())
+                continue
+            ratio = (sample - cumulative[seg_index]) / seg_len
+            resampled.append(seg_start + ratio * (seg_end - seg_start))
+        return np.asarray(resampled, dtype=np.float64)
+
+    @staticmethod
+    def _principal_axis_angle(points: np.ndarray) -> float:
+        if len(points) < 2:
+            return 0.0
+        covariance = np.cov(points.T)
+        eigenvalues, eigenvectors = np.linalg.eigh(covariance)
+        axis = eigenvectors[:, int(np.argmax(eigenvalues))]
+        return float(np.arctan2(axis[1], axis[0]))
+
+    @staticmethod
+    def _rotate_points(points: np.ndarray, center: np.ndarray, theta: float) -> np.ndarray:
+        rotation = np.array(
+            [
+                [np.cos(theta), -np.sin(theta)],
+                [np.sin(theta), np.cos(theta)],
+            ],
+            dtype=np.float64,
+        )
+        return (points - center) @ rotation.T + center
+
+    @staticmethod
+    def _rotate_and_scale_points(points: np.ndarray, center: np.ndarray, theta: float, scale: float) -> np.ndarray:
+        rotation = np.array(
+            [
+                [np.cos(theta), -np.sin(theta)],
+                [np.sin(theta), np.cos(theta)],
+            ],
+            dtype=np.float64,
+        )
+        return ((points - center) @ rotation.T) * float(scale) + center
+
+    @classmethod
+    def _transform_points(
+            cls,
+            points: np.ndarray,
+            center: np.ndarray,
+            theta: float,
+            scale: float,
+            translation: np.ndarray,
+    ) -> np.ndarray:
+        return cls._rotate_and_scale_points(points, center, theta, scale) + translation
+
+    @staticmethod
+    def _estimate_uniform_scale(source_centered: np.ndarray, target_centered: np.ndarray) -> float:
+        source_norm = float(np.sqrt(np.sum(source_centered * source_centered)))
+        target_norm = float(np.sqrt(np.sum(target_centered * target_centered)))
+        if source_norm <= 1e-9 or target_norm <= 1e-9:
+            return 1.0
+        return max(1e-3, target_norm / source_norm)
+
+    @staticmethod
+    def _alignment_error(source_points: np.ndarray, target_points: np.ndarray) -> float:
+        if len(source_points) == 0 or len(target_points) == 0:
+            return float("inf")
+        deltas = source_points[:, None, :] - target_points[None, :, :]
+        distances = np.linalg.norm(deltas, axis=2)
+        return float(np.mean(np.min(distances, axis=1)))
+
+    @staticmethod
+    def _refine_alignment_with_mask_overlap(
+            source_points: np.ndarray,
+            target_points: np.ndarray,
+            source_centroid: np.ndarray,
+            initial_theta: float,
+            initial_scale: float,
+            initial_translation: np.ndarray,
+            overlap_fn,
+    ) -> tuple[float, float, np.ndarray]:
+        best_theta = float(initial_theta)
+        best_scale = max(1e-3, float(initial_scale))
+        best_translation = np.asarray(initial_translation, dtype=np.float64)
+        best_overlap = WorkpieceEditorController._mask_overlap_for_pose(
+            source_points,
+            target_points,
+            source_centroid,
+            best_theta,
+            best_scale,
+            best_translation,
+            overlap_fn,
+        )
+
+        rotation_steps_deg = [6.0, 2.0, 0.5]
+        translation_steps_px = [12.0, 4.0, 1.5]
+        scale_steps = [0.10, 0.03, 0.01]
+
+        for rotation_step_deg, translation_step_px, scale_step in zip(rotation_steps_deg, translation_steps_px,
+                                                                      scale_steps):
+            improved = True
+            while improved:
+                improved = False
+                candidates: list[tuple[float, float, np.ndarray]] = [
+                    (best_theta - np.deg2rad(rotation_step_deg), best_scale, best_translation),
+                    (best_theta + np.deg2rad(rotation_step_deg), best_scale, best_translation),
+                    (best_theta, max(1e-3, best_scale * (1.0 - scale_step)), best_translation),
+                    (best_theta, best_scale * (1.0 + scale_step), best_translation),
+                    (best_theta, best_scale, best_translation + np.array([translation_step_px, 0.0], dtype=np.float64)),
+                    (best_theta, best_scale,
+                     best_translation + np.array([-translation_step_px, 0.0], dtype=np.float64)),
+                    (best_theta, best_scale, best_translation + np.array([0.0, translation_step_px], dtype=np.float64)),
+                    (best_theta, best_scale,
+                     best_translation + np.array([0.0, -translation_step_px], dtype=np.float64)),
+                    (best_theta, best_scale,
+                     best_translation + np.array([translation_step_px, translation_step_px], dtype=np.float64)),
+                    (best_theta, best_scale,
+                     best_translation + np.array([translation_step_px, -translation_step_px], dtype=np.float64)),
+                    (best_theta, best_scale,
+                     best_translation + np.array([-translation_step_px, translation_step_px], dtype=np.float64)),
+                    (best_theta, best_scale,
+                     best_translation + np.array([-translation_step_px, -translation_step_px], dtype=np.float64)),
+                ]
+                for candidate_theta, candidate_scale, candidate_translation in candidates:
+                    overlap = WorkpieceEditorController._mask_overlap_for_pose(
+                        source_points,
+                        target_points,
+                        source_centroid,
+                        float(candidate_theta),
+                        float(candidate_scale),
+                        np.asarray(candidate_translation, dtype=np.float64),
+                        overlap_fn,
+                    )
+                    if overlap > best_overlap:
+                        best_overlap = overlap
+                        best_theta = float(candidate_theta)
+                        best_scale = float(candidate_scale)
+                        best_translation = np.asarray(candidate_translation, dtype=np.float64)
+                        improved = True
+        return best_theta, best_scale, best_translation
+
+    @staticmethod
+    def _mask_overlap_for_pose(
+            source_points: np.ndarray,
+            target_points: np.ndarray,
+            source_centroid: np.ndarray,
+            theta: float,
+            scale: float,
+            translation: np.ndarray,
+            overlap_fn,
+    ) -> float:
+        transformed = WorkpieceEditorController._transform_points(
+            source_points,
+            source_centroid,
+            theta,
+            scale,
+            translation,
+        )
+        return float(overlap_fn(transformed, target_points))
+
+    def _on_save(self, data: dict) -> None:
+        data = self._augment_form_data_with_editor_context(data)
+        ok, msg = self._model.save_workpiece(data)
+        self._logger.info("Save workpiece (fallback): %s — %s", ok, msg)
+        if not ok:
+            show_warning(self._view, self._t("Cannot Save"), msg)
+
+    def _on_execute(self, data: dict) -> None:
+        self._restore_live_feed()
+        try:
+            inner = self._view._editor.contourEditor.editor_with_rulers.editor
+            editor_data = inner.workpiece_manager.export_editor_data()
+        except Exception:
+            editor_data = None
+        form_data = dict(data or {})
+        if (
+                not form_data
+                and self._loaded_raw_workpiece is not None
+                and editor_data is not None
+        ):
+            try:
+                stats = editor_data.get_statistics()
+                if int(stats.get("total_segments", 0)) == 0 and int(stats.get("total_points", 0)) == 0:
+                    form_data = copy.deepcopy(self._loaded_raw_workpiece)
+                    editor_data = None
+                    self._logger.info("Execute: using loaded raw workpiece payload because editor state is empty")
+            except Exception:
+                self._logger.debug("Failed to inspect editor_data stats during execute", exc_info=True)
+        payload = {"form_data": form_data, "editor_data": editor_data}
+        ok, msg = self._model.execute_workpiece(payload, skip_debug_plot=_TEMPORARILY_SKIP_PREPARED_PROCESS_PREVIEW)
+        self._logger.info("Execute workpiece: %s — %s", ok, msg)
+        if ok:
+            try:
+                raw_paths = self._model.get_last_raw_preview_paths()
+                raw_pixel_paths = self._model.get_last_raw_pixel_preview_paths()
+                raw_homography_paths = self._model.get_last_raw_homography_preview_paths()
+                prepared_paths = self._model.get_last_prepared_preview_paths()
+                curve_paths = self._model.get_last_curve_preview_paths()
+                sampled_paths = self._model.get_last_sampled_preview_paths()
+                execution_paths = self._model.get_last_execution_preview_paths()
+                camera_preview_paths: dict[str, list] | None = None
+                if not _TEMPORARILY_SKIP_PREPARED_PROCESS_PREVIEW:
+                    camera_preview_paths = self._model.get_last_camera_preview_paths()
+                if raw_paths or sampled_paths:
+                    if _TEMPORARILY_SKIP_PREPARED_PROCESS_PREVIEW:
+                        self._continue_with_process_action_after_prepare()
+                    else:
+                        self._show_interpolation_plot(
+                            raw_paths,
+                            raw_pixel_paths,
+                            raw_homography_paths,
+                            prepared_paths,
+                            curve_paths,
+                            sampled_paths,
+                            execution_paths,
+                            camera_preview_paths,
+                        )
+            except Exception:
+                self._logger.debug("Failed to show interpolation preview", exc_info=True)
+
+    def _continue_with_process_action_after_prepare(self) -> None:
+        actions = tuple(self._model.get_process_actions())
+        if not actions:
+            show_warning(
+                self._view,
+                self._t("No Process Action"),
+                self._t("Prepared process has no executable action."),
+            )
+            return
+        if len(actions) > 1:
+            self._logger.info(
+                "Prepared process preview bypass selected first process action out of %d: %s",
+                len(actions),
+                actions[0].action_id,
+            )
+        self._preview_dialog = None
+        self._on_execute_process_confirmed(actions[0])
+
+    def _show_interpolation_plot(
+            self,
+            raw_paths: list[list[list[float]]],
+            raw_pixel_paths: list[list[list[float]]],
+            raw_homography_paths: list[list[list[float]]],
+            prepared_paths: list[list[list[float]]],
+            curve_paths: list[list[list[float]]],
+            sampled_paths: list[list[list[float]]],
+            execution_paths: list[list[list[float]]],
+            camera_preview_paths: dict[str, list] | None = None,
+    ) -> None:
+        from src.engine.robot.path_interpolation.new_interpolation.debug_plotting import (
+            plot_pixel_to_mm_debug,
+            plot_trajectory_debug,
+        )
+
+        raw_mm_image_path = plot_pixel_to_mm_debug(raw_paths, raw_pixel_paths, raw_homography_paths)
+        prepared_image_path = plot_trajectory_debug(
+            raw_paths,
+            curve_paths,
+            sampled_paths,
+            execution_paths,
+            prepared_paths=prepared_paths,
+            camera_preview_paths=camera_preview_paths,
+        )
+        if not raw_mm_image_path and not prepared_image_path:
+            return
+
+        dialog = QDialog(self._view)
+        dialog.setWindowTitle("Prepared Process Paths")
+        dialog.resize(1100, 800)
+
+        layout = QVBoxLayout(dialog)
+        tabs = QTabWidget(dialog)
+
+        def _add_image_tab(title: str, image_path: str | None) -> None:
+            if not image_path:
+                return
+            scroll = QScrollArea(tabs)
+            image_label = QLabel(scroll)
+            pixmap = QPixmap(image_path)
+            image_label.setPixmap(pixmap)
+            image_label.setScaledContents(False)
+            scroll.setWidget(image_label)
+            scroll.setWidgetResizable(True)
+            tabs.addTab(scroll, title)
+
+        _add_image_tab("Pixel to mm only", raw_mm_image_path)
+        _add_image_tab("Prepared paths", prepared_image_path)
+        layout.addWidget(tabs)
+
+        actions = tuple(self._model.get_process_actions())
+        if not actions:
+            show_warning(
+                self._view,
+                self._t("No Process Action"),
+                self._t("Prepared process has no executable action."),
+            )
+            return
+        action = actions[0]
+        if len(actions) > 1:
+            self._logger.info(
+                "Prepared process dialog selected first process action out of %d: %s",
+                len(actions),
+                action.action_id,
+            )
+
+        button_row = QHBoxLayout()
+        cancel_button = QPushButton("Cancel")
+        cancel_button.clicked.connect(dialog.reject)
+        button_row.addWidget(cancel_button)
+        button_row.addStretch(1)
+        approve_button = QPushButton(action.label)
+        approve_button.clicked.connect(lambda _checked=False: self._on_execute_process_confirmed(action))
+        button_row.addWidget(approve_button)
+        layout.addLayout(button_row)
+
+        self._preview_dialog = dialog
+        dialog.show()
+
+    def _on_execute_process_confirmed(self, action: WorkpieceProcessAction) -> None:
+        _t0 = perf_counter()
+        self._restore_live_feed()
+        if action.requires_projected_path_plot:
+            from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
+            if PAINT_PROCESS_CONFIG.enable_pivot_debug_plot:
+                try:
+                    source_paths = self._model.get_last_execution_preview_paths()
+                    pivot_paths, pivot_pose = self._model.get_last_pivot_preview_paths()
+                    motion_snapshots, _ = self._model.get_last_pivot_motion_preview()
+                    if source_paths and pivot_paths:
+                        approved = self._show_pivot_path_plot(
+                            source_paths,
+                            pivot_paths,
+                            pivot_pose,
+                            motion_snapshots,
+                            approve_label=action.label,
+                        )
+                        if not approved:
+                            self._logger.info("Process action cancelled from prepared process dialog: %s", action.action_id)
+                            return
+                except Exception:
+                    self._logger.debug("Failed to show projected path plot before process execution", exc_info=True)
+                    return
+        self._logger.info("[TIMING] controller pre-execute elapsed_s=%.3f", perf_counter() - _t0)
+        _t1 = perf_counter()
+        ok, msg = self._model.execute_process_action(action.action_id)
+        self._logger.info("[TIMING] controller execute_process_action elapsed_s=%.3f", perf_counter() - _t1)
+        self._logger.info("Execute process action (%s): %s — %s", action.action_id, ok, msg)
+        if ok:
+            show_info(self._preview_dialog or self._view, self._t("Process Started"), msg)
+        else:
+            show_critical(self._preview_dialog or self._view, self._t("Process Failed"), msg)
+
+    def _show_pivot_path_plot(
+            self,
+            source_paths: list[list[list[float]]],
+            pivot_paths: list[list[list[float]]],
+            pivot_pose: list[float] | None,
+            motion_snapshots=None,
+            approve_label: str = "Approve",
+    ) -> bool:
+        from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
+        if not PAINT_PROCESS_CONFIG.enable_pivot_debug_plot:
+            return True
+        from src.engine.robot.path_interpolation.new_interpolation.debug_plotting import plot_pivot_path_debug
+
+        image_path = plot_pivot_path_debug(source_paths, pivot_paths, pivot_pose, motion_snapshots=motion_snapshots)
+        if not image_path:
+            return False
+
+        dialog = QDialog(self._view)
+        dialog.setWindowTitle("Projected Process Path")
+        dialog.resize(1000, 700)
+        dialog.setModal(True)
+
+        layout = QVBoxLayout(dialog)
+        scroll = QScrollArea(dialog)
+        image_label = QLabel(scroll)
+        pixmap = QPixmap(image_path)
+        image_label.setPixmap(pixmap)
+        image_label.setScaledContents(False)
+        scroll.setWidget(image_label)
+        scroll.setWidgetResizable(True)
+        layout.addWidget(scroll)
+
+        button_row = QHBoxLayout()
+        cancel_button = QPushButton("Cancel")
+        cancel_button.clicked.connect(dialog.reject)
+        button_row.addWidget(cancel_button)
+        button_row.addStretch(1)
+        approve_button = QPushButton(approve_label)
+        approve_button.clicked.connect(dialog.accept)
+        button_row.addWidget(approve_button)
+        layout.addLayout(button_row)
+
+        return dialog.exec() == QDialog.DialogCode.Accepted
+
+    def _sub(self, topic: str, cb: Callable) -> None:
+        self._broker.subscribe(topic, cb)
+        self._subs.append((topic, cb))
+
+    def _on_open_in_editor_raw(self, payload) -> None:
+        if isinstance(payload, dict) and "storage_id" in payload:
+            self._bridge.load_workpiece_raw.emit(payload)
+        elif isinstance(payload, dict):
+            self._bridge.load_workpiece_raw.emit({"raw": payload, "storage_id": None})
+
+    def _on_load_workpiece_raw(self, payload: dict) -> None:
+        if not self._active:
+            return
+        try:
+            raw = payload.get("raw", payload)
+            storage_id = payload.get("storage_id")
+            self._clear_verification_overlay()
+            self._load_raw_into_editor(raw, storage_id=storage_id)
+        except Exception as exc:
+            self._logger.exception("Failed to load workpiece: %s", exc)
+            show_warning(self._view, self._t("Load Failed"), str(exc))
+
+    def _augment_form_data_with_editor_context(self, form_data: dict) -> dict:
+        enriched = dict(form_data or {})
+        if self._captured_pickup_point is not None and not enriched.get("pickupPoint"):
+            enriched[
+                "pickupPoint"] = f"{float(self._captured_pickup_point[0]):.3f},{float(self._captured_pickup_point[1]):.3f}"
+        if self._captured_matching_contour:
+            enriched["matchingContour"] = copy.deepcopy(self._captured_matching_contour)
+        enriched["height_mm"] = self._safe_float(enriched.get("height_mm"), _DEFAULT_WORKPIECE_HEIGHT_MM)
+        return enriched
+
+    def _load_capture_contour_into_editor(self, contour) -> None:
+        editor_frame = self._view._editor
+        inner = editor_frame.contourEditor.editor_with_rulers.editor
+        wm = inner.workpiece_manager
+
+        wm.clear_workpiece()
+        # Let the injected system adapter establish its editor layers.  Paint,
+        # for example, keeps the captured matching boundary in Workpiece and
+        # creates an independent complete RTCP process contour in Paint.
+        editor_data = self._model.get_workpiece_data_adapter().from_raw(
+            {"contour": contour}
+        )
+        wm.load_editor_data(editor_data, close_contour=True)
+        editor_frame.pointManagerWidget.refresh_points()
+        inner.update()
+
+    def _load_raw_into_editor(self, raw: dict, storage_id=None) -> None:
+        raw = self._normalize_workpiece_raw(raw)
+        self._loaded_raw_workpiece = copy.deepcopy(raw)
+        self._camera_active = False
+        editor_data = self._model.get_workpiece_data_adapter().from_raw(raw)
+        self._logger.debug(f"Editor data keys: {editor_data.get_statistics()}")
+        inner = self._view._editor.contourEditor.editor_with_rulers.editor
+        inner.workpiece_manager.clear_workpiece()
+        inner.workpiece_manager.load_editor_data(editor_data, close_contour=False)
+        self._view._editor.contourEditor.data = raw
+        self._prefill_form_from_raw(raw)
+        self._model.set_editing(storage_id)
+        if storage_id is not None or self._captured_matching_contour is None:
+            matching_contour = raw.get("matchingContour")
+            if matching_contour is None:
+                matching_contour = raw.get("contour")
+            self._captured_matching_contour = self._extract_raw_contour_points(
+                {"contour": matching_contour}
+            ).tolist()
+        if raw.get("pickupPoint"):
+            self._captured_pickup_point = self._parse_pickup_point(raw.get("pickupPoint"))
+
+        self._logger.info("Loaded workpiece into editor (storage_id=%s)", storage_id)
+
+        try:
+            self._view._editor.pointManagerWidget.refresh_points()
+            inner.update()
+        except Exception:
+            self._logger.debug("Failed to refresh editor after loading workpiece", exc_info=True)
+        self._set_pickup_point_overlay()
+
+    def _prefill_form_from_raw(self, raw: dict) -> None:
+        form = getattr(self._view._editor, "additional_data_form", None)
+        if form is None:
+            return
+        try:
+            if hasattr(form, "prefill_form"):
+                form.prefill_form(raw)
+                return
+            if hasattr(form, "set_field_value"):
+                for key, value in (raw or {}).items():
+                    form.set_field_value(key, value)
+        except Exception:
+            self._logger.debug("Failed to prefill workpiece form from raw payload", exc_info=True)
+
+    @staticmethod
+    def _compute_contour_centroid(contour) -> tuple[float, float] | None:
+        try:
+            contour_arr = np.asarray(contour, dtype=np.float32).reshape(-1, 1, 2)
+            if contour_arr.size == 0:
+                return None
+            moments = cv2.moments(contour_arr)
+            if abs(float(moments.get("m00", 0.0))) > 1e-9:
+                return float(moments["m10"] / moments["m00"]), float(moments["m01"] / moments["m00"])
+            flat_pts = contour_arr.reshape(-1, 2)
+            return float(np.mean(flat_pts[:, 0])), float(np.mean(flat_pts[:, 1]))
+        except Exception:
+            return None
+
+    @staticmethod
+    def _build_pickup_point_overlay(pickup_point: tuple[float, float], size_px: float = 12.0) -> list[np.ndarray]:
+        cx = float(pickup_point[0])
+        cy = float(pickup_point[1])
+        half = float(size_px) * 0.5
+        horizontal = np.array(
+            [[cx - half, cy], [cx + half, cy]],
+            dtype=np.float32,
+        )
+        vertical = np.array(
+            [[cx, cy - half], [cx, cy + half]],
+            dtype=np.float32,
+        )
+        return [horizontal, vertical]
+
+    @staticmethod
+    def _parse_pickup_point(value) -> tuple[float, float] | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            try:
+                x_str, y_str = value.split(",", 1)
+                return float(x_str), float(y_str)
+            except (TypeError, ValueError):
+                return None
+        if isinstance(value, (list, tuple)) and len(value) >= 2:
+            try:
+                return float(value[0]), float(value[1])
+            except (TypeError, ValueError):
+                return None
+        if isinstance(value, dict):
+            try:
+                return float(value["x"]), float(value["y"])
+            except (KeyError, TypeError, ValueError):
+                return None
+        return None
+
+    @staticmethod
+    def _safe_float(value, default: float) -> float:
+        try:
+            return float(str(value).replace(",", "")) if value is not None else default
+        except (ValueError, TypeError):
+            return default
+
+    @classmethod
+    def _normalize_workpiece_raw(cls, raw: dict) -> dict:
+        normalized = dict(raw or {})
+        normalized["height_mm"] = cls._safe_float(normalized.get("height_mm"), _DEFAULT_WORKPIECE_HEIGHT_MM)
+        return normalized
+
+    def _restore_live_feed(self) -> None:
+        self._camera_active = True
+
+    def _try_prepare_known_workpiece_capture(
+        self,
+        captured_contour,
+    ) -> tuple[dict | None, dict | None, str]:
+        if not self._model.can_match_saved_workpieces():
+            return None, None, ""
+        try:
+            ok, payload, message = self._model.match_saved_workpieces(captured_contour)
+            if not ok or not payload:
+                self._logger.warning("Capture: saved-workpiece match failed: %s", message)
+                return None, None, str(message or self._t("No match found."))
+
+            matched_raw = copy.deepcopy(payload.get("raw") or {})
+            if not matched_raw.get("contour"):
+                return None, None, self._t("Matched workpiece has no contour.")
+            self._save_workpiece_alignment_debug_plot(
+                {"contour": self._normalize_contour_points(captured_contour).tolist()},
+                matched_raw,
+            )
+            self._logger.info(
+                "Capture: recognized known workpiece %s and loaded aligned saved contour",
+                payload.get("workpieceId") or "(no id)",
+            )
+            return matched_raw, payload, ""
+        except Exception as exc:
+            self._logger.exception("Capture: known-workpiece detection failed")
+            return None, None, str(exc)
+
+    def _capture_match_summary(self, payload: dict) -> str:
+        lines = [
+            self._t("Matched: {workpiece_id}").format(
+                workpiece_id=payload.get("workpieceId") or self._t("(no id)"),
+            )
+        ]
+        if payload.get("name"):
+            lines.append(self._t("Name: {name}").format(name=payload["name"]))
+        if payload.get("confidence") is not None:
+            lines.append(
+                self._t("Confidence: {confidence:.2f}").format(
+                    confidence=float(payload["confidence"]),
+                )
+            )
+        lines.append(self._t("The saved workpiece was aligned to the captured contour."))
+        return "\n".join(lines)
+
+    def _connect_segment_added(self) -> None:
+        try:
+            inner = self._view._editor.contourEditor.editor_with_rulers.editor
+            bus = getattr(inner, '_event_bus', None)
+            if bus is not None and hasattr(bus, 'segment_added'):
+                bus.segment_added.connect(self._on_segment_added)
+        except Exception:
+            self._logger.debug("Could not connect segment_added event", exc_info=True)
+
+    def _on_segment_added(self, *_args) -> None:
+        """Called when the user draws a new segment — assign defaults to it immediately."""
+        try:
+            inner = self._view._editor.contourEditor.editor_with_rulers.editor
+            if hasattr(inner, 'workpiece_manager'):
+                inner.workpiece_manager.apply_defaults_to_segments_without_settings()
+        except Exception:
+            self._logger.debug("_on_segment_added: could not apply defaults", exc_info=True)
+
+    @staticmethod
+    def _t(text: str) -> str:
+        translated = QCoreApplication.translate("WorkpieceEditor", text)
+        return translated or text

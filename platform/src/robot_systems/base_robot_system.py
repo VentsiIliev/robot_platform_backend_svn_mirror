@@ -1,0 +1,868 @@
+from __future__ import annotations
+
+import logging
+import os
+import sys
+from abc import ABC, abstractmethod
+from enum import Enum
+from typing import Any, ClassVar, Dict, List, Optional, TYPE_CHECKING
+from src.engine.repositories.interfaces import ISettingsRepository, ISettingsService
+from src.engine.robot.targeting.jog_frame_pose_resolver import JogFramePoseResolver
+from src.engine.robot.targeting.point_registry import PointRegistry
+from src.engine.robot.targeting.end_effector_point import EndEffectorPoint
+from src.engine.robot.targeting.target_frame import TargetFrame
+from src.engine.robot.targeting.vision_target_resolver import VisionTargetResolver
+import logging
+
+from src.engine.vision.homography_residual_transformer import HomographyResidualTransformer
+from src.engine.common_settings_ids import CommonSettingsID
+from src.engine.robot.calibration.robot_calibration.metrics import derive_calibration_artifact_paths
+from src.shared_contracts.declarations import (
+    DispenseChannelDefinition,
+    MovementGroupDefinition,
+    RemoteTcpDefinition,
+    RolePolicy,
+    ServiceSpec,
+    SettingsSpec,
+    ShellSetup,
+    SystemMetadata,
+    TargetFrameDefinition,
+    ToolDefinition,
+    ToolSlotDefinition,
+    WorkAreaDefinition,
+    WorkAreaObserverBinding,
+)
+if TYPE_CHECKING:
+    from src.engine.process.service_health_registry import ServiceHealthRegistry
+
+# ---------------------------------------------------------------------------
+# Base vision_service
+# ---------------------------------------------------------------------------
+
+class BaseRobotSystem(ABC):
+    """
+    Subclasses declare:
+        metadata: SystemMetadata — identity
+        services: list[ServiceSpec] — required/optional service contracts
+
+    Platform calls vision_service.start(services_dict) to resolve and inject.
+    """
+
+    metadata: ClassVar[SystemMetadata] = SystemMetadata(name="UnnamedSystem")
+    services: ClassVar[List[ServiceSpec]] = []
+    settings_specs: ClassVar[List[SettingsSpec]] = []
+    work_areas: ClassVar[List[WorkAreaDefinition]] = []
+    movement_groups: ClassVar[List[MovementGroupDefinition]] = []
+    dispense_channels: ClassVar[List[DispenseChannelDefinition]] = []
+    tools: ClassVar[List[ToolDefinition]] = []
+    tool_slots: ClassVar[List[ToolSlotDefinition]] = []
+    target_points: ClassVar[List[RemoteTcpDefinition]] = []
+    target_frames: ClassVar[List[TargetFrameDefinition]] = []
+    work_area_observers: ClassVar[List[WorkAreaObserverBinding]] = []
+    default_active_work_area_id: ClassVar[str] = ""
+    global_calibration_reference_frame: ClassVar[str] = "calibration"
+    shell: ClassVar[ShellSetup] = ShellSetup()
+    role_policy: ClassVar[RolePolicy] = RolePolicy()
+
+    def __init__(self) -> None:
+        self._logger = logging.getLogger(self.__class__.__name__)
+        self._resolved: Dict[Enum, Any] = {}
+        self._settings_service:  Optional[ISettingsService] = None
+        self._messaging_service: Optional[Any] = None
+        self._system_manager:    Optional[Any] = None
+        self._health_registry:   Optional[Any] = None
+        self._managed_resources: List[tuple[str, Any]] = []
+        self._development_mode = False
+        self._running = False
+
+    @property
+    def development_mode(self) -> bool:
+        return self._development_mode
+
+    def set_development_mode(self, enabled: bool) -> None:
+        if self._running:
+            raise RuntimeError("Development mode must be configured before system startup")
+        self._development_mode = bool(enabled)
+
+    @property
+    def system_manager(self):
+        return self._system_manager
+
+    @property
+    def health_registry(self):
+        return self._health_registry
+    # ------------------------------------------------------------------
+    # Persistence
+    # ------------------------------------------------------------------
+
+    def get_settings(self, name: Enum) -> Any:
+        if self._settings_service is None:
+            raise RuntimeError(
+                f"[{self.metadata.name}] No settings service available. "
+                f"Ensure settings_specs are declared and SystemBuilder is used."
+            )
+        return self._settings_service.get(name)
+
+    def get_settings_repo(self, name: Enum) -> ISettingsRepository:
+        if self._settings_service is None:
+            raise RuntimeError(f"[{self.metadata.name}] No settings service available.")
+        return self._settings_service.get_repo(name)
+
+    # ------------------------------------------------------------------
+    # Service accessors
+    # ------------------------------------------------------------------
+
+    def get_service(self, name: Enum) -> Any:
+        if not isinstance(name, Enum):
+            raise TypeError(
+              f"Service name must be an Enum value, got {type(name).__name__!r}. "
+            )
+        service = self._resolved.get(name)
+        if service is None:
+            raise RuntimeError(
+                f"[{self.metadata.name}] Service '{name}' not resolved. "
+                f"Ensure it is declared in `services` and provided at startup."
+            )
+        return service
+
+    def get_optional_service(self, name: Enum) -> Optional[Any]:
+        if not isinstance(name, Enum):
+            raise TypeError(
+                f"Service name must be an Enum value, got {type(name).__name__!r}. "
+            )
+        return self._resolved.get(name)
+
+    def get_targeting_provider(self):
+        return getattr(self, "_targeting_provider", None)
+
+    def get_work_area_definitions(self) -> List[WorkAreaDefinition]:
+        return list(self.__class__.work_areas)
+
+    def get_movement_group_definitions(self) -> List[MovementGroupDefinition]:
+        return list(self.__class__.movement_groups)
+
+    def get_dispense_channel_definitions(self) -> List[DispenseChannelDefinition]:
+        return list(self.__class__.dispense_channels)
+
+    def get_dispense_channel_definition(self, channel_id: str) -> DispenseChannelDefinition | None:
+        normalized = str(channel_id or "").strip()
+        if not normalized:
+            return None
+        for definition in self.__class__.dispense_channels:
+            if str(definition.id).strip() == normalized:
+                return definition
+        return None
+
+    def get_tool_definitions(self) -> List[ToolDefinition]:
+        return list(self.__class__.tools)
+
+    def get_tool_slot_definitions(self) -> List[ToolSlotDefinition]:
+        return list(self.__class__.tool_slots)
+
+    def get_tool_slot_definition(self, slot_id: int) -> ToolSlotDefinition | None:
+        for definition in self.__class__.tool_slots:
+            if int(definition.id) == int(slot_id):
+                return definition
+        return None
+
+    def get_tool_slot_definition_for_tool(self, tool_id: int) -> ToolSlotDefinition | None:
+        for definition in self.__class__.tool_slots:
+            if definition.tool_id is not None and int(definition.tool_id) == int(tool_id):
+                return definition
+        return None
+
+    def get_target_point_definitions(self) -> List[RemoteTcpDefinition]:
+        return list(self.__class__.target_points)
+
+    def get_target_point_definition(self, name: str) -> RemoteTcpDefinition | None:
+        normalized = str(name or "").strip().lower()
+        if not normalized:
+            return None
+        for definition in self.__class__.target_points:
+            if str(definition.name).strip().lower() == normalized:
+                return definition
+        return None
+
+    def get_target_frame_definitions(self) -> List[TargetFrameDefinition]:
+        return list(self.__class__.target_frames)
+
+    def get_target_frame_definition(self, name: str) -> TargetFrameDefinition | None:
+        normalized = str(name or "").strip().lower()
+        if not normalized:
+            return None
+        for definition in self.__class__.target_frames:
+            if str(definition.name).strip().lower() == normalized:
+                return definition
+        return None
+
+    def get_target_frame_for_work_area(self, work_area_id: str) -> TargetFrameDefinition | None:
+        normalized = str(work_area_id or "").strip()
+        if not normalized:
+            return None
+        for definition in self.__class__.target_frames:
+            if str(definition.work_area_id).strip() == normalized:
+                return definition
+        return None
+
+    def get_work_area_observer_bindings(self) -> List[WorkAreaObserverBinding]:
+        return list(self.__class__.work_area_observers)
+
+    def get_default_active_work_area_id(self) -> str:
+        return str(self.__class__.default_active_work_area_id or "").strip()
+
+    def get_observer_group_for_area(self, area_id: str) -> str | None:
+        area_id = str(area_id or "").strip()
+        if not area_id:
+            return None
+        for binding in self.__class__.work_area_observers:
+            if binding.area_id == area_id:
+                return binding.movement_group_id
+        return None
+
+    def get_observed_area_for_group(self, movement_group_id: str) -> str | None:
+        movement_group_id = str(movement_group_id or "").strip()
+        if not movement_group_id:
+            return None
+        for binding in self.__class__.work_area_observers:
+            if binding.movement_group_id == movement_group_id:
+                return binding.area_id
+        return None
+
+    def get_calibration_provider(self):
+        return getattr(self, "_calibration_provider", None)
+
+    def get_height_measuring_provider(self):
+        return getattr(self, "_height_measuring_provider", None)
+
+    def get_shared_vision_resolver(self):
+        provider = self.get_targeting_provider()
+        if provider is None:
+            return None, None
+        point_registry = provider.build_point_registry()
+        frames = provider.build_frames()
+        self._get_camera_to_tcp_offsets("global")  # refresh the saved robot configuration
+        area_registries = self._targeting_area_registries(frames)
+        area_tcp = self._camera_to_tcp_by_area(frames)
+        cache_signature = (
+            self._shared_vision_resolver_signature(point_registry, frames),
+            tuple(sorted((area, self._point_registry_signature(registry)) for area, registry in area_registries.items())),
+            repr(sorted(area_tcp.items())),
+        )
+        cached_transformer = getattr(self, "_vision_base_transformer", None)
+        cached_resolver = getattr(self, "_vision_target_resolver", None)
+        cached_signature = getattr(self, "_vision_target_resolver_signature", None)
+        if (
+            cached_transformer is not None
+            and cached_resolver is not None
+            and cached_signature == cache_signature
+        ):
+            # _logger.info(
+            #     "[CALIB] Reusing shared vision resolver: transformer=%s available=%s matrix_path=%s residual_path=%s",
+            #     cached_transformer.__class__.__name__,
+            #     bool(getattr(cached_transformer, "is_available", lambda: False)()),
+            #     str(getattr(cached_transformer, "_matrix_path", "")),
+            #     str(getattr(cached_transformer, "_artifact_path", "")),
+            # )
+            return cached_transformer, cached_resolver
+        if cached_transformer is not None or cached_resolver is not None:
+            _logger.info("[CALIB] Shared vision resolver cache changed; rebuilding resolver")
+        transformer = self._build_shared_base_transformer()
+        if transformer is None:
+            return None, None
+        tcp_x, tcp_y = self._get_camera_to_tcp_offsets("global")
+        robot_config = getattr(self, "_robot_config", None)
+        resolver = VisionTargetResolver(
+            base_transformer=transformer,
+            registry=point_registry,
+            camera_to_tcp_x_offset=tcp_x,
+            camera_to_tcp_y_offset=tcp_y,
+            camera_to_tcp_rotation_residuals=(
+                getattr(robot_config, "camera_to_tcp_rotation_residuals", [])
+                if getattr(robot_config, "use_automatic_camera_to_tcp_offset", True)
+                else []
+            ),
+            frames=frames,
+            area_registries=area_registries,
+            area_tcp=area_tcp,
+            **self._build_coordinate_calibration_routing(transformer),
+        )
+        _logger.info(
+            "[CALIB] Built shared vision resolver: transformer=%s available=%s tcp_offset=(%.3f, %.3f) frames=%s",
+            transformer.__class__.__name__,
+            bool(getattr(transformer, "is_available", lambda: False)()),
+            float(tcp_x),
+            float(tcp_y),
+            sorted(list(resolver._frames.keys())) if hasattr(resolver, "_frames") else [],
+        )
+        self._vision_base_transformer = transformer
+        self._vision_target_resolver = resolver
+        self._vision_target_resolver_signature = cache_signature
+        return transformer, resolver
+
+    def invalidate_shared_vision_resolver(self) -> None:
+        self._vision_base_transformer = None
+        self._vision_target_resolver = None
+        self._vision_target_resolver_signature = None
+
+    def _shared_vision_resolver_signature(
+        self,
+        point_registry: PointRegistry,
+        frames: Dict[str, TargetFrame],
+    ) -> tuple:
+        tcp_x, tcp_y = self._get_camera_to_tcp_offsets("global")
+        robot_config = getattr(self, "_robot_config", None)
+        vision_service = getattr(self, "_vision", None)
+        matrix_path = str(getattr(vision_service, "camera_to_robot_matrix_path", "") or "")
+        residual_path = ""
+        if matrix_path:
+            try:
+                residual_path = str(derive_calibration_artifact_paths(matrix_path)["homography_residual_path"])
+            except Exception:
+                residual_path = ""
+        calibration_routing = self._coordinate_calibration_signature(matrix_path)
+        return (
+            ("tcp", float(tcp_x), float(tcp_y)),
+            (
+                "tcp_rotation_residuals",
+                repr(
+                    getattr(robot_config, "camera_to_tcp_rotation_residuals", [])
+                    if getattr(robot_config, "use_automatic_camera_to_tcp_offset", True)
+                    else []
+                ),
+            ),
+            ("matrix", self._file_signature(matrix_path)),
+            ("residual", self._file_signature(residual_path)),
+            ("points", self._point_registry_signature(point_registry)),
+            ("frames", self._target_frames_signature(frames)),
+            ("coordinate_calibration", calibration_routing),
+        )
+
+    def _coordinate_calibration_signature(self, global_matrix_path: str) -> tuple:
+        settings_service = getattr(self, "_settings_service", None)
+        if settings_service is None:
+            return ("global",)
+        try:
+            settings = settings_service.get(CommonSettingsID.CALIBRATION_VISION_SETTINGS)
+        except Exception:
+            return ("global",)
+        mode = str(getattr(settings, "coordinate_calibration_mode", "global") or "global").strip().lower()
+        if mode != "per_area":
+            return ("global",)
+        root = os.path.dirname(str(global_matrix_path or ""))
+        profiles = []
+        for profile_id, profile in sorted(
+            (getattr(settings, "coordinate_calibration_profiles", {}) or {}).items()
+        ):
+            configured_path = str(getattr(profile, "matrix_path", "") or "").strip()
+            path = configured_path if os.path.isabs(configured_path) else os.path.normpath(os.path.join(root, configured_path))
+            residual = derive_calibration_artifact_paths(path)["homography_residual_path"] if configured_path else ""
+            profiles.append(
+                (
+                    str(profile_id).strip(),
+                    str(getattr(profile, "reference_frame", "calibration") or "calibration").strip().lower(),
+                    self._file_signature(path),
+                    self._file_signature(residual),
+                )
+            )
+        assignments = tuple(sorted(
+            (str(area).strip(), str(profile).strip())
+            for area, profile in (getattr(settings, "work_area_calibration_profiles", {}) or {}).items()
+        ))
+        return (
+            "per_area",
+            str(self.global_calibration_reference_frame or "calibration").strip().lower(),
+            tuple(profiles),
+            assignments,
+        )
+
+    @staticmethod
+    def _file_signature(path: str) -> tuple:
+        normalized = os.path.abspath(str(path or "")) if path else ""
+        if not normalized:
+            return ("", None, None)
+        try:
+            stat = os.stat(normalized)
+        except OSError:
+            return (normalized, None, None)
+        return (normalized, int(stat.st_mtime_ns), int(stat.st_size))
+
+    @staticmethod
+    def _point_registry_signature(point_registry: PointRegistry) -> tuple:
+        points = []
+        for name in sorted(point_registry.names()):
+            point = point_registry.by_name(name)
+            points.append((str(point.name).strip().lower(), float(point.offset_x), float(point.offset_y)))
+        return tuple(points)
+
+    @staticmethod
+    def _target_frames_signature(frames: Dict[str, TargetFrame]) -> tuple:
+        frame_items = []
+        for name, frame in sorted(frames.items(), key=lambda item: str(item[0]).strip().lower()):
+            mapper = getattr(frame, "mapper", None)
+            mapper_signature = None
+            if mapper is not None:
+                source = mapper.source_pose
+                target = mapper.target_pose
+                mapper_signature = (
+                    float(source.x),
+                    float(source.y),
+                    float(source.rz),
+                    float(target.x),
+                    float(target.y),
+                    float(target.rz),
+                )
+            frame_items.append(
+                (
+                    str(name).strip().lower(),
+                    str(getattr(frame, "work_area_id", "") or "").strip(),
+                    mapper_signature,
+                    bool(getattr(frame, "height_correction", None) is not None),
+                )
+            )
+        return tuple(frame_items)
+
+    def build_robot_system_jog_pose_resolver(self, reference_rz_provider=None):
+        provider = self.get_targeting_provider()
+        if provider is None:
+            return None
+        area_id = self._active_work_area_id()
+        tcp_x, tcp_y = self._get_camera_to_tcp_offsets(area_id)
+        area_registries = self._targeting_area_registries(provider.build_frames())
+        return JogFramePoseResolver(
+            registry=area_registries.get(area_id, provider.build_point_registry()),
+            camera_to_tcp_x_offset=tcp_x,
+            camera_to_tcp_y_offset=tcp_y,
+            reference_rz_provider=reference_rz_provider,
+        )
+
+    def _build_shared_base_transformer(self):
+        vision_service = getattr(self, "_vision", None)
+        if vision_service is None:
+            return None
+        robot_config = getattr(self, "_robot_config", None)
+        if robot_config is None:
+            transformer = HomographyResidualTransformer(vision_service.camera_to_robot_matrix_path)
+        else:
+            tcp_x, tcp_y = self._get_camera_to_tcp_offsets("global")
+            transformer = HomographyResidualTransformer(
+                vision_service.camera_to_robot_matrix_path,
+                camera_to_tcp_x_offset=tcp_x,
+                camera_to_tcp_y_offset=tcp_y,
+            )
+        _logger.info(
+            "[CALIB] Built base transformer: class=%s matrix_path=%s residual_path=%s available=%s",
+            transformer.__class__.__name__,
+            str(getattr(transformer, "_matrix_path", "")),
+            str(getattr(transformer, "_artifact_path", "")),
+            bool(getattr(transformer, "is_available", lambda: False)()),
+        )
+        return transformer
+
+    def _build_coordinate_calibration_routing(self, global_transformer) -> dict:
+        """Build optional per-area routing while keeping global mode unchanged."""
+        settings_service = getattr(self, "_settings_service", None)
+        if settings_service is None:
+            return {}
+        try:
+            settings = settings_service.get(CommonSettingsID.CALIBRATION_VISION_SETTINGS)
+        except Exception:
+            _logger.debug("Could not load coordinate calibration routing settings", exc_info=True)
+            return {}
+
+        mode = str(getattr(settings, "coordinate_calibration_mode", "global") or "global").strip().lower()
+        if mode != "per_area":
+            return {}
+
+        configured_profiles = getattr(settings, "coordinate_calibration_profiles", {}) or {}
+        assignments = {
+            str(area_id).strip(): str(profile_id).strip()
+            for area_id, profile_id in (getattr(settings, "work_area_calibration_profiles", {}) or {}).items()
+        }
+        invalid_assignments = sorted(
+            repr((area_id, profile_id))
+            for area_id, profile_id in assignments.items()
+            if not area_id or not profile_id
+        )
+        if invalid_assignments:
+            raise ValueError(f"Calibration profile assignments cannot be empty: {invalid_assignments}")
+        declared_areas = {
+            str(definition.id).strip() for definition in self.get_work_area_definitions()
+        }
+        declared_frames = {
+            str(definition.name).strip().lower()
+            for definition in self.get_target_frame_definitions()
+        }
+        unknown_areas = sorted(set(assignments) - declared_areas)
+        if unknown_areas:
+            raise ValueError(f"Calibration profiles reference unknown work areas: {unknown_areas}")
+
+        matrix_root = os.path.dirname(
+            str(getattr(getattr(self, "_vision", None), "camera_to_robot_matrix_path", "") or "")
+        )
+        global_reference_frame = str(
+            self.global_calibration_reference_frame or "calibration"
+        ).strip().lower()
+        transformers = {"global": global_transformer}
+        reference_frames = {"global": global_reference_frame}
+        normalized_profiles = {
+            str(profile_id).strip(): profile
+            for profile_id, profile in configured_profiles.items()
+            if str(profile_id).strip()
+        }
+        if normalized_profiles.pop("global", None) is not None:
+            _logger.warning(
+                "Ignoring legacy calibration profile definition 'global'; "
+                "the built-in global calibration artifact is used for that id"
+            )
+        missing_profiles = sorted(
+            set(assignments.values()) - {"global"} - set(normalized_profiles)
+        )
+        if missing_profiles:
+            raise ValueError(f"Work areas reference undefined calibration profiles: {missing_profiles}")
+        assigned_profile_ids = set(assignments.values()) - {"global"}
+        for normalized_id in sorted(assigned_profile_ids):
+            profile = normalized_profiles[normalized_id]
+            configured_path = str(getattr(profile, "matrix_path", "") or "").strip()
+            matrix_path = (
+                configured_path
+                if os.path.isabs(configured_path)
+                else os.path.normpath(os.path.join(matrix_root, configured_path))
+            )
+            if not configured_path:
+                raise ValueError(f"Calibration profile {normalized_id!r} has no matrix path")
+            transformers[normalized_id] = HomographyResidualTransformer(matrix_path)
+            reference_frame = str(
+                getattr(profile, "reference_frame", global_reference_frame)
+                or global_reference_frame
+            ).strip().lower()
+            if reference_frame not in declared_frames:
+                raise ValueError(
+                    f"Calibration profile {normalized_id!r} references unknown frame {reference_frame!r}"
+                )
+            if not transformers[normalized_id].is_available():
+                raise ValueError(
+                    f"Calibration profile {normalized_id!r} is unavailable at {matrix_path!r}"
+                )
+            reference_frames[normalized_id] = reference_frame
+
+        for area_id, profile_id in assignments.items():
+            target_frame = self.get_target_frame_for_work_area(area_id)
+            if target_frame is None:
+                raise ValueError(
+                    f"Work area {area_id!r} has a calibration assignment but no target frame"
+                )
+            target_reference = str(target_frame.name).strip().lower()
+            profile_reference = reference_frames[profile_id]
+            if profile_reference not in {global_reference_frame, target_reference}:
+                raise ValueError(
+                    f"Calibration profile {profile_id!r} references frame {profile_reference!r}, "
+                    f"which cannot be used for work area {area_id!r} ({target_reference!r})"
+                )
+
+        return {
+            "calibration_mode": "per_area",
+            "profile_transformers": transformers,
+            "work_area_profile_ids": assignments,
+            "profile_reference_frames": reference_frames,
+            "global_reference_frame": global_reference_frame,
+        }
+
+    def _active_work_area_id(self) -> str:
+        service = getattr(self, "_work_area_service", None)
+        if service is None:
+            return ""
+        return str(service.get_active_area_id() or "").strip()
+
+    def _targeting_area_registries(self, frames: Dict[str, TargetFrame]) -> dict[str, PointRegistry]:
+        settings_service = getattr(self, "_settings_service", None)
+        if settings_service is None:
+            return {}
+        try:
+            settings = settings_service.get(CommonSettingsID.TARGETING)
+        except Exception:
+            return {}
+        if getattr(settings, "point_mode", "global") != "per_area":
+            return {}
+        result = {}
+        for area in {frame.work_area_id for frame in frames.values() if frame.work_area_id}:
+            points = settings.area_points.get(area)
+            if points is None:
+                continue
+            merged = {
+                point.name: point for point in getattr(settings, "points", [])
+            }
+            merged.update({point.name: point for point in points})
+            camera = merged.get("camera")
+            camera_x = float(camera.x_mm) if camera is not None else 0.0
+            camera_y = float(camera.y_mm) if camera is not None else 0.0
+            result[area] = PointRegistry([
+                EndEffectorPoint(point.name, float(point.x_mm) - camera_x, float(point.y_mm) - camera_y)
+                for point in merged.values()
+            ])
+        return result
+
+    def _camera_to_tcp_by_area(self, frames: Dict[str, TargetFrame]) -> dict[str, tuple[float, float, list[dict]]]:
+        config = getattr(self, "_robot_config", None)
+        if config is None:
+            return {}
+        if not getattr(config, "use_automatic_camera_to_tcp_offset", True):
+            registries = self._targeting_area_registries(frames)
+            result = {}
+            for area, registry in registries.items():
+                try:
+                    tool = registry.by_name("tool")
+                    result[area] = (float(tool.offset_x), float(tool.offset_y), [])
+                except ValueError:
+                    continue
+            return result
+        if getattr(config, "camera_to_tcp_mode", "global") != "per_area":
+            return {}
+        return {
+            area: config.camera_to_tcp_for_area(area)
+            for area in {frame.work_area_id for frame in frames.values() if frame.work_area_id}
+            if area in config.camera_to_tcp_by_area
+        }
+
+    def _get_camera_to_tcp_offsets(self, area_id: str = "") -> tuple[float, float]:
+        robot_config = getattr(self, "_robot_config", None)
+        settings_service = getattr(self, "_settings_service", None)
+        if settings_service is not None:
+            try:
+                robot_config = settings_service.get(CommonSettingsID.ROBOT_CONFIG)
+                self._robot_config = robot_config
+            except Exception:
+                _logger.debug(
+                    "Could not refresh robot config while resolving camera-to-TCP offset",
+                    exc_info=True,
+                )
+        if robot_config is None:
+            return 0.0, 0.0
+        if not bool(getattr(robot_config, "use_automatic_camera_to_tcp_offset", True)):
+            provider = self.get_targeting_provider()
+            if provider is not None:
+                try:
+                    area = str(area_id or self._active_work_area_id()).strip()
+                    registry = self._targeting_area_registries(provider.build_frames()).get(area)
+                    tool_point = (registry or provider.build_point_registry()).by_name("tool")
+                    offsets = float(tool_point.offset_x), float(tool_point.offset_y)
+                    _logger.info(
+                        "[TARGETING] Using manual camera-to-TCP offset from "
+                        "Targeting tool-camera points: (%.3f, %.3f)",
+                        *offsets,
+                    )
+                    return offsets
+                except (KeyError, TypeError, ValueError, AttributeError):
+                    _logger.warning(
+                        "[TARGETING] Manual camera-to-TCP offset requested but "
+                        "Targeting has no valid 'camera'/'tool' points; using the "
+                        "stored automatic offset",
+                        exc_info=True,
+                    )
+        if hasattr(robot_config, "camera_to_tcp_for_area"):
+            return robot_config.camera_to_tcp_for_area(area_id or self._active_work_area_id())[:2]
+        return (float(getattr(robot_config, "camera_to_tcp_x_offset", 0.0)),
+                float(getattr(robot_config, "camera_to_tcp_y_offset", 0.0)))
+
+    @classmethod
+    def package_root(cls) -> str:
+        module = sys.modules.get(cls.__module__)
+        module_file = getattr(module, "__file__", None)
+        if not module_file:
+            raise RuntimeError(f"[{cls.metadata.name}] Cannot resolve package root for '{cls.__module__}'")
+        return os.path.dirname(os.path.abspath(module_file))
+
+    @classmethod
+    def storage_path(cls, *parts: str) -> str:
+        from src.engine.updates.paths import system_path
+        return system_path(cls, os.path.join("storage", *parts))
+
+    @classmethod
+    def workpieces_storage_path(cls) -> str:
+        return cls.storage_path("workpieces")
+
+    @classmethod
+    def users_storage_path(cls) -> str:
+        return cls.storage_path("users", "users.csv")
+
+    @classmethod
+    def permissions_storage_path(cls) -> str:
+        return cls.storage_path("settings", "permissions.json")
+
+    # ------------------------------------------------------------------
+    # Managed resources
+    # ------------------------------------------------------------------
+
+    def register_managed_resource(self, resource: Any, cleanup: Any = None) -> Any:
+        """Register a generic runtime resource for automatic shutdown.
+
+        Resources are cleaned up in reverse registration order after on_stop().
+        If cleanup is provided it is called directly. Otherwise the resource is
+        inspected for stop/close/disconnect in that order.
+        """
+        if resource is None:
+            return None
+        label = self._managed_resource_label(resource, cleanup)
+        entry = (label, cleanup if cleanup is not None else resource)
+        if entry not in self._managed_resources:
+            self._managed_resources.append(entry)
+        return resource
+
+    def unregister_managed_resource(self, resource: Any) -> None:
+        self._managed_resources = [
+            entry
+            for entry in self._managed_resources
+            if entry[1] is not resource
+        ]
+
+    def _cleanup_managed_resources(self) -> None:
+        for label, cleanup_target in reversed(self._managed_resources):
+            try:
+                self._cleanup_managed_resource(cleanup_target)
+            except Exception:
+                self._logger.exception(
+                    "Managed resource cleanup failed for %s in %s",
+                    label,
+                    self.metadata.name,
+                )
+        self._managed_resources.clear()
+
+    @staticmethod
+    def _managed_resource_label(resource: Any, cleanup: Any) -> str:
+        target = cleanup if cleanup is not None else resource
+        if callable(target):
+            return getattr(target, "__name__", repr(target))
+        return type(target).__name__
+
+    def _cleanup_managed_resource(self, resource: Any) -> None:
+        if callable(resource):
+            resource()
+            return
+        for method_name in ("stop", "close", "disconnect"):
+            method = getattr(resource, method_name, None)
+            if callable(method):
+                method()
+                return
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
+    def start(
+            self,
+            services:          Dict[str, Any],
+            settings_service   = None,
+            system_manager     = None,
+            messaging_service  = None,
+    ) -> None:
+        self._logger.info("Starting %s v%s", self.metadata.name, self.metadata.version)
+        self._settings_service  = settings_service
+        self._messaging_service = messaging_service
+        self._system_manager    = system_manager
+        self._validate_and_inject(services)
+        self._health_registry   = self._build_health_registry()
+        self._running = True
+        self.on_start()
+        self._logger.info("%s started", self.metadata.name)
+
+    def stop(self) -> None:
+        if not self._running:
+            return
+        self._logger.info("Stopping %s", self.metadata.name)
+        try:
+            self.on_stop()
+        finally:
+            try:
+                self._cleanup_managed_resources()
+            finally:
+                self._running = False
+                self._logger.info("%s stopped", self.metadata.name)
+
+    @property
+    def is_running(self) -> bool:
+        return self._running
+
+    # ------------------------------------------------------------------
+    # Abstract hooks
+    # ------------------------------------------------------------------
+
+    @abstractmethod
+    def on_start(self) -> None:
+        ...
+
+    @abstractmethod
+    def on_stop(self) -> None:
+        ...
+
+    # ------------------------------------------------------------------
+    # Introspection
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def describe(cls) -> str:
+        lines = [
+            f"System    : {cls.metadata.name} v{cls.metadata.version}",
+            f"Desc   : {cls.metadata.description}",
+            f"Author : {cls.metadata.author}",
+            f"Storage: {cls.metadata.settings_root}/{cls.metadata.name.lower()}/",
+            "Settings:",
+        ]
+        for spec in cls.settings_specs:
+            tag = "required" if spec.required else "optional"
+            lines.append(f"  [{tag}] {spec.name} → {spec.storage_key}")
+        if not cls.settings_specs:
+            lines.append("  (none declared)")
+        lines.append("Services:")
+        for spec in cls.services:
+            tag = "required" if spec.required else "optional"
+            lines.append(f"  [{tag}] {spec.name}: {spec.service_type.__name__}")
+            if spec.description:
+                lines.append(f"          ↳ {spec.description}")
+        if not cls.services:
+            lines.append("  (none declared)")
+        return "\n".join(lines)
+
+    # ------------------------------------------------------------------
+    # Internal
+    # ------------------------------------------------------------------
+
+    def _build_health_registry(self) -> ServiceHealthRegistry:
+        """
+        Auto-derives a ServiceHealthRegistry from the vision_service's resolved services.
+        Services implementing IHealthCheckable are registered via is_healthy().
+        Services without health semantics are registered as always available.
+        No manual wiring needed — the vision_service already owns the name → service mapping.
+        """
+        from src.engine.process.service_health_registry import ServiceHealthRegistry
+        registry = ServiceHealthRegistry()
+        for name, service in self._resolved.items():
+            registry.register_service(name, service)
+        return registry
+
+
+    def _validate_and_inject(self, services: Dict[Enum, Any]) -> None:
+        missing: List[Enum] = []
+
+        for spec in self.services:
+            provided = services.get(spec.name)
+
+            if provided is None:
+                if spec.required:
+                    missing.append(spec.name)
+                else:
+                    self._logger.debug("Optional service '%s' not provided — skipping", spec.name)
+                continue
+
+            if not isinstance(provided, spec.service_type):
+                raise TypeError(
+                    f"[{self.metadata.name}] '{spec.name}' expected "
+                    f"{spec.service_type.__name__}, got {type(provided).__name__}"
+                )
+
+            self._resolved[spec.name] = provided
+            self._logger.debug("Injected '%s' (%s)", spec.name, type(provided).__name__)
+
+        if missing:
+            raise RuntimeError(
+                f"[{self.metadata.name}] Cannot start — missing required services: {missing}"
+            )
+_logger = logging.getLogger(__name__)

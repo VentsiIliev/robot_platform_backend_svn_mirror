@@ -1,0 +1,811 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import cv2
+import numpy as np
+
+from PyQt6.QtCore import QCoreApplication, Qt, pyqtSignal
+from PyQt6.QtGui import QImage, QPixmap, QTextCursor
+from PyQt6.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
+    QComboBox,
+    QFormLayout,
+    QHBoxLayout,
+    QScrollArea,
+    QVBoxLayout,
+    QLabel,
+    QWidget,
+)
+
+from src.applications.base.i_application_view import IApplicationView
+from src.applications.base.widgets.keyboard_number_field import KeyboardNumberField
+from src.applications.calibration.view.calibration_controls_panel import CalibrationControlsPanel
+from src.applications.calibration.view.calibration_preview_panel import (
+    CalibrationAreaGridPanel,
+    CalibrationPreviewPanel,
+)
+from src.applications.calibration.view.robot_calibration_preview_dialog import (
+    RobotCalibrationPreviewDialog,
+)
+from src.applications.calibration_settings.calibration_settings_data import CalibrationSettingsData
+from src.applications.base.styled_message_box import show_warning
+from src.applications.calibration.service.i_calibration_service import RobotCalibrationPreview
+from src.applications.intrinsic_calibration_capture.service.i_intrinsic_capture_service import IntrinsicCaptureConfig
+from src.shared_contracts.declarations import WorkAreaDefinition
+from pl_gui.settings.settings_view.styles import APP_PAGE_TITLE_STYLE, APP_PHASE_TAB_STYLE, BG_COLOR, BORDER, PRIMARY, SECONDARY_BG, TEXT_COLOR
+
+_CROSSHAIR_COLOR = (0, 255, 80)
+_CROSSHAIR_THICKNESS = 1
+_MAGNIFY_CROP_HALF = 60
+_MAGNIFY_INSET_SIZE = 210
+_MAGNIFY_MARGIN = 10
+_MAGNIFY_BORDER = (230, 230, 230)
+_MAGNIFY_SOURCE = (0, 200, 255)
+
+
+@dataclass(frozen=True)
+class ZShiftCalibrationDialogResult:
+    marker_id: int
+    samples: int
+    z_step_mm: float
+    settle_time_s: float
+
+
+@dataclass(frozen=True)
+class TcpOffsetCalibrationDialogResult:
+    marker_id: int
+    rotation_step_deg: float
+    iterations: int
+    approach_z: float
+    approach_rx: float
+    approach_ry: float
+    approach_rz: float
+    velocity: int
+    acceleration: int
+    settle_time_s: float
+    recenter_max_iterations: int
+    recenter_stability_wait_s: float
+    recenter_alignment_threshold_mm: float
+
+
+class _CalibrationAreaDialog(QDialog):
+    def __init__(self, title: str, prompt: str, options: list[tuple[str, str]], current_id: str, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setModal(True)
+        self.setFixedWidth(480)
+        self.setStyleSheet(f"QDialog {{ background: white; }}")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(14)
+        heading = QLabel(title)
+        heading.setStyleSheet(f"color: {TEXT_COLOR}; font-size: 15pt; font-weight: bold;")
+        layout.addWidget(heading)
+        description = QLabel(prompt)
+        description.setWordWrap(True)
+        description.setStyleSheet(f"color: {PRIMARY}; font-size: 10pt;")
+        layout.addWidget(description)
+        self._areas = QComboBox()
+        for label, area_id in options:
+            self._areas.addItem(label, area_id)
+        index = self._areas.findData(current_id)
+        self._areas.setCurrentIndex(max(index, 0))
+        self._areas.setMinimumHeight(44)
+        self._areas.setStyleSheet(
+            f"QComboBox {{ background: white; color: {TEXT_COLOR}; border: 1px solid {BORDER}; "
+            "border-radius: 8px; padding: 0 12px; }"
+        )
+        layout.addWidget(self._areas)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        for button, bg, fg in (
+            (buttons.button(QDialogButtonBox.StandardButton.Ok), PRIMARY, "white"),
+            (buttons.button(QDialogButtonBox.StandardButton.Cancel), SECONDARY_BG, PRIMARY),
+        ):
+            button.setMinimumSize(110, 44)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setStyleSheet(
+                f"QPushButton {{ background: {bg}; color: {fg}; border: none; "
+                "border-radius: 8px; font-weight: bold; }"
+            )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def area_id(self) -> str:
+        return str(self._areas.currentData())
+
+
+class _ZShiftCalibrationDialog(QDialog):
+    def __init__(
+        self,
+        *,
+        marker_id: int,
+        samples: int,
+        z_step_mm: float,
+        settle_time_s: float,
+        parent=None,
+    ):
+        super().__init__(parent)
+        self.setWindowTitle("XY Shift Calibration")
+        self.setModal(True)
+
+        root = QVBoxLayout(self)
+        form = QFormLayout()
+
+        self._marker_id = KeyboardNumberField(parent=self)
+        self._marker_id.setRange(0, 10_000)
+        self._marker_id.setValue(int(marker_id))
+        form.addRow("Reference marker ID:", self._marker_id)
+
+        self._samples = KeyboardNumberField(parent=self)
+        self._samples.setRange(1, 1000)
+        self._samples.setValue(int(samples))
+        form.addRow("Samples:", self._samples)
+
+        self._z_step_mm = KeyboardNumberField(decimal=True, parent=self)
+        self._z_step_mm.setRange(-100.0, 100.0)
+        self._z_step_mm.setDecimals(3)
+        self._z_step_mm.setSingleStep(0.1)
+        self._z_step_mm.setValue(float(z_step_mm))
+        self._z_step_mm.setSuffix(" mm")
+        form.addRow("Z step per sample:", self._z_step_mm)
+
+        self._settle_time_s = KeyboardNumberField(decimal=True, parent=self)
+        self._settle_time_s.setRange(0.0, 30.0)
+        self._settle_time_s.setDecimals(2)
+        self._settle_time_s.setSingleStep(0.1)
+        self._settle_time_s.setValue(float(settle_time_s))
+        self._settle_time_s.setSuffix(" s")
+        form.addRow("Settle time:", self._settle_time_s)
+
+        root.addLayout(form)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            parent=self,
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        root.addWidget(buttons)
+
+    def get_result(self) -> ZShiftCalibrationDialogResult:
+        return ZShiftCalibrationDialogResult(
+            marker_id=int(self._marker_id.value()),
+            samples=int(self._samples.value()),
+            z_step_mm=float(self._z_step_mm.value()),
+            settle_time_s=float(self._settle_time_s.value()),
+        )
+
+
+class _TcpOffsetCalibrationDialog(QDialog):
+    def __init__(
+        self,
+        *,
+        marker_id: int,
+        rotation_step_deg: float,
+        iterations: int,
+        approach_z: float,
+        approach_rx: float,
+        approach_ry: float,
+        approach_rz: float,
+        velocity: int,
+        acceleration: int,
+        settle_time_s: float,
+        recenter_max_iterations: int,
+        recenter_stability_wait_s: float,
+        recenter_alignment_threshold_mm: float,
+        parent=None,
+    ):
+        super().__init__(parent)
+        self.setWindowTitle("Camera TCP Offset Calibration")
+        self.setModal(True)
+        self.resize(620, 680)
+
+        root = QVBoxLayout(self)
+        form_host = QWidget()
+        form = QFormLayout(form_host)
+
+        self._marker_id = KeyboardNumberField(parent=self)
+        self._marker_id.setRange(0, 10_000)
+        self._marker_id.setValue(int(marker_id))
+        form.addRow("Reference marker ID:", self._marker_id)
+
+        self._rotation_step_deg = KeyboardNumberField(decimal=True, parent=self)
+        self._rotation_step_deg.setRange(-180.0, 180.0)
+        self._rotation_step_deg.setDecimals(3)
+        self._rotation_step_deg.setSingleStep(1.0)
+        self._rotation_step_deg.setValue(float(rotation_step_deg))
+        self._rotation_step_deg.setSuffix(" deg")
+        form.addRow("Rotation step:", self._rotation_step_deg)
+
+        self._iterations = KeyboardNumberField(parent=self)
+        self._iterations.setRange(1, 1000)
+        self._iterations.setValue(int(iterations))
+        form.addRow("Iterations:", self._iterations)
+
+        self._approach_z = KeyboardNumberField(decimal=True, parent=self)
+        self._approach_z.setRange(-10000.0, 10000.0)
+        self._approach_z.setDecimals(3)
+        self._approach_z.setSingleStep(1.0)
+        self._approach_z.setValue(float(approach_z))
+        self._approach_z.setSuffix(" mm")
+        form.addRow("Approach Z:", self._approach_z)
+
+        self._approach_rx = KeyboardNumberField(decimal=True, parent=self)
+        self._approach_rx.setRange(-360.0, 360.0)
+        self._approach_rx.setDecimals(3)
+        self._approach_rx.setSingleStep(1.0)
+        self._approach_rx.setValue(float(approach_rx))
+        self._approach_rx.setSuffix(" deg")
+        form.addRow("Approach RX:", self._approach_rx)
+
+        self._approach_ry = KeyboardNumberField(decimal=True, parent=self)
+        self._approach_ry.setRange(-360.0, 360.0)
+        self._approach_ry.setDecimals(3)
+        self._approach_ry.setSingleStep(1.0)
+        self._approach_ry.setValue(float(approach_ry))
+        self._approach_ry.setSuffix(" deg")
+        form.addRow("Approach RY:", self._approach_ry)
+
+        self._approach_rz = KeyboardNumberField(decimal=True, parent=self)
+        self._approach_rz.setRange(-360.0, 360.0)
+        self._approach_rz.setDecimals(3)
+        self._approach_rz.setSingleStep(1.0)
+        self._approach_rz.setValue(float(approach_rz))
+        self._approach_rz.setSuffix(" deg")
+        form.addRow("Approach RZ:", self._approach_rz)
+
+        self._velocity = KeyboardNumberField(parent=self)
+        self._velocity.setRange(1, 100)
+        self._velocity.setValue(int(velocity))
+        form.addRow("Velocity:", self._velocity)
+
+        self._acceleration = KeyboardNumberField(parent=self)
+        self._acceleration.setRange(1, 100)
+        self._acceleration.setValue(int(acceleration))
+        form.addRow("Acceleration:", self._acceleration)
+
+        self._settle_time_s = KeyboardNumberField(decimal=True, parent=self)
+        self._settle_time_s.setRange(0.0, 30.0)
+        self._settle_time_s.setDecimals(2)
+        self._settle_time_s.setSingleStep(0.1)
+        self._settle_time_s.setValue(float(settle_time_s))
+        self._settle_time_s.setSuffix(" s")
+        form.addRow("Settle time:", self._settle_time_s)
+
+        self._recenter_max_iterations = KeyboardNumberField(parent=self)
+        self._recenter_max_iterations.setRange(1, 1000)
+        self._recenter_max_iterations.setValue(int(recenter_max_iterations))
+        form.addRow("Recenter iterations:", self._recenter_max_iterations)
+
+        self._recenter_stability_wait_s = KeyboardNumberField(decimal=True, parent=self)
+        self._recenter_stability_wait_s.setRange(0.0, 30.0)
+        self._recenter_stability_wait_s.setDecimals(2)
+        self._recenter_stability_wait_s.setSingleStep(0.1)
+        self._recenter_stability_wait_s.setValue(float(recenter_stability_wait_s))
+        self._recenter_stability_wait_s.setSuffix(" s")
+        form.addRow("Recenter wait:", self._recenter_stability_wait_s)
+
+        self._recenter_alignment_threshold_mm = KeyboardNumberField(decimal=True, parent=self)
+        self._recenter_alignment_threshold_mm.setRange(0.01, 100.0)
+        self._recenter_alignment_threshold_mm.setDecimals(3)
+        self._recenter_alignment_threshold_mm.setSingleStep(0.1)
+        self._recenter_alignment_threshold_mm.setValue(float(recenter_alignment_threshold_mm))
+        self._recenter_alignment_threshold_mm.setSuffix(" mm")
+        form.addRow("Recenter threshold:", self._recenter_alignment_threshold_mm)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(form_host)
+        root.addWidget(scroll)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            parent=self,
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        root.addWidget(buttons)
+
+    def get_result(self) -> TcpOffsetCalibrationDialogResult:
+        return TcpOffsetCalibrationDialogResult(
+            marker_id=int(self._marker_id.value()),
+            rotation_step_deg=float(self._rotation_step_deg.value()),
+            iterations=int(self._iterations.value()),
+            approach_z=float(self._approach_z.value()),
+            approach_rx=float(self._approach_rx.value()),
+            approach_ry=float(self._approach_ry.value()),
+            approach_rz=float(self._approach_rz.value()),
+            velocity=int(self._velocity.value()),
+            acceleration=int(self._acceleration.value()),
+            settle_time_s=float(self._settle_time_s.value()),
+            recenter_max_iterations=int(self._recenter_max_iterations.value()),
+            recenter_stability_wait_s=float(self._recenter_stability_wait_s.value()),
+            recenter_alignment_threshold_mm=float(self._recenter_alignment_threshold_mm.value()),
+        )
+
+
+class CalibrationView(IApplicationView):
+    SHOW_JOG_WIDGET = True
+    JOG_FRAME_SELECTOR_ENABLED = True
+
+    capture_requested = pyqtSignal()
+    calibrate_camera_requested = pyqtSignal()
+    intrinsic_auto_capture_requested = pyqtSignal()
+    intrinsic_auto_capture_stop_requested = pyqtSignal()
+    intrinsic_capture_config_save_requested = pyqtSignal(object)
+    calibrate_robot_requested = pyqtSignal()
+    calibrate_sequence_requested = pyqtSignal()
+    calibrate_camera_tcp_offset_requested = pyqtSignal()
+    calibrate_camera_z_shift_requested = pyqtSignal()
+    tool_tcp_start_requested = pyqtSignal(int)
+    tool_tcp_capture_requested = pyqtSignal()
+    tool_tcp_solve_requested = pyqtSignal()
+    tool_tcp_save_requested = pyqtSignal()
+    tool_tcp_clear_requested = pyqtSignal()
+    workobject_capture_requested = pyqtSignal(str)
+    workobject_solve_requested = pyqtSignal(int, str)
+    workobject_save_requested = pyqtSignal(int, str)
+    calibrate_laser_requested = pyqtSignal()
+    detect_laser_requested = pyqtSignal()
+    stop_calibration_requested = pyqtSignal()
+    test_calibration_requested = pyqtSignal()
+    measure_marker_heights_requested = pyqtSignal()
+    generate_area_grid_requested = pyqtSignal()
+    verify_area_grid_requested = pyqtSignal()
+    measure_area_grid_requested = pyqtSignal()
+    view_depth_map_requested = pyqtSignal()
+    verify_saved_model_requested = pyqtSignal()
+    save_calibration_settings_requested = pyqtSignal(dict)
+    work_area_changed = pyqtSignal(str)
+    measurement_area_changed = pyqtSignal()
+
+    def __init__(
+        self,
+        work_area_definitions: list[WorkAreaDefinition] | None = None,
+        parent=None,
+        *,
+        show_laser_tab: bool = True,
+        show_height_mapping_tab: bool = True,
+    ):
+        self._crosshair_on = False
+        self._magnifier_on = False
+        self._robot_overlay_payload: dict | None = None
+        self._show_laser_tab = show_laser_tab
+        self._show_height_mapping_tab = show_height_mapping_tab
+        self._calibration_work_area_definitions = list(work_area_definitions or [])
+        self._work_area_definitions = [
+            definition for definition in (work_area_definitions or []) if definition.supports_height_mapping
+        ]
+        super().__init__("Calibration", parent)
+
+    def setup_ui(self) -> None:
+        root = QVBoxLayout(self)
+        root.setContentsMargins(20, 16, 20, 20)
+        root.setSpacing(14)
+        self.setStyleSheet(f"background: {BG_COLOR};")
+        self._preview_panel = CalibrationPreviewPanel(self._work_area_definitions)
+        self._area_grid_panel = CalibrationAreaGridPanel(
+            self._preview_panel.preview_label,
+            self._work_area_definitions,
+        )
+        self._preview_panel.preview_label.corner_updated.connect(self._area_grid_panel._on_measurement_area_changed)
+        self._preview_panel.preview_label.empty_clicked.connect(self._area_grid_panel._on_measurement_area_empty_clicked)
+        self._controls_panel = CalibrationControlsPanel(
+            show_laser_tab=self._show_laser_tab,
+            show_height_mapping_tab=self._show_height_mapping_tab,
+        )
+        self._controls_panel.set_height_mapping_content(self._area_grid_panel)
+        self._preview_panel.add_preview_action(self._controls_panel.crosshair_btn)
+        self._preview_panel.add_preview_action(self._controls_panel.magnifier_btn)
+        self._preview_panel.add_stop_action(self._controls_panel.stop_robot_btn)
+
+        self._title_label = QLabel()
+        self._title_label.setStyleSheet(APP_PAGE_TITLE_STYLE)
+        root.addWidget(self._title_label)
+        phase_bar = self._controls_panel.phase_bar
+        phase_bar.setStyleSheet(APP_PHASE_TAB_STYLE)
+        root.addWidget(phase_bar, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        workspace = QHBoxLayout()
+        workspace.setSpacing(16)
+        self._controls_panel.setMinimumWidth(400)
+        self._controls_panel.setMaximumWidth(440)
+        workspace.addWidget(self._preview_panel, stretch=7)
+        workspace.addWidget(self._controls_panel, stretch=3)
+        root.addLayout(workspace, stretch=1)
+        self.retranslateUi()
+        self._connect_signals()
+
+    def retranslateUi(self) -> None:
+        self._title_label.setText(self.tr("Calibration"))
+        self._controls_panel.stop_robot_btn.setText(self.tr("Stop"))
+
+    def can_close(self) -> bool:
+        if hasattr(self, "_controller") and self._controller.is_calibrating():
+            show_warning(
+                self,
+                self._t("Calibration Running"),
+                self._t("Calibration is currently running.\nPlease stop it before leaving."),
+            )
+            return False
+        return True
+
+    def clean_up(self) -> None:
+        if hasattr(self, "_controller"):
+            self._controller.stop()
+
+    @staticmethod
+    def _t(text: str) -> str:
+        translated = QCoreApplication.translate("Calibration", text)
+        return translated or text
+
+    def _connect_signals(self) -> None:
+        self._controls_panel.capture_btn.clicked.connect(self.capture_requested.emit)
+        self._controls_panel.calibrate_camera_btn.clicked.connect(self.calibrate_camera_requested.emit)
+        self._controls_panel.intrinsic_auto_capture.start_requested.connect(self.intrinsic_auto_capture_requested.emit)
+        self._controls_panel.intrinsic_auto_capture.stop_requested.connect(self.intrinsic_auto_capture_stop_requested.emit)
+        self._controls_panel.camera_tab.auto_capture_config_saved.connect(self._on_intrinsic_capture_config_saved)
+        self._controls_panel.calibrate_robot_btn.clicked.connect(self.calibrate_robot_requested.emit)
+        self._controls_panel.calibrate_sequence_btn.clicked.connect(self.calibrate_sequence_requested.emit)
+        self._controls_panel.calibrate_camera_tcp_offset_btn.clicked.connect(
+            self.calibrate_camera_tcp_offset_requested.emit
+        )
+        self._controls_panel.calibrate_camera_z_shift_btn.clicked.connect(
+            self.calibrate_camera_z_shift_requested.emit
+        )
+        self._controls_panel.tool_tcp_start_btn.clicked.connect(self._emit_tool_tcp_start_requested)
+        self._controls_panel.tool_tcp_capture_btn.clicked.connect(self.tool_tcp_capture_requested.emit)
+        self._controls_panel.tool_tcp_solve_btn.clicked.connect(self.tool_tcp_solve_requested.emit)
+        self._controls_panel.tool_tcp_save_btn.clicked.connect(self.tool_tcp_save_requested.emit)
+        self._controls_panel.tool_tcp_clear_btn.clicked.connect(self.tool_tcp_clear_requested.emit)
+        self._controls_panel.workobject_tab.capture_requested.connect(self.workobject_capture_requested)
+        self._controls_panel.workobject_tab.solve_requested.connect(self.workobject_solve_requested)
+        self._controls_panel.workobject_tab.save_requested.connect(self.workobject_save_requested)
+        self._controls_panel.calibrate_laser_btn.clicked.connect(self.calibrate_laser_requested.emit)
+        self._controls_panel.detect_laser_btn.clicked.connect(self.detect_laser_requested.emit)
+        self._controls_panel.test_calibration_btn.clicked.connect(self.test_calibration_requested.emit)
+        self._controls_panel.measure_marker_heights_btn.clicked.connect(self.measure_marker_heights_requested.emit)
+        self._controls_panel.verify_saved_model_btn.clicked.connect(self.verify_saved_model_requested.emit)
+        self._controls_panel.stop_robot_btn.clicked.connect(self.stop_calibration_requested.emit)
+        self._controls_panel.crosshair_btn.clicked.connect(self._toggle_crosshair)
+        self._controls_panel.magnifier_btn.clicked.connect(self._toggle_magnifier)
+        for button in self._controls_panel.iter_save_settings_buttons():
+            button.clicked.connect(self._emit_save_calibration_settings)
+
+        self._area_grid_panel.generate_area_grid_requested.connect(self.generate_area_grid_requested.emit)
+        self._area_grid_panel.verify_area_grid_requested.connect(self.verify_area_grid_requested.emit)
+        self._area_grid_panel.measure_area_grid_requested.connect(self.measure_area_grid_requested.emit)
+        self._area_grid_panel.view_depth_map_requested.connect(self.view_depth_map_requested.emit)
+        self._area_grid_panel.work_area_changed.connect(self.work_area_changed.emit)
+        self._area_grid_panel.measurement_area_changed.connect(self.measurement_area_changed.emit)
+
+    def _toggle_crosshair(self) -> None:
+        self._crosshair_on = self._controls_panel.toggle_crosshair()
+
+    def _toggle_magnifier(self) -> None:
+        self._magnifier_on = self._controls_panel.toggle_magnifier()
+
+    def _emit_save_calibration_settings(self) -> None:
+        self.save_calibration_settings_requested.emit(self._controls_panel.get_settings_values())
+
+    def _on_intrinsic_capture_config_saved(self, config: IntrinsicCaptureConfig) -> None:
+        self.intrinsic_capture_config_save_requested.emit(config)
+
+    def set_stop_calibration_enabled(self, enabled: bool) -> None:
+        self._controls_panel.set_stop_calibration_enabled(enabled)
+
+    def set_test_calibration_enabled(self, enabled: bool) -> None:
+        self._controls_panel.set_test_calibration_enabled(enabled)
+
+    def set_camera_tcp_offset_enabled(self, enabled: bool) -> None:
+        self._controls_panel.set_camera_tcp_offset_enabled(enabled)
+
+    def set_camera_z_shift_enabled(self, enabled: bool) -> None:
+        self._controls_panel.set_camera_z_shift_enabled(enabled)
+
+    def set_tool_tcp_result(self, result: dict | None) -> None:
+        self._controls_panel.set_tool_tcp_result(result)
+
+    def set_workobject_capture(self, point: str, pose) -> None:
+        self._controls_panel.workobject_tab.set_capture_result(point, pose)
+
+    def set_workobject_result(self, ok: bool, message: str, payload: dict | None = None) -> None:
+        self._controls_panel.workobject_tab.set_result(ok, message, payload)
+
+    def _emit_tool_tcp_start_requested(self) -> None:
+        self.tool_tcp_start_requested.emit(int(self._controls_panel.tool_tcp_tool_spin.value()))
+
+    def prompt_z_shift_calibration_config(
+        self,
+        *,
+        marker_id: int = 4,
+        samples: int = 10,
+        z_step_mm: float = -1.0,
+        settle_time_s: float = 0.3,
+    ) -> ZShiftCalibrationDialogResult | None:
+        dialog = _ZShiftCalibrationDialog(
+            marker_id=marker_id,
+            samples=samples,
+            z_step_mm=z_step_mm,
+            settle_time_s=settle_time_s,
+            parent=self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        return dialog.get_result()
+
+    def prompt_tcp_offset_calibration_config(
+        self,
+        *,
+        marker_id: int,
+        rotation_step_deg: float,
+        iterations: int,
+        approach_z: float,
+        approach_rx: float,
+        approach_ry: float,
+        approach_rz: float,
+        velocity: int,
+        acceleration: int,
+        settle_time_s: float,
+        recenter_max_iterations: int,
+        recenter_stability_wait_s: float,
+        recenter_alignment_threshold_mm: float,
+    ) -> TcpOffsetCalibrationDialogResult | None:
+        dialog = _TcpOffsetCalibrationDialog(
+            marker_id=marker_id,
+            rotation_step_deg=rotation_step_deg,
+            iterations=iterations,
+            approach_z=approach_z,
+            approach_rx=approach_rx,
+            approach_ry=approach_ry,
+            approach_rz=approach_rz,
+            velocity=velocity,
+            acceleration=acceleration,
+            settle_time_s=settle_time_s,
+            recenter_max_iterations=recenter_max_iterations,
+            recenter_stability_wait_s=recenter_stability_wait_s,
+            recenter_alignment_threshold_mm=recenter_alignment_threshold_mm,
+            parent=self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        return dialog.get_result()
+
+    def set_measure_marker_heights_enabled(self, enabled: bool) -> None:
+        self._controls_panel.set_measure_marker_heights_enabled(enabled)
+
+    def set_measure_area_grid_enabled(self, enabled: bool) -> None:
+        self._area_grid_panel.set_measure_area_grid_enabled(enabled)
+
+    def set_verify_area_grid_busy(self, busy: bool, current: int = 0, total: int = 0) -> None:
+        self._area_grid_panel.set_verify_area_grid_busy(busy, current, total)
+
+    def set_depth_map_enabled(self, enabled: bool) -> None:
+        self._area_grid_panel.set_depth_map_enabled(enabled)
+        self._controls_panel.set_depth_map_enabled(enabled)
+
+    def set_laser_actions_enabled(self, enabled: bool) -> None:
+        self._controls_panel.set_laser_actions_enabled(enabled)
+
+    def load_calibration_settings(self, _settings: CalibrationSettingsData | None, flat: dict) -> None:
+        self._controls_panel.set_settings_values(flat)
+
+    def set_intrinsic_capture_config(self, config: IntrinsicCaptureConfig) -> None:
+        self._controls_panel.intrinsic_auto_capture.set_config(config)
+
+    def get_intrinsic_capture_config(self) -> IntrinsicCaptureConfig:
+        return self._controls_panel.intrinsic_auto_capture.get_config()
+
+    def set_intrinsic_auto_capture_running(self, running: bool) -> None:
+        self._controls_panel.intrinsic_auto_capture.set_running(running)
+
+    def update_camera_view(self, image) -> None:
+        if image is None:
+            return
+        frame = image.copy()
+        if self._robot_overlay_payload:
+            frame = self._draw_robot_calibration_overlay(frame, self._robot_overlay_payload)
+        if self._crosshair_on:
+            frame = self._draw_crosshair(frame)
+        if self._magnifier_on:
+            frame = self._draw_magnifier(frame)
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        h, w, ch = rgb.shape
+        qimg = QImage(rgb.data, w, h, ch * w, QImage.Format.Format_RGB888)
+        self._preview_panel.preview_label.set_frame(QPixmap.fromImage(qimg))
+
+    def set_robot_calibration_status(self, payload: dict | None) -> None:
+        self._robot_overlay_payload = payload
+        self._preview_panel.set_robot_calibration_status(payload)
+
+    def append_log(self, message: str) -> None:
+        self._preview_panel.log.append(message)
+        self._preview_panel.log.moveCursor(QTextCursor.MoveOperation.End)
+
+    def clear_log(self) -> None:
+        self._preview_panel.log.clear()
+
+    def set_buttons_enabled(self, enabled: bool) -> None:
+        self._controls_panel.set_enabled(enabled)
+        self._area_grid_panel.set_enabled(enabled)
+
+    def confirm_robot_calibration_preview(self, preview: RobotCalibrationPreview) -> bool:
+        dialog = RobotCalibrationPreviewDialog(preview, self)
+        return dialog.exec() == dialog.DialogCode.Accepted
+
+    def prompt_robot_calibration_area(
+        self,
+        current_area_id: str = "global",
+        configured_area_ids: set[str] | None = None,
+    ) -> str | None:
+        configured = {str(area_id).strip() for area_id in (configured_area_ids or set())}
+        options = [(self.tr("Global (shared calibration)"), "global")]
+        options.extend(
+            (
+                definition.label
+                if definition.id in configured
+                else f"{definition.label} ({self.tr('not configured')})",
+                definition.id,
+            )
+            for definition in self._calibration_work_area_definitions
+        )
+        dialog = _CalibrationAreaDialog(
+            self.tr("Robot Calibration Area"),
+            self.tr("Select the area to calibrate:"),
+            options,
+            current_area_id,
+            self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        return dialog.area_id()
+
+    def prompt_camera_tcp_calibration_area(self, current_area_id: str = "global") -> str | None:
+        options = [(self.tr("Global (shared calibration)"), "global")]
+        options.extend(
+            (definition.label, definition.id)
+            for definition in self._calibration_work_area_definitions
+        )
+        dialog = _CalibrationAreaDialog(
+            self.tr("Camera-to-TCP Calibration Area"),
+            self.tr("Select the area for camera-to-TCP calibration:"),
+            options,
+            current_area_id,
+            self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        return dialog.area_id()
+
+    @property
+    def work_area_definitions(self) -> list[WorkAreaDefinition]:
+        return list(self._work_area_definitions)
+
+    def current_work_area_id(self) -> str:
+        return self._area_grid_panel.current_work_area_id()
+
+    def set_current_work_area_id(self, area_id: str) -> None:
+        self._area_grid_panel.set_current_work_area_id(area_id)
+
+    def current_height_mapping_area_key(self) -> str | None:
+        return self._area_grid_panel.current_height_mapping_area_key()
+
+    def set_work_area_options(self, definitions: list[WorkAreaDefinition]) -> None:
+        self._work_area_definitions = [definition for definition in definitions if definition.supports_height_mapping]
+        self._area_grid_panel.set_work_area_options(self._work_area_definitions)
+
+    def get_measurement_area_corners(self) -> list[tuple[float, float]]:
+        return self._area_grid_panel.get_measurement_area_corners()
+
+    def clear_measurement_area(self) -> None:
+        self._area_grid_panel.clear_measurement_area()
+
+    def set_measurement_area_corners(self, area_id: str, corners: list[tuple[float, float]]) -> None:
+        self._area_grid_panel.set_measurement_area_corners(area_id, corners)
+
+    def set_generated_grid_points(
+        self,
+        points: list[tuple[float, float]],
+        *,
+        point_labels: list[str] | None = None,
+        point_statuses: dict[str, str] | None = None,
+    ) -> None:
+        self._area_grid_panel.set_generated_grid_points(
+            points,
+            point_labels=point_labels,
+            point_statuses=point_statuses,
+        )
+
+    def set_substitute_regions(self, polygons: dict[str, list[tuple[float, float]]]) -> None:
+        self._area_grid_panel.set_substitute_regions(polygons)
+
+    def get_area_grid_shape(self) -> tuple[int, int]:
+        return self._area_grid_panel.get_area_grid_shape()
+
+    @staticmethod
+    def _draw_robot_calibration_overlay(image: np.ndarray, payload: dict | None) -> np.ndarray:
+        if not payload:
+            return image
+
+        frame = image.copy()
+        state_name = str(payload.get("state_name") or "")
+        active_target = payload.get("active_target_id")
+        active_target_px = payload.get("active_target_px")
+        current_error_mm = payload.get("current_error_mm")
+        current_index = int(payload.get("current_marker_index") or 0)
+        total_targets = int(payload.get("total_targets") or 0)
+        iteration = int(payload.get("iteration_count") or 0)
+        max_iterations = int(payload.get("max_iterations") or 0)
+
+        panel_h = 90
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (12, 12), (520, 12 + panel_h), (18, 26, 38), -1)
+        cv2.addWeighted(overlay, 0.45, frame, 0.55, 0.0, frame)
+
+        lines = [f"State: {state_name}"]
+        if active_target is not None:
+            lines.append(f"Target: {active_target} ({current_index + 1}/{total_targets})")
+        elif total_targets > 0:
+            lines.append(f"Progress: {current_index}/{total_targets}")
+        if current_error_mm is not None:
+            lines.append(f"Error: {float(current_error_mm):.3f} mm")
+        if max_iterations > 0:
+            lines.append(f"Iteration: {iteration}/{max_iterations}")
+
+        y = 38
+        for i, line in enumerate(lines):
+            scale = 0.7 if i == 0 else 0.62
+            thickness = 2 if i == 0 else 1
+            cv2.putText(frame, line, (24, y), cv2.FONT_HERSHEY_SIMPLEX, scale, (235, 245, 250), thickness, cv2.LINE_AA)
+            y += 22
+
+        h, w = frame.shape[:2]
+        cx, cy = w // 2, h // 2
+        cv2.drawMarker(frame, (cx, cy), (60, 255, 120), cv2.MARKER_CROSS, 22, 2, cv2.LINE_AA)
+
+        return frame
+
+    @staticmethod
+    def _draw_crosshair(image: np.ndarray) -> np.ndarray:
+        frame = image.copy()
+        h, w = frame.shape[:2]
+        cx, cy = w // 2, h // 2
+        cv2.line(frame, (0, cy), (w, cy), _CROSSHAIR_COLOR, _CROSSHAIR_THICKNESS)
+        cv2.line(frame, (cx, 0), (cx, h), _CROSSHAIR_COLOR, _CROSSHAIR_THICKNESS)
+        return frame
+
+    @staticmethod
+    def _draw_magnifier(image: np.ndarray) -> np.ndarray:
+        frame = image.copy()
+        h, w = frame.shape[:2]
+        cx, cy = w // 2, h // 2
+        half = _MAGNIFY_CROP_HALF
+
+        x1 = max(0, cx - half)
+        y1 = max(0, cy - half)
+        x2 = min(w, cx + half)
+        y2 = min(h, cy + half)
+
+        crop = frame[y1:y2, x1:x2]
+        size = _MAGNIFY_INSET_SIZE
+        zoomed = cv2.resize(crop, (size, size), interpolation=cv2.INTER_LINEAR)
+
+        iz = size // 2
+        cv2.line(zoomed, (0, iz), (size, iz), _CROSSHAIR_COLOR, 1)
+        cv2.line(zoomed, (iz, 0), (iz, size), _CROSSHAIR_COLOR, 1)
+        cv2.circle(zoomed, (iz, iz), 3, _CROSSHAIR_COLOR, -1)
+
+        margin = _MAGNIFY_MARGIN
+        px = w - size - margin
+        py = h - size - margin
+        if px >= 0 and py >= 0:
+            frame[py:py + size, px:px + size] = zoomed
+            cv2.rectangle(frame, (px - 1, py - 1), (px + size, py + size), _MAGNIFY_BORDER, 1)
+
+        cv2.rectangle(frame, (x1, y1), (x2, y2), _MAGNIFY_SOURCE, 1)
+        return frame

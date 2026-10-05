@@ -1,0 +1,71 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from pl_gui.dashboard.config import ActionButtonConfig, CardConfig, DashboardConfig
+
+
+@dataclass(frozen=True)
+class AuxiliaryToggleConfig:
+    device_id: str
+    label: str
+
+
+@dataclass(frozen=True)
+class PaintDashboardUiConfig:
+    """Feature visibility supplied by the owning robot system."""
+
+    show_jog_widget: bool = True
+    show_left_drawer: bool = True
+    show_manual_controls: bool = False
+    show_unmatched_paint_controls: bool = True
+    show_paint_head_control: bool = True
+    show_acceleration_scale_control: bool = True
+    show_bottom_quick_controls: bool = True
+    show_drying_mode_control: bool = True
+    show_camera_preview: bool = True
+    show_tray_camera_tab: bool = False
+    use_collapsible_settings_panel: bool = True
+    use_combined_paint_speed_control: bool = False
+    combined_paint_speed_minimum_percent: float = 1.0
+    combined_paint_speed_maximum_percent: float = 100.0
+    combined_paint_acceleration_minimum_percent: float = 0.01
+    combined_paint_acceleration_maximum_percent: float = 100.0
+    show_resolved_paint_speed_values: bool = False
+    allow_running_paint_settings_updates: bool = False
+    use_tray_dry_duration: bool = False
+    tray_dry_duration_minutes: int = 30
+    show_application_shortcuts: bool = False
+    shortcut_application_names: tuple[str, ...] = ()
+
+
+PAINT_DASHBOARD_AUXILIARY_TOGGLES = [
+    AuxiliaryToggleConfig(device_id="pump", label="Vacuum Pump"),
+    AuxiliaryToggleConfig(device_id="fan", label="Fan"),
+]
+
+
+@dataclass
+class PaintDashboardConfig(DashboardConfig):
+    show_placeholders: bool = False
+    card_grid_rows: int = 1
+    card_grid_cols: int = 3
+    card_grid_min_width: int = 400
+    card_grid_max_width: int = 460
+    action_grid_rows: int = 1
+    action_grid_cols: int = 1
+    bottom_section_height: int = 380
+    status_column_height: int = 458
+
+
+
+PAINT_DASHBOARD_CARDS: list[CardConfig] = [
+    CardConfig(card_id=1, label="Robot Status"),
+    CardConfig(card_id=2, label="Vision Status"),
+    CardConfig(card_id=3, label="Process Status"),
+]
+
+
+PAINT_DASHBOARD_ACTIONS: list[ActionButtonConfig] = [
+    ActionButtonConfig(action_id="reset_errors", label="Reset", row=0, col=0),
+]

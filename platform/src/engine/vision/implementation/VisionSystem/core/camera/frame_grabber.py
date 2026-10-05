@@ -1,0 +1,231 @@
+import threading
+import time
+import logging
+from collections import deque
+from dataclasses import dataclass
+
+from src.engine.vision.frame_orientation import apply_orientation, is_transposing, normalize_rotation
+
+
+_logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class FrameSnapshot:
+    frame: object
+    timestamp_s: float
+    sequence: int
+
+
+class FrameGrabber:
+    def __init__(
+        self,
+        camera,
+        maxlen=5,
+        *,
+        read_timeout_s=0.25,
+        restart_after_failures=4,
+        restart_cooldown_s=1.0,
+        restart_max_cooldown_s=10.0,
+        post_restart_settle_s=0.2,
+        stale_frame_timeout_s=1.0,
+        flip_horizontal=False,
+        flip_vertical=False,
+        rotate_degrees=0,
+    ):
+        """
+        Threaded camera grabber.
+        camera: Camera object with .capture() method
+        maxlen: number of frames to keep in buffer
+        read_timeout_s: timeout passed to camera.capture() for each frame read
+        restart_after_failures: consecutive failed reads before attempting restart
+        restart_cooldown_s: base wait between restart attempts (doubles on each
+            failed restart, capped at restart_max_cooldown_s)
+        restart_max_cooldown_s: upper bound for the restart backoff
+        post_restart_settle_s: short wait after restarting the stream
+        stale_frame_timeout_s: how long the latest buffered frame may be reused
+            before it is considered stale and hidden from callers
+        """
+        self.camera = camera
+        self.buffer = deque(maxlen=maxlen)
+        self.running = False
+        self.lock = threading.RLock()
+        self._frame_available = threading.Condition(self.lock)
+        self.thread = threading.Thread(target=self._grab_loop, daemon=True)
+        self.read_timeout_s = float(read_timeout_s)
+        self.restart_after_failures = max(1, int(restart_after_failures))
+        self._base_restart_cooldown_s = max(0.0, float(restart_cooldown_s))
+        self._restart_max_cooldown_s = max(self._base_restart_cooldown_s, float(restart_max_cooldown_s))
+        self._restart_cooldown_s = self._base_restart_cooldown_s
+        self.post_restart_settle_s = float(post_restart_settle_s)
+        self.stale_frame_timeout_s = float(stale_frame_timeout_s)
+        self._flip_horizontal = bool(flip_horizontal)
+        self._flip_vertical = bool(flip_vertical)
+        self._rotate_degrees = normalize_rotation(rotate_degrees)
+        self._consecutive_failures = 0
+        self._last_restart_at = 0.0
+        self._last_frame_at = 0.0
+        self._frame_sequence = 0
+        self._resume_event = threading.Event()
+        self._resume_event.set()
+
+    def start(self):
+        self.running = True
+        self.thread.start()
+
+    def set_camera(self, camera) -> None:
+        self.camera = camera
+
+    def _grab_loop(self):
+        while self.running:
+            self._resume_event.wait()
+            if not self.running:
+                break
+            camera = self.camera
+            if camera is None:
+                time.sleep(0.05)
+                continue
+            frame = camera.capture(timeout=self.read_timeout_s)
+            if frame is not None:
+                if not self._resume_event.is_set():
+                    continue
+                self._consecutive_failures = 0
+                self._restart_cooldown_s = self._base_restart_cooldown_s
+                captured_at = time.time()
+                with self.lock:
+                    frame = apply_orientation(
+                        frame,
+                        self._flip_horizontal,
+                        self._flip_vertical,
+                        self._rotate_degrees,
+                    )
+                    self._frame_sequence += 1
+                    self.buffer.append(
+                        FrameSnapshot(
+                            frame=frame,
+                            timestamp_s=captured_at,
+                            sequence=self._frame_sequence,
+                        )
+                    )
+                    self._last_frame_at = captured_at
+                    self._frame_available.notify_all()
+            else:
+                self._consecutive_failures += 1
+                if self._should_restart_stream():
+                    self._restart_stream()
+                time.sleep(0.001)  # avoid busy loop if capture fails
+
+    def set_orientation(self, horizontal: bool, vertical: bool, rotate_degrees: int = 0) -> None:
+        """Apply a new capture orientation to every frame acquired from now on.
+
+        Buffered frames are dropped so no consumer can mix pre- and
+        post-orientation geometry.
+        """
+        rotation = normalize_rotation(rotate_degrees)
+        with self._frame_available:
+            self._flip_horizontal = bool(horizontal)
+            self._flip_vertical = bool(vertical)
+            self._rotate_degrees = rotation
+            self.buffer.clear()
+            self._last_frame_at = 0.0
+            self._frame_available.notify_all()
+
+    def get_orientation(self) -> tuple[bool, bool, int]:
+        with self.lock:
+            return self._flip_horizontal, self._flip_vertical, self._rotate_degrees
+
+    def is_transposed(self) -> bool:
+        """True when the applied rotation swaps the frame width and height."""
+        with self.lock:
+            return is_transposing(self._rotate_degrees)
+
+    def _should_restart_stream(self) -> bool:
+        if self._consecutive_failures < self.restart_after_failures:
+            return False
+        if not hasattr(self.camera, "start_stream") or not hasattr(self.camera, "stop_stream"):
+            return False
+        return (time.time() - self._last_restart_at) >= self._restart_cooldown_s
+
+    def _restart_stream(self) -> None:
+        self._last_restart_at = time.time()
+        _logger.warning(
+            "FrameGrabber restarting camera stream after %d consecutive capture failures (backoff %.1fs)",
+            self._consecutive_failures,
+            self._restart_cooldown_s,
+        )
+        with self.lock:
+            self.buffer.clear()
+            self._last_frame_at = 0.0
+            self._frame_available.notify_all()
+        try:
+            self.camera.stop_stream()
+        except Exception:
+            _logger.exception("FrameGrabber failed to stop camera stream during recovery")
+        time.sleep(self.post_restart_settle_s)
+        try:
+            self.camera.start_stream()
+        except Exception:
+            _logger.exception("FrameGrabber failed to start camera stream during recovery")
+        opened = False
+        opener = getattr(self.camera, "isOpened", None)
+        if callable(opener):
+            try:
+                opened = bool(opener())
+            except Exception:
+                opened = False
+        self._restart_cooldown_s = (
+            self._base_restart_cooldown_s
+            if opened
+            else min(self._restart_cooldown_s * 2, self._restart_max_cooldown_s)
+        )
+        self._consecutive_failures = 0
+
+    def get_latest(self):
+        snapshot = self.get_latest_snapshot()
+        return None if snapshot is None else snapshot.frame
+
+    def get_latest_snapshot(self):
+        with self.lock:
+            if not self.buffer:
+                return None
+            if self._last_frame_at and (time.time() - self._last_frame_at) > self.stale_frame_timeout_s:
+                return None
+            return self.buffer[-1]
+
+    def get_latest_snapshot_since(self, last_sequence: int, timeout_s: float | None = None):
+        deadline = None if timeout_s is None else (time.monotonic() + max(0.0, timeout_s))
+        with self._frame_available:
+            while self.running:
+                snapshot = self.get_latest_snapshot()
+                if snapshot is not None and snapshot.sequence > last_sequence:
+                    return snapshot
+                if timeout_s is None:
+                    self._frame_available.wait()
+                    continue
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return None
+                self._frame_available.wait(timeout=remaining)
+            return None
+
+    def pause(self) -> None:
+        """Suspend acquisition without closing the camera device."""
+        self._resume_event.clear()
+        with self._frame_available:
+            self.buffer.clear()
+            self._last_frame_at = 0.0
+            self._frame_available.notify_all()
+
+    def resume(self) -> None:
+        """Resume acquisition and require callers to receive a newly captured frame."""
+        with self._frame_available:
+            self.buffer.clear()
+            self._last_frame_at = 0.0
+        self._resume_event.set()
+
+    def stop(self):
+        self.running = False
+        self._resume_event.set()
+        with self._frame_available:
+            self._frame_available.notify_all()
+        self.thread.join()

@@ -1,0 +1,233 @@
+{
+  "confirm_cycles": 3,
+  "effort_thresholds": [
+    20.0,
+    20.0,
+    15.0,
+    8.0,
+    6.0,
+    4.0
+  ],
+  "external_torque_thresholds": [
+    6.456045101148984,
+    2.6366597697724057,
+    4.692886567278524,
+    2.1,
+    2.268354515790675,
+    3.397454252418073
+  ],
+  "following_error_thresholds": [
+    4000.0,
+    4000.0,
+    3500.0,
+    2000.0,
+    1500.0,
+    1200.0
+  ],
+  "friction_coulomb_nm": [
+    0.1152,
+    0.0804,
+    0.0593,
+    0.2199,
+    -0.0013,
+    0.6053
+  ],
+  "friction_velocity_deadband_rad_s": 0.01,
+  "friction_viscous_nm_per_rad_s": [
+    74.4647,
+    18.5468,
+    76.9516,
+    21.6831,
+    29.9885,
+    23.6337
+  ],
+  "position_correction_coefficients": {
+    "Joint_2": [
+      44.45755641,
+      18.4652823154,
+      -27.9396219352,
+      30.483534445,
+      0.4167562131,
+      1.3921313852,
+      -0.8249835583,
+      -11.9947453129,
+      -2.0616277999
+    ]
+  },
+  "dynamic_threshold_enabled": true,
+  "dynamic_threshold_feature_names": [
+    "bias",
+    "positive_velocity",
+    "negative_velocity",
+    "positive_acceleration",
+    "negative_acceleration",
+    "positive_velocity_squared",
+    "negative_velocity_squared",
+    "positive_acceleration_squared",
+    "negative_acceleration_squared"
+  ],
+  "dynamic_threshold_coefficients": {
+    "Joint_1": [
+      5.4812021199699625,
+      -7.227764923534214,
+      -2.757318830384903,
+      0.2651031696400482,
+      0.25021677281718163,
+      33.031274454302626,
+      18.133886778218226,
+      -0.10006327309525341,
+      0.08817333729690915
+    ],
+    "Joint_2": [
+      3.373401735038925,
+      5.517607416902359,
+      12.577510031964126,
+      1.8315639816699825,
+      -1.3213011913288746,
+      -4.941455624239759,
+      -16.94932636124476,
+      -0.3294801339673072,
+      0.13219684999393705
+    ],
+    "Joint_3": [
+      3.3243372340131514,
+      -1.4922707291064607,
+      -2.8768009052351613,
+      -0.03433651323780318,
+      0.4794184357039078,
+      9.85150448226625,
+      15.867166847620396,
+      0.06766563589221462,
+      -0.1287957369087475
+    ],
+    "Joint_4": [
+      1.3532963298620238,
+      4.229340711267377,
+      2.1333502561561826,
+      -0.13666277520924172,
+      0.45605926986313483,
+      -5.238839610376191,
+      -0.11892760889146459,
+      0.003653132438075837,
+      -0.1310141544028839
+    ],
+    "Joint_5": [
+      3.4376729435151323,
+      -2.0135267604833866,
+      1.9027059926944176,
+      0.8656705844640841,
+      -0.08842175879498013,
+      9.65855562923116,
+      10.614476179642859,
+      -0.22254546551420634,
+      -0.05135784984325638
+    ],
+    "Joint_6": [
+      2.7879748068835357,
+      3.0398135361997447,
+      4.0226677069505925,
+      -0.03620680411818363,
+      0.24085104070279711,
+      -2.086735366047661,
+      -5.27761432891255,
+      -0.026761243246915117,
+      -0.05618828052288239
+    ]
+  },
+  "dynamic_threshold_training_limits": {
+    "Joint_1": [
+      0.845416774,
+      3.924457045
+    ],
+    "Joint_2": [
+      0.631551881,
+      3.281470971
+    ],
+    "Joint_3": [
+      0.636081926,
+      3.413837629
+    ],
+    "Joint_4": [
+      0.708640554,
+      4.717711651
+    ],
+    "Joint_5": [
+      1.053936693,
+      4.463595239
+    ],
+    "Joint_6": [
+      0.80505982,
+      5.401482629
+    ]
+  },
+  "dynamic_threshold_fit": {
+    "input_csv": "/home/ilv/ros2_ws/eRob_moveit/zeroerr_data/collision_detection/collision_training.csv",
+    "run_directories": [
+      "/home/ilv/ros2_ws/eRob_moveit/zeroerr_data/collision_detection/calibration_runs/20260911-084844",
+      "/home/ilv/ros2_ws/eRob_moveit/zeroerr_data/collision_detection/calibration_runs/20260911-091222"
+    ],
+    "time_ranges": [
+      [
+        1789105724.895975,
+        1789106035.0945761
+      ],
+      [
+        1789107142.6373608,
+        1789107295.8371332
+      ]
+    ],
+    "percentile": 99.9,
+    "margin_scale": 1.12,
+    "joints": {
+      "Joint_1": {
+        "samples": 8275,
+        "max_abs_velocity_rad_s": 0.845416774,
+        "max_abs_acceleration_rad_s2": 3.924457045,
+        "calibration_exceedance_fraction": 0.00024169184290030211,
+        "predicted_threshold_min_nm": 5.071929433098521,
+        "predicted_threshold_max_nm": 23.109227024148083
+      },
+      "Joint_2": {
+        "samples": 8275,
+        "max_abs_velocity_rad_s": 0.631551881,
+        "max_abs_acceleration_rad_s2": 3.281470971,
+        "calibration_exceedance_fraction": 0.00012084592145015106,
+        "predicted_threshold_min_nm": 2.177831571259083,
+        "predicted_threshold_max_nm": 7.7487714094129885
+      },
+      "Joint_3": {
+        "samples": 8275,
+        "max_abs_velocity_rad_s": 0.636081926,
+        "max_abs_acceleration_rad_s2": 3.413837629,
+        "calibration_exceedance_fraction": 0.00024169184290030211,
+        "predicted_threshold_min_nm": 3.2079619610070984,
+        "predicted_threshold_max_nm": 8.236557843031191
+      },
+      "Joint_4": {
+        "samples": 8275,
+        "max_abs_velocity_rad_s": 0.708640554,
+        "max_abs_acceleration_rad_s2": 4.717711651,
+        "calibration_exceedance_fraction": 0.00036253776435045317,
+        "predicted_threshold_min_nm": 1.003723675872001,
+        "predicted_threshold_max_nm": 2.9300555019894587
+      },
+      "Joint_5": {
+        "samples": 8275,
+        "max_abs_velocity_rad_s": 1.053936693,
+        "max_abs_acceleration_rad_s2": 4.463595239,
+        "calibration_exceedance_fraction": 0.00048338368580060423,
+        "predicted_threshold_min_nm": 3.1925268980889565,
+        "predicted_threshold_max_nm": 16.368176592066757
+      },
+      "Joint_6": {
+        "samples": 8275,
+        "max_abs_velocity_rad_s": 0.80505982,
+        "max_abs_acceleration_rad_s2": 5.401482629,
+        "calibration_exceedance_fraction": 0.0,
+        "predicted_threshold_min_nm": 2.6167185811855345,
+        "predicted_threshold_max_nm": 3.9892755460914917
+      }
+    }
+  },
+  "dynamic_threshold_decay_sec": 0.35
+}

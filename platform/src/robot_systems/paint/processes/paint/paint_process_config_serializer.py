@@ -1,0 +1,186 @@
+from dataclasses import asdict, replace
+from copy import deepcopy
+from typing import Any, Dict, Type, TypeVar
+
+from src.engine.repositories.interfaces import ISettingsSerializer
+from src.robot_systems.paint.processes.paint.config import (
+    PAINT_PROCESS_CONFIG,
+    PaintDropoffConfig,
+    PaintEdgeCleanupConfig,
+    PaintMagazineLoadConfig,
+    PaintNavigationReturnConfig,
+    PaintContactStagingConfig,
+    PaintProcessConfig,
+    PaintSafeTravelConfig,
+    PaintToDropoffSafeTravelConfig,
+    PickupMotionConfig,
+    UnmatchedSecondPassConfig,
+    normalize_magazine_pickup_mode,
+    normalize_pickup_contact_mode,
+)
+
+T = TypeVar("T")
+
+
+def _section(raw: Dict[str, Any], key: str) -> Dict[str, Any]:
+    value = raw.get(key, {})
+    return value if isinstance(value, dict) else {}
+
+
+def _build_dataclass(cls: Type[T], raw: Dict[str, Any], default: T) -> T:
+    values = asdict(default)
+    unknown = sorted(set(raw) - set(values))
+    if unknown:
+        raise ValueError(
+            f"{cls.__name__} contains unsupported setting(s): {', '.join(unknown)}"
+        )
+    values.update({key: value for key, value in raw.items() if key in values})
+    return cls(**values)
+
+
+class PaintProcessConfigSerializer(ISettingsSerializer[PaintProcessConfig]):
+    def __init__(self, default_config: PaintProcessConfig = PAINT_PROCESS_CONFIG):
+        self._default_config = deepcopy(default_config)
+
+    @property
+    def settings_type(self) -> str:
+        return "paint_process_config"
+
+    def get_default(self) -> PaintProcessConfig:
+        return deepcopy(self._default_config)
+
+    def to_dict(self, settings: PaintProcessConfig) -> Dict[str, Any]:
+        return asdict(settings)
+
+    def from_dict(self, data: Dict[str, Any]) -> PaintProcessConfig:
+        default = self.get_default()
+        values = asdict(default)
+        raw = data if isinstance(data, dict) else {}
+        unknown = sorted(set(raw) - set(values))
+        if unknown:
+            raise ValueError(
+                f"PaintProcessConfig contains unsupported setting(s): {', '.join(unknown)}"
+            )
+        values.update({
+            key: value
+            for key, value in raw.items()
+            if key in values and key not in {
+                "pickup_motion",
+                "contact_staging",
+                "edge_cleanup",
+                "dropoff",
+                "magazine_load",
+                "safe_travel",
+                "dropoff_safe_travel",
+                "navigation_return",
+                "unmatched_second_pass",
+            }
+        })
+        raw_pickup_motion = dict(_section(raw, "pickup_motion"))
+        # Removed after the fail-safe sensor pickup path stopped permitting a
+        # planned-descent fallback. Accept the persisted key during upgrades so
+        # one obsolete setting cannot prevent the complete Paint config loading.
+        raw_pickup_motion.pop("servo_contact_fallback_to_planned_descend", None)
+        pickup_motion = _build_dataclass(
+            PickupMotionConfig,
+            raw_pickup_motion,
+            default.pickup_motion,
+        )
+        values["pickup_motion"] = replace(
+            pickup_motion,
+            pickup_contact_mode=normalize_pickup_contact_mode(
+                pickup_motion.pickup_contact_mode
+            ),
+        )
+        values["contact_staging"] = _build_dataclass(
+            PaintContactStagingConfig,
+            _section(raw, "contact_staging"),
+            default.contact_staging,
+        )
+        values["edge_cleanup"] = _build_dataclass(
+            PaintEdgeCleanupConfig,
+            _section(raw, "edge_cleanup"),
+            default.edge_cleanup,
+        )
+        values["dropoff"] = _build_dataclass(
+            PaintDropoffConfig,
+            _section(raw, "dropoff"),
+            default.dropoff,
+        )
+        magazine_load = _build_dataclass(
+            PaintMagazineLoadConfig,
+            _section(raw, "magazine_load"),
+            default.magazine_load,
+        )
+        values["magazine_load"] = replace(
+            magazine_load,
+            pickup_mode=normalize_magazine_pickup_mode(magazine_load.pickup_mode),
+            fixed_pickup_group_ids=_normalize_group_ids(
+                magazine_load.fixed_pickup_group_ids
+            ),
+            fixed_pickup_sources=_normalize_magazine_sources(
+                magazine_load.fixed_pickup_sources
+            ),
+        )
+        values["safe_travel"] = _build_dataclass(
+            PaintSafeTravelConfig,
+            _section(raw, "safe_travel"),
+            default.safe_travel,
+        )
+        values["dropoff_safe_travel"] = _build_dataclass(
+            PaintToDropoffSafeTravelConfig,
+            _section(raw, "dropoff_safe_travel"),
+            default.dropoff_safe_travel,
+        )
+        values["navigation_return"] = _build_dataclass(
+            PaintNavigationReturnConfig,
+            _section(raw, "navigation_return"),
+            default.navigation_return,
+        )
+        values["unmatched_second_pass"] = _build_dataclass(
+            UnmatchedSecondPassConfig,
+            _section(raw, "unmatched_second_pass"),
+            default.unmatched_second_pass,
+        )
+        return PaintProcessConfig(**values)
+
+
+def _normalize_group_ids(value: object) -> list[str]:
+    if isinstance(value, str):
+        values = value.split(",")
+    elif isinstance(value, (list, tuple)):
+        values = value
+    else:
+        return []
+    result: list[str] = []
+    for item in values:
+        group_id = str(item or "").strip()
+        if group_id and group_id not in result:
+            result.append(group_id)
+    return result
+
+
+def _normalize_magazine_sources(value: object) -> list[dict]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    result: list[dict] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        group_id = str(item.get("movement_group_id", "") or "").strip()
+        position = item.get("position")
+        try:
+            pose = [float(component) for component in list(position)[:6]]
+        except (TypeError, ValueError):
+            pose = []
+        identity = group_id or repr(pose)
+        if (group_id or len(pose) == 6) and identity not in seen:
+            source = {"enabled": bool(item.get("enabled", True))}
+            if group_id:
+                source["movement_group_id"] = group_id
+            if len(pose) == 6:
+                source["position"] = pose
+            result.append(source)
+            seen.add(identity)
+    return result

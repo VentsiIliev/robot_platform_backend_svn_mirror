@@ -1,0 +1,13 @@
+URDF_PATH: urdfs/erob_arm_family_motor_masses.urdf
+SRDF_PATH: eRobo3.srdf
+COLLISION_TIP_LINK: disk_link
+DEFAULT_WORKOBJECT:
+- 0
+- 0
+- 0
+- 0
+- 1.14
+- 15.83
+
+# Welding: disable collision checking (tool contacts workpiece)
+ENABLE_COLLISION_CHECKING: false

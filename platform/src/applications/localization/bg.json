@@ -1,0 +1,107 @@
+{
+  "__meta__": {
+    "display_name": "Български"
+  },
+  "Shell": {
+    "folder.production": "Производство",
+    "folder.service": "Сервиз",
+    "folder.admin": "Администрация",
+    "folder.tests": "Тестове"
+  },
+  "Header": {
+    "Turn Off Platform": "Изключване на платформата"
+  },
+  "StartupSplashView": {
+    "Preparing runtime services": "Подготовка на runtime услугите",
+    "Loading applications": "Зареждане на приложения",
+    "Waiting for robot readiness": "Изчакване роботът да е готов",
+    "Connecting to robot runtime": "Свързване към средата на робота",
+    "Starting robot runtime": "Стартиране на runtime средата на робота",
+    "Checking EtherCAT communication": "Проверка на EtherCAT комуникацията",
+    "Enabling robot drives": "Активиране на задвижванията на робота",
+    "Preparing robot drives": "Подготовка на задвижванията на робота",
+    "Configuring robot tool": "Конфигуриране на инструмента на робота",
+    "Checking robot status": "Проверка на статуса на робота",
+    "Ready": "Готово",
+    "Robot App Platform": "Robot App Platform"
+  },
+  "SessionDrawer": {
+    "Session": "Сесия",
+    "Name": "Име",
+    "User ID": "Потребителски ID",
+    "Role": "Роля",
+    "Email": "Имейл",
+    "Logout": "Изход",
+    "Not logged in": "Не сте влезли"
+  },
+  "ModbusSettingsView": {
+    "Modbus Settings": "Настройки на Modbus",
+    "SETTINGS": "НАСТРОЙКИ",
+    "Connection": "Връзка",
+    "Slaves": "Устройства",
+    "PORT": "ПОРТ",
+    "SERIAL PORT": "СЕРИЕН ПОРТ",
+    "CONNECTION PROFILES": "ПРОФИЛИ ЗА ВРЪЗКА",
+    "MODBUS SLAVES": "MODBUS УСТРОЙСТВА",
+    "CONNECTION TOOLS": "ИНСТРУМЕНТИ ЗА ВРЪЗКА",
+    "Give permission": "Дай разрешение",
+    "Allow this user to open the serial port": "Разреши на този потребител да отваря серийния порт",
+    "Set low latency": "Задай ниска латентност",
+    "Reduce USB serial adapter latency": "Намали латентността на USB серийния адаптер",
+    "Test connection": "Провери връзката",
+    "Send a test request using the selected port": "Изпрати тестова заявка през избрания порт",
+    "Not tested": "Не е проверено",
+    "UNSAVED CHANGES": "НЕЗАПАЗЕНИ ПРОМЕНИ",
+    "●  ALL CHANGES SAVED": "●  ВСИЧКИ ПРОМЕНИ СА ЗАПАЗЕНИ",
+    "Detect Ports": "Открий портове",
+    "Give Permission": "Дай разрешение",
+    "Test Connection": "Провери връзката",
+    "Add Profile": "Добави профил",
+    "Edit Profile": "Редактирай профил",
+    "Remove Profile": "Премахни профил",
+    "Add Slave": "Добави устройство",
+    "Edit Slave": "Редактирай устройство",
+    "Remove Slave": "Премахни устройство",
+    "Discard": "Отхвърли",
+    "Save": "Запази",
+    "Set Low Latency": "Задай ниска латентност",
+    "Low latency enabled — {count} port(s)": "Ниската латентност е активирана — {count} порт(а)",
+    "Low latency update failed": "Неуспешно задаване на ниска латентност"
+  },
+  "SettingsView": {
+    "SETTINGS": "НАСТРОЙКИ",
+    "STEP": "СТЪПКА",
+    "AXIS": "ОС",
+    "MINIMUM": "МИНИМУМ",
+    "MAXIMUM": "МАКСИМУМ",
+    "Save": "Запази",
+    "Discard": "Отхвърли",
+    "All changes saved": "Всички промени са запазени",
+    "Unsaved changes": "Незапазени промени"
+  },
+  "RobotJogWidget": {
+    "Cartesian": "Декартово",
+    "Joint": "Стави",
+    "Current Position": "Текуща позиция",
+    "Joint Positions": "Позиции на ставите",
+    "Linear Step": "Линейна стъпка",
+    "Linear Speed": "Линейна скорост",
+    "Rotation Step": "Стъпка на въртене",
+    "Rotation Speed": "Скорост на въртене",
+    "Joint Step": "Стъпка на става",
+    "J6 Full Turn": "Пълен оборот J6",
+    "Linear": "Линейно движение",
+    "Rotational": "Въртеливо движение",
+    "Joints": "Стави",
+    "Invert Z": "Обърни Z",
+    "Mode": "Режим",
+    "Frame": "Координатна система",
+    "Step": "Стъпка",
+    "Servo": "Серво",
+    "Recovery": "Възстановяване"
+  },
+  "StartupError": {
+    "Platform could not start": "Платформата не може да стартира",
+    "The platform stopped because an error occurred.": "Платформата спря поради възникнала грешка."
+  }
+}

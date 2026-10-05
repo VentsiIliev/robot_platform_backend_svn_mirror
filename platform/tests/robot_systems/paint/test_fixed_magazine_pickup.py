@@ -1,0 +1,458 @@
+import unittest
+from unittest.mock import MagicMock, patch
+
+from src.robot_systems.paint.processes.paint.config import (
+    MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN,
+    MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
+    MAGAZINE_PICKUP_MODE_VISION_PLANNED,
+    MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN,
+    PaintMagazineLoadConfig,
+    PaintProcessConfig,
+)
+from src.robot_systems.paint.processes.paint.execution_control import PaintExecutionControl
+from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler import (
+    _verify_fixed_pickup_start_pose,
+    execute_magazine_pickup_release,
+)
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_move_to_magazine_handler import (
+    handle_magazine_move_to_magazine,
+)
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_capture_handler import (
+    handle_magazine_capture,
+)
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_prepare_pickup_release_handler import (
+    handle_magazine_prepare_pickup_release,
+)
+from src.robot_systems.paint.processes.paint.execution_machine.state import (
+    PaintExecutionState,
+    PaintExecutionTransitions,
+)
+from src.robot_systems.paint.processes.paint.paint_process_config_serializer import (
+    PaintProcessConfigSerializer,
+)
+from src.robot_systems.paint.applications.paint_process_settings.mapper import (
+    PaintProcessSettingsMapper,
+)
+
+
+class TestFixedMagazinePickup(unittest.TestCase):
+    def test_verified_prepositioned_auto_discovery_recaptures_without_duplicate_move(self):
+        load_service = MagicMock()
+        service = MagicMock()
+        service._magazine_load_service = load_service
+        service._consume_verified_prepositioned_start_group.return_value = True
+        config = PaintMagazineLoadConfig(
+            enabled=True,
+            pickup_mode=MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN,
+            magazine_group_id="Magazine",
+            recapture_every_cycle=True,
+        )
+        ctx = self._context(service, config)
+
+        next_state = handle_magazine_move_to_magazine(ctx)
+
+        self.assertEqual(PaintExecutionState.MAGAZINE_WAIT_CAMERA_SETTLE, next_state)
+        load_service._move_to_group_with_pause_resume_recovery.assert_not_called()
+        load_service._move_to_pose_with_pause_resume_recovery.assert_not_called()
+        load_service._mark_magazine_capture_area_active.assert_called_once_with()
+        service._restore_magazine_capture_view.assert_called_once_with(
+            "after verifying prepositioned magazine pickup"
+        )
+
+    def test_cached_auto_discovery_moves_to_known_pile_approach_before_skipping_camera_wait(self):
+        load_service = MagicMock()
+        approach_pose = [25.0, -30.0, 120.0, 180.0, 0.0, 5.0]
+        load_service._resolve_auto_discovery_approach_pose.return_value = approach_pose
+        load_service._move_to_pose_with_pause_resume_recovery.return_value = True
+        service = MagicMock()
+        service._magazine_load_service = load_service
+        service._consume_verified_prepositioned_start_group.return_value = False
+        config = PaintMagazineLoadConfig(
+            enabled=True,
+            pickup_mode=MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN,
+            magazine_group_id="Magazine",
+        )
+        ctx = self._context(service, config)
+        ctx.magazine_discovery_contours = [object()]
+
+        next_state = handle_magazine_move_to_magazine(ctx)
+
+        self.assertEqual(PaintExecutionState.MAGAZINE_CAPTURE, next_state)
+        self.assertIn(
+            next_state,
+            PaintExecutionTransitions.get_rules()[
+                PaintExecutionState.MAGAZINE_MOVE_TO_MAGAZINE
+            ],
+        )
+        load_service._move_to_pose_with_pause_resume_recovery.assert_called_once()
+        self.assertEqual(
+            approach_pose,
+            load_service._move_to_pose_with_pause_resume_recovery.call_args.args[2],
+        )
+        load_service._move_to_group_with_pause_resume_recovery.assert_not_called()
+        load_service._mark_magazine_capture_area_active.assert_called_once_with()
+        service._restore_capture_view.assert_not_called()
+
+    def test_auto_discovery_approaches_and_retracts_at_configured_z(self):
+        process_config = PaintProcessConfig(
+            magazine_load=PaintMagazineLoadConfig(
+                enabled=True,
+                pickup_mode=MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN,
+                full_retract_z_mm=120.0,
+            )
+        )
+        executor = MagicMock()
+        executor._paint_process_config.return_value = process_config
+        executor._pickup_z_mm = 0.0
+        executor._pickup_safety_z_min_mm = 0.0
+        executor._motion.turn_vacuum_on.return_value = (True, "Vacuum on")
+        executor._motion.turn_vacuum_off.return_value = (True, "Vacuum off")
+        service = MagicMock()
+        service._path_executor = executor
+
+        with patch(
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler._execute_magazine_servo_contact_pickup_release",
+            return_value=(True, "Picked"),
+        ) as execute_servo:
+            ok, message = execute_magazine_pickup_release(
+                service,
+                pickup_xy=(10.0, 20.0),
+                pickup_rz=30.0,
+                pickup_base_pose=[100.0, 200.0, 300.0, 180.0, 0.0, 0.0],
+                release_pose=[0.0, 0.0, 50.0, 180.0, 0.0, 0.0],
+                magazine_pickup_mode=MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN,
+            )
+
+        self.assertTrue(ok, message)
+        waypoints = execute_servo.call_args.args[1]
+        self.assertEqual([10.0, 20.0, 120.0, 180.0, 0.0, 30.0], waypoints[0].pose)
+        self.assertEqual(
+            [10.0, 20.0, 120.0, 180.0, 0.0, 30.0],
+            execute_servo.call_args.kwargs["retract_reference_pose"],
+        )
+        executor._motion.turn_vacuum_off.assert_called_once_with(
+            wait_for_blow_off=False
+        )
+
+    def test_fixed_pickup_allows_approach_to_correct_initial_tolerance_miss(self):
+        config = PaintProcessConfig()
+        executor = MagicMock()
+        executor._paint_process_config.return_value = config
+        executor._pickup_z_mm = 20.0
+        executor._pickup_safety_z_min_mm = 0.0
+        executor._motion.turn_vacuum_on.return_value = (True, "")
+        executor._motion.turn_vacuum_off.return_value = (True, "")
+        fixed_pose = [0.0, 0.0, 100.0, 180.0, 0.0, 0.0]
+        executor._robot_service.get_current_position_fresh.return_value = [
+            1.5, 0.0, 100.0, 180.0, 0.0, 0.0
+        ]
+
+        with patch(
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler._execute_magazine_servo_contact_pickup_release",
+            return_value=(True, "corrected"),
+        ) as execute_servo:
+            ok, message = execute_magazine_pickup_release(
+                MagicMock(_path_executor=executor),
+                pickup_xy=(0.0, 0.0),
+                pickup_rz=0.0,
+                pickup_base_pose=fixed_pose,
+                release_pose=[10.0, 20.0, 30.0, 180.0, 0.0, 0.0],
+                fixed_approach_pose=fixed_pose,
+                fixed_position_tolerance_mm=1.0,
+                fixed_orientation_tolerance_deg=0.5,
+                magazine_pickup_mode=MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
+            )
+
+        self.assertTrue(ok, message)
+        execute_servo.assert_called_once()
+        executor._motion.turn_vacuum_off.assert_called_once_with(
+            wait_for_blow_off=False
+        )
+
+    def test_old_settings_default_to_vision_targeting(self):
+        restored = PaintProcessConfigSerializer().from_dict({"magazine_load": {"enabled": True}})
+
+        self.assertEqual(MAGAZINE_PICKUP_MODE_VISION_PLANNED, restored.magazine_load.pickup_mode)
+
+    def test_legacy_servo_and_fixed_target_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, "magazine_pickup_contact_mode"):
+            PaintProcessConfigSerializer().from_dict({
+                "pickup_motion": {"magazine_pickup_contact_mode": "servo_contact"},
+                "magazine_load": {"pickup_target_mode": "fixed_group"},
+            })
+
+    def test_legacy_servo_without_target_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "magazine_pickup_contact_mode"):
+            PaintProcessConfigSerializer().from_dict({
+                "pickup_motion": {"magazine_pickup_contact_mode": "servo_contact"},
+                "magazine_load": {},
+            })
+
+    def test_fixed_group_settings_round_trip_through_ui_mapper(self):
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+        flat.update({
+            "magazine_pickup_mode": MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
+            "magazine_fixed_pickup_group_id": "Magazine Pickup Taught",
+            "magazine_fixed_pickup_group_ids": "Magazine Pickup Taught, Magazine Pickup 1, Magazine Pickup 1",
+            "magazine_fixed_pickup_position_tolerance_mm": 1.5,
+            "magazine_fixed_pickup_orientation_tolerance_deg": 0.75,
+        })
+
+        restored = PaintProcessSettingsMapper.from_flat_dict(flat, base)
+
+        self.assertEqual(MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN, restored.magazine_load.pickup_mode)
+        self.assertEqual("Magazine Pickup Taught", restored.magazine_load.fixed_pickup_group_id)
+        self.assertEqual(
+            ["Magazine Pickup Taught", "Magazine Pickup 1"],
+            restored.magazine_load.fixed_pickup_group_ids,
+        )
+        self.assertEqual(1.5, restored.magazine_load.fixed_pickup_position_tolerance_mm)
+        self.assertEqual(0.75, restored.magazine_load.fixed_pickup_orientation_tolerance_deg)
+
+    def test_magazine_post_retract_confirmation_round_trips_through_ui_mapper(self):
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+        flat.update({
+            "pickup_magazine_post_retract_confirmation_samples": 3,
+            "pickup_magazine_post_retract_confirmation_interval_s": 0.08,
+        })
+
+        restored = PaintProcessSettingsMapper.from_flat_dict(flat, base)
+
+        self.assertEqual(
+            3,
+            restored.pickup_motion.magazine_post_retract_confirmation_samples,
+        )
+        self.assertEqual(
+            0.08,
+            restored.pickup_motion.magazine_post_retract_confirmation_interval_s,
+        )
+
+    def test_fixed_mode_moves_to_fixed_group_and_skips_camera_wait(self):
+        load_service = MagicMock()
+        load_service._move_to_group_with_pause_resume_recovery.return_value = True
+        service = MagicMock()
+        service._magazine_load_service = load_service
+        config = PaintMagazineLoadConfig(
+            enabled=True,
+            pickup_mode=MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
+            fixed_pickup_group_id="Magazine Fixed Pickup",
+        )
+        ctx = self._context(service, config)
+
+        next_state = handle_magazine_move_to_magazine(ctx)
+
+        self.assertEqual(PaintExecutionState.MAGAZINE_PREPARE_PICKUP_RELEASE, next_state)
+        self.assertEqual("Magazine Fixed Pickup", ctx.magazine_group)
+        self.assertEqual(
+            "Magazine Fixed Pickup",
+            load_service._move_to_group_with_pause_resume_recovery.call_args.args[2],
+        )
+
+    def test_fixed_mode_moves_to_process_defined_magazine_pose(self):
+        pose = [10.0, 20.0, 100.0, 180.0, 0.0, 0.0]
+        load_service = MagicMock()
+        load_service._move_to_pose_with_pause_resume_recovery.return_value = True
+        service = MagicMock()
+        service._magazine_load_service = load_service
+        config = PaintMagazineLoadConfig(
+            enabled=True,
+            pickup_mode=MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
+            fixed_pickup_group_id="Magazine Fixed Pickup",
+        )
+        ctx = self._context(service, config)
+        ctx.magazine_group = "Magazine Fixed Pickup"
+        ctx.magazine_fixed_pickup_pose = pose
+
+        next_state = handle_magazine_move_to_magazine(ctx)
+
+        self.assertEqual(PaintExecutionState.MAGAZINE_PREPARE_PICKUP_RELEASE, next_state)
+        call = load_service._move_to_pose_with_pause_resume_recovery.call_args
+        self.assertEqual(pose, call.args[2])
+        self.assertEqual("Magazine Fixed Pickup", call.args[3])
+        load_service._move_to_group_with_pause_resume_recovery.assert_not_called()
+        load_service._mark_magazine_capture_area_active.assert_called_once_with()
+
+    def test_fixed_mode_retries_one_exact_move_after_endpoint_miss(self):
+        load_service = MagicMock()
+        load_service._move_to_group_with_pause_resume_recovery.side_effect = [False, True]
+        service = MagicMock()
+        service._magazine_load_service = load_service
+        config = PaintMagazineLoadConfig(
+            enabled=True,
+            pickup_mode=MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
+            fixed_pickup_group_id="Magazine Fixed Pickup",
+            move_to_magazine_blendR=20.0,
+        )
+        ctx = self._context(service, config)
+
+        next_state = handle_magazine_move_to_magazine(ctx)
+
+        self.assertEqual(PaintExecutionState.MAGAZINE_PREPARE_PICKUP_RELEASE, next_state)
+        self.assertEqual(2, load_service._move_to_group_with_pause_resume_recovery.call_count)
+        correction = load_service._move_to_group_with_pause_resume_recovery.call_args_list[1]
+        self.assertEqual(0.0, correction.kwargs["blendR"])
+
+    def test_capture_retries_one_exact_move_after_settled_endpoint_miss(self):
+        load_service = MagicMock()
+        load_service._verify_current_capture_pose.side_effect = [
+            (False, "position error 4.370 mm"),
+            (True, ""),
+        ]
+        load_service._move_to_group_with_pause_resume_recovery.return_value = True
+        load_service._wait.return_value = True
+        service = MagicMock()
+        service._magazine_load_service = load_service
+        service._capture_snapshot_service.capture_snapshot.return_value = MagicMock(
+            contours=[]
+        )
+        config = PaintMagazineLoadConfig(
+            enabled=True,
+            pickup_mode=MAGAZINE_PICKUP_MODE_VISION_PLANNED,
+            move_to_magazine_vel_percent=100.0,
+            move_to_magazine_acc_percent=100.0,
+        )
+        ctx = self._context(service, config)
+        ctx.magazine_group = "Magazine"
+
+        next_state = handle_magazine_capture(ctx)
+
+        self.assertEqual(PaintExecutionState.COMPLETED, next_state)
+        self.assertEqual(2, load_service._verify_current_capture_pose.call_count)
+        correction = load_service._move_to_group_with_pause_resume_recovery.call_args
+        self.assertEqual("Magazine", correction.args[2])
+        self.assertEqual(50.0, correction.kwargs["velocity"])
+        self.assertEqual(20.0, correction.kwargs["acceleration"])
+        self.assertEqual(0.0, correction.kwargs["blendR"])
+        load_service._wait.assert_called_once_with(0.3, ctx.motion_cancel_requested)
+        service._capture_snapshot_service.capture_snapshot.assert_called_once_with(
+            source="paint_magazine_load"
+        )
+        service._set_dashboard_live_view_paused.assert_called_once_with(
+            True,
+            image=service._capture_snapshot_service.capture_snapshot.return_value.frame,
+            reason="magazine snapshot captured",
+        )
+
+    def test_verified_prepositioned_fixed_group_skips_duplicate_move(self):
+        load_service = MagicMock()
+        service = MagicMock()
+        service._magazine_load_service = load_service
+        service._consume_verified_prepositioned_start_group.return_value = True
+        config = PaintMagazineLoadConfig(
+            enabled=True,
+            pickup_mode=MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
+            fixed_pickup_group_id="Magazine Fixed Pickup",
+        )
+        ctx = self._context(service, config)
+
+        next_state = handle_magazine_move_to_magazine(ctx)
+
+        self.assertEqual(PaintExecutionState.MAGAZINE_PREPARE_PICKUP_RELEASE, next_state)
+        service._consume_verified_prepositioned_start_group.assert_called_once_with(
+            "Magazine Fixed Pickup",
+            position_tolerance_mm=config.fixed_pickup_position_tolerance_mm,
+            orientation_tolerance_deg=config.fixed_pickup_orientation_tolerance_deg,
+        )
+        load_service._mark_magazine_capture_area_active.assert_called_once_with()
+        load_service._move_to_group_with_pause_resume_recovery.assert_not_called()
+
+    def test_fixed_prepare_does_not_use_snapshot_or_vision_target_resolver(self):
+        fixed_pose = [10.0, 20.0, 100.0, 179.0, 0.0, -179.0]
+        calibration_pose = [30.0, 40.0, 200.0, 180.0, 0.0, 0.0]
+        resolved_release_pose = [35.0, 45.0, 50.0, 180.0, 0.0, 0.0]
+        load_service = MagicMock()
+        load_service._navigation.get_group_position.side_effect = [fixed_pose, calibration_pose]
+        load_service._validated_pose.return_value = fixed_pose
+        load_service._resolve_work_area_center_release_pose.return_value = resolved_release_pose
+        service = MagicMock()
+        service._magazine_load_service = load_service
+        config = PaintMagazineLoadConfig(
+            enabled=True,
+            pickup_mode=MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
+            release_z_mm=50.0,
+        )
+        process_config = PaintProcessConfig(magazine_load=config)
+        ctx = self._context(service, config, process_config=process_config)
+        ctx.magazine_group = "Magazine Fixed Pickup"
+        ctx.calibration_group = "CALIBRATION"
+
+        next_state = handle_magazine_prepare_pickup_release(ctx)
+
+        self.assertEqual(PaintExecutionState.MAGAZINE_EXECUTE_PICKUP_RELEASE, next_state)
+        self.assertEqual(fixed_pose, ctx.magazine_fixed_pickup_pose)
+        self.assertEqual(resolved_release_pose, ctx.magazine_release_pose)
+        self.assertEqual(
+            "CALIBRATION",
+            load_service._navigation.get_group_position.call_args_list[1].args[0],
+        )
+        load_service._resolve_pickup_target.assert_not_called()
+        load_service._resolve_work_area_center_release_pose.assert_called_once_with(
+            base_pose=calibration_pose,
+            frame=None,
+            release_z_mm=50.0,
+        )
+
+    def test_start_pose_verification_accepts_wrapped_angles(self):
+        robot = MagicMock()
+        robot.get_current_position_fresh.return_value = [0.5, 0.0, 100.0, -179.0, 0.0, 179.0]
+
+        ok, message = _verify_fixed_pickup_start_pose(
+            robot,
+            [0.0, 0.0, 100.0, 179.0, 0.0, -179.0],
+            position_tolerance_mm=1.0,
+            orientation_tolerance_deg=2.1,
+        )
+
+        self.assertTrue(ok, message)
+
+    def test_start_pose_verification_refuses_position_mismatch(self):
+        robot = MagicMock()
+        robot.get_current_position_fresh.return_value = [3.0, 0.0, 100.0, 0.0, 0.0, 0.0]
+
+        ok, message = _verify_fixed_pickup_start_pose(
+            robot,
+            [0.0, 0.0, 100.0, 0.0, 0.0, 0.0],
+            position_tolerance_mm=2.0,
+            orientation_tolerance_deg=1.0,
+            settle_timeout_s=0.0,
+        )
+
+        self.assertFalse(ok)
+        self.assertIn("position error 3.000 mm", message)
+
+    def test_start_pose_verification_waits_for_two_settled_samples(self):
+        robot = MagicMock()
+        robot.get_current_position_fresh.side_effect = [
+            [0.8, 0.0, 100.0, 0.0, 0.0, 0.505],
+            [0.1, 0.0, 100.0, 0.0, 0.0, 0.2],
+            [0.1, 0.0, 100.0, 0.0, 0.0, 0.2],
+        ]
+
+        ok, message = _verify_fixed_pickup_start_pose(
+            robot,
+            [0.0, 0.0, 100.0, 0.0, 0.0, 0.0],
+            position_tolerance_mm=1.0,
+            orientation_tolerance_deg=0.5,
+            settle_timeout_s=0.1,
+            poll_interval_s=0.005,
+        )
+
+        self.assertTrue(ok, message)
+        self.assertEqual(3, robot.get_current_position_fresh.call_count)
+
+    @staticmethod
+    def _context(service, config, *, process_config=None):
+        return PaintExecutionContext(
+            production_service=service,
+            stop_requested=lambda: False,
+            control=PaintExecutionControl(),
+            process_config=process_config or PaintProcessConfig(magazine_load=config),
+            magazine_config=config,
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

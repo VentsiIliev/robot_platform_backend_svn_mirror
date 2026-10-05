@@ -1,0 +1,154 @@
+import logging
+import numpy as np
+from typing import Callable, Optional
+
+from src.engine.vision.implementation.plvision.PLVision.PID.BrightnessController import BrightnessController
+from src.engine.vision.implementation.VisionSystem.core.settings.CameraSettings import CameraSettings
+
+_logger = logging.getLogger(__name__)
+
+_FALLBACK_AREA = [(940, 612), (1004, 614), (1004, 662), (940, 660)]
+
+
+class BrightnessService:
+
+    def __init__(
+        self,
+        camera_settings: CameraSettings,
+        area_points_provider: Optional[Callable[[], np.ndarray | None]] = None,
+        area_key_provider: Optional[Callable[[], str]] = None,
+    ):
+        self._settings = camera_settings
+        self._area_points_provider = area_points_provider
+        self._area_key_provider = area_key_provider
+        self._locked_area_points: np.ndarray | None = None
+        self._resolved_area_cache_key: tuple | None = None
+        self._resolved_area_cache_points: np.ndarray | None = None
+        self._adjustment_locked = False
+        self._adjustment = 0.0
+        self._active_adjustment_key: str | None = None
+        self._adjustments_by_area: dict[str, float] = {}
+        self.brightness_controller = BrightnessController(
+            Kp       = camera_settings.get_brightness_kp(),
+            Ki       = camera_settings.get_brightness_ki(),
+            Kd       = camera_settings.get_brightness_kd(),
+            setPoint = camera_settings.get_target_brightness(),
+        )
+
+    # ── Broker callback ───────────────────────────────────────────────
+
+    def on_brightness_toggle(self, mode: str) -> None:
+        if mode == "start":
+            self._settings.set_brightness_auto(True)
+        elif mode == "stop":
+            self._settings.set_brightness_auto(False)
+        else:
+            _logger.warning("on_brightness_toggle: unknown mode %r", mode)
+
+    # ── Main operation ────────────────────────────────────────────────
+
+    def adjust(self, image: np.ndarray) -> np.ndarray:
+        self._activate_area_adjustment()
+        area = self._get_area_points()
+
+        adjusted = self.brightness_controller.adjustBrightness(image, self._adjustment)
+        if self._adjustment_locked:
+            return adjusted
+
+        current  = self.brightness_controller.calculateBrightness(adjusted, area)
+        error    = self.brightness_controller.target - current
+
+        if abs(error) > 10:
+            correction = error * 0.6
+        elif abs(error) > 2:
+            correction = error * 0.4
+        else:
+            correction = error
+
+        self._adjustment = float(np.clip(self._adjustment + correction, -255, 255))
+        if self._active_adjustment_key is not None:
+            self._adjustments_by_area[self._active_adjustment_key] = self._adjustment
+
+        return self.brightness_controller.adjustBrightness(image, self._adjustment)
+
+    def lock_current_area(self) -> bool:
+        area = self._read_area_points()
+        if area is None:
+            return False
+        self._locked_area_points = np.array(area, dtype=np.float32)
+        self._invalidate_area_cache()
+        return True
+
+    def unlock_area(self) -> None:
+        self._locked_area_points = None
+        self._invalidate_area_cache()
+
+    def lock_adjustment(self) -> None:
+        self._adjustment_locked = True
+
+    def unlock_adjustment(self) -> None:
+        self._adjustment_locked = False
+
+    def _activate_area_adjustment(self) -> None:
+        if self._area_key_provider is None:
+            return
+        try:
+            area_key = str(self._area_key_provider() or "").strip()
+        except Exception as exc:
+            _logger.error("Error reading brightness area key: %s", exc)
+            return
+        if not area_key or area_key == self._active_adjustment_key:
+            return
+        if self._active_adjustment_key is not None:
+            self._adjustments_by_area[self._active_adjustment_key] = self._adjustment
+        previous_adjustment = self._adjustment
+        self._adjustment = self._adjustments_by_area.get(area_key, previous_adjustment)
+        restored = area_key in self._adjustments_by_area
+        self._active_adjustment_key = area_key
+        _logger.info(
+            "Brightness correction area switched to '%s': adjustment=%.3f restored=%s",
+            area_key,
+            self._adjustment,
+            restored,
+        )
+
+    # ── Private ───────────────────────────────────────────────────────
+
+    def _get_area_points(self) -> np.ndarray:
+        if self._locked_area_points is not None:
+            return self._locked_area_points
+
+        area = self._read_area_points()
+        if area is not None:
+            return self._cache_resolved_area_points(area)
+
+        return self._cache_resolved_area_points(_FALLBACK_AREA)
+
+    def _read_area_points(self) -> np.ndarray | None:
+        if self._area_points_provider is not None:
+            try:
+                points = self._area_points_provider()
+                if points is not None and len(points) == 4:
+                    return np.asarray(points, dtype=np.float32)
+            except Exception as exc:
+                _logger.error("Error reading dynamic brightness area, using settings fallback: %s", exc)
+        try:
+            pts = self._settings.get_brightness_area_points()
+            if pts and len(pts) == 4:
+                return np.asarray([tuple(p) for p in pts], dtype=np.float32)
+        except Exception as exc:
+            _logger.error("Error reading brightness area from settings, using fallback: %s", exc)
+        return None
+
+    def _cache_resolved_area_points(self, points) -> np.ndarray:
+        area = np.asarray(points, dtype=np.float32).reshape(-1, 2)
+        key = tuple((float(x), float(y)) for x, y in area.tolist())
+        if key == self._resolved_area_cache_key and self._resolved_area_cache_points is not None:
+            return self._resolved_area_cache_points
+        self._resolved_area_cache_key = key
+        self._resolved_area_cache_points = area
+        return area
+
+    def _invalidate_area_cache(self) -> None:
+        self._resolved_area_cache_key = None
+        self._resolved_area_cache_points = None

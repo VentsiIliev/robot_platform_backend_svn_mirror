@@ -1,0 +1,51 @@
+from typing import Optional
+
+from src.engine.core.i_messaging_service import IMessagingService
+from src.engine.robot.features.tool_service import RobotToolService
+from src.engine.robot.interfaces.i_robot import IRobot
+from src.engine.robot.interfaces.i_robot_service import IRobotService
+from src.engine.robot.interfaces.i_tool_service import IToolService
+from src.engine.robot.safety.safety_checker import SafetyChecker
+from src.engine.robot.services.motion_service import MotionService
+from src.engine.robot.services.robot_service import RobotService
+from src.engine.robot.services.robot_state_manager import RobotStateManager
+from src.engine.robot.services.robot_state_publisher import RobotStatePublisher
+
+
+def create_robot_service(
+        robot: IRobot,
+        messaging_service: IMessagingService,  # ← required, no default
+        robot_settings_key,
+        settings_service=None,
+        tool_changer=None,
+) -> IRobotService:
+    safety = SafetyChecker(robot_settings_key, settings_service)
+    motion = MotionService(robot, safety, messaging_service=messaging_service)
+    publisher = RobotStatePublisher(messaging_service)  # ← no fallback
+    active_tool_getter = None
+    active_workobject_getter = None
+    if settings_service is not None:
+        active_tool_getter = lambda: int(
+            getattr(settings_service.get(robot_settings_key), "robot_tool", 0)
+        )
+        active_workobject_getter = lambda: int(
+            getattr(settings_service.get(robot_settings_key), "robot_user", 0)
+        )
+    state = RobotStateManager(
+        robot,
+        publisher=publisher,
+        active_tool_getter=active_tool_getter,
+        active_workobject_getter=active_workobject_getter,
+    )
+    state.refresh_once()
+    state.start_monitoring()
+
+    tool_service: Optional[IToolService] = None
+    if tool_changer is not None and settings_service is not None:
+        tool_service = RobotToolService(
+            motion_service=motion,
+            robot_config=settings_service.get(robot_settings_key),
+            tool_changer=tool_changer,
+        )
+
+    return RobotService(motion=motion, robot=robot, state_provider=state, tool_service=tool_service)

@@ -1,0 +1,129 @@
+from abc import ABC, abstractmethod
+from typing import Optional
+from src.engine.core.i_health_checkable import IHealthCheckable
+from .i_motion_service import IMotionService
+from .i_robot_lifecycle import IRobotLifecycle
+from ..motion_sequence import OrderedMotionInput
+
+
+class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
+    """Full robot service interface."""
+
+    @abstractmethod
+    def get_current_velocity(self) -> float: ...
+
+    @abstractmethod
+    def get_current_acceleration(self) -> float: ...
+
+    @abstractmethod
+    def get_state(self) -> str: ...
+
+    @abstractmethod
+    def get_state_topic(self) -> str: ...
+
+    @abstractmethod
+    def execute_trajectory(
+        self,
+        path,
+        rx: float = 180,
+        ry: float = 0,
+        rz: float = 0,
+        vel: float = 0.1,
+        acc: float = 0.1,
+        blocking: bool = False,
+        orientation_mode: str = "constant",
+    ):
+        ...
+
+    def execute_ordered_motion_chain(
+        self,
+        segments: list[OrderedMotionInput],
+        tool: int,
+        user: int,
+        blocking: bool = False,
+    ):
+        return -1
+
+    def prepare_ordered_motion_chain(self, segments: list[OrderedMotionInput], start_position, tool, user, *,
+                                     allow_servo_during_prepare=False):
+        return None
+
+    def execute_prepared_ordered_motion_chain(self, plan_id):
+        return None
+
+    def discard_prepared_ordered_motion_chain(self, plan_id):
+        return None
+
+    def get_prepared_ordered_motion_chain(self, plan_id):
+        return None
+
+    def get_execution_status(self):
+        return None
+
+    def get_last_trajectory_command_info(self):
+        return None
+
+    def unwind_joint6(
+        self,
+        blocking: bool = True,
+        queue_if_busy: bool = True,
+        vel: float | None = None,
+        acc: float | None = None,
+    ) -> bool:
+        return False
+
+    @abstractmethod
+    def enable_safety_walls(self) -> bool: ...
+
+    @abstractmethod
+    def disable_safety_walls(self) -> bool: ...
+
+    @abstractmethod
+    def are_safety_walls_enabled(self) -> Optional[bool]: ...
+
+    @abstractmethod
+    def get_safety_walls_status(self) -> dict: ...
+
+    @abstractmethod
+    def validate_pose(
+        self,
+        start_position,
+        target_position,
+        tool: int = 0,
+        user: int = 0,
+        start_joint_state: dict | None = None,
+    ) -> dict: ...
+
+    @abstractmethod
+    def set_active_tool(self, tool: int) -> bool: ...
+
+    def get_tool_registry(self):
+        return None
+
+    def set_active_workobject(self, user: int) -> bool:
+        return True
+
+    def get_workobject_registry(self):
+        return None
+
+    def update_workobject_registry(self, user_id, name=None, transform=None, persist=False):
+        return -1
+
+    def is_healthy(self) -> bool:
+        """Healthy = robot is not in error state."""
+        return self.get_connection_state() not in ("disconnected", "starting", "error", "fault")
+
+    def get_connection_state(self) -> str:
+        """Optional lifecycle/availability state for the underlying transport."""
+        return self.get_state()
+
+    def get_connection_details(self) -> dict:
+        """Optional diagnostic details about the underlying transport state."""
+        return {}
+
+    def get_drive_status(self) -> dict:
+        """Optional drive/fieldbus status from the underlying robot transport."""
+        return {}
+
+    @abstractmethod
+    def set_digital_output(self, port_id: int, value: bool) -> bool: ...
