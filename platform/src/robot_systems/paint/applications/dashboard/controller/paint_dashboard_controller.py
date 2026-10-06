@@ -147,6 +147,9 @@ class PaintDashboardController(
             self._status_timer.start()
         self._view.destroyed.connect(self.stop)
 
+    def has_active_operations(self) -> bool:
+        return bool(self._workers) or self._model.is_process_active()
+
     def stop(self) -> None:
         self._active = False
         # The current pause is dashboard-local. Never carry a frozen preview
@@ -161,7 +164,8 @@ class PaintDashboardController(
         self._unsubscribe_all()
         for thread, _worker in list(self._workers):
             thread.quit()
-            thread.wait(1000)
+            if not thread.wait(1000):
+                thread.wait()
         self._workers.clear()
 
     def _on_start(self) -> None:

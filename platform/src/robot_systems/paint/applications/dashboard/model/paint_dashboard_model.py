@@ -12,6 +12,10 @@ class PaintDashboardModel(IApplicationModel):
     def __init__(self, service: IPaintDashboardService):
         self._service = service
 
+    def is_process_active(self) -> bool:
+        """Include running, paused and stopping work without starting hardware I/O."""
+        return self._service.is_process_active()
+
     def load(self) -> DashboardState:
         return self._service.load_state()
 

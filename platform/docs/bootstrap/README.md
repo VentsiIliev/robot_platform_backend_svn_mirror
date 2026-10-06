@@ -43,3 +43,5 @@ Use `tests/bootstrap/` for startup config, lazy loading, sessions, splash and ba
 
 [Complete source index](../SOURCE_INDEX.md).
 <!-- source-navigation:end -->
+
+A vetoed header power-off resets the shutdown-request latch and re-enables the power button, allowing the operator to stop the operation and retry.

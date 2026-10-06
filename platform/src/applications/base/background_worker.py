@@ -102,6 +102,10 @@ class BackgroundWorker:
         self._active_workers: List[Tuple[QThread, _Worker, _UiRelay]] = []
         self._logger = logging.getLogger(self.__class__.__name__)
 
+    def has_running_workers(self) -> bool:
+        """Include submitted workers until their GUI-thread cleanup completes."""
+        return bool(self._active_workers)
+
     def _run_in_thread(
         self,
         fn: Callable,
@@ -132,9 +136,8 @@ class BackgroundWorker:
         thread.started.connect(worker.run)
         worker.finished.connect(relay.handle_finished)
         worker.finished.connect(thread.quit)
-        if on_error is not None:
-            worker.failed.connect(relay.handle_failed)
-            worker.failed.connect(thread.quit)
+        worker.failed.connect(relay.handle_failed)
+        worker.failed.connect(thread.quit)
         # Plain Python callbacks can execute on the emitting worker thread.
         # Pruning its last references there can deadlock Qt/Python teardown.
         thread.finished.connect(relay.handle_thread_finished)

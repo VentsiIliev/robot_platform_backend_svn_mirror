@@ -119,6 +119,9 @@ class CalibrationController(IApplicationController):
         self._load_height_mapping_areas()
         self._view.set_depth_map_enabled(self._model.has_saved_height_model(self._view.current_work_area_id()))
 
+    def has_active_operations(self) -> bool:
+        return self.is_calibrating() or self._model.is_intrinsic_auto_capture_running()
+
     def stop(self) -> None:
         self._running = False
         self._active = False
@@ -132,7 +135,8 @@ class CalibrationController(IApplicationController):
         self._subs.clear()
         for thread, _ in self._threads:
             thread.quit()
-            thread.wait(3000)  # ← timeout, don't block forever
+            if not thread.wait(3000):
+                thread.wait()
         self._threads.clear()
 
     # ── Broker → Bridge ───────────────────────────────────────────────
@@ -449,11 +453,11 @@ class CalibrationController(IApplicationController):
             self._view.set_buttons_enabled(True)
 
     def is_calibrating(self) -> bool:
-        threads_active = any(t.isRunning() for t, _ in self._threads)
+        threads_active = bool(self._threads)
         return threads_active or self._robot_process_running
 
     def _on_calibration_process_state(self, event: ProcessStateEvent) -> None:
-        if event.state == ProcessState.RUNNING:
+        if event.state in (ProcessState.RUNNING, ProcessState.PAUSED):
             self._robot_process_running = True
             self._bridge.stop_btn_enabled.emit(True)
             self._bridge.test_btn_enabled.emit(False)

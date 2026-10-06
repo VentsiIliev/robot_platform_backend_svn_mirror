@@ -100,6 +100,12 @@ class PaintAdjustmentController(IApplicationController):
         self._timer.start()
         self._settings_timer.start()
 
+    def has_active_operations(self) -> bool:
+        return (
+            self._action_pending or self._position_read_pending or self._cycle_start_pending
+            or self._model.get_paint_cycle_state() in {"running", "paused", "stopping"}
+        )
+
     def stop(self) -> None:
         self._stopped = True
         self._timer.stop()

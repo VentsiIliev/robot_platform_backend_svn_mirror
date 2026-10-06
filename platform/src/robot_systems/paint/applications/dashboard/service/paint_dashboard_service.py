@@ -76,6 +76,11 @@ class PaintDashboardService(IPaintDashboardService):
         self._homography_residual_strategy = HomographyResidualStrategy()
         self._logger = logging.getLogger(__name__)
 
+    def is_process_active(self) -> bool:
+        """Include running, paused and stopping work without starting hardware I/O."""
+        return (self._process.state in {ProcessState.RUNNING, ProcessState.PAUSED}
+                or getattr(self._process, "is_stopping", False) is True)
+
     def get_process_id(self) -> str:
         return str(getattr(self._process.process_id, "value", self._process.process_id))
 

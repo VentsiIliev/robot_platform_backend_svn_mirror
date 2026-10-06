@@ -484,3 +484,9 @@ Schema-based forms built through `KeyboardSettingsView` or `build_with_keyboard_
 
 [Complete source index](../../SOURCE_INDEX.md).
 <!-- source-navigation:end -->
+
+## Navigation during operations
+
+`IApplicationController.has_active_operations()` is a nonblocking query for finite screen-owned work, including paused processes and stopping operations. Its default is false; custom controllers override it for private workers, executors or service-owned processes. The factory binds it to `IApplicationView.can_close()` and also checks `BackgroundWorker` work and jog commands. Workers block navigation from submission until cleanup. Specialized view guards must call `super().can_close()`.
+
+Finite reads, connection checks and actions block leaving until completion. Continuous previews and monitoring loops do not. Warnings use the shared English/Bulgarian `ApplicationNavigation` catalogs. Background worker failures quit their thread even without an error callback. Direct cleanup waits for private workers before releasing ownership.

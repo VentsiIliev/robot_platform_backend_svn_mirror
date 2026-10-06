@@ -426,6 +426,8 @@ class CalibrationView(IApplicationView):
         self._controls_panel.stop_robot_btn.setText(self.tr("Stop"))
 
     def can_close(self) -> bool:
+        if not super().can_close():
+            return False
         if hasattr(self, "_controller") and self._controller.is_calibrating():
             show_warning(
                 self,

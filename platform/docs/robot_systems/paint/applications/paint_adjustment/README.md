@@ -18,3 +18,5 @@ This page follows the source directory. The reference below records its modules 
 
 [Complete source index](../../../../SOURCE_INDEX.md).
 <!-- source-navigation:end -->
+
+The shared guard covers pending serial actions, position reads and cycle commands, plus running, paused and stopping paint cycles. Camera streaming is excluded. The system passes stopping state through the cycle callback so Stop does not prematurely unlock navigation.

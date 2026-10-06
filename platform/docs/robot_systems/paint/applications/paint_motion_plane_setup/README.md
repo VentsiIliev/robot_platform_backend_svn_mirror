@@ -19,3 +19,5 @@ This page follows the source directory. The reference below records its modules 
 
 [Complete source index](../../../../SOURCE_INDEX.md).
 <!-- source-navigation:end -->
+
+The shared guard blocks leaving during finite motion/capture workers and jog commands. Direct cleanup retains thread ownership until completion, including after a timed wait expires.

@@ -17,3 +17,7 @@ This page follows the source directory. The reference below records its modules 
 
 [Complete source index](../../SOURCE_INDEX.md).
 <!-- source-navigation:end -->
+
+## Active-operation close veto
+
+Application `can_close()` guards navigation, logout and normal main-window close. A main-window veto ignores the event before cleanup. Forced teardown is separate; controllers must retain workers until they exit.

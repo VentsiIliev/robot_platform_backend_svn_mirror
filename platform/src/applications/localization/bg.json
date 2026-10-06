@@ -106,5 +106,9 @@
   "StartupError": {
     "Platform could not start": "Платформата не може да стартира",
     "The platform stopped because an error occurred.": "Платформата спря поради възникнала грешка."
+  },
+  "ApplicationNavigation": {
+    "Operation Running": "Операцията се изпълнява",
+    "An operation is running or stopping. Please stop it or wait for it to finish before leaving.": "Операцията се изпълнява или спира. Спрете я или изчакайте да приключи, преди да напуснете екрана."
   }
 }

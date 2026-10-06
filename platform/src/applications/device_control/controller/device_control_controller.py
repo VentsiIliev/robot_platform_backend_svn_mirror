@@ -105,6 +105,13 @@ class DeviceControlController(IApplicationController, BackgroundWorker):
         for address, healthy in snapshot.items():
             self._view.set_device_available(f"motor_{address}", healthy)
 
+    def has_active_operations(self) -> bool:
+        return (
+            self._device_action_in_flight or self._device_poll_in_flight or bool(self._pending_device_enabled)
+            or (self._dryer_controller is not None and self._dryer_controller.has_active_operations())
+            or any(controller.has_active_operations() for _, _, _, controller in self._extra_panels)
+        )
+
     def stop(self) -> None:
         self._device_stopped = True
         self._device_executor.shutdown(wait=False, cancel_futures=True)

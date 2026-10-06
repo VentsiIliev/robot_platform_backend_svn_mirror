@@ -1,5 +1,4 @@
 import logging
-import threading
 
 from PyQt6.QtCore import QCoreApplication, QObject, pyqtSignal
 from src.applications.base.background_worker import BackgroundWorker
@@ -208,15 +207,11 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
             self._logger.debug("Failed to publish targeting-definitions change event", exc_info=True)
 
     def _run_blocking(self, fn, label: str) -> None:
-        def _work() -> None:
-            try:
-                result = fn()
-            except Exception as exc:
-                self._motion_bridge.failed.emit(str(exc), label)
-                return
-            self._motion_bridge.done.emit(result, label)
-
-        threading.Thread(target=_work, daemon=True).start()
+        self._run_in_thread(
+            fn=fn,
+            on_done=lambda result: self._on_motion_done(result, label),
+            on_error=lambda message: self._on_motion_failed(message, label),
+        )
 
     def _on_motion_done(self, result, label: str) -> None:
         ok, reason = result if isinstance(result, tuple) else (bool(result), "")

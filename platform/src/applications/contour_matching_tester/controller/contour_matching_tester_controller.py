@@ -76,6 +76,9 @@ class ContourMatchingTesterController(IApplicationController):
         if self._broker is not None:
             self._subscribe()
 
+    def has_active_operations(self) -> bool:
+        return bool(self._threads)
+
     def stop(self) -> None:
         self._active = False
         for topic, cb in reversed(self._subs):

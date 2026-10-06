@@ -56,10 +56,14 @@ class ToolSettingsController(IApplicationController):
         self._refresh()
         self._update_calibration_progress()
 
+    def has_active_operations(self) -> bool:
+        return bool(self._active)
+
     def stop(self) -> None:
         for thread, _worker in list(self._active):
             thread.quit()
-            thread.wait(1000)
+            if not thread.wait(1000):
+                thread.wait()
         self._active.clear()
 
     def _connect_signals(self) -> None:

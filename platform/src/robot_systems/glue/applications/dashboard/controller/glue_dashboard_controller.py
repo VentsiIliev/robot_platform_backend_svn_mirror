@@ -77,6 +77,11 @@ class GlueDashboardController(
         self._progress_timer.start()
         self._view.destroyed.connect(self.stop)
 
+    def has_active_operations(self) -> bool:
+        snapshot = self._model.get_process_snapshot() or {}
+        return (self._model.get_process_state() in {"running", "paused"}
+                or bool(snapshot.get("worker_alive", False)))
+
     def stop(self) -> None:
         self._is_active = False
         try:

@@ -65,6 +65,8 @@ class AppShell(QWidget):
 
     def on_app_selected(self, app_name):
         """Handle when an app is selected from any folder"""
+        if not self.can_switch_to_app(app_name):
+            return
         print(f"Currently running app: {self.current_running_app}")
         print(f"MainWindow: App selected - {app_name}")
 
@@ -95,7 +97,15 @@ class AppShell(QWidget):
 
 
 
+    def can_switch_to_app(self, app_name: str) -> bool:
+        for name, widget in self.running_widgets.items():
+            if name != app_name and widget and hasattr(widget, "can_close") and not widget.can_close():
+                return False
+        return True
+
     def show_app(self, app_name):
+        if not self.can_switch_to_app(app_name):
+            return None
         # Check if widget already exists
         if app_name in self.running_widgets:
             app_widget = self.running_widgets[app_name]
@@ -367,5 +377,9 @@ class AppShell(QWidget):
     
     def closeEvent(self, event):
         """Handle window close event"""
+        for app_widget in self.running_widgets.values():
+            if app_widget and hasattr(app_widget, "can_close") and not app_widget.can_close():
+                event.ignore()
+                return
         self.cleanup()
         super().closeEvent(event)

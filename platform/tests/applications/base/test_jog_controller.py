@@ -46,6 +46,7 @@ class TestJogController(unittest.TestCase):
 
         view.jog_requested.emit("SERVO_JOG", "X", "Plus", 5.0)
         self.assertTrue(start_entered.wait(timeout=1.0))
+        self.assertTrue(controller.has_active_operations())
         view.jog_stopped.emit("x_plus")
         self.assertFalse(stop_called.wait(timeout=0.05))
 
@@ -55,6 +56,7 @@ class TestJogController(unittest.TestCase):
 
         controller.stop()
         self.assertTrue(controller._jog_pool.waitForDone(1000))
+        self.assertFalse(controller.has_active_operations())
         view.deleteLater()
 
 

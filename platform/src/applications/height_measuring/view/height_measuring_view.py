@@ -41,6 +41,8 @@ class HeightMeasuringView(IApplicationView):
         self._settings_view.save_requested.connect(self._on_inner_save)
 
     def can_close(self) -> bool:
+        if not super().can_close():
+            return False
         if hasattr(self, "_controller") and self._controller.is_calibrating():
             show_warning(
                 self,

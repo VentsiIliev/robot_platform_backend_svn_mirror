@@ -8,6 +8,7 @@ from src.applications.base.i_application_controller import IApplicationControlle
 from src.applications.base.i_application_model import IApplicationModel
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.base.jog_controller import JogController
+from src.applications.base.background_worker import BackgroundWorker
 
 
 def finalize_application_build(
@@ -25,6 +26,16 @@ def finalize_application_build(
         jog = JogController(view, jog_service, messaging)
         jog.start()
         view._jog_controller = jog
+
+    def _has_active_operations() -> bool:
+        return (
+            controller.has_active_operations()
+            or (isinstance(controller, BackgroundWorker) and controller.has_running_workers())
+            or (jog is not None and jog.has_active_operations())
+        )
+
+    if isinstance(view, IApplicationView):
+        view.set_navigation_guard(_has_active_operations)
 
     controller.load()
     view._controller = controller  # transfers ownership — prevents GC killing signal connections

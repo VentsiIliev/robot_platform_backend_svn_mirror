@@ -50,6 +50,9 @@ class HandEyeController(IApplicationController):
         self._preview_timer.timeout.connect(self._update_preview)
         self._preview_timer.start()
 
+    def has_active_operations(self) -> bool:
+        return self._model.is_running()
+
     def stop(self) -> None:
         if self._preview_timer is not None:
             self._preview_timer.stop()

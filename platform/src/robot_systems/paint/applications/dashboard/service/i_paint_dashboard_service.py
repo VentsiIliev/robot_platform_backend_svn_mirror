@@ -24,6 +24,11 @@ class DashboardCommandResult:
 class IPaintDashboardService(ABC):
 
     @abstractmethod
+    def is_process_active(self) -> bool:
+        """Include running, paused and stopping work without starting hardware I/O."""
+        ...
+
+    @abstractmethod
     def get_process_id(self) -> str: ...
 
     @abstractmethod

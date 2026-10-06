@@ -723,7 +723,7 @@ class PaintRobotSystem(BaseRobotSystem):
         self._paint_adjustment_service = PaintAdjustmentService(
             self._settings_service,
             start_single_cycle=self._main_process.start_manual_single_cycle,
-            get_cycle_state=lambda: self._main_process.state.value,
+            get_cycle_state=lambda: ("stopping" if self._main_process.is_stopping else self._main_process.state.value),
             start_adjustment=self._main_process.start_adjustment_cycle,
             paint_next=self._main_process.paint_next_adjustment_section,
             finish_adjustment=self._main_process.finish_adjustment_cycle,

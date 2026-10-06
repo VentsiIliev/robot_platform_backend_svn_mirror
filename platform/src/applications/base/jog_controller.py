@@ -142,6 +142,9 @@ class JogController:
         self._messaging = messaging
         # Cartesian jog commands must retain submission order. In particular, a
         # quick servo press/release must never let the stop run before the start.
+        self._operation_lock = threading.Lock()
+        self._pending_operations = 0
+        self._servo_held = False
         self._jog_pool = QThreadPool()
         self._jog_pool.setMaxThreadCount(1)
         self._bridge    = _Bridge(view, self._apply_frame_options)
@@ -165,6 +168,23 @@ class JogController:
         self._messaging.subscribe(RobotTopics.TARGETING_DEFINITIONS_CHANGED, targeting_cb)
         self._subs.append((RobotTopics.TARGETING_DEFINITIONS_CHANGED, targeting_cb))
         self._refresh_frame_options()
+
+    def has_active_operations(self) -> bool:
+        with self._operation_lock:
+            return self._pending_operations > 0 or self._servo_held
+
+    def _submit_operation(self, pool: QThreadPool, fn) -> None:
+        with self._operation_lock:
+            self._pending_operations += 1
+
+        def run() -> None:
+            try:
+                fn()
+            finally:
+                with self._operation_lock:
+                    self._pending_operations -= 1
+
+        pool.start(_FireAndForget(run))
 
     def stop(self) -> None:
         for topic, cb in self._subs:
@@ -224,17 +244,22 @@ class JogController:
         set_options([], default="")
 
     def _on_jog(self, command: str, axis: str, direction: str, step: float) -> None:
-        task = _FireAndForget(partial(self._service.jog, command, axis, direction, step))
+        fn = partial(self._service.jog, command, axis, direction, step)
         if command == "SERVO_JOG":
-            self._jog_pool.start(task)
+            with self._operation_lock:
+                self._servo_held = True
+            self._submit_operation(self._jog_pool, fn)
             return
-        QThreadPool.globalInstance().start(task)
+        self._submit_operation(QThreadPool.globalInstance(), fn)
 
     def _on_joint_jog(self, command: str, joint: str, direction: str, step: float) -> None:
-        QThreadPool.globalInstance().start(
-            _FireAndForget(partial(self._service.joint_jog, command, joint, direction, step))
+        self._submit_operation(
+            QThreadPool.globalInstance(),
+            partial(self._service.joint_jog, command, joint, direction, step),
         )
 
     def _on_jog_stop(self, _key: str) -> None:
         _logger.debug("jog stop: %s", _key)
-        self._jog_pool.start(_FireAndForget(self._service.stop_jog))
+        self._submit_operation(self._jog_pool, self._service.stop_jog)
+        with self._operation_lock:
+            self._servo_held = False

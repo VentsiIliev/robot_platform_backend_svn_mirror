@@ -12,6 +12,13 @@ class IApplicationController(ABC):
                  stops threads
     """
 
+    def has_active_operations(self) -> bool:
+        """Whether finite work or a process still requires this screen to stay open.
+
+        Include stopping workers; exclude continuous previews and monitoring.
+        """
+        return False
+
     @abstractmethod
     def load(self) -> None: ...
 

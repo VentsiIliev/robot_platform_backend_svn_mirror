@@ -39,6 +39,9 @@ class WeldingDashboardController(
         self._view.apply_dashboard_state(self._model.load())
         self._view.destroyed.connect(self.stop)
 
+    def has_active_operations(self) -> bool:
+        return self._model.load().process_state in {"running", "paused"}
+
     def stop(self) -> None:
         self._active = False
         self._unsubscribe_all()

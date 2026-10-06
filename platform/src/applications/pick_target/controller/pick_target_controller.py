@@ -183,13 +183,17 @@ class PickTargetController(IApplicationController):
         if self._broker:
             self._subscribe()
 
+    def has_active_operations(self) -> bool:
+        return bool(self._active)
+
     def stop(self) -> None:
         self._alive = False
         if self._current_worker and hasattr(self._current_worker, "request_stop"):
             self._current_worker.request_stop()
         for thread, _ in self._active:
             thread.quit()
-            thread.wait(3000)
+            if not thread.wait(3000):
+                thread.wait()
         self._active.clear()
         for topic, cb in reversed(self._subs):
             try:

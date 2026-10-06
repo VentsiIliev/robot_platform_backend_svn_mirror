@@ -50,6 +50,11 @@ class GlueProcessDriverController(IApplicationController):
             self._view.set_manual_mode_enabled(bool(snapshot.get("manual_mode")))
         self._subscribe()
 
+    def has_active_operations(self) -> bool:
+        snapshot = self._model.refresh_process_snapshot() or {}
+        return (snapshot.get("process_state") in {"running", "paused"}
+                or bool(snapshot.get("worker_alive", False)))
+
     def stop(self) -> None:
         if not self._active and not self._subs:
             return

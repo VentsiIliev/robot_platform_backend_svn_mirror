@@ -36,6 +36,10 @@ class StubPaintDashboardService(IPaintDashboardService):
         self._plate_layout = {"width_mm": 200.0, "height_mm": 200.0, "placements": [], "pending": None}
         self._paint_head_position = 10
 
+    def is_process_active(self) -> bool:
+        """Include running, paused and stopping work without starting hardware I/O."""
+        return self._state in {"running", "paused"}
+
     def get_process_id(self) -> str:
         return self._process_id
 

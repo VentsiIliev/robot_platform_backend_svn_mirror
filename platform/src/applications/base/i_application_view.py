@@ -1,9 +1,10 @@
 from abc import abstractmethod
-from typing import Optional
+from typing import Callable, Optional
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import QCoreApplication, pyqtSignal
 
 from pl_gui.shell.base_app_widget.AppWidget import AppWidget
+from src.applications.base.styled_message_box import show_warning
 from src.applications.base.drawer_toggle import DrawerToggle
 from src.applications.base.robot_jog_widget import RobotJogWidget
 
@@ -32,10 +33,27 @@ class IApplicationView(AppWidget):
     language_changed = pyqtSignal()
 
     def __init__(self, title: str, parent=None):
+        self._navigation_guard: Callable[[], bool] | None = None
         self._drawer: Optional[DrawerToggle] = None
         self._jog_widget: Optional[RobotJogWidget] = None
         super().__init__(title, parent)
         self._install_jog_widget()
+
+    def set_navigation_guard(self, has_active_operations: Callable[[], bool]) -> None:
+        """Bind a nonblocking activity query supplied by the application factory."""
+        self._navigation_guard = has_active_operations
+
+    def can_close(self) -> bool:
+        if self._navigation_guard is not None and self._navigation_guard():
+            title = "Operation Running"
+            message = "An operation is running or stopping. Please stop it or wait for it to finish before leaving."
+            show_warning(
+                self,
+                QCoreApplication.translate("ApplicationNavigation", title) or title,
+                QCoreApplication.translate("ApplicationNavigation", message) or message,
+            )
+            return False
+        return super().can_close()
 
     def _install_jog_widget(self) -> None:
         self._drawer = DrawerToggle(

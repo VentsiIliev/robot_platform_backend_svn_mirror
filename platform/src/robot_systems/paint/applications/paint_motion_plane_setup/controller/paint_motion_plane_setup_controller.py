@@ -57,18 +57,15 @@ class PaintMotionPlaneSetupController(IApplicationController):
         except Exception as exc:
             self._view.show_error("Paint setup unavailable", str(exc))
 
+    def has_active_operations(self) -> bool:
+        return bool(self._active)
+
     def stop(self) -> None:
         for thread, worker in self._active:
-            try:
-                worker.finished.disconnect()
-            except (RuntimeError, TypeError):
-                pass
-            try:
-                worker.failed.disconnect()
-            except (RuntimeError, TypeError):
-                pass
+            # Preserve completion-to-quit connections while the operation finishes.
             thread.quit()
-            thread.wait(1000)
+            if not thread.wait(1000):
+                thread.wait()
         self._active.clear()
         try:
             self._view.move_to_paint_pose_requested.disconnect(self._on_move_to_paint_pose)

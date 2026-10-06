@@ -193,7 +193,9 @@ def main() -> None:
         shutdown_requested["value"] = True
         shell.header.power_toggle_button.setEnabled(False)
         _LOGGER.info("Platform shutdown requested from header")
-        shell.close()
+        if not shell.close():
+            shutdown_requested["value"] = False
+            shell.header.power_toggle_button.setEnabled(True)
 
     shell.header.power_off_requested.connect(_on_power_off_requested)
 

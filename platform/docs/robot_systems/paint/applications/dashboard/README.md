@@ -26,3 +26,7 @@ Process Status details show "Waiting for paint stopping to finish." during clean
 
 [Complete source index](../../../../SOURCE_INDEX.md).
 <!-- source-navigation:end -->
+
+## Navigation guard
+
+Leaving is blocked while paint is running, paused or stopping, or finite dashboard workers are pending. The process query reads lifecycle state without hardware I/O. Camera feeds and continuous monitoring are excluded. Stop unlocks navigation only after production and hardware-stop workers finish.
