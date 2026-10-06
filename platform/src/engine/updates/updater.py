@@ -181,6 +181,52 @@ class PlatformUpdater:
         os.replace(temporary, self.root / "current")
         sync_directory(self.root)
 
+    def _prepare_tools(self, release: Path) -> str | None:
+        """Copy release-owned updater sources; keep machine configuration metadata."""
+        payload = release / "platform/installation/updater"
+        if not payload.exists():
+            return None  # Older releases did not carry updater sources.
+        if not (payload / "manage.py").is_file() or not (payload / "src/engine/updates/updater.py").is_file():
+            raise ValueError("Release updater payload is incomplete")
+        tools = self.root / "tools"
+        if tools.exists() and not tools.is_symlink():
+            raise ValueError("Refresh legacy updater tools using the installer before updating")
+        versions = self.root / "updater-tools"
+        versions.mkdir(exist_ok=True)
+        destination = versions / uuid.uuid4().hex
+        shutil.copytree(payload, destination)
+        metadata = tools / "installation.json"
+        if metadata.is_file():
+            shutil.copy2(metadata, destination / "installation.json")
+        subprocess.run(["/usr/bin/python3", str(destination / "manage.py"), "--help"],
+                       cwd=destination, env=subprocess_environment(),
+                       check=True, capture_output=True, timeout=15)
+        sync_tree(destination)
+        sync_directory(versions)
+        return str(destination.relative_to(self.root))
+
+    def _tools_pointer(self, target: str | None) -> None:
+        tools = self.root / "tools"
+        if target is None:
+            tools.unlink(missing_ok=True)
+        else:
+            temporary = self.root / ".tools-new"
+            temporary.unlink(missing_ok=True)
+            temporary.symlink_to(target)
+            os.replace(temporary, tools)
+        sync_directory(self.root)
+
+    def _transaction_record(self, previous: str | None, backup: str) -> dict:
+        rollback = self.state / "rollback.json"
+        tools = self.root / "tools"
+        record = {"previous": previous, "backup": backup,
+                  "rollback": json.loads(rollback.read_text()) if rollback.exists() else None}
+        if tools.is_symlink():
+            record["tools"] = os.readlink(tools)
+        elif not tools.exists():
+            record["tools"] = None
+        return record
+
     def recover(self) -> None:
         """Roll back an interrupted activation before opening the application."""
         with self.offline():
@@ -197,10 +243,19 @@ class PlatformUpdater:
                 abandoned = self.root / (".failed-data-" + uuid.uuid4().hex)
                 os.rename(self.data, abandoned)
             os.rename(backup, self.data)
+            sync_directory(self.root)
+            sync_directory(backup.parent)
         if record["previous"]:
             self._pointer(record["previous"])
         else:
             (self.root / "current").unlink(missing_ok=True)
+        if "tools" in record:
+            self._tools_pointer(record["tools"])
+        if "rollback" in record:
+            if record["rollback"] is None:
+                (self.state / "rollback.json").unlink(missing_ok=True)
+            else:
+                atomic_json(self.state / "rollback.json", record["rollback"])
         sync_directory(self.root)
         atomic_json(self.state / "result.json", {"status": "recovered", "version": record["previous"]})
         (self.state / "pending.json").unlink(missing_ok=True)
@@ -236,14 +291,21 @@ class PlatformUpdater:
                     from .factory_defaults import seed_factory_defaults
                     seed_factory_defaults(release / "platform/_internal", staged_data, manifest)
                 sync_tree(staged_data)
-                atomic_json(self.state / "transaction.json", {"previous": previous["version"] if previous else None, "backup": backup_name})
+                new_tools = self._prepare_tools(release)
+                transaction = self._transaction_record(previous["version"] if previous else None, backup_name)
+                atomic_json(self.state / "transaction.json", transaction)
                 os.rename(self.data, backup)
                 sync_directory(backup.parent)
                 sync_directory(self.root)
                 os.rename(staged_data, self.data)
                 sync_directory(self.root)
                 self._pointer(version)
-                atomic_json(self.state / "rollback.json", {"previous": previous["version"] if previous else None, "backup": backup_name})
+                if new_tools is not None:
+                    self._tools_pointer(new_tools)
+                rollback = {"previous": transaction["previous"], "backup": backup_name}
+                if "tools" in transaction:
+                    rollback["tools"] = transaction["tools"]
+                atomic_json(self.state / "rollback.json", rollback)
                 atomic_json(self.state / "result.json", {"status": "installed", "version": version})
                 pending.unlink()
                 (self.state / "staged.json").unlink(missing_ok=True)
@@ -272,7 +334,7 @@ class PlatformUpdater:
             # Preserve post-update data too; rollback is itself recoverable.
             saved_name = uuid.uuid4().hex
             current = self.installed()
-            atomic_json(self.state / "transaction.json", {"previous": current["version"], "backup": saved_name})
+            atomic_json(self.state / "transaction.json", self._transaction_record(current["version"], saved_name))
             os.rename(self.data, self.root / "backups" / saved_name)
             sync_directory(self.root / "backups")
             sync_directory(self.root)
@@ -280,6 +342,8 @@ class PlatformUpdater:
             sync_tree(self.data)
             sync_directory(self.root)
             self._pointer(record["previous"])
+            if "tools" in record:
+                self._tools_pointer(record["tools"])
             atomic_json(self.state / "result.json", {"status": "rolled_back", "version": record["previous"]})
             (self.state / "rollback.json").unlink()
             (self.state / "pending.json").unlink(missing_ok=True)

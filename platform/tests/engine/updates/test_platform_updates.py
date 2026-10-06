@@ -120,6 +120,89 @@ class UpdateTests(unittest.TestCase):
         self.assertEqual("1.0.0", self.updater.installed()["version"])
         self.assertFalse((self.updater.state / "transaction.json").exists())
 
+    def test_failed_activation_preserves_previous_rollback_snapshot(self):
+        self.install()
+        target, _ = self.seed()
+        self.install("1.1.0")
+        before = json.loads((self.updater.state / "rollback.json").read_text())
+        self.updater.stage_local(self.release("1.2.0"))
+        self.updater.queue()
+
+        def fail_result(path, value):
+            if path.name == "result.json" and value.get("status") == "installed":
+                raise OSError("simulated result write failure")
+            atomic_json(path, value)
+
+        with patch("src.engine.updates.updater.atomic_json", side_effect=fail_result):
+            with self.assertRaises(OSError):
+                self.updater.apply_pending()
+        self.assertEqual(before, json.loads((self.updater.state / "rollback.json").read_text()))
+        self.updater.rollback()
+        self.assertEqual("1.0.0", self.updater.installed()["version"])
+        self.assertEqual(35, json.loads(target.read_text())["speed"])
+
+    def test_recovery_syncs_backup_directory_before_removing_journal(self):
+        self.install()
+        self.seed()
+        backup = self.root / "backups/crash"
+        atomic_json(self.updater.state / "transaction.json", {"previous": "1.0.0", "backup": "crash"})
+        os.rename(self.updater.data, backup)
+        from src.engine.updates.files import sync_directory
+        synced = []
+
+        def observe(path):
+            if path == backup.parent:
+                self.assertTrue((self.updater.state / "transaction.json").exists())
+            synced.append(path)
+            sync_directory(path)
+
+        with patch("src.engine.updates.updater.sync_directory", side_effect=observe):
+            self.updater.recover()
+        self.assertIn(backup.parent, synced)
+        self.assertLess(synced.index(backup.parent), synced.index(self.updater.state))
+
+    def _add_updater_payload(self, version):
+        payload = self.root / "releases" / version / "platform/installation/updater"
+        (payload / "src/engine/updates").mkdir(parents=True)
+        (payload / "manage.py").write_text("# helper " + version)
+        (payload / "src/engine/updates/updater.py").write_text("# updater " + version)
+
+    def test_activation_refreshes_tools_and_rollback_restores_them(self):
+        self.install()
+        old = self.root / "updater-tools/original"
+        old.mkdir(parents=True)
+        atomic_json(old / "installation.json", {"config_path": "/machine/custom.json", "product": "paint-robot"})
+        (old / "manage.py").write_text("# original helper")
+        self.updater._tools_pointer("updater-tools/original")
+        self.updater.stage_local(self.release("1.1.0"))
+        self._add_updater_payload("1.1.0")
+        self.updater.queue()
+        self.updater.apply_pending()
+        self.assertEqual("# helper 1.1.0", (self.root / "tools/manage.py").read_text())
+        self.assertEqual("/machine/custom.json", json.loads((self.root / "tools/installation.json").read_text())["config_path"])
+        self.updater.rollback()
+        self.assertEqual(old, (self.root / "tools").resolve())
+
+    def test_failed_activation_restores_tools(self):
+        self.install()
+        old = self.root / "updater-tools/original"
+        old.mkdir(parents=True)
+        self.updater._tools_pointer("updater-tools/original")
+        self.updater.stage_local(self.release("1.1.0"))
+        self._add_updater_payload("1.1.0")
+        self.updater.queue()
+
+        def fail_result(path, value):
+            if path.name == "result.json" and value.get("status") == "installed":
+                raise OSError("simulated result write failure")
+            atomic_json(path, value)
+
+        with patch("src.engine.updates.updater.atomic_json", side_effect=fail_result):
+            with self.assertRaises(OSError):
+                self.updater.apply_pending()
+        self.assertEqual(old, (self.root / "tools").resolve())
+        self.assertEqual("1.0.0", self.updater.installed()["version"])
+
     def test_recover_after_interrupted_activation(self):
         self.install()
         target, _ = self.seed()
@@ -272,7 +355,21 @@ class UpdateTests(unittest.TestCase):
         config = self.directory / "updates.json"
         archive = self.release("1.0.0")
         environment = dict(os.environ, PYTHONPATH="")
-        arguments = ["/usr/bin/python3", str(manager), "--config", str(config), "install", str(archive), "--root", str(self.root)]
+        # Exercise the CLI and storage migration in a separate system-Python process.
+        # System remote-support provisioning has its own mocked tests and must not
+        # invoke sudo or change services during this storage integration check.
+        bootstrap = """
+import importlib.util
+import sys
+from unittest.mock import patch
+sys.argv = sys.argv[1:]
+spec = importlib.util.spec_from_file_location('platform_manager', sys.argv[0])
+manager = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(manager)
+with patch.object(manager, 'install_remote_support'):
+    sys.exit(manager.main())
+"""
+        arguments = ["/usr/bin/python3", "-c", bootstrap, str(manager), "--config", str(config), "install", str(archive), "--root", str(self.root)]
         subprocess.run(arguments + ["--storage-from", str(source)], check=True, capture_output=True, env=environment, cwd="/tmp")
         self.assertEqual(35, json.loads((self.updater.data / "paint/storage/settings/custom.json").read_text())["speed"])
         self.assertEqual(17, json.loads((self.updater.data / "paint/profiles/tray_dryer/storage/settings/custom.json").read_text())["speed"])

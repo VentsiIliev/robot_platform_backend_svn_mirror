@@ -4,7 +4,7 @@ import subprocess
 import tempfile
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[3]
 spec = importlib.util.spec_from_file_location('platform_installer', ROOT / 'packaging/platform/manage.py')
@@ -44,3 +44,23 @@ class RemoteSupportInstallTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'payload is missing'):
                 manager.install_remote_support(self.root)
             run.assert_not_called()
+
+
+class LauncherRefreshTests(unittest.TestCase):
+    def test_launcher_executes_new_helper_after_activation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            old = root / "updater-tools/old"
+            new = root / "updater-tools/new"
+            old.mkdir(parents=True)
+            new.mkdir()
+            (new / "manage.py").touch()
+            (root / "tools").symlink_to(new)
+            updater = MagicMock(root=root)
+            config = root / "machine-config.json"
+            with patch.object(manager, "HERE", old), patch.object(manager, "__file__", str(old / "manage.py")), patch.object(manager.os, "execv", side_effect=SystemExit) as execute:
+                with self.assertRaises(SystemExit):
+                    manager.launch(updater, config)
+            execute.assert_called_once_with("/usr/bin/python3", ["/usr/bin/python3", str(root / "tools/manage.py"), "--config", str(config), "launch"])
+            updater.recover.assert_called_once()
+            updater.apply_pending.assert_called_once()

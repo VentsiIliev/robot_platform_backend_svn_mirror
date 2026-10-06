@@ -61,6 +61,7 @@ def main():
                 **{key: release_target[key] for key in ("robot_system", "profile", "storage_system", "executable")},
                 "architecture": platform.machine(), "os": "ubuntu-24.04",
                 "storage_schema": args.storage_schema, "source_svn_revision": args.svn_revision}
+    source = Path(__file__).resolve().parents[2]
     with tempfile.TemporaryDirectory() as temporary:
         internal = Path(temporary) / "manifest.json"
         internal.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
@@ -74,6 +75,13 @@ def main():
                         raise ValueError(f"Bundle contains live machine data: {member.name}")
                 return member
             target.add(bundle, arcname="platform", filter=exclude_storage)
+            updater_prefix = "platform/installation/updater"
+            target.add(Path(__file__).with_name("manage.py"), arcname=f"{updater_prefix}/manage.py")
+            def exclude_updater_cache(member):
+                return None if "__pycache__" in Path(member.name).parts else member
+            target.add(source / "src/engine/updates", arcname=f"{updater_prefix}/src/engine/updates", filter=exclude_updater_cache)
+            target.add(source / "src/__init__.py", arcname=f"{updater_prefix}/src/__init__.py")
+            target.add(source / "src/engine/__init__.py", arcname=f"{updater_prefix}/src/engine/__init__.py")
             if args.migrations:
                 target.add(args.migrations, arcname="migrations")
     with archive.open("rb") as stream:

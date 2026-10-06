@@ -99,11 +99,6 @@ def install(args):
             if updater.data.exists():
                 updater.data.rmdir()
             os.rename(temporary, updater.data)
-    current = updater.installed()
-    if current != local_manifest:
-        updater.stage_local(args.archive.resolve())
-        updater.queue()
-        updater.apply_pending()
     # Update the independent helper during a trusted installer maintenance run.
     # Subsequent refreshes atomically replace a symlink to a complete tool tree.
     tools = root / "tools"
@@ -127,6 +122,11 @@ def install(args):
         pointer.symlink_to(new_tools.relative_to(root))
         os.replace(pointer, tools)
         sync_directory(root)
+    current = updater.installed()
+    if current != local_manifest:
+        updater.stage_local(args.archive.resolve())
+        updater.queue()
+        updater.apply_pending()
     install_remote_support(root)
     print(f"Installed platform at {root}\nUpdate configuration: {config_path}")
     print(f"Launch: /usr/bin/python3 '{tools / 'manage.py'}' --config '{config_path}' launch")
@@ -145,6 +145,12 @@ def launch(updater, config_path):
     updater.recover()
     apply_or_reopen()
     while True:
+        helper = updater.root / "tools/manage.py"
+        if (HERE.is_relative_to(updater.root / "updater-tools")
+                and helper.is_file() and helper.resolve() != Path(__file__).resolve()):
+            # Release the update locks before loading the newly activated helper.
+            os.execv("/usr/bin/python3", ["/usr/bin/python3", str(helper),
+                                       "--config", str(config_path.resolve()), "launch"])
         with lock(updater.state / "runtime.lock", shared=True):
             current = updater.installed()
             if current is None:

@@ -182,6 +182,36 @@ class ReleaseTargetTests(unittest.TestCase):
         self.assertIn("Bundle identity does not match", result.stderr)
         self.assertFalse((self.directory / "output").exists())
 
+    def test_release_archive_carries_runnable_updater_sources(self):
+        target = targets.load_target("paint_tray_dry")
+        bundle = self.directory / "bundle"
+        config = bundle / "_internal/config"
+        config.mkdir(parents=True)
+        (bundle / target["executable"]).write_text("#!/bin/sh\nexit 0\n")
+        (config / "release-target.json").write_text(json.dumps(target))
+        (config / "factory-defaults.json").write_bytes((ROOT / "config/factory_defaults/paint_tray_dry.json").read_bytes())
+        output = self.directory / "output"
+        subprocess.run(["/usr/bin/python3", str(ROOT / "packaging/platform/build_release.py"),
+                        "paint_tray_dry", "1.0.0", "--bundle", str(bundle), "--output", str(output)],
+                       check=True, capture_output=True)
+        archive = next((output / "paint_tray_dry/stable").glob("*.tar.gz"))
+        with tarfile.open(archive) as release:
+            names = release.getnames()
+            prefix = "platform/installation/updater"
+            self.assertIn(prefix + "/manage.py", names)
+            self.assertIn(prefix + "/src/engine/updates/updater.py", names)
+            self.assertFalse(any("__pycache__" in name for name in names))
+        # Verify independent imports under system Python.
+        extracted = self.directory / "extracted"
+        with tarfile.open(archive) as release:
+            for member in release:
+                if member.name.startswith(prefix + "/") and member.isfile():
+                    destination = extracted / member.name
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    destination.write_bytes(release.extractfile(member).read())
+        subprocess.run(["/usr/bin/python3", str(extracted / prefix / "manage.py"), "--help"],
+                       cwd="/tmp", check=True, capture_output=True)
+
     def test_activation_seeds_factory_files_without_replacing_existing_settings(self):
         factory = json.loads((ROOT / "config/factory_defaults/paint_tray_dry.json").read_text())
         updater = PlatformUpdater(UpdateConfig(self.directory / "tray", "", None, product="paint-tray-dry-robot"))

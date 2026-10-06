@@ -20,22 +20,25 @@ class TestPaintPackagingProfile(unittest.TestCase):
         self.assertEqual(config["supported_robot_systems"], ["paint"])
 
     def test_spec_excludes_other_robot_systems(self):
-        assignments = _literal_assignments(PACKAGING_ROOT / "paint.spec")
-
-        self.assertEqual(
-            set(assignments["excluded_robot_systems"]),
-            {
-                "src.robot_systems.glue",
-                "src.robot_systems.welding",
-                "src.robot_systems.ROBOT_SYSTEM_BLUEPRINT",
-            },
-        )
+        targets = json.loads((ROOT / "config/release_targets.json").read_text())
+        tree = ast.parse((PACKAGING_ROOT / "platform.spec").read_text())
+        expression = next(node.value for node in tree.body
+                          if isinstance(node, ast.Assign)
+                          and any(isinstance(name, ast.Name) and name.id == "excluded"
+                                  for name in node.targets))
+        excluded = eval(compile(ast.Expression(expression), "platform.spec", "eval"),
+                        {"ROOT": ROOT, "target": targets["paint"]})
+        for package in ("glue", "welding", "paint_auto_dry", "paint_tray_dry", "ROBOT_SYSTEM_BLUEPRINT"):
+            self.assertIn(f"src.robot_systems.{package}", excluded)
+        self.assertNotIn("src.robot_systems.paint", excluded)
 
     def test_build_script_checks_collected_module_archive(self):
-        script = (PACKAGING_ROOT / "build_paint.sh").read_text(encoding="utf-8")
-
+        wrapper = (PACKAGING_ROOT / "build_paint.sh").read_text(encoding="utf-8")
+        self.assertIn('packaging/build_platform.sh" paint', wrapper)
+        script = (PACKAGING_ROOT / "platform/build.py").read_text(encoding="utf-8")
         self.assertIn("PYZ-00.toc", script)
-        self.assertIn("src\\\\.robot_systems\\\\.(glue|welding)", script)
+        self.assertIn('allowed = set(target["packages"])', script)
+        self.assertIn("Other robot system bundled", script)
 
 
 def _literal_assignments(path: Path) -> dict[str, object]:
