@@ -1040,7 +1040,7 @@ acceleration_percent: float
 
 Source: [src/robot_systems/paint/processes/paint/paint_process.py](../../../../../src/robot_systems/paint/processes/paint/paint_process.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `src.engine.core.i_messaging_service`, `src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller`, `src.engine.process.base_process`, `src.engine.process.process_requirements`, `src.engine.robot.interfaces.i_robot_service`, `src.engine.system.i_system_manager`, `src.robot_systems.paint.component_ids`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.incremental_adjustment`, `src.shared_contracts.events.process_events`, `threading`, `typing`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `src.engine.core.i_messaging_service`, `src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller`, `src.engine.process.base_process`, `src.engine.process.process_requirements`, `src.engine.robot.interfaces.i_robot_service`, `src.engine.system.i_system_manager`, `src.robot_systems.paint.component_ids`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.incremental_adjustment`, `src.shared_contracts.events.process_events`, `threading`, `time`, `typing`.
 
 ### `PaintProcess`
 
@@ -1057,6 +1057,18 @@ def __init__(self, production_service, messaging: IMessagingService, robot_servi
 ```
 
 Store the production service and process dependencies for a single-run paint process.
+
+```python
+@property
+def is_stopping(self) -> bool
+```
+
+Report pending cleanup without changing the public process state.
+
+```python
+@property
+def stopping_elapsed_seconds(self) -> float
+```
 
 ```python
 def start_adjustment_cycle(self) -> bool

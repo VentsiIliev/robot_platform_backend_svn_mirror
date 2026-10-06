@@ -18,6 +18,8 @@ The production `PaintExecutionMachineFactory` wires handlers for magazine loadin
 
 Pause/resume use cooperative run gates and execution control; stop sets stop events and requests hardware halt. Terminal handlers normalize state/cleanup. Failed motion, unavailable fresh pose, failed matching or a blocked dropoff must be assessed through the returned result/error state, not only command submission.
 
+The public process may already be `STOPPED` while production cancellation or the hardware-stop worker is still finishing. `PaintProcess` rejects new runs until both workers have exited, and the dashboard keeps Start disabled during that interval. Per-run cancellation remains set across reset, and completion is serialized with Stop/reset so cancelled workers cannot publish late results. See the [production guide](README.md) for delayed-stop feedback and the start/retry entry points covered by the guard.
+
 Plate-layout and automatic-dryer paths have their own destination/release coordination. Reservation, committed occupancy, vacuum release, return motion and dryer readiness are separate operations. See [tray](tray_dry/README.md) and [dryer](auto_dryer/README.md).
 
 For exact APIs/defaults use [plan](plan/README.md), [execute](execute/README.md) and [execution machine](execution_machine/README.md). The [previous projection/order description](../../../../archive/robot_systems/paint/processes/paint/TRAJECTORY_AND_EXECUTION.md) is retained for historical context and must not be used as a fixed execution sequence.

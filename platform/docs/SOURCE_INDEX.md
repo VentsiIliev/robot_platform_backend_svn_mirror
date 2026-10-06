@@ -36,7 +36,7 @@ Every Python file is parsed without executing it, including vendor code, demos a
 | `pl_gui/shell/ui/material/managers` | [Guide](pl_gui/shell/ui/material/managers/README.md) | 4 |
 | `pl_gui/utils` | [Guide](pl_gui/utils/README.md) | 1 |
 | `pl_gui/utils/utils_widgets` | [Guide](pl_gui/utils/utils_widgets/README.md) | 11 |
-| `scripts` | [Guide](scripts/README.md) | 35 |
+| `scripts` | [Guide](scripts/README.md) | 36 |
 | `scripts/paint_shaft_alignment` | [Guide](scripts/paint_shaft_alignment/README.md) | 14 |
 | `scripts/paint_shaft_alignment/tests` | [Guide](scripts/paint_shaft_alignment/tests/README.md) | 6 |
 | `src` | [Guide](source/README.md) | 2 |
@@ -686,15 +686,15 @@ Every Python file is parsed without executing it, including vendor code, demos a
 | `tests/robot_systems` | [Guide](tests/robot_systems/README.md) | 1 |
 | `tests/robot_systems/compact_paint` | [Guide](tests/robot_systems/compact_paint/README.md) | 1 |
 | `tests/robot_systems/glue` | [Guide](tests/robot_systems/glue/README.md) | 41 |
-| `tests/robot_systems/paint` | [Guide](tests/robot_systems/paint/README.md) | 42 |
+| `tests/robot_systems/paint` | [Guide](tests/robot_systems/paint/README.md) | 43 |
 | `tests/robot_systems/paint/processes` | [Guide](tests/robot_systems/paint/processes/README.md) | 0 |
 | `tests/robot_systems/paint/processes/paint` | [Guide](tests/robot_systems/paint/processes/paint/README.md) | 1 |
 | `tests/robot_systems/paint/processes/paint/execute` | [Guide](tests/robot_systems/paint/processes/paint/execute/README.md) | 1 |
 | `tests/robot_systems/twin_robot` | [Guide](tests/robot_systems/twin_robot/README.md) | 2 |
 | `tests/robot_systems/welding` | [Guide](tests/robot_systems/welding/README.md) | 1 |
-| `tests/scripts` | [Guide](tests/scripts/README.md) | 2 |
+| `tests/scripts` | [Guide](tests/scripts/README.md) | 3 |
 | `tests/shared_contracts` | [Guide](tests/shared_contracts/README.md) | 0 |
 | `tests/shared_contracts/declarations` | [Guide](tests/shared_contracts/declarations/README.md) | 1 |
 | `tests/shared_contracts/events` | [Guide](tests/shared_contracts/events/README.md) | 1 |
 
-Total: 2016 Python files in 688 source directories.
+Total: 2019 Python files in 688 source directories.

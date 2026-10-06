@@ -21,6 +21,10 @@ This is the shared production implementation used by the paint family. System cl
 
 Cooperative execution controls coordinate pause, resume and stop across the active context, magazine navigation and path execution. The business machine includes magazine phases, capture/prepare/plan, pickup, paint contact, edge cleanup, prepare/dropoff/post-return and lifecycle states. See [trajectory/execution](TRAJECTORY_AND_EXECUTION.md) for responsibilities and [alignment](ALIGNMENT.md) for the current geometry path.
 
+`PaintProcess` prevents a new run until both the previous production worker and its hardware-stop worker have exited. Stop retains the existing `STOPPED` state while cleanup continues. Each run owns its cancellation event, so resetting the process cannot revive a cancelled run; late results from that run cannot change the current state. Normal starts, manual cycles, adjustment cycles and unmatched-workpiece retries share this restart restriction. Starting from `PAUSED` resumes the existing worker.
+
+The dashboard disables Start during cleanup and enables it again on a subsequent status refresh after both workers exit. The process exposes `is_stopping` and `stopping_elapsed_seconds` for this feedback. Its Process Status details show a waiting message, or "Stopping is taking longer than expected." after ten seconds. That threshold only changes the message: it does not bypass cleanup or automatically restart. Robot-stop and intentional vacuum-off behavior remain unchanged. Regression coverage lives in `tests/robot_systems/paint/test_paint_process_lifecycle.py`.
+
 Plate layout separates reservations from committed occupied records. Outlines support dashboard placement display; conservative footprints support allocation. Automatic-dryer coordination and tray dropoff are selected/configured at composition/runtime rather than duplicated into separate full process packages.
 
 The current tree no longer has `align/alignment/core.py`, `align/dxf_image_placement.py` or `execute/pivot_projection/core.py`. Earlier descriptions are retained in [archive](../../../../archive/robot_systems/paint/processes/paint/README.md), not treated as current APIs.

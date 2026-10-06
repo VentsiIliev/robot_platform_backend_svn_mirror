@@ -22,6 +22,7 @@ Generated from Python ASTs. Signatures, declared defaults, imports and docstring
 - [paint_motion_plane_probe.py](#paint_motion_plane_probepy)
 - [paint_web_jog.py](#paint_web_jogpy)
 - [plate_workpiece_placer.py](#plate_workpiece_placerpy)
+- [publish_changes.py](#publish_changespy)
 - [raw_http_camera_viewer.py](#raw_http_camera_viewerpy)
 - [raw_http_camera_viewer_requests.py](#raw_http_camera_viewer_requestspy)
 - [read_slave10_address0.py](#read_slave10_address0py)
@@ -1636,6 +1637,72 @@ def _distance(first: tuple[float, float], second: tuple[float, float]) -> float
 
 ```python
 def main() -> None
+```
+
+## `publish_changes.py`
+
+Source: [scripts/publish_changes.py](../../scripts/publish_changes.py).
+
+Commit selected changes, publish through SVN, then push rewritten history to Git. Run from this checkout (paths are relative to your current directory): python3 platform/scripts/publish_changes.py --all -m "Describe the change" python3 platform/scripts/publish_changes.py -m "Describe staged changes" python3 platform/scripts/publish_changes.py --resume Add --dry-run to inspect the plan without staging, committing or publishing.
+
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `argparse`, `pathlib`, `shlex`, `subprocess`, `sys`.
+
+### `PublicationError`
+
+```python
+class PublicationError(RuntimeError):
+```
+
+A precondition or publication step failed.
+
+### `Git`
+
+```python
+class Git:
+```
+
+Directly declared public methods and constructor (inherited methods are documented on their base class):
+
+```python
+def __init__(self, root: Path) -> None
+```
+
+```python
+def read(self, *args: str, allowed: tuple[int, ...]=(0,)) -> str
+```
+
+```python
+def run(self, *args: str) -> None
+```
+
+### `resolve_paths`
+
+```python
+def resolve_paths(root: Path, paths: list[str]) -> list[str]
+```
+
+### `ensure_clean`
+
+```python
+def ensure_clean(git: Git) -> None
+```
+
+### `publish`
+
+```python
+def publish(git: Git, args: argparse.Namespace, paths: list[str]) -> None
+```
+
+### `parse_args`
+
+```python
+def parse_args(argv: list[str] | None=None) -> argparse.Namespace
+```
+
+### `main`
+
+```python
+def main(argv: list[str] | None=None) -> int
 ```
 
 ## `raw_http_camera_viewer.py`

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from time import monotonic
 from typing import Callable, Optional
 
 from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
@@ -46,10 +47,47 @@ class PaintProcess(BaseProcess):
         self._thread: Optional[threading.Thread] = None
         self._stop_thread: Optional[threading.Thread] = None
         self._stopping = False
+        self._run_stop_event = threading.Event()
+        self._stop_started_at: float | None = None
         self._manual_single_cycle_requested = False
         self._retry_unmatched_workpiece_requested = False
         self._adjustment_session: PaintAdjustmentSession | None = None
         self._pending_adjustment_session: PaintAdjustmentSession | None = None
+
+    def _workers_running(self) -> bool:
+        return any(
+            thread is not None and thread.is_alive()
+            for thread in (self._thread, self._stop_thread)
+        )
+
+    @property
+    def is_stopping(self) -> bool:
+        """Report pending cleanup without changing the public process state."""
+        return (
+            self._state not in (ProcessState.RUNNING, ProcessState.PAUSED)
+            and self._workers_running()
+        )
+
+    @property
+    def stopping_elapsed_seconds(self) -> float:
+        started_at = self._stop_started_at
+        if started_at is None or not self.is_stopping:
+            return 0.0
+        return max(0.0, monotonic() - started_at)
+
+    def _transition(
+        self, target: ProcessState, action: Callable[[], None], message: str = ""
+    ) -> None:
+        # All callers hold the process lock. Resume uses the existing worker;
+        # every other RUNNING transition must wait for both previous workers.
+        if (
+            target == ProcessState.RUNNING
+            and self._state != ProcessState.PAUSED
+            and self._workers_running()
+        ):
+            self._logger.info("Paint start ignored while previous workers are active")
+            return
+        super()._transition(target, action, message)
 
     def start_adjustment_cycle(self) -> bool:
         """Start one operator-paced cycle without changing production settings."""
@@ -104,6 +142,7 @@ class PaintProcess(BaseProcess):
         with self._lock:
             if (
                 self._state != ProcessState.ERROR
+                or self._workers_running()
                 or not self._production_service.can_retry_unmatched_workpiece()
             ):
                 return False
@@ -120,6 +159,8 @@ class PaintProcess(BaseProcess):
     def _on_start(self) -> None:
         """Start the background worker thread that performs one production cycle."""
         self._stopping = False
+        self._run_stop_event = threading.Event()
+        self._stop_started_at = None
         self._adjustment_session = self._pending_adjustment_session
         self._thread = threading.Thread(
             target=self._run_in_background,
@@ -127,6 +168,7 @@ class PaintProcess(BaseProcess):
                 self._manual_single_cycle_requested,
                 self._pending_adjustment_session,
                 self._retry_unmatched_workpiece_requested,
+                self._run_stop_event,
             ),
             daemon=True,
             name="PaintProcess",
@@ -136,6 +178,8 @@ class PaintProcess(BaseProcess):
     def _on_stop(self) -> None:
         """Signal stop and request hardware halt without blocking the process lock."""
         self._stopping = True
+        self._run_stop_event.set()
+        self._stop_started_at = monotonic()
         self._production_service.stop_current_phase()
         self._request_hardware_stop()
 
@@ -187,38 +231,50 @@ class PaintProcess(BaseProcess):
         manual_single_cycle: bool = False,
         adjustment_session: PaintAdjustmentSession | None = None,
         retry_unmatched_workpiece: bool = False,
+        stop_event: threading.Event | None = None,
     ) -> None:
         """Execute one production cycle and translate the result into process state transitions."""
+        run_stop_event = stop_event if stop_event is not None else self._run_stop_event
+        should_stop = run_stop_event.is_set
         try:
             if retry_unmatched_workpiece:
                 success, msg = self._production_service.run_once(
-                    lambda: self._stopping, retry_unmatched_workpiece=True
+                    should_stop, retry_unmatched_workpiece=True
                 )
             elif adjustment_session is not None:
                 success, msg = self._production_service.run_once(
-                    lambda: self._stopping, adjustment_session=adjustment_session
+                    should_stop, adjustment_session=adjustment_session
                 )
             elif manual_single_cycle:
                 success, msg = self._production_service.run_once(
-                    lambda: self._stopping, manual_single_cycle=True
+                    should_stop, manual_single_cycle=True
                 )
             else:
-                success, msg = self._production_service.run_once(lambda: self._stopping)
+                success, msg = self._production_service.run_once(should_stop)
         except Exception as exc:
             self._logger.exception("Paint process failed")
-            if not self._stopping:
-                self.set_error(str(exc))
-            return
+            success, msg = False, str(exc)
 
-        if self._stopping:
-            return
-
-        if success:
-            self._logger.info("Paint process completed: %s", msg)
-            self.stop(msg if self._is_no_workpiece_message(msg) else "")
-        else:
-            self._logger.error("Paint process failed: %s", msg)
-            self.set_error(msg)
+        # Serialize completion with Stop/reset. A cancelled run cannot publish
+        # a late success or error, even if reset has cleared the legacy flag.
+        with self._lock:
+            if (
+                run_stop_event is not self._run_stop_event
+                or run_stop_event.is_set()
+                or self._stopping
+                or self._state not in (ProcessState.RUNNING, ProcessState.PAUSED)
+            ):
+                return
+            if success:
+                self._logger.info("Paint process completed: %s", msg)
+                self._transition(
+                    ProcessState.STOPPED,
+                    self._on_stop,
+                    msg if self._is_no_workpiece_message(msg) else "",
+                )
+            else:
+                self._logger.error("Paint process failed: %s", msg)
+                self._transition(ProcessState.ERROR, lambda: None, msg)
 
     @staticmethod
     def _is_no_workpiece_message(message: str) -> bool:

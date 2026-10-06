@@ -1833,21 +1833,20 @@ class TestPaintProcessIntegration(unittest.TestCase):
         production_service = MagicMock()
         production_service.run_once.side_effect = RuntimeError("boom")
         process = PaintProcess(production_service=production_service, messaging=MagicMock())
-        set_error = MagicMock()
-        process.set_error = set_error
-
-        process._stopping = False
-        process._run_in_background()
-        set_error.assert_called_once_with("boom")
-
-        set_error.reset_mock()
-        process._stopping = True
-        process._run_in_background()
-        set_error.assert_not_called()
+        process.start()
+        process._thread.join(timeout=1.0)
+        self.assertFalse(process._thread.is_alive())
+        self.assertEqual(process.state, ProcessState.ERROR)
+        self.assertTrue(any(
+            call.args[1].message == "boom"
+            for call in process._messaging.publish.call_args_list
+            if call.args[0] == ProcessTopics.state(ProcessID.MAIN_PROCESS)
+        ))
 
         process._stopping = True
-        process._on_reset_errors()
+        process.reset_errors()
         self.assertFalse(process._stopping)
+        self.assertEqual(process.state, ProcessState.IDLE)
 
     def test_pause_resume_and_stop_delegate_to_current_production_phase(self):
         production_service = MagicMock()

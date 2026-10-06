@@ -224,6 +224,8 @@
     "Painting workpiece": "Боядисване на детайла",
     "Resolve error before restart": "Отстранете грешката преди рестарт",
     "Waiting for start": "Изчакване на старт",
+    "Waiting for paint stopping to finish.": "Изчакване на приключването на спирането.",
+    "Stopping is taking longer than expected.": "Спирането отнема повече време от очакваното.",
     "Robot service is not registered": "Услугата за робота не е регистрирана",
     "Robot service healthy": "Услугата за робота е в изправност",
     "Robot needs attention": "Роботът изисква внимание",

@@ -224,6 +224,8 @@
     "Painting workpiece": "Painting workpiece",
     "Resolve error before restart": "Resolve error before restart",
     "Waiting for start": "Waiting for start",
+    "Waiting for paint stopping to finish.": "Waiting for paint stopping to finish.",
+    "Stopping is taking longer than expected.": "Stopping is taking longer than expected.",
     "Robot service is not registered": "Robot service is not registered",
     "Robot service healthy": "Robot service healthy",
     "Robot needs attention": "Robot needs attention",

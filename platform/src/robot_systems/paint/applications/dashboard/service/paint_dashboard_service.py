@@ -82,17 +82,31 @@ class PaintDashboardService(IPaintDashboardService):
     def load_state(self) -> DashboardState:
         process_state = self._process.state.value
         is_paused = self._process.state == ProcessState.PAUSED
+        is_stopping = getattr(self._process, "is_stopping", False) is True
+        status_lines = self._status_lines(process_state)
+        if is_stopping:
+            status_lines = [
+                "Stopping is taking longer than expected."
+                if self._process.stopping_elapsed_seconds >= 10.0
+                else "Waiting for paint stopping to finish."
+            ]
+        process_card = self._process_status_card(process_state)
+        if is_stopping:
+            process_card = replace(process_card, note=status_lines[0])
         return DashboardState(
             process_state=process_state,
             mode_label="Paint Mode",
             active_job_label=self._active_job_label(process_state),
-            status_lines=self._status_lines(process_state),
+            status_lines=status_lines,
             card_states={
                 1: self._robot_status_card(),
                 2: self._vision_status_card(),
-                3: self._process_status_card(process_state),
+                3: process_card,
             },
-            can_start=process_state in (ProcessState.IDLE.value, ProcessState.STOPPED.value),
+            can_start=(
+                process_state in (ProcessState.IDLE.value, ProcessState.STOPPED.value)
+                and not is_stopping
+            ),
             can_stop=process_state in (ProcessState.RUNNING.value, ProcessState.PAUSED.value),
             can_pause=process_state in (ProcessState.RUNNING.value, ProcessState.PAUSED.value),
             pause_label="Resume" if is_paused else "Pause",
