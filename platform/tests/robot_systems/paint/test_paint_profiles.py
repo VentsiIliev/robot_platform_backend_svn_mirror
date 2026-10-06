@@ -6,6 +6,7 @@ from src.robot_systems.paint_auto_dry.bootstrap_provider import (
     create_bootstrap_provider as create_auto_dry_provider,
 )
 from src.robot_systems.paint.paint_robot_system import (
+    PaintRobotSystem,
     AutomaticDryerPaintRobotSystem,
     TrayDryerPaintRobotSystem,
 )
@@ -43,12 +44,14 @@ class TestPaintProfiles(unittest.TestCase):
     def test_selects_automatic_dryer_profile(self):
         provider = create_auto_dry_provider()
 
-        self.assertIs(provider.system_class, AutomaticDryerPaintRobotSystem)
+        self.assertTrue(issubclass(provider.system_class, AutomaticDryerPaintRobotSystem))
+        self.assertEqual(provider.system_class.metadata, AutomaticDryerPaintRobotSystem.metadata)
 
     def test_selects_tray_dryer_profile(self):
         provider = create_tray_dry_provider()
 
-        self.assertIs(provider.system_class, TrayDryerPaintRobotSystem)
+        self.assertTrue(issubclass(provider.system_class, TrayDryerPaintRobotSystem))
+        self.assertEqual(provider.system_class.metadata, TrayDryerPaintRobotSystem.metadata)
         self.assertFalse(provider.system_class.ui_config.show_drying_mode_control)
 
     def test_automatic_dryer_keeps_mode_selection(self):
@@ -73,9 +76,22 @@ class TestPaintProfiles(unittest.TestCase):
         self.assertEqual(strategy_field.choices, ["plate_layout"])
         self.assertEqual(strategy_field.default, "plate_layout")
 
-    def test_height_measuring_is_disabled_only_for_tray_dryer(self):
-        self.assertFalse(TrayDryerPaintRobotSystem.height_measuring_enabled)
-        self.assertTrue(AutomaticDryerPaintRobotSystem.height_measuring_enabled)
+    def test_all_paint_profiles_exclude_height_measurement(self):
+        from src.engine.common_settings_ids import CommonSettingsID
+
+        height_settings = {
+            CommonSettingsID.HEIGHT_MEASURING_SETTINGS,
+            CommonSettingsID.HEIGHT_MEASURING_CALIBRATION,
+            CommonSettingsID.DEPTH_MAP_DATA,
+        }
+        systems = [PaintRobotSystem, AutomaticDryerPaintRobotSystem,
+                   TrayDryerPaintRobotSystem, create_auto_dry_provider().system_class,
+                   create_tray_dry_provider().system_class]
+        for system in systems:
+            with self.subTest(system=system.__name__):
+                self.assertFalse(height_settings & {spec.name for spec in system.settings_specs})
+                self.assertTrue(all(not frame.use_height_correction for frame in system.target_frames))
+                self.assertTrue(all(not area.supports_height_mapping for area in system.work_areas))
 
     def test_tray_dryer_rejects_movement_group_dropoff_at_runtime(self):
         settings = MagicMock()

@@ -42,24 +42,31 @@ class CalibrationSettingsApplicationService(ICalibrationSettingsService):
         vision_service: IVisionService | None = None,
         robot_service=None,
         messaging=None,
+        *,
+        include_height_settings: bool = True,
     ):
         self._settings_service = settings_service
         self._vision_service = vision_service
         self._robot_service = robot_service
         self._messaging = messaging
+        self._include_height_settings = include_height_settings
         self._workobject_points: dict[str, list[float]] = {}
         self._workobject_tool_id: int | None = None
 
     def load_settings(self) -> CalibrationSettingsData:
         vision = self._settings_service.get(CommonSettingsID.CALIBRATION_VISION_SETTINGS)
         robot = self._settings_service.get(CommonSettingsID.ROBOT_CALIBRATION)
-        height = self._settings_service.get(CommonSettingsID.HEIGHT_MEASURING_SETTINGS)
+        height = (
+            self._settings_service.get(CommonSettingsID.HEIGHT_MEASURING_SETTINGS)
+            if self._include_height_settings else None
+        )
         return CalibrationSettingsData(vision=vision, robot=robot, height=height)
 
     def save_settings(self, settings: CalibrationSettingsData) -> None:
         self._settings_service.save(CommonSettingsID.CALIBRATION_VISION_SETTINGS, settings.vision)
         self._settings_service.save(CommonSettingsID.ROBOT_CALIBRATION, settings.robot)
-        self._settings_service.save(CommonSettingsID.HEIGHT_MEASURING_SETTINGS, settings.height)
+        if self._include_height_settings:
+            self._settings_service.save(CommonSettingsID.HEIGHT_MEASURING_SETTINGS, settings.height)
 
         try:
             camera_settings = self._settings_service.get(CommonSettingsID.VISION_CAMERA_SETTINGS)

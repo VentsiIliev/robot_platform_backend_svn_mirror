@@ -19,12 +19,6 @@ from src.engine.robot.configuration import (
     RobotSettingsSerializer,
     ToolChangerSettingsSerializer,
 )
-from src.engine.robot.height_measuring import (
-    HeightMeasuringSettingsSerializer,
-    LaserCalibrationDataSerializer,
-    build_robot_system_height_measuring_services,
-)
-from src.engine.robot.height_measuring.depth_map_data import DepthMapDataSerializer
 from src.engine.robot.features.navigation_service import NavigationService
 from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.engine.robot.interfaces.i_tool_service import IToolService
@@ -37,7 +31,6 @@ from src.engine.work_areas import IWorkAreaService, WorkAreaSettingsSerializer
 from src.robot_systems.base_robot_system import BaseRobotSystem
 from src.robot_systems.paint import application_wiring, paint_system_config
 from src.robot_systems.paint.calibration.provider import PaintRobotSystemCalibrationProvider
-from src.robot_systems.paint.height_measuring.provider import PaintRobotSystemHeightMeasuringProvider
 from src.robot_systems.paint.component_ids import ServiceID, SettingsID
 from src.robot_systems.paint.processes.paint.paint_process_config_serializer import (
     PaintProcessConfigSerializer,
@@ -226,7 +219,6 @@ def _build_dashboard_ui_config(config, base=None):
 
 class PaintRobotSystem(BaseRobotSystem):
     allowed_dropoff_strategies = ("movement_group", "plate_layout")
-    height_measuring_enabled = True
 
     calibration_tool = ToolDefinition(id=1, name="Calibration Tool")
     tools = [calibration_tool]
@@ -332,21 +324,21 @@ class PaintRobotSystem(BaseRobotSystem):
         TargetFrameDefinition(
             name="calibration",
             work_area_id="paint",
-            use_height_correction=True,
+            use_height_correction=False,
         ),
         TargetFrameDefinition(
             name="magazine",
             work_area_id="magazine",
             source_navigation_group="CALIBRATION",
             target_navigation_group="Magazine",
-            use_height_correction=True,
+            use_height_correction=False,
         ),
         TargetFrameDefinition(
             name="vertical_shaft_alignment",
             work_area_id="vertical_shaft_alignment",
             source_navigation_group="CALIBRATION",
             target_navigation_group="Vertical Shaft Alignment",
-            use_height_correction=True,
+            use_height_correction=False,
         ),
 
     ]
@@ -360,7 +352,7 @@ class PaintRobotSystem(BaseRobotSystem):
             threshold_profile="default",
             supports_detection_roi=True,
             supports_brightness_roi=True,
-            supports_height_mapping=True,
+            supports_height_mapping=False,
         ),
         WorkAreaDefinition(
             id="magazine",
@@ -369,7 +361,7 @@ class PaintRobotSystem(BaseRobotSystem):
             threshold_profile="default",
             supports_detection_roi=True,
             supports_brightness_roi=True,
-            supports_height_mapping=True,
+            supports_height_mapping=False,
         ),
         WorkAreaDefinition(
             id="vertical_shaft_alignment",
@@ -378,7 +370,7 @@ class PaintRobotSystem(BaseRobotSystem):
             threshold_profile="default",
             supports_detection_roi=True,
             supports_brightness_roi=True,
-            supports_height_mapping=True,
+            supports_height_mapping=False,
         ),
     ]
     work_area_observers = [
@@ -450,11 +442,6 @@ class PaintRobotSystem(BaseRobotSystem):
                      "vision/camera_settings.json"),
         SettingsSpec(SettingsID.CAMERAS, CameraDevicesConfigSerializer(), "hardware/cameras.json"),
         SettingsSpec(CommonSettingsID.WORK_AREA_SETTINGS, WorkAreaSettingsSerializer(), "vision/work_areas.json"),
-        SettingsSpec(CommonSettingsID.HEIGHT_MEASURING_SETTINGS, HeightMeasuringSettingsSerializer(),
-                     "height_measuring/settings.json"),
-        SettingsSpec(CommonSettingsID.HEIGHT_MEASURING_CALIBRATION, LaserCalibrationDataSerializer(),
-                     "height_measuring/calibration_data.json"),
-        SettingsSpec(CommonSettingsID.DEPTH_MAP_DATA, DepthMapDataSerializer(), "height_measuring/depth_map.json"),
         SettingsSpec(CommonSettingsID.MODBUS_CONFIG, ModbusConfigSerializer(), "hardware/modbus.json"),
         SettingsSpec(SettingsID.PERIPHERALS, PeripheralConfigSerializer(), "hardware/peripherals.json"),
         SettingsSpec(SettingsID.DRYER_CONFIG, DryerConfigSerializer(), "dryer/settings.json"),
@@ -655,18 +642,6 @@ class PaintRobotSystem(BaseRobotSystem):
             self.register_managed_resource(publisher)
             self._camera_stream_publishers[role] = publisher
 
-        self._height_measuring_provider = None
-        self._height_measuring_service = None
-        self._height_measuring_calibration_service = None
-        self._laser_detection_service = None
-        if self.height_measuring_enabled:
-            self._height_measuring_provider = PaintRobotSystemHeightMeasuringProvider(self)
-            (
-                self._height_measuring_service,
-                self._height_measuring_calibration_service,
-                self._laser_detection_service,
-            ) = build_robot_system_height_measuring_services(self)
-
         self._calibration_provider = PaintRobotSystemCalibrationProvider(self)
         self._calibration_service = build_robot_system_calibration_service(self)
 
@@ -851,7 +826,6 @@ class TrayDryerPaintRobotSystem(PaintRobotSystem):
         show_drying_mode_control=False,
     )
     allowed_dropoff_strategies = ("plate_layout",)
-    height_measuring_enabled = False
 
     # Fresh installations must use a strategy supported by this profile.
     settings_specs = [

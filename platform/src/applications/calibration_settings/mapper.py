@@ -14,11 +14,7 @@ class CalibrationSettingsMapper:
 
     @staticmethod
     def to_flat_dict(data: CalibrationSettingsData) -> dict:
-        height = data.height
-        detection = height.detection
-        calibration = height.calibration
-        measuring = height.measuring
-        return {
+        flat = {
             "calib_vision_chessboard_width": data.vision.chessboard_width,
             "calib_vision_chessboard_height": data.vision.chessboard_height,
             "calib_vision_square_size_mm": data.vision.square_size_mm,
@@ -45,6 +41,14 @@ class CalibrationSettingsMapper:
                 sort_keys=True,
             ),
             **RobotCalibrationMapper.to_flat_dict(data.robot),
+        }
+        height = data.height
+        if height is None:
+            return flat
+        detection = height.detection
+        calibration = height.calibration
+        measuring = height.measuring
+        flat.update({
             "min_intensity": detection.min_intensity,
             "blur_kernel_size": int(detection.gaussian_blur_kernel[0]),
             "gaussian_blur_sigma": detection.gaussian_blur_sigma,
@@ -67,7 +71,8 @@ class CalibrationSettingsMapper:
             "measurement_threshold": measuring.measurement_threshold,
             "measurement_timeout": measuring.measurement_timeout,
             "meas_delay_ms": measuring.delay_between_move_detect_ms,
-        }
+        })
+        return flat
 
     @staticmethod
     def from_flat_dict(flat: dict, base: CalibrationSettingsData) -> CalibrationSettingsData:
@@ -118,6 +123,9 @@ class CalibrationSettingsMapper:
         }
 
         robot = RobotCalibrationMapper.from_flat_dict(flat, base.robot)
+
+        if base.height is None:
+            return CalibrationSettingsData(vision=vision, robot=robot)
 
         height: HeightMeasuringModuleSettings = deepcopy(base.height)
         height.detection.min_intensity = float(flat.get("min_intensity", height.detection.min_intensity))

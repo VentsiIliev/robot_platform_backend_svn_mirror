@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from src.engine.common_settings_ids import CommonSettingsID
-from src.engine.robot.height_measuring.height_correction_service import HeightCorrectionService
 from src.engine.robot.targeting.robot_system_targeting_provider import RobotSystemTargetingProvider
 from src.robot_systems.paint.targeting.frames import build_paint_target_frames
 from src.robot_systems.paint.targeting.registry import build_paint_point_registry
@@ -88,15 +87,9 @@ class PaintRobotSystemTargetingProvider(RobotSystemTargetingProvider):
         return build_paint_point_registry(self._point_definitions())
 
     def build_frames(self):
-        height_service = getattr(self._robot_system, "_height_measuring_service", None)
-        height_correction = (
-            (lambda area_id="": HeightCorrectionService(height_service, area_id=area_id))
-            if height_service is not None else None
-        )
         return build_paint_target_frames(
             self._frame_definitions(),
             getattr(self._robot_system, "_navigation", None),
-            height_correction,
         )
 
     def get_frame_for_work_area(self, work_area_id: str):

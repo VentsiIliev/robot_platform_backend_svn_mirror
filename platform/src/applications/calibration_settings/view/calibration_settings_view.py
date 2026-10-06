@@ -71,6 +71,11 @@ class CalibrationSettingsView(IApplicationView):
         if self._workobject_tab is not None:
             self._workobject_tab.set_capture_result(point, pose)
 
+    def set_height_settings_available(self, available: bool) -> None:
+        """Show laser and height settings only for systems that supply them."""
+        self.settings_view._tabs.setTabVisible(2, available)
+        self.settings_view._tabs.setTabVisible(3, available)
+
     def set_workobject_result(self, ok: bool, message: str, payload: dict | None = None) -> None:
         if self._workobject_tab is not None:
             self._workobject_tab.set_result(ok, message, payload)

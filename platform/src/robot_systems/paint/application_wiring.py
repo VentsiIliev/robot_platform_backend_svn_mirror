@@ -1008,6 +1008,7 @@ def _build_calibration_settings_application(robot_system):
         vision_service=robot_system.get_optional_service(CommonServiceID.VISION),
         robot_service=getattr(robot_system, "_robot", None),
         messaging=getattr(robot_system, "_messaging_service", None),
+        include_height_settings=False,
     )
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(
@@ -1049,9 +1050,6 @@ def _build_calibration_application(robot_system):
     from src.applications.calibration_settings import CalibrationSettingsApplicationService
     from src.applications.intrinsic_calibration_capture.service.intrinsic_capture_service import (
         IntrinsicCaptureService,
-    )
-    from src.engine.robot.calibration.aruco_marker_height_mapping_service import (
-        ArucoMarkerHeightMappingService,
     )
     from src.engine.robot.calibration.camera_tcp_offset_calibration_service import (
         CameraTcpOffsetCalibrationService,
@@ -1148,22 +1146,6 @@ def _build_calibration_application(robot_system):
         )
         if vision_service is not None and robot_service is not None and robot_config is not None else None
     )
-    marker_height_mapping_service = (
-        ArucoMarkerHeightMappingService(
-            vision_service=vision_service,
-            robot_service=robot_service,
-            height_service=getattr(robot_system, "_height_measuring_service", None),
-            robot_config=robot_system._robot_config,
-            calib_config=robot_system._robot_calibration,
-            transformer=transformer,
-            use_marker_centre=True,
-        )
-        if vision_service is not None
-           and robot_service is not None
-           and getattr(robot_system, "_height_measuring_service", None) is not None
-           and robot_config is not None
-        else None
-    )
     intrinsic_capture_service = (
         IntrinsicCaptureService(
             robot_service=robot_service,
@@ -1190,7 +1172,6 @@ def _build_calibration_application(robot_system):
         vision_service=calibration_vision_service,
         process_controller=robot_system._calibration_coordinator,
         robot_service=robot_service,
-        height_service=getattr(robot_system, '_height_measuring_service', None),
         robot_config=robot_system._robot_config,
         calib_config=robot_system._robot_calibration,
         transformer=transformer,
@@ -1198,17 +1179,15 @@ def _build_calibration_application(robot_system):
         work_area_service=work_area_service,
         camera_tcp_offset_calibrator=camera_tcp_offset_calibrator,
         camera_z_shift_calibrator=camera_z_shift_calibrator,
-        marker_height_mapping_service=marker_height_mapping_service,
         intrinsic_capture_service=intrinsic_capture_service,
         tool_tcp_calibrator=tool_tcp_calibrator,
         calibration_settings_service=CalibrationSettingsApplicationService(
             robot_system._settings_service,
             robot_service=robot_service,
             messaging=getattr(robot_system, "_messaging_service", None),
+            include_height_settings=False,
         ),
         settings_service=robot_system._settings_service,
-        laser_calibration_service=getattr(robot_system, "_height_measuring_calibration_service", None),
-        laser_ops=getattr(robot_system, "_laser_detection_service", None),
         observer_group_provider=robot_system.get_observer_group_for_area,
         observer_position_provider=_observer_position,
         use_marker_centre=True,
@@ -1434,7 +1413,6 @@ def _build_device_control_application(robot_system):
         "vacuum_sensor": robot_system.get_optional_service(ServiceID.VACUUM_SENSOR),
         "physical_control_buttons": robot_system.get_optional_service(ServiceID.PHYSICAL_CONTROL_BUTTONS),
         "dryer": robot_system.get_optional_service(ServiceID.DRYER),
-        "laser": getattr(robot_system, "_laser_detection_service", None),
     }
     devices = build_device_control_adapters(peripheral_config, services, persist_enabled)
     if "paint_head" in peripheral_config.peripherals:
@@ -1569,7 +1547,6 @@ def _build_pick_target_application(robot_system):
     vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
     capture_snapshot_service = _build_capture_snapshot_service(robot_system)
     robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
-    height_service = getattr(robot_system, "_height_measuring_service", None)
     default_target_name = (
         robot_system.get_targeting_provider().get_default_target_name()
         if robot_system.get_targeting_provider() is not None else ""
@@ -1584,7 +1561,6 @@ def _build_pick_target_application(robot_system):
         robot_config=robot_system._robot_config,
         robot_config_getter=lambda: robot_system.get_settings(CommonSettingsID.ROBOT_CONFIG),
         navigation=robot_system._navigation,
-        height_measuring=height_service,
         default_target_name=default_target_name,
         calibration_frame_name=calibration_frame_name,
         pickup_frame_name="",

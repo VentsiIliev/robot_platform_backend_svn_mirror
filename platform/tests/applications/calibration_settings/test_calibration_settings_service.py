@@ -9,6 +9,9 @@ from src.applications.calibration_settings.calibration_settings_data import Cali
 from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.vision.calibration_vision_settings import CalibrationVisionSettings
 from src.engine.vision.camera_settings_serializer import CameraSettings
+from src.engine.repositories.settings_service import SettingsService
+from src.engine.robot.configuration import RobotCalibrationSettings
+from src.applications.calibration_settings.mapper import CalibrationSettingsMapper
 
 
 def _make_settings_service():
@@ -22,6 +25,29 @@ def _make_settings_service():
 
 
 class TestCalibrationSettingsApplicationService(unittest.TestCase):
+    def test_load_edit_and_save_without_height_repository(self):
+        vision_repo, robot_repo = MagicMock(), MagicMock()
+        vision_repo.load.return_value = CalibrationVisionSettings()
+        robot_repo.load.return_value = RobotCalibrationSettings()
+        settings = SettingsService({
+            CommonSettingsID.CALIBRATION_VISION_SETTINGS: vision_repo,
+            CommonSettingsID.ROBOT_CALIBRATION: robot_repo,
+        })
+        service = CalibrationSettingsApplicationService(settings, include_height_settings=False)
+        data = service.load_settings()
+        self.assertIsNone(data.height)
+        flat = CalibrationSettingsMapper.to_flat_dict(data)
+        self.assertNotIn("min_intensity", flat)
+        flat["calib_vision_chessboard_width"] = 15
+        # Stale UI values must not recreate removed height settings.
+        flat["min_intensity"] = 99
+        updated = CalibrationSettingsMapper.from_flat_dict(flat, data)
+        self.assertIsNone(updated.height)
+        self.assertEqual(updated.vision.chessboard_width, 15)
+        service.save_settings(updated)
+        vision_repo.save.assert_called_once_with(updated.vision)
+        robot_repo.save.assert_called_once_with(updated.robot)
+
     def test_load_requests_all_calibration_setting_groups(self):
         service = CalibrationSettingsApplicationService(_make_settings_service())
         service.load_settings()

@@ -42,9 +42,6 @@ from src.robot_systems.paint.domain.workpieces.paint_workpiece_library_service i
     PaintWorkpieceLibraryService,
     build_paint_workpiece_library_schema,
 )
-from src.robot_systems.paint.height_measuring import (
-    PaintRobotSystemHeightMeasuringProvider,
-)
 from src.robot_systems.paint.service_builders import (
     build_paint_vision_service,
     build_vacuum_pump_service,
@@ -176,7 +173,6 @@ class TestPaintIdentifiersAndExports(unittest.TestCase):
         self.assertIs(ApplicationsDashboardFactory, PaintDashboardFactory)
         self.assertIs(DashboardPackageFactory, PaintDashboardFactory)
         self.assertIs(PaintRobotSystemCalibrationProvider, PaintRobotSystemCalibrationProvider)
-        self.assertIs(PaintRobotSystemHeightMeasuringProvider, PaintRobotSystemHeightMeasuringProvider)
         self.assertIs(PaintRobotSystemTargetingProvider, PaintRobotSystemTargetingProvider)
         self.assertIs(build_paint_target_frames, build_paint_target_frames)
         self.assertIs(build_paint_point_registry, build_paint_point_registry)
@@ -269,32 +265,6 @@ class TestPaintServiceBuildersAndProviders(unittest.TestCase):
 
         self.assertIsNone(build_vacuum_pump_service(ctx))
 
-    def test_height_measuring_provider_builds_xinje_modbus_laser(self) -> None:
-        modbus_config = SimpleNamespace(
-            port="/dev/ttyUSB0",
-            slave_address=1,
-            baudrate=57600,
-            bytesize=8,
-            stopbits=1,
-            parity="E",
-            timeout=0.01,
-        )
-        robot_system = SimpleNamespace(
-            _settings_service=SimpleNamespace(get=MagicMock(return_value=modbus_config)),
-        )
-        provider = PaintRobotSystemHeightMeasuringProvider(robot_system=robot_system)
-
-        laser = provider.build_laser_control()
-
-        self.assertEqual(laser._register, 133)
-        robot_system._settings_service.get.assert_called_once_with(CommonSettingsID.MODBUS_CONFIG)
-        laser._transport.write_register = MagicMock()
-        laser.turn_on()
-        laser.turn_off()
-        self.assertEqual(
-            laser._transport.write_register.call_args_list,
-            [call(133, 1), call(133, 0)],
-        )
 
 
 class TestPaintDashboardSupport(unittest.TestCase):
@@ -303,7 +273,7 @@ class TestPaintDashboardSupport(unittest.TestCase):
         state = DashboardState()
 
         self.assertFalse(config.show_placeholders)
-        self.assertEqual(PAINT_DASHBOARD_CARDS[0].label, "Mock")
+        self.assertEqual(PAINT_DASHBOARD_CARDS[0].label, "Robot Status")
         self.assertEqual(PAINT_DASHBOARD_ACTIONS[0].action_id, "reset_errors")
         self.assertEqual(state.process_state, "idle")
         self.assertEqual(state.mode_label, "Paint Mode")

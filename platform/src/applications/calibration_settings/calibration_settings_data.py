@@ -9,4 +9,4 @@ from src.engine.vision.calibration_vision_settings import CalibrationVisionSetti
 class CalibrationSettingsData:
     vision: CalibrationVisionSettings
     robot: RobotCalibrationSettings
-    height: HeightMeasuringModuleSettings
+    height: HeightMeasuringModuleSettings | None = None

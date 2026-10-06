@@ -555,14 +555,13 @@ class TestPaintTargetingProvider(unittest.TestCase):
 
         captured = {}
 
-        def _build_frames(definitions, navigation, height_correction):
+        def _build_frames(definitions, navigation, height_correction=None):
             captured["navigation"] = navigation
-            captured["height_correction"] = height_correction("paint")
+            captured["height_correction"] = height_correction
             return built_frames
 
         with (
             patch("src.robot_systems.paint.targeting.provider.build_paint_target_frames", side_effect=_build_frames) as build_frames,
-            patch("src.robot_systems.paint.targeting.provider.HeightCorrectionService", side_effect=lambda svc, area_id="": f"hc:{svc}:{area_id}"),
         ):
             frames = provider.build_frames()
             frame = provider.get_frame_for_work_area("paint")
@@ -573,7 +572,7 @@ class TestPaintTargetingProvider(unittest.TestCase):
         self.assertEqual("extra", area)
         self.assertTrue(build_frames.called)
         self.assertEqual("navigation-service", captured["navigation"])
-        self.assertEqual("hc:height-service:paint", captured["height_correction"])
+        self.assertIsNone(captured["height_correction"])
 
     def test_target_options_and_default_name_follow_definitions(self):
         provider = PaintRobotSystemTargetingProvider(self._make_robot_system())

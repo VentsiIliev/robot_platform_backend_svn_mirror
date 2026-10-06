@@ -16,6 +16,7 @@ class CalibrationSettingsController(IApplicationController):
 
     def load(self) -> None:
         settings = self._model.load()
+        self._view.set_height_settings_available(settings.height is not None)
         self._view.settings_view.set_values(CalibrationSettingsMapper.to_flat_dict(settings))
         self._view.save_requested.connect(self._on_save)
         self._view.workobject_capture_requested.connect(self._on_workobject_capture)
