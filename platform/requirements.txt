@@ -17,7 +17,8 @@ ImageIO==2.37.2
 PyQt6==6.11.0
 QtAwesome==1.4.2
 QtPy==2.4.3
-contour-editor-plugin @ https://raw.githubusercontent.com/VentsiIliev/contour_editor-plugin/main/ContourEditor-Plugin/dist/contour_editor_plugin-1.0.0-py3-none-any.whl
+# Published 1.0.0 wheel lacks the UI configuration API required by WorkpieceEditor.
+contour-editor-plugin @ git+https://github.com/VentsiIliev/contour_editor-plugin.git@96f92655395e428fd4bfa0904712750bb2e2f3a1#subdirectory=ContourEditor-Plugin
 ezdxf==1.4.3
 matplotlib==3.10.8
 minimalmodbus==2.1.1
