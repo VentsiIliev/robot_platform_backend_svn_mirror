@@ -5,6 +5,26 @@ ROS backend launch configuration; it does not install or update ROS or the backe
 Target: Ubuntu 24.04, built on the target CPU architecture.
 
 
+## Running a fresh source checkout
+
+From `platform/`, run `./launch_robot_app.sh`. It creates `.venv`, installs
+Python requirements when their hash changes, and verifies native/GUI imports.
+Use `./launch_robot_app.sh --setup-only` to prepare the environment without
+starting the application or robot services.
+
+On Ubuntu/Debian, a missing ZBar shared library triggers `apt-get update` and
+installation of `libzbar0`, using `sudo` when needed. ZBar is an OS dependency
+of `pyzbar` and is not installed by pip. An administrator password may be
+required on first setup. If installing manually, run:
+
+```bash
+sudo apt-get update
+sudo apt-get install libzbar0
+```
+
+Python environment creation also requires the OS `python3-venv` package. Other
+native or GUI import failures are reported with their original traceback.
+
 ## Independent system/profile releases
 
 Select a target from `config/release_targets.json`:
@@ -131,8 +151,13 @@ For an existing machine, import storage during first installation:
   --storage-from /home/operator/robot_app_platform/src/robot_systems/paint
 ```
 
-`--storage-from` points at the paint package, not just its `storage` directory:
-this imports both base storage and all profile storage. The source is untouched.
+`--storage-from` points at the selected system package, not just its `storage`
+directory. For the dryer products, use `paint_auto_dry` or `paint_tray_dry`.
+The legacy `paint` package is also accepted when it contains the selected
+`profiles/automatic_dryer/storage/` or `profiles/tray_dryer/storage/`; only that
+profile is imported for the corresponding dryer product. The default paint
+product retains compatibility with importing base storage and legacy profiles.
+The source is untouched.
 Import is refused if the destination already contains data. Reinstallation and
 updates never import or overwrite storage from a release.
 
@@ -143,12 +168,26 @@ The default installation is per-user, with no root privileges:
     releases/VERSION/platform/
     current -> releases/VERSION
     data/paint/storage/
-    data/paint/profiles/PROFILE/storage/
     tools/manage.py
     update-state/
     backups/
 ~/.config/robot-platform/paint-robot/updates.json
 ```
+
+The dryer products use their own installation roots and data directories:
+
+| Product | Data path within its installation root |
+|---------|----------------------------------------|
+| `paint-auto-dry-robot` | `data/paint_auto_dry/storage/` |
+| `paint-tray-dry-robot` | `data/paint_tray_dry/storage/` |
+
+When activating a new release, the updater moves an existing
+`data/paint/profiles/<profile>/storage/` into the respective system directory
+in the staged data copy before seeding factory defaults. Settings, accounts,
+workpieces, and other files are preserved. Rollback restores the previous data
+snapshot and layout. Activation fails if both old and new storage roots exist;
+resolve that conflict before retrying. This relocation does not require a JSON
+storage-schema increment.
 
 Use `--root /absolute/path` and `--config /absolute/path/updates.json` to choose
 other locations. Install as the HMI user so data and tools have the right owner.

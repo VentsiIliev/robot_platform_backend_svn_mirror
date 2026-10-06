@@ -4,6 +4,11 @@ set -euo pipefail
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON="${APP_DIR}/.venv/bin/python"
 
+if [[ $# -gt 1 || ( $# -eq 1 && "${1}" != "--setup-only" ) ]]; then
+  echo "Usage: $0 [--setup-only]" >&2
+  exit 2
+fi
+
 # Bootstrap an independent environment for this checkout.
 if [[ ! -x "${PYTHON}" ]]; then
   echo "Creating platform Python environment..."
@@ -11,6 +16,30 @@ if [[ ! -x "${PYTHON}" ]]; then
     echo "Virtual environment creation failed. On Ubuntu install python3-venv, then retry." >&2
     exit 1
   fi
+fi
+
+# ZBar is an OS library: installing pyzbar with pip does not supply it on Linux.
+if ! env -u PYTHONPATH "${PYTHON}" -c 'import ctypes; import ctypes.util; ctypes.CDLL(ctypes.util.find_library("zbar") or "libzbar.so.0")' 2>/dev/null; then
+  if [[ ! -f /etc/os-release ]]; then
+    echo "Missing ZBar shared library. Install ZBar for your operating system, then retry." >&2
+    exit 1
+  fi
+  source /etc/os-release
+  if [[ "${ID:-}" != "ubuntu" && "${ID:-}" != "debian" ]]; then
+    echo "Missing ZBar shared library. Install ZBar for your operating system, then retry." >&2
+    exit 1
+  fi
+  echo "Installing missing system dependency: libzbar0 (administrator access required)..."
+  APT_COMMAND=(apt-get)
+  if [[ "${EUID}" -ne 0 ]]; then
+    if ! command -v sudo >/dev/null; then
+      echo "Ask an administrator to install libzbar0, then retry." >&2
+      exit 1
+    fi
+    APT_COMMAND=(sudo apt-get)
+  fi
+  "${APT_COMMAND[@]}" update
+  "${APT_COMMAND[@]}" install -y libzbar0
 fi
 
 REQUIREMENTS="${APP_DIR}/requirements.txt"
@@ -26,17 +55,13 @@ if [[ "${INSTALLED_HASH}" != "${REQUIREMENTS_HASH}" ]]; then
 fi
 
 # Verify native and GUI imports without starting application or robot services.
-if ! "${PYTHON}" -c 'from PyQt6 import QtWidgets; import cv2; from pyzbar.pyzbar import decode'; then
-  echo "Platform dependency check failed. Missing zbar on Ubuntu: sudo apt install libzbar0" >&2
+if ! env -u PYTHONPATH "${PYTHON}" -c 'from PyQt6 import QtWidgets; import cv2; from pyzbar.pyzbar import decode'; then
+  echo "Platform dependency check failed. See the import error above for the failing dependency." >&2
   exit 1
 fi
 if [[ "${1:-}" == "--setup-only" ]]; then
   echo "Platform environment is ready."
   exit 0
-fi
-if [[ $# -gt 0 ]]; then
-  echo "Usage: $0 [--setup-only]" >&2
-  exit 2
 fi
 
 export PYTHONPATH="${APP_DIR}:${PYTHONPATH:-}"

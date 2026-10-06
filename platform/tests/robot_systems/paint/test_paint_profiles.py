@@ -1,14 +1,14 @@
+from src.robot_systems.paint_auto_dry.paint_robot_system import AutomaticDryerPaintRobotSystem
+from src.robot_systems.paint_tray_dry.paint_robot_system import TrayDryerPaintRobotSystem
 import os
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from src.robot_systems.paint_auto_dry.bootstrap_provider import (
     create_bootstrap_provider as create_auto_dry_provider,
 )
 from src.robot_systems.paint.paint_robot_system import (
     PaintRobotSystem,
-    AutomaticDryerPaintRobotSystem,
-    TrayDryerPaintRobotSystem,
 )
 from src.robot_systems.paint.applications.paint_process_settings.view.paint_process_settings_schema import (
     build_process_groups,
@@ -117,14 +117,21 @@ class TestPaintProfiles(unittest.TestCase):
         tray_root = TrayDryerPaintRobotSystem.storage_path()
 
         self.assertNotEqual(automatic_root, tray_root)
-        self.assertTrue(automatic_root.endswith(os.path.join("automatic_dryer", "storage")))
-        self.assertTrue(tray_root.endswith(os.path.join("tray_dryer", "storage")))
+        self.assertTrue(automatic_root.endswith(os.path.join("paint_auto_dry", "storage")))
+        self.assertTrue(tray_root.endswith(os.path.join("paint_tray_dry", "storage")))
         self.assertTrue(
             AutomaticDryerPaintRobotSystem.users_storage_path().startswith(automatic_root)
         )
         self.assertTrue(
             TrayDryerPaintRobotSystem.permissions_storage_path().startswith(tray_root)
         )
+
+    def test_providers_resolve_installed_storage_in_their_own_system(self):
+        with patch.dict(os.environ, {'ROBOT_PLATFORM_DATA_ROOT': '/tmp/paint-profile-test-data'}):
+            for provider, system in [(create_auto_dry_provider(), 'paint_auto_dry'),
+                                     (create_tray_dry_provider(), 'paint_tray_dry')]:
+                self.assertEqual(provider.system_class.storage_path('settings'),
+                                 f'/tmp/paint-profile-test-data/{system}/storage/settings')
 
 if __name__ == "__main__":
     unittest.main()

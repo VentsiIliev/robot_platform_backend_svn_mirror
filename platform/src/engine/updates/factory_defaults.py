@@ -34,8 +34,9 @@ def load_factory_defaults(resource_root: Path, identity: dict) -> dict:
 def seed_factory_defaults(resource_root: Path, data_root: Path, identity: dict) -> list[str]:
     """Atomically create missing settings files, including on subsequent releases."""
     files = load_factory_defaults(resource_root, identity)
+    migrate_paint_profile_storage(data_root, identity)
     settings = data_root / identity["storage_system"]
-    if identity["profile"] != "default":
+    if identity["profile"] != "default" and identity["storage_system"] != identity["robot_system"]:
         settings = settings / "profiles" / identity["profile"]
     settings = settings / "storage/settings"
     created = []
@@ -62,3 +63,25 @@ def seed_factory_defaults(resource_root: Path, data_root: Path, identity: dict) 
         finally:
             temporary.unlink(missing_ok=True)
     return created
+
+
+def migrate_paint_profile_storage(data_root: Path, identity: dict) -> None:
+    """Relocate legacy paint data in the updater's staged copy before seeding."""
+    profiles = {"paint_auto_dry": "automatic_dryer", "paint_tray_dry": "tray_dryer"}
+    system = identity.get("robot_system")
+    if system not in profiles or identity.get("storage_system") != system:
+        return
+    source = data_root / "paint" / "profiles" / profiles[system] / "storage"
+    destination = data_root / system / "storage"
+    if not source.exists():
+        return
+    for path in (source, destination):
+        parent = path
+        while parent != data_root.parent:
+            if parent.is_symlink():
+                raise ValueError("Profile storage cannot traverse data symlinks")
+            parent = parent.parent
+    if destination.exists():
+        raise ValueError("Both legacy and system-owned paint storage exist; resolve before updating")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    source.rename(destination)

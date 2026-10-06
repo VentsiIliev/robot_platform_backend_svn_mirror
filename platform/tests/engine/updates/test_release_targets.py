@@ -215,7 +215,7 @@ class ReleaseTargetTests(unittest.TestCase):
     def test_activation_seeds_factory_files_without_replacing_existing_settings(self):
         factory = json.loads((ROOT / "config/factory_defaults/paint_tray_dry.json").read_text())
         updater = PlatformUpdater(UpdateConfig(self.directory / "tray", "", None, product="paint-tray-dry-robot"))
-        settings = updater.data / "paint/profiles/tray_dryer/storage/settings"
+        settings = updater.data / "paint_tray_dry/storage/settings"
         saved = settings / "hardware/modbus.json"
         saved.parent.mkdir(parents=True)
         saved.write_text('{"port": "operator-port", "baudrate": 9600}')
@@ -233,6 +233,25 @@ class ReleaseTargetTests(unittest.TestCase):
         updater.apply_pending()
         self.assertEqual(before, saved.read_bytes())
         self.assertEqual(before_devices, devices.read_bytes())
+
+    def test_activation_moves_legacy_profile_storage_and_rollback_restores_it(self):
+        updater = PlatformUpdater(UpdateConfig(self.directory / 'legacy-tray', '', None,
+                                               product='paint-tray-dry-robot'))
+        legacy = updater.data / 'paint/profiles/tray_dryer/storage/users/users.csv'
+        legacy.parent.mkdir(parents=True)
+        legacy.write_text('existing accounts')
+        updater.stage_local(self.archive('paint_tray_dry', override={'storage_system': 'paint'}))
+        updater.queue()
+        updater.apply_pending()
+        updater.stage_local(self.archive('paint_tray_dry', '1.1.0'))
+        updater.queue()
+        updater.apply_pending()
+        destination = updater.data / 'paint_tray_dry/storage/users/users.csv'
+        self.assertEqual('existing accounts', destination.read_text())
+        self.assertFalse(legacy.exists())
+        updater.rollback()
+        self.assertEqual('existing accounts', legacy.read_text())
+        self.assertFalse(destination.exists())
 
 
 if __name__ == "__main__":

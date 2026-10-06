@@ -1,5 +1,17 @@
 # Paint Robot-System Split
 
+## Current storage layout
+
+The sections below describe the earlier compact-system extraction proposal.
+The current dryer systems now own their class, configuration overrides, and
+complete source storage tree in `paint_auto_dry/` and `paint_tray_dry/`.
+Shared painting implementation remains in `paint/`, which owns only the default
+paint system's storage. The previous `paint/profiles/<profile>/storage/` layout
+is legacy: installed updates relocate it in a staged data copy and preserve
+the previous layout in the rollback backup. See
+[current system ownership](paint/README.md#system-owned-configuration-and-storage)
+and [installation and migration](../../packaging/platform/README.md).
+
 ## Decision
 
 Compact paint and automatic-dryer paint are separate robot systems. They share
@@ -29,7 +41,7 @@ Automatic-dryer paint composition
   - dryer service and configuration
   - AutomaticDryerDestination
   - AutomaticDryerStartGuard
-  - existing paint/storage until storage migration is commissioned
+  - paint_auto_dry/storage
 ```
 
 ## Implemented foundation

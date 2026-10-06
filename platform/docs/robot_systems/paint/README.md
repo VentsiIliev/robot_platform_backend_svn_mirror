@@ -32,8 +32,33 @@ src/robot_systems/paint/
 │   └── paint/                        # paint production process package
 ├── applications/dashboard/           # paint dashboard MVC package
 ├── service_builders.py               # paint-only service builders (vacuum pump)
-└── storage/                          # checked-in settings, users, and workpiece data
+└── storage/                          # default paint system data and translation catalogs
 ```
+
+### System-owned configuration and storage
+
+The dryer variants reuse `PaintRobotSystem` through subclasses defined in their
+own packages. Each bootstrap provider applies its package's
+`paint_system_config.py` overrides without changing shared defaults.
+
+| System | Concrete class module | Source storage root |
+|--------|-----------------------|---------------------|
+| Default paint | `paint/paint_robot_system.py` | `src/robot_systems/paint/storage/` |
+| Automatic dryer | `paint_auto_dry/paint_robot_system.py` | `src/robot_systems/paint_auto_dry/storage/` |
+| Tray dryer | `paint_tray_dry/paint_robot_system.py` | `src/robot_systems/paint_tray_dry/storage/` |
+
+Each root owns settings, users, permissions, workpieces, targeting data, and
+translation catalogs. Shared process and application code remains under `paint`.
+`metadata.settings_root` is `storage/settings` for all three systems; the dryer
+systems set `metadata.translations_root` to `storage/translations`.
+The defining module determines `package_root()`, and configuration overrides
+preserve that module identity.
+
+With `ROBOT_PLATFORM_DATA_ROOT` set, writable paths resolve beneath
+`<data_root>/<system>/storage/`. Translation catalogs remain bundled resources
+under the respective system package. Legacy `paint/profiles/<profile>/storage/`
+is migrated during installed update activation; see
+[the update storage documentation](../../engine/updates/README.md).
 
 ---
 
@@ -78,7 +103,9 @@ The default active work area is `paint`.
 
 ## Settings
 
-All settings are rooted under `src/robot_systems/paint/storage/settings/`.
+Default paint settings are rooted under `src/robot_systems/paint/storage/settings/`.
+The dryer variants use their own roots listed above, with the same relative
+settings file paths.
 
 | Key (`CommonSettingsID`) | File | Purpose |
 |--------------------------|------|---------|

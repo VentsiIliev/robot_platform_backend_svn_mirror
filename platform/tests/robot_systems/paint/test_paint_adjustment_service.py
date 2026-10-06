@@ -21,7 +21,7 @@ from src.robot_systems.paint.applications.paint_adjustment.service.i_paint_adjus
 class PaintAdjustmentServiceTests(unittest.TestCase):
     def test_tray_profile_enables_plus_and_minus_direction(self):
         root = Path(__file__).resolve().parents[3]
-        hardware = root / "src/robot_systems/paint/profiles/tray_dryer/storage/settings/hardware"
+        hardware = root / "src/robot_systems/paint_tray_dry/storage/settings/hardware"
         modbus = ModbusConfig.from_dict(json.loads((hardware / "modbus.json").read_text()))
         peripherals = PeripheralConfig.from_dict(
             json.loads((hardware / "peripherals.json").read_text())

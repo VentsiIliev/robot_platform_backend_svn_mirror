@@ -1,7 +1,9 @@
+from src.robot_systems.paint_auto_dry.paint_robot_system import AutomaticDryerPaintRobotSystem
+from src.robot_systems.paint_tray_dry.paint_robot_system import TrayDryerPaintRobotSystem
 import types
 import unittest
 from src.robot_systems.paint import paint_system_config
-from src.robot_systems.paint.paint_robot_system import (PaintRobotSystem, TrayDryerPaintRobotSystem, AutomaticDryerPaintRobotSystem, with_paint_system_overrides)
+from src.robot_systems.paint.paint_robot_system import (PaintRobotSystem, with_paint_system_overrides)
 from src.robot_systems.paint.application_wiring import _bypass_contour_preparation_enabled
 
 

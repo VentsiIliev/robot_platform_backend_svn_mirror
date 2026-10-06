@@ -1,6 +1,7 @@
 from src.robot_systems.paint_auto_dry import paint_system_config
 from src.robot_systems.paint.bootstrap_provider import PaintBootstrapProvider
-from src.robot_systems.paint.paint_robot_system import AutomaticDryerPaintRobotSystem, with_paint_system_overrides
+from src.robot_systems.paint.paint_robot_system import with_paint_system_overrides
+from src.robot_systems.paint_auto_dry.paint_robot_system import AutomaticDryerPaintRobotSystem
 from src.robot_systems.robot_system_bootstrap_provider import RobotSystemBootstrapProvider
 
 

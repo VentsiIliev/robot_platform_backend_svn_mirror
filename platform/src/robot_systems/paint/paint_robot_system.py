@@ -809,49 +809,6 @@ class PaintRobotSystem(BaseRobotSystem):
             publisher.set_orientation(horizontal, vertical, rotate_degrees)
 
 
-class AutomaticDryerPaintRobotSystem(PaintRobotSystem):
-    """Paint system variant with storage isolated for the automatic dryer."""
-
-    metadata = replace(
-        PaintRobotSystem.metadata,
-        name="PaintSystemAutomaticDryer",
-        settings_root=os.path.join("profiles", "automatic_dryer", "storage", "settings"),
-        translations_root=os.path.join(
-            "profiles", "automatic_dryer", "storage", "translations"
-        ),
-    )
-
-
-class TrayDryerPaintRobotSystem(PaintRobotSystem):
-    """Paint system variant with storage isolated for the tray dryer."""
-
-    ui_config = replace(
-        PaintRobotSystem.ui_config,
-        show_drying_mode_control=False,
-    )
-    allowed_dropoff_strategies = ("plate_layout",)
-
-    # Fresh installations must use a strategy supported by this profile.
-    settings_specs = [
-        replace(spec, serializer=PaintProcessConfigSerializer(
-            replace(
-                spec.serializer.get_default(),
-                dropoff=replace(spec.serializer.get_default().dropoff, strategy="plate_layout"),
-            )
-        )) if spec.name == SettingsID.PAINT_PROCESS_CONFIG else spec
-        for spec in PaintRobotSystem.settings_specs
-    ]
-
-    metadata = replace(
-        PaintRobotSystem.metadata,
-        name="PaintSystemTrayDryer",
-        settings_root=os.path.join("profiles", "tray_dryer", "storage", "settings"),
-        translations_root=os.path.join(
-            "profiles", "tray_dryer", "storage", "translations"
-        ),
-    )
-
-
 def with_paint_system_overrides(system_class, overrides):
     """Compose a system's switches without mutating shared defaults/classes."""
     from types import SimpleNamespace

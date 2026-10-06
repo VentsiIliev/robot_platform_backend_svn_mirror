@@ -85,6 +85,10 @@ def install(args):
             if updater.installed() or (updater.data.exists() and any(updater.data.iterdir())):
                 raise ValueError("Storage import is allowed only into an empty first installation")
             source = args.storage_from.expanduser().resolve()
+            profile = local_manifest.get("profile", "default")
+            if (local_manifest.get("storage_system") == local_manifest.get("robot_system")
+                    and profile != "default" and (source / "profiles" / profile / "storage").is_dir()):
+                source = source / "profiles" / profile
             if not (source / "storage").is_dir():
                 raise ValueError("--storage-from must be the old robot-system package directory containing storage/")
             if any(p.is_symlink() for p in source.rglob("*") if p.is_relative_to(source / "storage") or p.is_relative_to(source / "profiles")):

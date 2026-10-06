@@ -467,9 +467,20 @@ are always left alone.
 Target directory:
 
 ```
-<data_root>/<storage_system>/storage/settings/            profile == "default"
-<data_root>/<storage_system>/profiles/<profile>/storage/settings/   otherwise
+<data_root>/<storage_system>/storage/settings/            system-owned storage or default profile
+<data_root>/<storage_system>/profiles/<profile>/storage/settings/   legacy shared profile storage
 ```
+
+`paint_auto_dry` and `paint_tray_dry` own their storage directly. Their system
+classes and source-run `storage/` directories live in the respective packages;
+shared painting code remains in `paint`. During activation, legacy
+`paint/profiles/automatic_dryer/storage/` or `paint/profiles/tray_dryer/storage/`
+is relocated into the respective system directory in the staged data copy,
+before factory defaults are seeded. Existing accounts, settings, and workpieces
+are preserved, and rollback restores the previous layout. If both legacy and
+destination storage exist, activation fails without replacing live data.
+`--storage-from` accepts either the system package or the legacy paint package
+containing the selected profile.
 
 Per file:
 

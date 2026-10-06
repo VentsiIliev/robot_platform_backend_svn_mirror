@@ -70,3 +70,32 @@ class FactoryDefaultsTests(unittest.TestCase):
             seed_factory_defaults(self.resources, self.data, self.identity)
         self.assertEqual('{"operator": true}', self.destination.read_text())
         self.assertFalse(list(self.destination.parent.glob('.factory-*')))
+
+    def test_system_storage_migrates_legacy_data_before_factory_seeding(self):
+        self.destination.parent.mkdir(parents=True)
+        self.destination.write_text('{"operator": true}')
+        legacy = self.data / 'paint/profiles/tray_dryer/storage'
+        (legacy / 'users').mkdir()
+        (legacy / 'users/users.csv').write_text('existing accounts')
+        self.identity['storage_system'] = 'paint_tray_dry'
+        self.assertEqual([], seed_factory_defaults(self.resources, self.data, self.identity))
+        storage = self.data / 'paint_tray_dry/storage'
+        self.assertEqual('{"operator": true}', (storage / 'settings/hardware/peripherals.json').read_text())
+        self.assertEqual('existing accounts', (storage / 'users/users.csv').read_text())
+        self.assertFalse(legacy.exists())
+
+    def test_migration_rejects_conflicting_storage(self):
+        self.destination.parent.mkdir(parents=True)
+        self.destination.write_text('{}')
+        destination = self.data / 'paint_tray_dry/storage'
+        destination.mkdir(parents=True)
+        self.identity['storage_system'] = 'paint_tray_dry'
+        with self.assertRaisesRegex(ValueError, 'Both legacy'):
+            seed_factory_defaults(self.resources, self.data, self.identity)
+        self.assertTrue(self.destination.exists())
+
+    def test_fresh_system_storage_has_no_profile_directory(self):
+        self.identity['storage_system'] = 'paint_tray_dry'
+        seed_factory_defaults(self.resources, self.data, self.identity)
+        self.assertTrue((self.data / 'paint_tray_dry/storage/settings/hardware/peripherals.json').exists())
+        self.assertFalse((self.data / 'paint').exists())

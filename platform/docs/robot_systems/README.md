@@ -302,6 +302,10 @@ through the same app and OS service adapter across systems; no robot-specific
 network settings are persisted.
 
 Installed systems resolve writable storage beneath `ROBOT_PLATFORM_DATA_ROOT`;
-paint profile paths remain separate. Paint, Glue, Welding and Twin expose the
+each paint system owns `<data_root>/<system>/storage/`, including
+`paint_auto_dry` and `paint_tray_dry`. Their source storage lives alongside their
+system class and configuration overrides; shared implementation remains in
+`paint`. See [paint storage ownership](paint/README.md#system-owned-configuration-and-storage).
+Paint, Glue, Welding and Twin expose the
 shared Software Update application to administrators. Each release target owns
 a dedicated product identity, update config, repository and installation root. See [platform updates](../../packaging/platform/README.md).
