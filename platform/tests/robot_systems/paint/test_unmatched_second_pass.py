@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import replace
+from src.robot_systems.paint.processes.paint.paint_contact_job import PaintContactCommandJob
 from src.engine.robot.motion_sequence import serialize_ordered_motion_commands
 
 from src.robot_systems.paint.processes.paint.config import (
@@ -90,7 +91,7 @@ class TestUnmatchedSecondPass(unittest.TestCase):
         path = [[1.0, 2.0, 3.0, 0.0, 0.0, 0.0], [2.0, 2.0, 3.0, 0.0, 0.0, 5.0]]
 
         segments = serialize_ordered_motion_commands(build_ordered_second_pass_segments(
-            [path], [{"vel": 21.0, "acc": 31.0, "pattern_type": "Workpiece"}], config
+            [path], [PaintContactCommandJob(1, "Workpiece", 21.0, 31.0)], config
         ))
 
         self.assertEqual([segment["type"] for segment in segments], ["unwind_joint6", "linear", "path"])

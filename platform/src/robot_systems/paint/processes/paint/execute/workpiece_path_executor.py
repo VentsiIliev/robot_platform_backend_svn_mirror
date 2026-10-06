@@ -179,6 +179,11 @@ class _PreparedPaintProcessAdapter:
     def _log_phase_timing(_label: str, _started_at: float, **_fields: object) -> None:
         return None
 
+    @staticmethod
+    def _next_cycle_start_target(_ctx: object) -> None:
+        """A single prepared-plan execution has no following production cycle."""
+        return None
+
 
 def _normalize_contact_motion_config(
     *,
@@ -321,6 +326,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._last_paint_contact_end_rz: float | None = None
         self._last_process_end_pose: list[float] | None = None
         self._dropoff_unwind_prepared: bool = False
+        self._last_prepositioned_start_group: str | None = None
         self._plate_entry_completed_in_paint_chain: bool = False
         self._last_pickup_contact_mode: str | None = None
         self._last_safe_travel_error: str = ""
@@ -396,24 +402,27 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         )
         self._contact_motion_strategy = get_execution_plane_strategy(self._contact_motion_config.motion_plane)
 
-    def _refresh_paint_process_config_snapshot(self) -> None:
+    def _refresh_paint_process_config_snapshot(self) -> PaintProcessConfig:
         service = self._paint_process_config_service
         if service is None:
             self._paint_process_config_snapshot = PAINT_PROCESS_CONFIG
             self._apply_cycle_dropoff_strategy()
-            return
+            return PAINT_PROCESS_CONFIG
         try:
+            raw_config = service.get_snapshot()
             self._paint_process_config_snapshot = scale_paint_process_accelerations(
-                service.get_snapshot()
+                raw_config
             )
             self._apply_cycle_dropoff_strategy()
             self._enable_vacuum_pump = bool(self._paint_process_config_snapshot.enable_vacuum_pump)
             if self._pickup_condition_provider is not None:
                 self._pickup_condition = self._pickup_condition_provider()
+            return raw_config
         except Exception:
             _logger.debug("[PAINT_CONFIG] Failed to refresh paint process settings", exc_info=True)
             self._paint_process_config_snapshot = PAINT_PROCESS_CONFIG
             self._apply_cycle_dropoff_strategy()
+            return PAINT_PROCESS_CONFIG
 
     def _set_cycle_process_config_snapshot(self, config) -> None:
         """Freeze one raw settings snapshot for the active workpiece cycle."""
@@ -974,6 +983,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         )
         from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
 
+        raw_config = self._refresh_paint_process_config_snapshot()
         self._refresh_runtime_config()
         control = control or PaintExecutionControl()
         context = PaintExecutionContext(
@@ -981,6 +991,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             stop_requested=lambda: False,
             control=control,
             process_config=self._paint_process_config(),
+            raw_process_config=raw_config,
             magazine_config=None,
         )
         context.execution_plan = prepared_workpiece

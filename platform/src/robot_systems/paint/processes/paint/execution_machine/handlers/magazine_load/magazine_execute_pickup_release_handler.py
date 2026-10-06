@@ -248,6 +248,10 @@ def execute_magazine_pickup_release(
     if not ordered_segments:
         _logger.info("[PICKUP] Ordered magazine pickup-to-release sequence already at final target")
     else:
+        if contact_mode == PICKUP_CONTACT_MODE_PLANNED and not callable(
+            getattr(executor._robot_service, "execute_ordered_motion_chain", None)
+        ):
+            return False, "Ordered motion chain is unavailable"
         if fixed_approach_pose is not None:
             try:
                 fixed_start_z = float(fixed_approach_pose[2])

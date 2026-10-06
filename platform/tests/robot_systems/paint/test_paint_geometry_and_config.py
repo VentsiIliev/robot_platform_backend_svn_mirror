@@ -230,7 +230,14 @@ class TestPaintProcessConfig(unittest.TestCase):
         )
 
         self.assertEqual(
-            PaintContactStagingConfig(1.0, 2.0, 3.0, 4.0, 5.0, 6.0),
+            PaintContactStagingConfig(
+                attach_z_offset_mm=1.0,
+                attach_paint_axis_offset_mm=2.0,
+                attach_perpendicular_axis_offset_mm=3.0,
+                detach_z_offset_mm=4.0,
+                detach_paint_axis_offset_mm=5.0,
+                detach_perpendicular_axis_offset_mm=6.0,
+            ),
             restored.contact_staging,
         )
 
@@ -407,10 +414,10 @@ class TestPaintProcessConfig(unittest.TestCase):
                 "magazine_release_settle_s": 0.75,
                 "magazine_release_z_mm": 55.0,
                 "magazine_full_retract_z_mm": 125.0,
-                "magazine_move_to_magazine_vel_percent": 11.0,
-                "magazine_move_to_magazine_acc_percent": 12.0,
-                "magazine_transfer_to_calibration_vel_percent": 13.0,
-                "magazine_transfer_to_calibration_acc_percent": 14.0,
+                "magazine_motion_profiles": [
+                    {**flat["magazine_motion_profiles"][0], "vel_percent": 11.0, "acc_percent": 12.0},
+                    {**flat["magazine_motion_profiles"][1], "vel_percent": 13.0, "acc_percent": 14.0},
+                ],
             },
             base,
         )
@@ -567,10 +574,7 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertEqual(1, len(magazine_groups))
         self.assertEqual(
             [
-                "magazine_move_to_magazine_vel_percent",
-                "magazine_move_to_magazine_acc_percent",
-                "magazine_transfer_to_calibration_vel_percent",
-                "magazine_transfer_to_calibration_acc_percent",
+                "magazine_motion_profiles",
             ],
             [field.key for field in magazine_groups[0].fields],
         )
@@ -588,21 +592,17 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertIn("magazine_camera_settle_s", keys)
         self.assertIn("magazine_release_settle_s", keys)
         self.assertIn("safe_travel_enabled", keys)
-        self.assertIn("safe_travel_position", keys)
-        self.assertIn("safe_travel_set_current", keys)
+        self.assertIn("safe_travel_positions", keys)
         self.assertIn("dropoff_safe_travel_enabled", keys)
-        self.assertIn("dropoff_safe_travel_position", keys)
-        self.assertIn("dropoff_safe_travel_set_current", keys)
+        self.assertIn("dropoff_safe_travel_positions", keys)
         self.assertNotIn("safe_travel_group_id", keys)
         self.assertEqual(1, len(safe_travel_groups))
         self.assertEqual(
             [
                 "safe_travel_enabled",
-                "safe_travel_position",
-                "safe_travel_set_current",
+                "safe_travel_positions",
                 "dropoff_safe_travel_enabled",
-                "dropoff_safe_travel_position",
-                "dropoff_safe_travel_set_current",
+                "dropoff_safe_travel_positions",
             ],
             [field.key for field in safe_travel_groups[0].fields],
         )
@@ -696,7 +696,8 @@ class TestPaintProcessConfig(unittest.TestCase):
         cleanup._move_to_preplanned_xy_rz_stage.assert_not_called()
 
     def test_edge_cleanup_uses_ordered_chain_generic_segments(self) -> None:
-        config = PaintProcessConfig()
+        from src.engine.robot.motion_sequence import OrderedMotionType
+        config = PaintProcessConfig(dropoff=PaintDropoffConfig(release_align_motion_type=OrderedMotionType.LINEAR))
         robot = SimpleNamespace(
             execute_ordered_motion_chain=MagicMock(return_value=0),
         )
@@ -709,6 +710,8 @@ class TestPaintProcessConfig(unittest.TestCase):
             _last_pickup_plan=None,
             _dropoff_unwind_prepared=False,
             _last_process_end_pose=None,
+            _dropoff_position_provider=None,
+            _read_provider_position=lambda _provider: None,
         )
         cleanup = PaintEdgeCleanupExecutor(owner)
 
@@ -722,10 +725,11 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertTrue(ok, msg)
         self.assertEqual(waypoints, 2)
         robot.execute_ordered_motion_chain.assert_called_once()
-        segments = robot.execute_ordered_motion_chain.call_args.args[0]
+        from src.engine.robot.motion_sequence import serialize_ordered_motion_commands
+        segments = serialize_ordered_motion_commands(robot.execute_ordered_motion_chain.call_args.args[0])
         self.assertEqual([segment["type"] for segment in segments], ["linear", "unwind_joint6", "linear", "path", "unwind_joint6"])
 
-    def test_paint_contact_starts_cleanup_preplan_before_final_robot_execute(self) -> None:
+    def test_paint_contact_executes_final_projected_command_path(self) -> None:
         events: list[str] = []
         robot = SimpleNamespace(
             execute_trajectory=MagicMock(side_effect=lambda *args, **kwargs: events.append("execute") or 0),
@@ -747,6 +751,7 @@ class TestPaintProcessConfig(unittest.TestCase):
             _refresh_runtime_config=MagicMock(),
             _paint_process_config=lambda: PaintProcessConfig(),
             _resolve_pivot_offset_mm=MagicMock(return_value=0.0),
+            _scale_process_acceleration=lambda value: value,
             _build_paint_contact_path=MagicMock(
                 return_value=(
                     [[1.0, 2.0, 3.0, 180.0, 0.0, 0.0]],
@@ -766,6 +771,7 @@ class TestPaintProcessConfig(unittest.TestCase):
             ),
         )
         execution_plan = SimpleNamespace(
+            execution_paths=lambda: [],
             execution_jobs=[
                 {
                     "pivot_source_path": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
@@ -780,11 +786,9 @@ class TestPaintProcessConfig(unittest.TestCase):
 
         self.assertTrue(ok, msg)
         self.assertEqual(waypoints, 1)
-        self.assertEqual(events, ["preplan", "execute"])
-        edge_cleanup.start_preplanning_during_paint.assert_called_once_with(
-            execution_plan,
-            started=ANY,
-        )
+        self.assertEqual(events, ["execute"])
+        robot.execute_trajectory.assert_called_once()
+        self.assertEqual(owner._last_process_end_pose, [1.0, 2.0, 3.0, 180.0, 0.0, 0.0])
 
     def test_simulation_config_exposes_plane_specific_indices_and_signs(self) -> None:
         xy = PaintSimulationConfig(

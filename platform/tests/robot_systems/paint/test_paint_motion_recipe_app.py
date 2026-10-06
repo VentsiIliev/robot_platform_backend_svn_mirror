@@ -90,14 +90,18 @@ class TestPaintMotionRecipeService(unittest.TestCase):
 
 class TestPaintMotionRecipeWiring(unittest.TestCase):
     def test_paint_system_declares_developer_motion_recipe_app(self):
+        from src.robot_systems.paint.paint_robot_system import with_paint_system_overrides
+        system_class = with_paint_system_overrides(
+            PaintRobotSystem, SimpleNamespace(PAINT_MOTION_RECIPE_APP=True)
+        )
         app = next(
             spec
-            for spec in PaintRobotSystem.shell.applications
+            for spec in system_class.shell.applications
             if spec.name == "PaintMotionRecipe"
         )
 
         self.assertEqual(4, app.folder_id)
-        self.assertEqual(["Admin", "Developer"], PaintRobotSystem.role_policy.protected_app_role_values[app.app_id])
+        self.assertEqual(["Admin", "Developer"], system_class.role_policy.protected_app_role_values[app.app_id])
 
     def test_build_paint_motion_recipe_application_wires_mock_safe_service(self):
         robot_system = SimpleNamespace(

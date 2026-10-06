@@ -7,11 +7,14 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 
 from src.engine.geometry.planar import axis_equivalent_shift_degrees
-from src.engine.robot.motion_sequence import serialize_ordered_motion_commands
+from src.engine.robot.motion_sequence import (
+    serialize_ordered_motion_commands, OrderedPositionCommand, OrderedMotionProfile, OrderedMotionType,
+)
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 from src.robot_systems.paint.processes.paint.config import (
     PAINT_PROCESS_CONFIG,
     PaintDropoffConfig,
+    DropoffStrategy,
     PaintMagazineLoadConfig,
     PaintProcessConfig,
     PaintSafeTravelConfig,
@@ -32,7 +35,10 @@ from src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts impor
 )
 from src.robot_systems.paint.processes.paint.motion.pose_comparison import poses_close
 from src.robot_systems.paint.processes.paint.motion.path_geometry import shift_path_rotation
-from src.robot_systems.paint.processes.paint.execute.pickup_executor import build_paint_pickup_segments
+from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
+    PickupPlan, PickupWaypoint, build_paint_pickup_segments,
+)
+from src.robot_systems.paint.processes.paint.paint_contact_job import PaintContactCommandJob
 from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor import (
     PaintExecutorContactMotionConfig,
     PaintExecutorDependencies,
@@ -181,7 +187,8 @@ class TestDropoffReleaseVerification(unittest.TestCase):
             "EJECT completion was not confirmed",
         )
         executor = SimpleNamespace(
-            _workpiece_destination=destination,
+            _dryer_ready_for_release=destination.check_ready_for_release,
+            _paint_process_config=lambda: PaintProcessConfig(),
             _motion=motion,
         )
 
@@ -197,7 +204,8 @@ class TestDropoffReleaseVerification(unittest.TestCase):
     def test_release_verified_callback_notifies_destination(self):
         destination = MagicMock()
         destination.on_release_verified.return_value = True
-        executor = SimpleNamespace(_workpiece_destination=destination)
+        executor = SimpleNamespace(_on_workpiece_release_verified=destination.on_release_verified,
+                                   _paint_process_config=lambda: PaintProcessConfig())
 
         ok, message = _on_workpiece_release_verified(executor)
 
@@ -207,18 +215,19 @@ class TestDropoffReleaseVerification(unittest.TestCase):
     def test_release_verified_callback_failure_is_reported(self):
         destination = MagicMock()
         destination.on_release_verified.return_value = False
-        executor = SimpleNamespace(_workpiece_destination=destination)
+        executor = SimpleNamespace(_on_workpiece_release_verified=destination.on_release_verified,
+                                   _paint_process_config=lambda: PaintProcessConfig())
 
         ok, message = _on_workpiece_release_verified(executor)
 
         self.assertFalse(ok)
-        self.assertIn("destination handoff failed", message)
+        self.assertIn("dryer sequence could not be queued", message)
 
     def test_release_verification_succeeds_when_vacuum_clears(self):
         sensor = MagicMock()
         sensor.is_vacuum_detected.return_value = False
         sensor.is_healthy.return_value = True
-        executor = SimpleNamespace(_enable_vacuum_pump=True, _vacuum_sensor=sensor)
+        executor = SimpleNamespace(_is_vacuum_pump_enabled=lambda: True, _vacuum_sensor=sensor)
 
         ok, message = _verify_workpiece_released(executor)
 
@@ -230,7 +239,7 @@ class TestDropoffReleaseVerification(unittest.TestCase):
         sensor = MagicMock()
         sensor.is_vacuum_detected.return_value = True
         sensor.is_healthy.return_value = True
-        executor = SimpleNamespace(_enable_vacuum_pump=True, _vacuum_sensor=sensor)
+        executor = SimpleNamespace(_is_vacuum_pump_enabled=lambda: True, _vacuum_sensor=sensor)
 
         ok, message = _verify_workpiece_released(executor)
 
@@ -241,7 +250,7 @@ class TestDropoffReleaseVerification(unittest.TestCase):
         sensor = MagicMock()
         sensor.is_vacuum_detected.return_value = False
         sensor.is_healthy.return_value = False
-        executor = SimpleNamespace(_enable_vacuum_pump=True, _vacuum_sensor=sensor)
+        executor = SimpleNamespace(_is_vacuum_pump_enabled=lambda: True, _vacuum_sensor=sensor)
 
         ok, message = _verify_workpiece_released(executor)
 
@@ -303,6 +312,9 @@ class TestNormalizePivotConfig(unittest.TestCase):
             ),
         ]
 
+        for waypoint in waypoints:
+            waypoint.motion_type = None
+            waypoint.blendR = None
         segments = serialize_ordered_motion_commands(build_paint_pickup_segments(waypoints))
 
         self.assertEqual(
@@ -333,6 +345,29 @@ class TestPaintPathRotationHelpers(unittest.TestCase):
 
 
 class TestPaintWorkpiecePathExecutor(unittest.TestCase):
+    def test_prepared_execution_refreshes_settings_and_scales_acceleration_once(self):
+        settings = MagicMock()
+        settings.get_snapshot.return_value = PaintProcessConfig(
+            paint_process_acceleration_scale_percent=50.0,
+            enable_path_debug_plots=False,
+        )
+        robot = MagicMock()
+        executor = _make_executor(robot_service=robot, paint_process_config_service=settings)
+        executor._pickup.build_plan = MagicMock(return_value=SimpleNamespace(contact_mode="height_measure"))
+        executor._pickup.execute = MagicMock(return_value=(True, ""))
+        executor._paint_contact.execute = MagicMock(return_value=(True, "", 3))
+        executor._edge_cleanup.should_run_after_xy_rz = MagicMock(return_value=False)
+        executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
+        with (
+            patch("src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler.execute_dropoff_preparation_for_executor", return_value=(True, "")),
+            patch("src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handler.execute_dropoff_release_for_executor", return_value=(True, "")),
+        ):
+            ok, message = executor.execute_paint_process(_execution_plan({"execution_path": [[0, 0, 0, 0, 0, 0]]}))
+        self.assertTrue(ok, message)
+        settings.get_snapshot.assert_called_once_with()
+        self.assertEqual(executor._paint_process_config().pickup_motion.approach_acc_percent, 25.0)
+        self.assertEqual(settings.get_snapshot.return_value.pickup_motion.approach_acc_percent, 50.0)
+
     def test_prepare_workpiece_execution_plan_builds_and_caches_execution_plan(self):
         expected_plan = _execution_plan()
         path_preparation_service = MagicMock()
@@ -365,13 +400,14 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             post_execute_callback=MagicMock(return_value=True),
         )
         executor._pickup = MagicMock()
-        executor._pickup.build_plan.return_value = SimpleNamespace(
+        executor._pickup.build_plan.return_value = PickupPlan(
+            strategy_name="test",
             motion_plan=SimpleNamespace(),
             vacuum_on_before_moves=False,
             change_plane_combined_with_first_contact=False,
             waypoints=[
-                SimpleNamespace(label="Moving to pickup approach pose", pose=[1, 2, 3, 4, 5, 6], vel_percent=11, acc_percent=21),
-                SimpleNamespace(label="Moving to staging offset before first pivot contact pose", pose=[7, 8, 9, 10, 11, 12], vel_percent=12, acc_percent=22),
+                PickupWaypoint(label="Moving to pickup approach pose", pose=[1, 2, 3, 4, 5, 6], vel_percent=11, acc_percent=21),
+                PickupWaypoint(label="Moving to staging offset before first pivot contact pose", pose=[7, 8, 9, 10, 11, 12], vel_percent=12, acc_percent=22),
             ],
         )
         executor._paint_contact.execute = MagicMock(
@@ -379,15 +415,25 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         )
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
         executor._edge_cleanup.should_run_after_xy_rz = MagicMock(return_value=False)
-        executor._prepare_dropoff_joint6_unwind = MagicMock(return_value=(True, ""))
-        executor._dropoff.execute = MagicMock(return_value=(True, ""))
+        preparation_patch = patch(
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler.execute_dropoff_preparation_for_executor",
+            return_value=(True, ""),
+        )
+        self.addCleanup(preparation_patch.stop)
+        prepare_dropoff = preparation_patch.start()
+        release_patch = patch(
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handler.execute_dropoff_release_for_executor",
+            MagicMock(return_value=(True, '')),
+        )
+        self.addCleanup(release_patch.stop)
+        release_mock = release_patch.start()
         control = PaintExecutionControl()
         plan = _execution_plan({"execution_path": [[0, 0, 0, 0, 0, 0]]})
         command_path = [[13, 14, 15, 16, 17, 18], [19, 20, 21, 22, 23, 24]]
 
         def _collect_contact(_plan, **kwargs):
             kwargs["collected_command_paths"].append(command_path)
-            kwargs["collected_command_jobs"].append({"pattern_type": "Path", "vel": 33, "acc": 44})
+            kwargs["collected_command_jobs"].append(PaintContactCommandJob(1, "Path", 33, 44))
             return True, "", len(command_path)
 
         executor._paint_contact.execute.side_effect = _collect_contact
@@ -398,13 +444,13 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         executor._paint_contact.execute.assert_called_once()
         self.assertFalse(executor._paint_contact.execute.call_args.kwargs["execute_robot"])
         robot_service.execute_ordered_motion_chain.assert_called_once()
-        segments = robot_service.execute_ordered_motion_chain.call_args.args[0]
-        self.assertEqual(["ptp", "ptp", "path"], [segment["type"] for segment in segments])
-        self.assertEqual(command_path, segments[-1]["path"])
-        self.assertEqual("paint_contact_1:Path", segments[-1]["label"])
+        segments = serialize_ordered_motion_commands(robot_service.execute_ordered_motion_chain.call_args.kwargs["segments"])
+        self.assertEqual(["ptp", "ptp", "linear", "path", "unwind_joint6"], [segment["type"] for segment in segments])
+        self.assertEqual(command_path, segments[-2]["path"])
+        self.assertEqual("paint_contact_1:Path", segments[-2]["label"])
         self.assertTrue(segments[-1]["protected"])
-        executor._prepare_dropoff_joint6_unwind.assert_called_once()
-        executor._dropoff.execute.assert_called_once_with(plan)
+        prepare_dropoff.assert_called_once_with(executor)
+        release_mock.assert_called_once_with(executor, next_cycle_start=None)
 
     def test_controlled_paint_retries_ordered_chain_when_pause_resume_happens_before_stop_result(self):
         robot_service = MagicMock()
@@ -421,26 +467,37 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             post_execute_callback=MagicMock(return_value=True),
         )
         executor._pickup = MagicMock()
-        executor._pickup.build_plan.return_value = SimpleNamespace(
+        executor._pickup.build_plan.return_value = PickupPlan(
+            strategy_name="test",
             motion_plan=SimpleNamespace(),
             vacuum_on_before_moves=False,
             change_plane_combined_with_first_contact=False,
             waypoints=[
-                SimpleNamespace(label="Moving to pickup approach pose", pose=[1, 2, 3, 4, 5, 6], vel_percent=11, acc_percent=21),
-                SimpleNamespace(label="Moving to staging offset before first pivot contact pose", pose=[7, 8, 9, 10, 11, 12], vel_percent=12, acc_percent=22),
+                PickupWaypoint(label="Moving to pickup approach pose", pose=[1, 2, 3, 4, 5, 6], vel_percent=11, acc_percent=21),
+                PickupWaypoint(label="Moving to staging offset before first pivot contact pose", pose=[7, 8, 9, 10, 11, 12], vel_percent=12, acc_percent=22),
             ],
         )
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
         executor._edge_cleanup.should_run_after_xy_rz = MagicMock(return_value=False)
-        executor._prepare_dropoff_joint6_unwind = MagicMock(return_value=(True, ""))
-        executor._dropoff.execute = MagicMock(return_value=(True, ""))
+        preparation_patch = patch(
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler.execute_dropoff_preparation_for_executor",
+            return_value=(True, ""),
+        )
+        self.addCleanup(preparation_patch.stop)
+        prepare_dropoff = preparation_patch.start()
+        release_patch = patch(
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handler.execute_dropoff_release_for_executor",
+            MagicMock(return_value=(True, '')),
+        )
+        self.addCleanup(release_patch.stop)
+        release_mock = release_patch.start()
         control = PaintExecutionControl()
         plan = _execution_plan({"execution_path": [[0, 0, 0, 0, 0, 0]]})
         command_path = [[13, 14, 15, 16, 17, 18], [19, 20, 21, 22, 23, 24]]
 
         def _collect_contact(_plan, **kwargs):
             kwargs["collected_command_paths"].append(command_path)
-            kwargs["collected_command_jobs"].append({"pattern_type": "Path", "vel": 33, "acc": 44})
+            kwargs["collected_command_jobs"].append(PaintContactCommandJob(1, "Path", 33, 44))
             return True, "", len(command_path)
 
         def _execute_chain(*_args, **_kwargs):
@@ -458,8 +515,8 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
 
         self.assertTrue(ok, msg)
         self.assertEqual(2, robot_service.execute_ordered_motion_chain.call_count)
-        retry_segments = robot_service.execute_ordered_motion_chain.call_args_list[1].args[0]
-        self.assertEqual(["ptp", "path"], [segment["type"] for segment in retry_segments])
+        retry_segments = serialize_ordered_motion_commands(robot_service.execute_ordered_motion_chain.call_args_list[1].kwargs["segments"])
+        self.assertEqual(["ptp", "linear", "path", "unwind_joint6"], [segment["type"] for segment in retry_segments])
         self.assertEqual("Moving to staging offset before first pivot contact pose", retry_segments[0]["label"])
 
     def test_pause_current_execution_stops_non_protected_ordered_segment(self):
@@ -531,35 +588,22 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         vacuum.turn_on.assert_not_called()
         vacuum.turn_off.assert_not_called()
 
-    def test_execute_pickup_and_release_at_position_uses_pickup_lift_then_release_pose(self):
+    def test_explicit_magazine_transfer_orders_pickup_lift_then_release_pose(self):
         events = []
         robot_service = MagicMock()
         robot_service.execute_ordered_motion_chain.side_effect = (
-            lambda **kwargs: events.append([segment["label"] for segment in kwargs["segments"]]) or 0
+            lambda **kwargs: events.append([segment["label"] for segment in serialize_ordered_motion_commands(kwargs["segments"])]) or 0
         )
         executor = _make_executor(robot_service=robot_service)
-        transfer_plan = PickupTransferPlan(
-            pickup_approach_pose=[1, 2, 103, 180, 0, 10],
-            pickup_pose=[1, 2, 3, 180, 0, 10],
-            lift_pose=[1, 2, 23, 180, 0, 10],
-            align_pose=[1, 2, 103, 180, 0, 0],
-            stage_transition_poses=[],
-            staged_pose=[4, 5, 6, 180, 0, 0],
-            change_plane_pose=[1, 2, 103, 180, 0, 0],
-            paint_pivot_pose=[4, 5, 6, 180, 0, 0],
-        )
-        executor._pickup = MagicMock()
-        executor._pickup.build_plan.return_value = SimpleNamespace(
-            motion_plan=transfer_plan,
-            vacuum_on_before_moves=True,
-        )
-        executor._motion.turn_vacuum_on = MagicMock(side_effect=lambda: events.append("vacuum_on") or (True, ""))
+        executor._motion.turn_vacuum_on = MagicMock(side_effect=lambda **_kwargs: events.append("vacuum_on") or (True, ""))
         executor._motion.turn_vacuum_off = MagicMock(return_value=(True, ""))
         executor._motion.move_pickup_phase = MagicMock(return_value=True)
 
-        ok, msg = executor.execute_pickup_and_release_at_position(
-            _execution_plan({"execution_path": [[0, 0, 0, 0, 0, 0]], "pickup_xy": [1, 2]}),
-            [10, 20, 30, 180, 0, 0],
+        ok, msg = execute_magazine_pickup_release(
+            SimpleNamespace(_path_executor=executor),
+            pickup_xy=(1.0, 2.0), pickup_rz=10.0,
+            pickup_base_pose=[0.0, 0.0, 0.0, 180.0, 0.0, 0.0],
+            release_pose=[10.0, 20.0, 30.0, 180.0, 0.0, 0.0],
             release_label="CALIBRATION",
         )
 
@@ -592,13 +636,13 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         )
         robot_service = MagicMock()
         robot_service.execute_ordered_motion_chain.side_effect = (
-            lambda **kwargs: events.append([segment["label"] for segment in kwargs["segments"]]) or 0
+            lambda **kwargs: events.append([segment["label"] for segment in serialize_ordered_motion_commands(kwargs["segments"])]) or 0
         )
         executor = _make_executor(
             robot_service=robot_service,
             paint_process_config_service=config_service,
         )
-        executor._motion.turn_vacuum_on = MagicMock(side_effect=lambda: events.append("vacuum_on") or (True, ""))
+        executor._motion.turn_vacuum_on = MagicMock(side_effect=lambda **_kwargs: events.append("vacuum_on") or (True, ""))
         executor._motion.turn_vacuum_off = MagicMock(return_value=(True, ""))
         executor._motion.move_pickup_phase = MagicMock(return_value=True)
 
@@ -619,7 +663,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         expected_lift_z = expected_pickup_z + PAINT_PROCESS_CONFIG.pickup_motion.initial_lift_clearance_mm
         executor._motion.move_pickup_phase.assert_not_called()
         robot_service.execute_ordered_motion_chain.assert_called_once()
-        segments = robot_service.execute_ordered_motion_chain.call_args.kwargs["segments"]
+        segments = serialize_ordered_motion_commands(robot_service.execute_ordered_motion_chain.call_args.kwargs["segments"])
         self.assertEqual(
             [
                 "vacuum_on",
@@ -648,7 +692,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             )
         )
         robot_service = MagicMock()
-        robot_service.get_current_position.return_value = [10.5, 21.0, 75.0, 180.0, 0.0, 0.0]
+        robot_service.get_current_position_fresh.return_value = [10.5, 21.0, 75.0, 180.0, 0.0, 0.0]
         robot_service.execute_ordered_motion_chain.return_value = 0
         executor = _make_executor(
             robot_service=robot_service,
@@ -671,7 +715,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
 
         self.assertTrue(ok, msg)
         robot_service.execute_ordered_motion_chain.assert_called_once()
-        segments = robot_service.execute_ordered_motion_chain.call_args.kwargs["segments"]
+        segments = serialize_ordered_motion_commands(robot_service.execute_ordered_motion_chain.call_args.kwargs["segments"])
         self.assertEqual(
             ["Moving picked workpiece to CALIBRATION release pose"],
             [segment["label"] for segment in segments],
@@ -681,20 +725,27 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
     def test_ordered_non_contact_motion_resume_retries_remaining_waypoints(self):
         control = PaintExecutionControl()
         robot_service = MagicMock()
-        robot_service.get_current_position.return_value = [5.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        robot_service.execute_ordered_motion_chain.side_effect = [-14, 0]
+        robot_service.get_current_position_fresh.return_value = [5.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        robot_service.get_execution_status.return_value = {"ordered_motion_chain": {"active": True, "current_segment_index": 1}}
         executor = _make_executor(robot_service=robot_service)
         executor._active_execution_control = control
         segments = [
-            {"type": "linear", "label": "first", "position": [0, 0, 0, 0, 0, 0], "vel": 10, "acc": 10},
-            {"type": "linear", "label": "second", "position": [10, 0, 0, 0, 0, 0], "vel": 10, "acc": 10},
+            OrderedPositionCommand("first", OrderedMotionType.LINEAR, (0, 0, 0, 0, 0, 0), OrderedMotionProfile(10, 10)),
+            OrderedPositionCommand("second", OrderedMotionType.LINEAR, (10, 0, 0, 0, 0, 0), OrderedMotionProfile(10, 10)),
         ]
         result = {}
 
         def _run():
             result["ok"] = executor._motion.move_ordered_pickup_sequence("resume test", segments)
 
-        control.request_pause()
+        def execute_chain(**_kwargs):
+            if robot_service.execute_ordered_motion_chain.call_count == 1:
+                control.request_pause()
+                executor.pause_current_execution()
+                return -14
+            return 0
+
+        robot_service.execute_ordered_motion_chain.side_effect = execute_chain
         thread = threading.Thread(target=_run)
         thread.start()
         for _ in range(100):
@@ -709,7 +760,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         self.assertFalse(thread.is_alive())
         self.assertTrue(result["ok"])
         self.assertEqual(robot_service.execute_ordered_motion_chain.call_count, 2)
-        retry_segments = robot_service.execute_ordered_motion_chain.call_args_list[1].kwargs["segments"]
+        retry_segments = serialize_ordered_motion_commands(robot_service.execute_ordered_motion_chain.call_args_list[1].kwargs["segments"])
         self.assertEqual(["second"], [segment["label"] for segment in retry_segments])
 
     def test_execute_magazine_pickup_release_fails_without_ordered_chain(self):
@@ -912,7 +963,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         safe_pose = [70.0, 80.0, 190.0, 180.0, 0.0, 5.0]
         config_service = MagicMock()
         config_service.get_snapshot.return_value = PaintProcessConfig(
-            safe_travel=PaintSafeTravelConfig(enabled=True, position=safe_pose)
+            safe_travel=PaintSafeTravelConfig(enabled=True, positions=[{"position": safe_pose, "vel_percent": 12.0, "acc_percent": 13.0, "motion_type": "ptp", "blendR": 0.0}])
         )
         executor = _make_executor(
             robot_service=None,
@@ -945,8 +996,8 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         )
         safe_waypoint = pickup_plan.waypoints[labels.index("Safe travel waypoint 1")]
         self.assertEqual(safe_pose, safe_waypoint.pose)
-        self.assertEqual(PAINT_PROCESS_CONFIG.pickup_motion.stage_transition_vel_percent, safe_waypoint.vel_percent)
-        self.assertEqual(PAINT_PROCESS_CONFIG.pickup_motion.stage_transition_acc_percent, safe_waypoint.acc_percent)
+        self.assertEqual(12.0, safe_waypoint.vel_percent)
+        self.assertEqual(13.0, safe_waypoint.acc_percent)
 
     def test_enabled_safe_travel_blocks_pickup_plan_when_group_position_is_missing(self):
         config_service = MagicMock()
@@ -977,7 +1028,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
 
         self.assertIsNone(pickup_plan)
         self.assertEqual(
-            "Safe travel pose is enabled but no valid 6-axis pose is configured",
+            "Safe travel is enabled but no valid 6-axis waypoint is configured",
             executor._last_safe_travel_error,
         )
 
@@ -1366,7 +1417,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             paint_pivot_pose=[30.0, 40.0, 110.0, 90.0, 0.0, 15.0],
         )
 
-        ok, message = executor._prepare_dropoff_joint6_unwind()
+        ok, message = execute_dropoff_preparation_for_executor(executor)
 
         self.assertTrue(ok, message)
         self.assertEqual(["unwind"], events)
@@ -1388,7 +1439,8 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             paint_pivot_pose=[30.0, 40.0, 110.0, 90.0, 0.0, 15.0],
         )
 
-        segments, final_pose = executor._ordered_dropoff_preparation_segments()
+        commands, final_pose = build_ordered_dropoff_preparation_segments(executor)
+        segments = serialize_ordered_motion_commands(commands)
 
         self.assertEqual(["unwind_joint6"], [segment["type"] for segment in segments])
         self.assertEqual(["prepare_dropoff_unwind"], [segment["label"] for segment in segments])
@@ -1412,12 +1464,13 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             paint_pivot_pose=[284.599, 404.100, 101.129, -178.852, -0.014, 0.0],
         )
 
-        segments, final_pose = executor._ordered_dropoff_preparation_segments()
+        commands, final_pose = build_ordered_dropoff_preparation_segments(executor)
+        segments = serialize_ordered_motion_commands(commands)
 
         self.assertEqual(["prepare_dropoff_unwind"], [segment["label"] for segment in segments])
-        self.assertIsNone(final_pose)
+        self.assertEqual(executor._last_process_end_pose, final_pose)
 
-    def test_xy_rz_dropoff_releases_at_current_pose_without_restore_move(self):
+    def test_xy_rz_dropoff_rejects_missing_movement_group_without_motion(self):
         robot_service = MagicMock()
         robot_service.move_ptp.return_value = True
         executor = _make_executor(
@@ -1439,7 +1492,8 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
 
         ok, message = executor._dropoff.execute(_execution_plan({"execution_path": [[0, 0, 0, 0, 0, 0]]}))
 
-        self.assertTrue(ok, message)
+        self.assertFalse(ok)
+        self.assertEqual("Dropoff movement group 'Dropoff' is not configured", message)
         robot_service.move_ptp.assert_not_called()
 
     def test_xy_rz_movement_group_dropoff_moves_to_configured_group_before_release(self):
@@ -1449,7 +1503,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         config_service.get_snapshot.return_value = PaintProcessConfig(
             pivot_motion_plane="xy_z_rz",
             dropoff=PaintDropoffConfig(
-                strategy="movement_group",
+                strategy=DropoffStrategy.MOVEMENT_GROUP,
                 release_align_vel_percent=12.0,
                 release_align_acc_percent=13.0,
             ),
@@ -1480,7 +1534,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         config_service.get_snapshot.return_value = PaintProcessConfig(
             pivot_motion_plane="xy_z_rz",
             dropoff=PaintDropoffConfig(
-                strategy="movement_group",
+                strategy=DropoffStrategy.MOVEMENT_GROUP,
                 release_align_vel_percent=12.0,
                 release_align_acc_percent=13.0,
             ),
@@ -1494,7 +1548,8 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         executor._configured_contact_motion_plane = "xy_z_rz"
         executor._refresh_paint_process_config_snapshot()
 
-        segments, final_pose = executor._ordered_dropoff_preparation_segments()
+        commands, final_pose = build_ordered_dropoff_preparation_segments(executor)
+        segments = serialize_ordered_motion_commands(commands)
 
         self.assertEqual(["prepare_dropoff_align", "prepare_dropoff_unwind"], [segment["label"] for segment in segments])
         self.assertEqual([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], final_pose)
@@ -1507,7 +1562,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         config_service.get_snapshot.return_value = PaintProcessConfig(
             pivot_motion_plane="xy_z_rz",
             dropoff=PaintDropoffConfig(
-                strategy="movement_group",
+                strategy=DropoffStrategy.MOVEMENT_GROUP,
                 allow_sub_zero_dropoff=True,
                 release_align_vel_percent=12.0,
                 release_align_acc_percent=13.0,
@@ -1542,13 +1597,13 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         config_service.get_snapshot.return_value = PaintProcessConfig(
             pivot_motion_plane="xy_z_rz",
             dropoff=PaintDropoffConfig(
-                strategy="movement_group",
+                strategy=DropoffStrategy.MOVEMENT_GROUP,
                 release_align_vel_percent=12.0,
                 release_align_acc_percent=13.0,
             ),
             dropoff_safe_travel=PaintToDropoffSafeTravelConfig(
                 enabled=True,
-                position=safe_pose,
+                positions=[{"position": safe_pose, "vel_percent": 12.0, "acc_percent": 13.0, "motion_type": "ptp", "blendR": 0.0}],
             ),
         )
         executor = _make_executor(
@@ -1560,10 +1615,11 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         executor._configured_contact_motion_plane = "xy_z_rz"
         executor._refresh_paint_process_config_snapshot()
 
-        segments, final_pose = executor._ordered_dropoff_preparation_segments()
+        commands, final_pose = build_ordered_dropoff_preparation_segments(executor)
+        segments = serialize_ordered_motion_commands(commands)
 
         self.assertEqual(
-            ["prepare_dropoff_safe_travel", "prepare_dropoff_align", "prepare_dropoff_unwind"],
+            ["prepare_dropoff_safe_travel_1", "prepare_dropoff_align", "prepare_dropoff_unwind"],
             [segment["label"] for segment in segments],
         )
         self.assertEqual(safe_pose, segments[0]["position"])
@@ -1585,17 +1641,17 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         executor._configured_contact_motion_plane = "xy_z_rz"
         executor._refresh_paint_process_config_snapshot()
 
-        ok, message = executor._prepare_dropoff_joint6_unwind()
+        ok, message = execute_dropoff_preparation_for_executor(executor)
 
         self.assertFalse(ok)
-        self.assertEqual("Pivot paint finished, but paint-to-dropoff safe travel pose is not configured", message)
+        self.assertEqual("Pivot paint finished, but paint-to-dropoff safe travel waypoints are not configured", message)
 
     def test_xz_ry_ordered_dropoff_preparation_uses_configured_dropoff_group(self):
         config_service = MagicMock()
         config_service.get_snapshot.return_value = PaintProcessConfig(
             pivot_motion_plane="xz_y_ry",
             dropoff=PaintDropoffConfig(
-                strategy="movement_group",
+                strategy=DropoffStrategy.MOVEMENT_GROUP,
                 release_align_vel_percent=14.0,
                 release_align_acc_percent=15.0,
             ),
@@ -1609,7 +1665,8 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         executor._configured_contact_motion_plane = "xz_y_ry"
         executor._refresh_paint_process_config_snapshot()
 
-        segments, final_pose = executor._ordered_dropoff_preparation_segments()
+        commands, final_pose = build_ordered_dropoff_preparation_segments(executor)
+        segments = serialize_ordered_motion_commands(commands)
 
         self.assertEqual(["prepare_dropoff_align", "prepare_dropoff_unwind"], [segment["label"] for segment in segments])
         self.assertEqual([10.0, 20.0, 30.0, 40.0, 50.0, 60.0], final_pose)
@@ -1638,11 +1695,23 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             post_execute_callback=post_execute_callback,
         )
         executor._robot_service.execute_ordered_motion_chain = None
+        # Use the existing non-combined branch to isolate process control from planning.
+        executor._pickup.build_plan = MagicMock(return_value=SimpleNamespace(contact_mode="height_measure"))
         executor._pickup.execute = MagicMock(return_value=(True, "pickup ok"))
         executor._paint_contact.execute = MagicMock(return_value=(True, "", 3))
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
-        executor._prepare_dropoff_joint6_unwind = MagicMock(return_value=(True, ""))
-        executor._dropoff.execute = MagicMock(return_value=(True, ""))
+        preparation_patch = patch(
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler.execute_dropoff_preparation_for_executor",
+            return_value=(True, ""),
+        )
+        self.addCleanup(preparation_patch.stop)
+        prepare_dropoff = preparation_patch.start()
+        release_patch = patch(
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handler.execute_dropoff_release_for_executor",
+            MagicMock(return_value=(True, '')),
+        )
+        self.addCleanup(release_patch.stop)
+        release_mock = release_patch.start()
         plan = _execution_plan({"execution_path": [[0, 0, 0, 0, 0, 0]]})
 
         ok, msg = executor.execute_paint_process(plan)
@@ -1658,11 +1727,23 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             post_execute_callback=MagicMock(return_value=True),
         )
         executor._robot_service.execute_ordered_motion_chain = None
+        # Use the existing non-combined branch to isolate process control from planning.
+        executor._pickup.build_plan = MagicMock(return_value=SimpleNamespace(contact_mode="height_measure"))
         executor._pickup.execute = MagicMock(return_value=(True, "pickup ok"))
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
         executor._edge_cleanup.should_run_after_xy_rz = MagicMock(return_value=False)
-        executor._prepare_dropoff_joint6_unwind = MagicMock(return_value=(True, ""))
-        executor._dropoff.execute = MagicMock(return_value=(True, ""))
+        preparation_patch = patch(
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler.execute_dropoff_preparation_for_executor",
+            return_value=(True, ""),
+        )
+        self.addCleanup(preparation_patch.stop)
+        prepare_dropoff = preparation_patch.start()
+        release_patch = patch(
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handler.execute_dropoff_release_for_executor",
+            MagicMock(return_value=(True, '')),
+        )
+        self.addCleanup(release_patch.stop)
+        release_mock = release_patch.start()
         plan = _execution_plan({"execution_path": [[0, 0, 0, 0, 0, 0]]})
         result = {}
 
@@ -1677,19 +1758,19 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
 
         thread.start()
         for _ in range(100):
-            if executor._paint_contact.execute.called and not executor._dropoff.execute.called:
+            if executor._paint_contact.execute.called and not release_mock.called:
                 break
             time.sleep(0.01)
 
         self.assertTrue(thread.is_alive())
-        executor._dropoff.execute.assert_not_called()
+        release_mock.assert_not_called()
 
         control.resume()
         thread.join(timeout=1.0)
 
         self.assertFalse(thread.is_alive())
         self.assertTrue(result["value"][0], result["value"][1])
-        executor._dropoff.execute.assert_called_once_with(plan)
+        release_mock.assert_called_once_with(executor, next_cycle_start=None)
 
     def test_execute_paint_process_logs_timing_summary_after_cycle(self):
         config_service = MagicMock()
@@ -1701,12 +1782,24 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             paint_process_config_service=config_service,
         )
         executor._robot_service.execute_ordered_motion_chain = None
+        # Use the existing non-combined branch to isolate process control from planning.
+        executor._pickup.build_plan = MagicMock(return_value=SimpleNamespace(contact_mode="height_measure"))
         executor._pickup.execute = MagicMock(return_value=(True, "pickup ok"))
         executor._paint_contact.execute = MagicMock(return_value=(True, "", 3))
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
         executor._edge_cleanup.should_run_after_xy_rz = MagicMock(return_value=False)
-        executor._prepare_dropoff_joint6_unwind = MagicMock(return_value=(True, ""))
-        executor._dropoff.execute = MagicMock(return_value=(True, ""))
+        preparation_patch = patch(
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler.execute_dropoff_preparation_for_executor",
+            return_value=(True, ""),
+        )
+        self.addCleanup(preparation_patch.stop)
+        prepare_dropoff = preparation_patch.start()
+        release_patch = patch(
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handler.execute_dropoff_release_for_executor",
+            MagicMock(return_value=(True, '')),
+        )
+        self.addCleanup(release_patch.stop)
+        release_mock = release_patch.start()
         plan = _execution_plan({"execution_path": [[0, 0, 0, 0, 0, 0]]})
 
         with (
@@ -1734,12 +1827,24 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             paint_process_config_service=config_service,
         )
         executor._robot_service.execute_ordered_motion_chain = None
+        # Use the existing non-combined branch to isolate process control from planning.
+        executor._pickup.build_plan = MagicMock(return_value=SimpleNamespace(contact_mode="height_measure"))
         executor._pickup.execute = MagicMock(return_value=(True, "pickup ok"))
         executor._paint_contact.execute = MagicMock(return_value=(True, "", 3))
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
         executor._edge_cleanup.should_run_after_xy_rz = MagicMock(return_value=False)
-        executor._prepare_dropoff_joint6_unwind = MagicMock(return_value=(True, ""))
-        executor._dropoff.execute = MagicMock(return_value=(True, ""))
+        preparation_patch = patch(
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler.execute_dropoff_preparation_for_executor",
+            return_value=(True, ""),
+        )
+        self.addCleanup(preparation_patch.stop)
+        prepare_dropoff = preparation_patch.start()
+        release_patch = patch(
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handler.execute_dropoff_release_for_executor",
+            MagicMock(return_value=(True, '')),
+        )
+        self.addCleanup(release_patch.stop)
+        release_mock = release_patch.start()
         plan = _execution_plan({"execution_path": [[0, 0, 0, 0, 0, 0]]})
 
         with (
@@ -1778,19 +1883,31 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             post_execute_callback=_calibration_return,
             paint_process_config_service=config_service,
         )
+        # Use the existing non-combined branch to isolate process control from planning.
+        executor._pickup.build_plan = MagicMock(return_value=SimpleNamespace(contact_mode="height_measure"))
         executor._pickup.execute = MagicMock(return_value=(True, "pickup ok"))
         executor._paint_contact.execute = MagicMock(return_value=(True, "", 3))
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
         executor._edge_cleanup.should_run_after_xy_rz = MagicMock(return_value=True)
         executor._edge_cleanup.execute_after_xy_rz_paint = MagicMock(side_effect=_cleanup)
-        executor._prepare_dropoff_joint6_unwind = MagicMock(return_value=(True, ""))
-        executor._dropoff.execute = MagicMock(return_value=(True, ""))
+        preparation_patch = patch(
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler.execute_dropoff_preparation_for_executor",
+            return_value=(True, ""),
+        )
+        self.addCleanup(preparation_patch.stop)
+        prepare_dropoff = preparation_patch.start()
+        release_patch = patch(
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handler.execute_dropoff_release_for_executor",
+            MagicMock(return_value=(True, '')),
+        )
+        self.addCleanup(release_patch.stop)
+        release_mock = release_patch.start()
         plan = _execution_plan({"execution_path": [[0, 0, 0, 0, 0, 0]]})
 
         ok, msg = executor.execute_paint_process(plan)
 
         self.assertTrue(ok, msg)
-        self.assertEqual([("cleanup", True), "calibration"], events)
+        self.assertEqual(["unwind", ("cleanup", True), "calibration"], events)
 
     def test_execute_paint_process_fails_when_post_execute_return_fails(self):
         executor = _make_executor(
@@ -1798,11 +1915,23 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             post_execute_callback=MagicMock(return_value=False),
         )
         executor._robot_service.execute_ordered_motion_chain = None
+        # Use the existing non-combined branch to isolate process control from planning.
+        executor._pickup.build_plan = MagicMock(return_value=SimpleNamespace(contact_mode="height_measure"))
         executor._pickup.execute = MagicMock(return_value=(True, "pickup ok"))
         executor._paint_contact.execute = MagicMock(return_value=(True, "", 3))
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
-        executor._prepare_dropoff_joint6_unwind = MagicMock(return_value=(True, ""))
-        executor._dropoff.execute = MagicMock(return_value=(True, ""))
+        preparation_patch = patch(
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler.execute_dropoff_preparation_for_executor",
+            return_value=(True, ""),
+        )
+        self.addCleanup(preparation_patch.stop)
+        prepare_dropoff = preparation_patch.start()
+        release_patch = patch(
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handler.execute_dropoff_release_for_executor",
+            MagicMock(return_value=(True, '')),
+        )
+        self.addCleanup(release_patch.stop)
+        release_mock = release_patch.start()
         plan = _execution_plan({"execution_path": [[0, 0, 0, 0, 0, 0]]})
 
         ok, msg = executor.execute_paint_process(plan)
@@ -1810,13 +1939,15 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual("Paint process finished, but return-to-calibration failed", msg)
 
-    def test_execute_paint_process_returns_to_calibration_after_paint_contact_failure(self):
+    def test_execute_paint_process_stops_without_return_after_paint_contact_failure(self):
         post_execute_callback = MagicMock(return_value=True)
         executor = _make_executor(
             robot_service=MagicMock(),
             post_execute_callback=post_execute_callback,
         )
         executor._robot_service.execute_ordered_motion_chain = None
+        # Use the existing non-combined branch to isolate process control from planning.
+        executor._pickup.build_plan = MagicMock(return_value=SimpleNamespace(contact_mode="height_measure"))
         executor._pickup.execute = MagicMock(return_value=(True, "pickup ok"))
         executor._paint_contact.execute = MagicMock(return_value=(False, "pivot failed", 0))
         plan = _execution_plan({"execution_path": [[0, 0, 0, 0, 0, 0]]})
@@ -1825,25 +1956,38 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
 
         self.assertFalse(ok)
         self.assertEqual("pivot failed", msg)
-        post_execute_callback.assert_called_once_with()
+        post_execute_callback.assert_not_called()
 
-    def test_execute_paint_process_reports_cleanup_failure_after_motion_failure(self):
+    def test_execute_paint_process_reports_dropoff_failure_without_return_motion(self):
         executor = _make_executor(
             robot_service=MagicMock(),
             post_execute_callback=MagicMock(return_value=False),
         )
         executor._robot_service.execute_ordered_motion_chain = None
+        # Use the existing non-combined branch to isolate process control from planning.
+        executor._pickup.build_plan = MagicMock(return_value=SimpleNamespace(contact_mode="height_measure"))
         executor._pickup.execute = MagicMock(return_value=(True, "pickup ok"))
         executor._paint_contact.execute = MagicMock(return_value=(True, "", 3))
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
-        executor._prepare_dropoff_joint6_unwind = MagicMock(return_value=(True, ""))
-        executor._dropoff.execute = MagicMock(return_value=(False, "restore failed"))
+        preparation_patch = patch(
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler.execute_dropoff_preparation_for_executor",
+            return_value=(True, ""),
+        )
+        self.addCleanup(preparation_patch.stop)
+        prepare_dropoff = preparation_patch.start()
+        release_patch = patch(
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handler.execute_dropoff_release_for_executor",
+            MagicMock(return_value=(False, 'restore failed')),
+        )
+        self.addCleanup(release_patch.stop)
+        release_mock = release_patch.start()
         plan = _execution_plan({"execution_path": [[0, 0, 0, 0, 0, 0]]})
 
         ok, msg = executor.execute_paint_process(plan)
 
         self.assertFalse(ok)
-        self.assertEqual("restore failed; additionally, return-to-calibration failed", msg)
+        self.assertEqual("restore failed", msg)
+        executor._post_execute_callback.assert_not_called()
 
     def test_build_executed_snapshot_series_rebases_preview_snapshot_to_executed_poses(self):
         pivot_config = _normalize_contact_motion_config(motion_plane="xy_z_rz")
