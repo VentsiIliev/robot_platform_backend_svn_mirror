@@ -55,6 +55,12 @@ install -o root -g root -m 0755 \
 install -o root -g root -m 0644 \
     "$source_dir/plproject-remote-support.service" \
     /etc/systemd/system/plproject-remote-support.service
+install -o root -g root -m 0644 \
+    "$source_dir/plproject-remote-support-expiry.service" \
+    /etc/systemd/system/plproject-remote-support-expiry.service
+install -o root -g root -m 0644 \
+    "$source_dir/plproject-remote-support-expiry.timer" \
+    /etc/systemd/system/plproject-remote-support-expiry.timer
 socket_temp=$(mktemp)
 trap 'rm -f "$socket_temp"' EXIT
 sed "s/@UI_USER@/$ui_user/g" "$source_dir/plproject-remote-support.socket.in" > "$socket_temp"
@@ -76,6 +82,7 @@ if [[ -n "$vendor_installer" ]]; then
         exit 1
     fi
 fi
+/usr/bin/python3 /usr/local/libexec/plproject-remote-support --expire
 if [[ ! -f "$state_dir/enabled" ]]; then
     # First installation defaults to OFF; the condition now blocks restarts.
     systemctl stop rustdesk.service
@@ -85,5 +92,6 @@ fi
 systemctl stop plproject-remote-support.service 2>/dev/null || true
 systemctl enable plproject-remote-support.socket
 systemctl restart plproject-remote-support.socket
+systemctl enable --now plproject-remote-support-expiry.timer
 echo "Remote support controller installed for $ui_user"
 echo "Current desired state: $(test -f "$state_dir/enabled" && echo ON || echo OFF)"

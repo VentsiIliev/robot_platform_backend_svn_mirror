@@ -13,7 +13,8 @@ def build_payload(destination: Path, vendor_installer: Path | None = None) -> No
     project = source.parents[1]
     destination.mkdir(parents=True, exist_ok=True)
     for name in ("install.sh", "plproject-remote-support.service",
-                 "plproject-remote-support.socket.in", "README.md"):
+                 "plproject-remote-support.socket.in", "README.md",
+                 "plproject-remote-support-expiry.service", "plproject-remote-support-expiry.timer"):
         shutil.copy2(source / name, destination / name)
     dropins = destination / "rustdesk.service.d"
     dropins.mkdir(exist_ok=True)

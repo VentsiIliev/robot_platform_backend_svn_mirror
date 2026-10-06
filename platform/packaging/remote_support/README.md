@@ -7,8 +7,8 @@ environment. Ubuntu must provide `/usr/bin/python3`, systemd, and an installed
 `rustdesk.service`.
 
 The platform installer invokes this automatically with the bundled vendor installer,
-using sudo for the system step and passing the desktop user. It preserves the saved
-ON/OFF state and defaults to OFF on first installation. To run the step manually:
+using sudo for the system step and passing the desktop user. It preserves a valid access window from the current boot and defaults to OFF
+on first installation. Legacy indefinite ON markers are invalidated during upgrade. To run the step manually:
 
 ```bash
 sudo bash installation/remote-support/install.sh ROBOT_UI_USER
@@ -43,7 +43,7 @@ when changing the supported branded release; packaging does not read a
 separate RustDesk source checkout.
 
 First installation defaults to OFF and ends any current RustDesk session.
-Upgrades preserve the customer choice. The HMI runs without administrator
+Upgrades preserve valid timed access windows without renewing their deadlines. The HMI runs without administrator
 privileges; it talks to the socket owned by its configured account.
 
 Provision RustDesk's relay/server settings separately. Its own `stop-service`
@@ -53,15 +53,17 @@ The support installer does not overwrite RustDesk connection credentials or
 desktop configuration. The product provisioning workflow must validate those
 settings before enabling remote support.
 
-The payload installs the helper under `/usr/local/libexec`, two systemd units,
+The payload installs the helper under `/usr/local/libexec`, four systemd units (controller, socket, expiry service, and expiry timer),
 and a RustDesk drop-in. Customer state remains under
-`/var/lib/plproject/remote-support/`, outside the application bundle. Missing
-state means OFF, including at boot. Do not remove the RustDesk gate while
+`/var/lib/plproject/remote-support/`, outside the application bundle. Missing, expired, or previous-boot state means OFF. The RustDesk
+ExecCondition validates the window before each startup; the expiry watchdog
+also removes expired permission and stops active sessions. Do not remove the RustDesk gate while
 uninstalling the application: that could restore RustDesk's normal boot start.
 A future package removal action must stop RustDesk before removing the gate.
 
-Verify the target Ubuntu image with OFF and ON across reboot, an upgrade in
-each state, and OFF during an active support session. Watch actions with:
+Verify the target Ubuntu image with OFF across reboot, timed ON followed by
+expiry with the GUI closed, an upgrade in each state, reboot invalidating ON,
+and OFF during an active support session. Watch actions with:
 
 ```bash
 journalctl -f -u plproject-remote-support.service -u rustdesk.service

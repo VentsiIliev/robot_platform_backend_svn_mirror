@@ -3,11 +3,12 @@ from typing import Callable, Optional
 
 from PyQt6.QtCore import QSize, Qt, QEvent, pyqtSignal
 from PyQt6.QtWidgets import (
-    QHBoxLayout, QPushButton, QFrame
+    QHBoxLayout, QPushButton, QFrame, QLabel
 )
 
 from pl_gui.shell.ui.icon_loader import load_icon
 from pl_gui.shell.ui.styles import BORDER, PRIMARY, PRIMARY_DARK
+from pl_gui.settings.settings_view.styles import BG_COLOR, ERROR_COLOR
 
 
 
@@ -79,6 +80,20 @@ class Header(QFrame):
         # Right stretch
         self.header_layout.addStretch()
 
+        self._remote_support_state = "disabled"
+        self.remote_support_badge = QLabel()
+        self.remote_support_badge.setFixedSize(48, 48)
+        self.remote_support_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.remote_support_badge.setPixmap(
+            load_icon("fa5s.desktop", color=ERROR_COLOR).pixmap(QSize(26, 26))
+        )
+        self.remote_support_badge.setStyleSheet(
+            f"background-color: {BG_COLOR}; border: 2px solid {ERROR_COLOR};"
+            "border-radius: 8px;"
+        )
+        self.remote_support_badge.hide()
+        self.header_layout.addWidget(self.remote_support_badge)
+
         # Platform shutdown button. Runtime wiring decides whether it is visible.
         self.power_toggle_button: QPushButton = QPushButton()
         self.power_toggle_button.setIcon(load_icon('fa5s.power-off', color=PRIMARY))
@@ -129,7 +144,6 @@ class Header(QFrame):
         self.header_layout.addWidget(self.userAccountButton)
 
         # FPS Label
-        from PyQt6.QtWidgets import QLabel
         self.fps_label = QLabel("FPS: --")
         self.fps_label.setStyleSheet("font-size: 14px; color: black;")
         # self.header_layout.addWidget(self.fps_label)
@@ -178,6 +192,18 @@ class Header(QFrame):
 
     def retranslateUi(self) -> None:
         self.power_toggle_button.setToolTip(self.tr("Turn Off Platform"))
+        source = "Remote session active"
+        translated = self.tr(source) or source
+        self.remote_support_badge.setToolTip(translated)
+        self.remote_support_badge.setAccessibleName(translated)
+
+    def set_remote_support_state(self, state: str) -> None:
+        """Display confirmed session state supplied by the shell controller."""
+        if state not in ("disabled", "ready", "connected", "unavailable"):
+            raise ValueError("Unknown remote support state")
+        self._remote_support_state = state
+        self.remote_support_badge.setVisible(state == "connected")
+        self.retranslateUi()
 
     def changeEvent(self, event: QEvent) -> None:
         if event.type() == QEvent.Type.LanguageChange:

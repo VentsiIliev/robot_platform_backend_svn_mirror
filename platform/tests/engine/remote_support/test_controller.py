@@ -88,7 +88,9 @@ class RemoteSupportControllerTests(unittest.TestCase):
                 thread = threading.Thread(target=serve_once)
                 thread.start()
                 expected = {"enabled": False, "active": False, "service_state": "inactive"}
-                with patch.object(controller, "_status", return_value=expected):
+                with patch.object(controller, "_status", return_value=expected), \
+                     patch.object(controller, "STATE_DIR", Path(temp)), \
+                     patch.object(controller, "ENABLE_MARKER", Path(temp) / "enabled"):
                     self.assertEqual(RemoteSupportClient(socket_path).status(), expected)
                 thread.join(timeout=2)
                 self.assertFalse(thread.is_alive())

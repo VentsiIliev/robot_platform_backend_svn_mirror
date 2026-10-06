@@ -33,7 +33,8 @@ class NetworkSettingsController(IApplicationController, BackgroundWorker):
     def load(self) -> None:
         self._model.load()
         QTimer.singleShot(0, self._refresh_all)
-        self._remote_timer.start()
+        if self._view.has_remote_support:
+            self._remote_timer.start()
 
     def stop(self) -> None:
         self._stopped = True
@@ -55,7 +56,7 @@ class NetworkSettingsController(IApplicationController, BackgroundWorker):
             self._refresh_remote_support()
 
     def _refresh_remote_support(self) -> None:
-        if self._stopped or self._busy["remote"]:
+        if not self._view.has_remote_support or self._stopped or self._busy["remote"]:
             return
         self._set_busy("remote", True)
         self._run_in_thread(

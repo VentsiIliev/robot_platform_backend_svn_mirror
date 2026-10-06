@@ -9,7 +9,10 @@
     "folder.tests": "Тестове"
   },
   "Header": {
-    "Turn Off Platform": "Изключване на платформата"
+    "Turn Off Platform": "Изключване на платформата",
+    "Remote session active": "Активна отдалечена сесия",
+    "Remote support ready": "Отдалечената поддръжка е готова",
+    "Remote support status unavailable": "Състоянието на отдалечената поддръжка е недостъпно"
   },
   "StartupSplashView": {
     "Preparing runtime services": "Подготовка на runtime услугите",

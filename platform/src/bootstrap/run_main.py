@@ -173,6 +173,18 @@ def main() -> None:
     shell.header.language_selector.languageChanged.connect(localization_svc.set_language)
     shell.header.power_toggle_button.setVisible(show_power_off_button)
 
+    remote_support_monitor = None
+    if sys.platform == "linux" and bootstrap_provider.system_class.__module__.startswith("src.robot_systems.paint."):
+        from src.engine.remote_support.client import RemoteSupportClient
+        from src.engine.remote_support.session_client import RustDeskSessionClient
+        from src.bootstrap.shell_remote_support_controller import ShellRemoteSupportController
+
+        remote_support_monitor = ShellRemoteSupportController(
+            shell.header, RemoteSupportClient(timeout=2), RustDeskSessionClient(),
+        )
+        qt_app.aboutToQuit.connect(remote_support_monitor.stop)
+        remote_support_monitor.start()
+
     shutdown_requested = {"value": False}
 
     def _on_power_off_requested() -> None:
@@ -319,6 +331,8 @@ def main() -> None:
     try:
         exit_code = qt_app.exec()
     finally:
+        if remote_support_monitor is not None:
+            remote_support_monitor.stop()
         if startup_splash_coordinator is not None:
             try:
                 startup_splash_coordinator.stop()

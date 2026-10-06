@@ -131,6 +131,9 @@ def _build_application_specs(config=paint_system_config):
         (config.NETWORK_SETTINGS_APP,
          ApplicationSpec(name="NetworkSettings", folder_id=2, icon="fa5s.wifi",
                          factory=application_wiring._build_network_settings_application)),
+        (config.REMOTE_SUPPORT_APP,
+         ApplicationSpec(name="RemoteSupport", folder_id=3, icon="fa5s.desktop",
+                         factory=application_wiring._build_remote_support_application)),
         (config.DEVICE_CONTROL_APP,
          ApplicationSpec(name="DeviceControl", folder_id=2, icon="fa5s.sliders-h",
                          factory=application_wiring._build_device_control_application)),
@@ -391,6 +394,7 @@ class PaintRobotSystem(BaseRobotSystem):
         protected_app_role_values={
             "user_management": ["Admin"],
             "softwareupdate": ["Admin"],
+            "remotesupport": ["Admin"],
             "paintmotionrecipe": ["Admin", "Developer"],
             "contourmatchingtester": ["Admin", "Developer"],
         },

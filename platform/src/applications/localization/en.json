@@ -9,7 +9,10 @@
     "folder.tests": "Tests"
   },
   "Header": {
-    "Turn Off Platform": "Turn Off Platform"
+    "Turn Off Platform": "Turn Off Platform",
+    "Remote session active": "Remote session active",
+    "Remote support ready": "Remote support ready",
+    "Remote support status unavailable": "Remote support status unavailable"
   },
   "StartupSplashView": {
     "Preparing runtime services": "Preparing runtime services",

@@ -108,7 +108,8 @@ class NetworkSettingsView(IApplicationView):
     remote_support_requested = pyqtSignal(bool)
     remote_support_refresh_requested = pyqtSignal()
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None, *, show_remote_support: bool = True) -> None:
+        self.has_remote_support = show_remote_support
         super().__init__("NetworkSettings", parent)
 
     def setup_ui(self) -> None:
@@ -130,7 +131,8 @@ class NetworkSettingsView(IApplicationView):
         self._wired_list = self._build_page(
             "wired", ("refresh", "connect", "disconnect", "ipv4")
         )
-        self._build_remote_support_page()
+        if self.has_remote_support:
+            self._build_remote_support_page()
         self._tabs.currentChanged.connect(self._on_tab_changed)
         self._buttons["wifi"]["refresh"].clicked.connect(self.refresh_wifi_requested.emit)
         self._buttons["wifi"]["connect"].clicked.connect(self._on_connect_wifi)
@@ -261,11 +263,11 @@ class NetworkSettingsView(IApplicationView):
         self.remote_support_requested.emit(enabled)
 
     def _on_tab_changed(self, index: int) -> None:
-        if index == 2:
+        if self.has_remote_support and index == 2:
             self.remote_support_refresh_requested.emit()
 
     def is_remote_support_visible(self) -> bool:
-        return self.isVisible() and self._tabs.currentIndex() == 2
+        return self.has_remote_support and self.isVisible() and self._tabs.currentIndex() == 2
 
     def set_remote_support_status(self, status: dict) -> None:
         self._remote_error = None
@@ -345,7 +347,8 @@ class NetworkSettingsView(IApplicationView):
     def _sync_actions(self) -> None:
         if not hasattr(self, "_busy"):
             return
-        self._remote_switch.setEnabled(self._remote_enabled is not None and not self._busy["remote"])
+        if self.has_remote_support:
+            self._remote_switch.setEnabled(self._remote_enabled is not None and not self._busy["remote"])
         wifi = self._selected("wifi")
         wired = self._selected("wired")
         for kind, selected in (("wifi", wifi), ("wired", wired)):
@@ -424,10 +427,11 @@ class NetworkSettingsView(IApplicationView):
         self._title.setText(self.tr("Network Settings"))
         self._tabs.setTabText(0, self.tr("Wi-Fi"))
         self._tabs.setTabText(1, self.tr("Wired"))
-        self._tabs.setTabText(2, self.tr("Remote Support"))
-        self._remote_heading.setText(self.tr("Remote Support"))
-        self._remote_hint.setText(self.tr("Allow PL PROJECT support engineers to connect to this robot."))
-        self._update_remote_labels()
+        if self.has_remote_support:
+            self._tabs.setTabText(2, self.tr("Remote Support"))
+            self._remote_heading.setText(self.tr("Remote Support"))
+            self._remote_hint.setText(self.tr("Allow PL PROJECT support engineers to connect to this robot."))
+            self._update_remote_labels()
         for kind, source, hint in (
             ("wifi", "Wi-Fi networks", "Scan and manage nearby wireless networks."),
             ("wired", "Wired interfaces", "Connect and configure Ethernet interfaces."),

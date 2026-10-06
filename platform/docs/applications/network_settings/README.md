@@ -18,6 +18,10 @@ connects or disconnects them, and edits their IPv4 settings. Applying IPv4
 settings can briefly interrupt connectivity because the OS backend reactivates
 the connection.
 
+Paint hides the Remote Support page and registers a dedicated screen under
+Administration instead; see [Remote Support](../remote_support/README.md).
+Other systems can retain this optional tab.
+
 The Remote Support page uses the shared switch to show the saved customer
 choice and actual state of `rustdesk.service`. It communicates only with the
 local Unix socket `/run/plproject/remote-support.sock`; the app never invokes
@@ -36,11 +40,10 @@ The installer and systemd units are under `packaging/remote_support/`. Install
 them on each Ubuntu robot with
 `sudo packaging/remote_support/install.sh ROBOT_UI_USER`, where
 `ROBOT_UI_USER` is the account running the HMI. First
-installation defaults to OFF and stops RustDesk; reinstalling preserves the
-existing choice. The root-owned marker at
-`/var/lib/plproject/remote-support/enabled` stores ON. A drop-in condition on
-`rustdesk.service` prevents startup when that marker is absent, including at
-boot. The socket is owned by the HMI account with mode `0600`; ERP and Android
+installation defaults to OFF and stops RustDesk; reinstalling preserves only a valid, current-boot timed access window. The root-owned marker at
+`/var/lib/plproject/remote-support/enabled` stores a timed access window. A drop-in condition on
+`rustdesk.service` prevents startup when that marker is absent, expired, or
+from a previous boot. The socket is owned by the HMI account with mode `0600`; ERP and Android
 clients cannot call it directly.
 
 After installation, check OFF across a reboot, then test ON, OFF during an

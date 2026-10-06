@@ -1,0 +1,10 @@
+[Unit]
+Description=Watchdog for PL PROJECT remote support expiry
+
+[Timer]
+OnBootSec=1s
+OnUnitActiveSec=5s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
