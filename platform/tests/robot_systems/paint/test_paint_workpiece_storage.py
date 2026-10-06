@@ -10,6 +10,7 @@ import numpy as np
 
 from src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository import (
     JsonPaintWorkpieceRepository,
+    WorkpieceWriteError,
     _numpy_to_python,
 )
 from src.robot_systems.paint.domain.workpieces.service.paint_workpiece_service import (
@@ -89,6 +90,112 @@ class TestJsonPaintWorkpieceRepository(unittest.TestCase):
                 self.assertFalse(repo.delete(storage_id))
                 self.assertIsNone(repo.load_raw(storage_id))
                 self.assertIsNone(repo.get_thumbnail_bytes(storage_id))
+
+    def test_preparation_failures_preserve_existing_pair_and_hide_new_records(self):
+        module = "src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository"
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = JsonPaintWorkpieceRepository(tmp)
+            with patch(module + ".generate_thumbnail_bytes", return_value=b"original thumbnail"):
+                path = Path(repo.save({"name": "original"}))
+            storage_id = path.parent.name
+            thumb = path.parent / (storage_id + "_thumbnail.png")
+            original = path.read_bytes(), thumb.read_bytes()
+            for payload, thumbnail in [({"bad": object()}, b"png"), ({"name": "new"}, None), ({"name": "new"}, b"")]:
+                with self.subTest(payload=payload, thumbnail=thumbnail), patch(module + ".generate_thumbnail_bytes", return_value=thumbnail):
+                    with self.assertRaises(WorkpieceWriteError):
+                        repo.update(storage_id, payload)
+                    with self.assertRaises(WorkpieceWriteError):
+                        repo.save(payload)
+                    self.assertEqual((path.read_bytes(), thumb.read_bytes()), original)
+                    self.assertEqual(len(repo.list_all()), 1)
+                    self.assertEqual(list(Path(tmp).rglob('.paint-*')), [])
+            with patch(module + ".generate_thumbnail_bytes", side_effect=RuntimeError("encoder failed")):
+                ok, message = PaintWorkpieceService(repo).update(storage_id, {"name": "new"})
+                self.assertFalse(ok)
+                self.assertIn(storage_id, message)
+                self.assertIn("Thumbnail generation failed: encoder failed", message)
+
+    def test_json_publication_failure_restores_thumbnail(self):
+        import os
+        module = "src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository"
+        with tempfile.TemporaryDirectory() as tmp, patch(module + ".generate_thumbnail_bytes", return_value=b"original"):
+            repo = JsonPaintWorkpieceRepository(tmp)
+            path = Path(repo.save({"name": "original"}))
+            storage_id = path.parent.name
+            thumb = path.parent / (storage_id + "_thumbnail.png")
+            original = path.read_bytes(), thumb.read_bytes()
+            replace = os.replace
+            def fail_json(source, destination):
+                if str(destination) == str(path):
+                    raise OSError("JSON publication failed")
+                return replace(source, destination)
+            with patch(module + ".generate_thumbnail_bytes", return_value=b"new"), patch(module + ".os.replace", side_effect=fail_json):
+                with self.assertRaisesRegex(WorkpieceWriteError, "JSON publication failed"):
+                    repo.update(storage_id, {"name": "new"})
+            self.assertEqual((path.read_bytes(), thumb.read_bytes()), original)
+            self.assertEqual(len(repo.list_all()), 1)
+            self.assertFalse((path.parent / '.incomplete').exists())
+            self.assertEqual(list(path.parent.glob('.paint-*')), [])
+
+    def test_failed_rollback_blocks_record_and_preserves_recovery_files(self):
+        import os
+        module = "src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository"
+        with tempfile.TemporaryDirectory() as tmp, patch(module + ".generate_thumbnail_bytes", return_value=b"original"):
+            repo = JsonPaintWorkpieceRepository(tmp)
+            path = Path(repo.save({"name": "original"}))
+            storage_id = path.parent.name
+            replace = os.replace
+            calls = 0
+            def fail_after_thumbnail(source, destination):
+                nonlocal calls
+                calls += 1
+                if calls > 1:
+                    raise OSError("disk unavailable")
+                return replace(source, destination)
+            with patch(module + ".os.replace", side_effect=fail_after_thumbnail):
+                with self.assertRaisesRegex(WorkpieceWriteError, "rollback failed.*Record is blocked"):
+                    repo.update(storage_id, {"name": "new"})
+            self.assertEqual(repo.list_all(), [])
+            with self.assertRaisesRegex(WorkpieceWriteError, "recovery is required"):
+                repo.load_raw(storage_id)
+            staging = Path((path.parent / '.incomplete').read_text())
+            self.assertEqual((staging / 'previous_thumbnail.png').read_bytes(), b"original")
+
+    def test_update_write_and_thumbnail_publication_failures_preserve_pair(self):
+        module = "src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository"
+        with tempfile.TemporaryDirectory() as tmp, patch(module + ".generate_thumbnail_bytes", return_value=b"png"):
+            repo = JsonPaintWorkpieceRepository(tmp)
+            path = Path(repo.save({"name": "original"}))
+            storage_id = path.parent.name
+            thumb = path.parent / (storage_id + '_thumbnail.png')
+            original = path.read_bytes(), thumb.read_bytes()
+            for operation in ('os.fsync', 'os.replace'):
+                with self.subTest(operation=operation), patch(module + '.' + operation, side_effect=OSError("disk failure")):
+                    with self.assertRaisesRegex(WorkpieceWriteError, "disk failure"):
+                        repo.update(storage_id, {"name": "new"})
+                self.assertEqual((path.read_bytes(), thumb.read_bytes()), original)
+                self.assertFalse((path.parent / '.incomplete').exists())
+
+    def test_real_thumbnail_failure_does_not_publish_invalid_workpiece(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = JsonPaintWorkpieceRepository(tmp)
+            with self.assertRaisesRegex(WorkpieceWriteError, "Thumbnail generation failed"):
+                repo.save({"name": "missing contour"})
+            self.assertEqual(repo.list_all(), [])
+            path = repo.save({"name": "valid", "contour": [[0, 0], [10, 0], [10, 10]]})
+            storage_id = Path(path).parent.name
+            self.assertTrue(repo.get_thumbnail_bytes(storage_id).startswith(b'\x89PNG'))
+
+    def test_staging_write_and_new_publication_failures_leave_no_record(self):
+        module = "src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository"
+        with tempfile.TemporaryDirectory() as tmp, patch(module + ".generate_thumbnail_bytes", return_value=b"png"):
+            repo = JsonPaintWorkpieceRepository(tmp)
+            for operation in ('os.fsync', 'os.rename'):
+                with self.subTest(operation=operation), patch(module + '.' + operation, side_effect=OSError("disk failure")):
+                    with self.assertRaisesRegex(WorkpieceWriteError, "disk failure"):
+                        repo.save({"name": "new"})
+                    self.assertEqual(repo.list_all(), [])
+                    self.assertEqual(list(Path(tmp).rglob('.paint-*')), [])
 
     def test_list_all_skips_invalid_entries_and_missing_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
