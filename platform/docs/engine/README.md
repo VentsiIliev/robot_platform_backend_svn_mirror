@@ -12,25 +12,39 @@ robots. It is used by the shared Network Settings application.
 
 ```
 src/engine/
-├── core/                       ← Pub/sub messaging system
+├── common_service_ids.py  ← CommonServiceID (robot, navigation, work_areas, vision, tools)
+├── common_settings_ids.py ← CommonSettingsID (shared SettingsSpec keys)
+├── core/                       ← Pub/sub messaging + cross-cutting interfaces
 │   ├── i_messaging_service.py
 │   ├── message_broker.py
-│   └── messaging_service.py
+│   ├── messaging_service.py
+│   ├── i_health_checkable.py
+│   ├── i_coordinate_transformer.py
+│   └── dependency_container.py  ← empty placeholder (0 bytes, not imported)
+├── geometry/                   ← planar.py: rotate/unwrap/normalize/axis-equivalent angles
 ├── hardware/                   ← Hardware I/O drivers
-│   ├── communication/
-│   │   └── modbus/             ← Serial/Modbus port management
-│   ├── generator/              ← Relay-switched generator controller + run timer
+│   ├── communication/          ← IRegisterTransport, transport registry, live transport
+│   │   └── modbus/             ← Modbus RTU, FC16, Xinje MA, slave config, serial bus
+│   ├── xinje/                  ← XinjeMA8X8YR address map + device wrapper
+│   ├── peripherals/            ← PeripheralBinding/Config + device adapters + factories
 │   ├── motor/                  ← Motor controller service (IMotorService)
-│   ├── laser/                  ← ILaserControl interface
-│   ├── vacuum_pump/            ← IVacuumPumpController, IVacuumPumpTransport
+│   ├── generator/              ← Relay-switched generator controller + run timer
+│   ├── fan/                    ← IFanControl, ModbusFanControl
+│   ├── dryer/                  ← DryerService, ModbusDryerController, register model
+│   ├── laser/                  ← ILaserControl, ModbusLaserControl
+│   ├── vacuum_pump/            ← IVacuumPumpController, VacuumPumpController
+│   ├── vacuum_sensor/          ← IVacuumSensorService, VacuumSensorService
+│   ├── physical_control_buttons/ ← IPhysicalControlButtons, Modbus impl
 │   └── weight/                 ← Weight cell service + HTTP transport
 │       ├── interfaces/
 │       └── http/
 ├── process/                    ← Process lifecycle state machine
 │   ├── i_process.py            ← IProcess ABC
 │   ├── base_process.py         ← Thread-safe BaseProcess with template hooks
+│   ├── executable_state_machine.py ← Standalone FSM used by process executors
 │   ├── process_requirements.py ← Service pre-condition declarations
-│   └── process_sequence.py     ← Auto-advancing ordered process chain
+│   ├── process_sequence.py     ← Auto-advancing ordered process chain
+│   └── service_health_registry.py ← Service name → health callable for BaseProcess
 │   (ProcessState, ProcessStateEvent, ProcessTopics → src/shared_contracts/events/process_events.py)
 ├── localization/               ← Runtime language service over Qt translators
 │   ├── i_localization_service.py
@@ -55,24 +69,33 @@ src/engine/
 ├── repositories/               ← JSON-backed settings persistence
 │   ├── interfaces/
 │   └── json/
-├── robot/                      ← Robot control stack
+├── updates/                    ← Signed release download, verify, migrate, rollback
+│   ├── config.py  updater.py  releases.py  migrations.py
+│   ├── factory_defaults.py  files.py  environment.py  paths.py
+├── robot/                      ← Robot control stack (see robot/README.md)
 │   ├── interfaces/             ← IRobot, IMotionService, IRobotService, …
 │   ├── configuration/          ← RobotSettings, RobotCalibrationSettings
 │   ├── enums/                  ← RobotAxis, Direction, ImageToRobotMapping
-│   ├── safety/                 ← SafetyChecker (workspace bounds)
+│   ├── safety/                 ← SafetyChecker + MotionCorridor / MotionCorridorRegistry
 │   ├── features/               ← NavigationService, RobotToolService
 │   ├── targeting/              ← VisionTargetResolver, JogFramePoseResolver, PointRegistry
+│   ├── calibration/            ← calibration services + builders + TCP/Z-shift/intrinsic capture
 │   ├── height_measuring/       ← Laser height sensor services + correction interpolation
-│   ├── path_interpolation/     ← Linear + spline path densification utilities
+│   ├── path_interpolation/     ← ContourPathPipeline (active) + legacy deprecated/
+│   ├── path_preparation/       ← Workpiece pixels → WorkpieceExecutionPlan
+│   ├── procedures/             ← ServoUntilConditionProcedure + pickup conditions
 │   ├── services/               ← MotionService, RobotStateManager, RobotService
 │   └── drivers/
+│       ├── ros2_robot.py       ← Ros2Robot (production driver)
+│       ├── client_adapters/    ← HTTP/WebSocket + fake transports
 │       └── fairino/            ← FairinoRobot, TestRobotWrapper
 ├── work_areas/                 ← IWorkAreaService, WorkAreaService, normalised polygon storage
-└── vision/                     ← IVisionService interface + VisionSystem implementation
-    ├── i_vision_service.py     ← IVisionService ABC
-    ├── camera_settings_serializer.py
-    └── implementation/
-        └── VisionSystem/       ← Full camera + contour + calibration system
+├── vision/                     ← IVisionService interface + VisionSystem implementation
+│   ├── i_vision_service.py     ← IVisionService ABC
+│   ├── camera_settings_serializer.py
+│   └── implementation/
+│       └── VisionSystem/       ← Full camera + contour + calibration system
+└── remote_support/             ← Restricted systemd socket service for the Network app
 ```
 
 ---
@@ -131,41 +154,85 @@ src/engine/
 | Subsystem | Key Entry Point | Docs |
 |-----------|----------------|------|
 | Messaging | `MessagingService` | [core/](core/README.md) |
-| Modbus | `ModbusActionService` | [hardware/communication/modbus/](hardware/communication/modbus/README.md) |
+| Health checks | `IHealthCheckable`, `ServiceHealthRegistry` | [core/](core/README.md), [process/](process/README.md) |
+| Shared service ids | `CommonServiceID`, `CommonSettingsID` | `src/engine/common_service_ids.py`, `src/engine/common_settings_ids.py` |
+| Planar geometry | `nearest_axis_equivalent_degrees`, `unwrap_degrees` | [geometry/](geometry/README.md) |
+| Modbus / transports | `ModbusActionService`, `IRegisterTransport` | [hardware/communication/modbus/](hardware/communication/modbus/README.md), [hardware/communication/](hardware/communication/README.md) |
+| Xinje MA I/O | `XinjeMA8X8YR`, `XinjeMA8X8YRTransport` | [hardware/xinje/](hardware/xinje/README.md) |
+| Peripheral registry | `PeripheralConfig`, `build_device_control_adapters()` | [hardware/peripherals/](hardware/peripherals/README.md) |
+| Motors | `IMotorService` | [hardware/motor/](hardware/motor/README.md) |
+| Generator | `IGeneratorController` | [hardware/generator/](hardware/generator/README.md) |
+| Fans | `IFanControl`, `ModbusFanControl` | [hardware/fan/](hardware/fan/README.md) |
+| Dryer | `DryerService`, `ModbusDryerController` | [hardware/dryer/](hardware/dryer/README.md) |
 | Weight cells | `WeightCellService` | [hardware/weight/](hardware/weight/README.md) |
+| Laser | `ILaserControl`, `ModbusLaserControl` | [hardware/laser/](hardware/laser/README.md) |
+| Vacuum pump | `IVacuumPumpController`, `VacuumPumpController` | [hardware/vacuum_pump/](hardware/vacuum_pump/README.md) |
+| Vacuum sensor | `IVacuumSensorService`, `VacuumSensorService` | [hardware/vacuum_sensor/](hardware/vacuum_sensor/README.md) |
+| Physical buttons | `IPhysicalControlButtons` | [hardware/physical_control_buttons/](hardware/physical_control_buttons/README.md) |
 | Process lifecycle | `BaseProcess` / `IProcess` | [process/](process/README.md) |
 | Localization | `LocalizationService` | [localization/](localization/README.md) |
 | Auth | `AuthenticationService` / `AuthorizationService` / `UserSession` | [auth/](auth/README.md) |
 | System manager | `SystemManager` / `ISystemManager` | [system/](system/README.md) |
 | Settings | `SettingsService` | [repositories/](repositories/README.md) |
+| Updates | `PlatformUpdater` | [updates/](updates/README.md) |
 | Robot control | `RobotService` | [robot/](robot/README.md) |
+| Motion safety | `SafetyChecker`, `MotionCorridor` | [robot/safety/](robot/safety/README.md) |
 | Targeting | `VisionTargetResolver`, `JogFramePoseResolver` | [robot/targeting/](robot/targeting/README.md) |
+| Robot calibration | `RobotCalibrationService`, `CameraTcpOffsetCalibrationService`, `ToolTcpCalibrationService` | [robot/calibration/](robot/calibration/README.md) |
+| Robot drivers | `Ros2Robot`, `build_robot_client` | [robot/drivers/](robot/drivers/README.md) |
 | Height measuring | `IHeightMeasuringService`, `HeightCorrectionService` | [robot/height_measuring/](robot/height_measuring/README.md) |
-| Path interpolation | `interpolate_path_two_stage` | [robot/path_interpolation/](robot/path_interpolation/README.md) |
+| Path interpolation | `ContourPathPipeline`, `smooth_points` | [robot/path_interpolation/](robot/path_interpolation/README.md) |
+| Path preparation | `DefaultWorkpiecePathPreparationService`, `WorkpieceExecutionPlan` | [robot/path_preparation/](robot/path_preparation/README.md) |
+| Motion procedures | `ServoUntilConditionProcedure` | [robot/procedures/](robot/procedures/README.md) |
 | Work areas | `IWorkAreaService`, `WorkAreaService` | [work_areas/](work_areas/README.md) |
-| Laser | `ILaserControl` | [hardware/laser/](hardware/laser/README.md) |
-| Vacuum pump | `IVacuumPumpController`, `IVacuumPumpTransport` | [hardware/vacuum_pump/](hardware/vacuum_pump/README.md) |
 | Vision | `VisionSystem` / `IVisionService` | [vision/](vision/README.md) |
+| Remote support | `remote_support` controller | [remote_support/](remote_support/README.md) |
 
 ---
 
 ## Startup Integration
 
-The engine is wired together during platform startup (`../../src/bootstrap/run_main.py`):
+The engine is wired together during platform startup
+(`../../src/bootstrap/run_main.py`). The active robot system is selected by a
+`BootstrapProvider` resolved from the startup config:
 
 ```
-1. EngineContext.build()
-       └─ creates MessagingService singleton
+1. load_startup_config() → load_bootstrap_provider(startup_config)
+       └─ selects the BootstrapProvider (system_class, robot, dev flags)
 
-2. SystemBuilder.build(GlueRobotSystem)
+2. EngineContext.build()
+       └─ creates the MessagingService singleton
+
+3. SystemBuilder()
+       .with_robot(build_configured_robot(startup_config))
+       .with_messaging_service(ctx.messaging_service)
+       .with_development_mode(dev_skip_login)
+       .build(bootstrap_provider.system_class)
        ├─ build_from_specs(settings_specs, …) → SettingsService
-       ├─ FairinoRobot(ip)  →  create_robot_service(robot, messaging, settings)
-       └─ app.start(services, settings_service)
+       ├─ constructs the robot transport / driver
+       └─ robot_system.on_start() composes runtime services
+
+4. ShellConfigurator.configure(bootstrap_provider.system_class)
+       └─ registers folder metadata from the system's ShellSetup
+
+5. QApplication + localization service init
+       └─ Qt must exist before any widget is created
+
+6. AppShell (created before application loading, empty placeholder)
+       └─ login gate when dev_skip_login is False
+
+7. _load_apps_into_shell(…) — ApplicationLoader iterates visible
+   ApplicationSpecs filtered by user role, calls spec.factory(robot_app),
+   then rebuilds the shell's folder page
 ```
 
-All engine objects are created once and injected as interfaces — no engine module instantiates itself at import time.
+All engine objects are created once and injected as interfaces — no engine
+module instantiates itself at import time.
 
-Robot-system-specific startup composition does not belong in `engine/` and should not be hardcoded in `../../src/bootstrap/run_main.py`. Concrete robot driver selection, login/auth wiring, and authorization/permissions filtering should live in the active robot system's bootstrap provider.
+Robot-system-specific startup composition does not belong in `engine/` and must
+not be hardcoded in `../../src/bootstrap/run_main.py`. Concrete robot driver
+selection, login/auth wiring, and authorization/permissions filtering live in the
+active robot system's bootstrap provider (`src/bootstrap/startup_config.py`).
 
 ---
 

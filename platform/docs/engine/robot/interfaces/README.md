@@ -112,6 +112,16 @@ class IMotionService(ABC):
 
     def stop_motion(self) -> bool: ...
     def get_current_position(self) -> List[float]: ...
+
+    # Optional (base-class defaults; MotionService overrides) — see safety/README.md
+    def get_current_position_fresh(self) -> List[float]: ...      # default: get_current_position()
+    def move_fast_linear(self, **kwargs) -> dict | None: ...      # default: None (unsupported)
+    def register_motion_corridor(self, corridor) -> None: ...     # default: NotImplementedError
+    def set_motion_passage_closed(self, passage_id: str, closed: bool) -> bool: ...  # default: False
+    def move_linear_in_corridor(self, corridor_id: str, position: List[float],
+                                tool: int, user: int, velocity: float,
+                                acceleration: float, blendR: float = 0.0,
+                                wait_to_reach: bool = False) -> bool: ...           # default: False
 ```
 
 - `wait_to_reach=True`: blocks until the robot reaches the target pose. The default `MotionService` implementation requires Euclidean position error ≤ 2mm on `x,y,z` and, when the target includes orientation, wrapped angular error ≤ 1.0° on `rx,ry,rz`, or it times out after 10s.
@@ -239,6 +249,30 @@ class IToolService(ABC):
 ```
 
 Returns `(success: bool, error_message: Optional[str])` tuples. Implementation: `RobotToolService` (wraps `ToolManager`).
+
+---
+
+### `ToolDefinition`
+
+**File:** `tool_definition.py`
+
+Concrete dataclass (not an ABC) living alongside the interfaces because every tool contract (`IToolChanger.list_tools()`, `IToolService.get_tools()`, `ToolChangerSettings`) returns it.
+
+```python
+@dataclass
+class ToolDefinition:
+    id:   int
+    name: str
+    reference_tool_id: Optional[int] = None
+    relative_transform: list[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]   # [x, y, z, rx, ry, rz]
+    collision_profile: str = ""
+```
+
+`__post_init__` coerces `relative_transform` to six floats and raises `ValueError` unless exactly `[x, y, z, rx, ry, rz]` were supplied. `__str__` returns `name`.
+
+> **Do not confuse with `src/shared_contracts/declarations/tooling.py::ToolDefinition`** — that is the *declaration-time* contract (string id, `from_dict`) used by robot-system blueprints; the engine one above is the *runtime* contract with an int id. `ToolChangerSettings.from_defaults()` converts declarations → engine objects.
+
+Consumers: `ToolChanger`, `ToolManager`, `ToolService`, `tool_settings` application, robot-system `tools` class vars (`GlueRobotSystem`, `PaintRobotSystem`, blueprint).
 
 ---
 

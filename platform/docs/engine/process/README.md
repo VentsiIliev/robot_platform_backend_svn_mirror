@@ -16,6 +16,7 @@ The `process` package defines a **thread-safe, broker-integrated state machine**
 | `executable_state_machine.py` | `ExecutableStateMachine` | Small handler-driven state machine used by long-running process internals such as glue dispensing |
 | `process_requirements.py` | `ProcessRequirements` | Declares which services must be available before a process can start |
 | `process_sequence.py` | `ProcessSequence` | Executes a list of `IProcess` objects in order, auto-advancing on each stop, with an optional transition hook before the next process starts |
+| `service_health_registry.py` | `ServiceHealthRegistry` | Maps service names (enum values) to health-check callables for `ProcessRequirements` gating |
 
 ---
 
@@ -236,6 +237,57 @@ Typical case:
 - while `robot/state` is `disconnected` because the ROS bridge or robot transport is unavailable
 
 UI/controllers should therefore handle `disconnected` explicitly instead of expecting robot unavailability to appear only as a thrown exception during startup.
+
+---
+
+## `ServiceHealthRegistry` — Wiring Service Availability
+
+**File:** `service_health_registry.py`
+
+Maps **service names (enum values, e.g. `CommonServiceID.ROBOT`)** to health-check callables. `BaseProcess` receives the registry's `check` as its `service_checker`, which `ProcessRequirements` calls before allowing a `RUNNING` transition.
+
+```python
+class ServiceHealthRegistry:
+    def register(self, service_name: Enum, check: Callable[[], bool]) -> ServiceHealthRegistry: ...
+    def register_service(self, service_name: Enum, service: object) -> ServiceHealthRegistry: ...
+    def check(self, service_name: Enum) -> bool: ...
+```
+
+Resolution order in `check(name)`:
+
+| Priority | Case | Result |
+|---|---|---|
+| 1 | Explicitly registered callable | called directly |
+| 2 | Service registered via `register_service` and implements `IHealthCheckable` | `service.is_healthy` is called |
+| 3 | `register_service` with a non-`IHealthCheckable` service | `lambda: True` — always healthy |
+| — | Name never registered | `False` (logged at debug: "treating as unhealthy") |
+
+A raising health callable is caught, logged with traceback, and treated as `False`. Both registration methods return `self` for chaining.
+
+### Usage
+
+```python
+from src.engine.common_service_ids import CommonServiceID
+from src.engine.process.service_health_registry import ServiceHealthRegistry
+
+registry = ServiceHealthRegistry()
+registry.register_service(CommonServiceID.ROBOT, robot_service)   # auto-detects IHealthCheckable
+
+process = GlueProcess(
+    messaging=messaging_service,
+    service_checker=registry.check,
+    requirements=ProcessRequirements.requires(CommonServiceID.ROBOT),
+)
+```
+
+### Consumers
+
+| Consumer | Use |
+|---|---|
+| `BaseRobotSystem._build_health_registry()` (`src/robot_systems/base_robot_system.py`) | auto-derives a registry from a system's resolved services and exposes it for processes |
+| `BaseProcess(service_checker=..., requirements=...)` | gates `RUNNING` transitions on `registry.check(name)` |
+
+> Service **names** are enum values (`CommonServiceID.ROBOT`, `ServiceID.MOTOR`), never plain strings — an unregistered name always fails.
 
 ---
 

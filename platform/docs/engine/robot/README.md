@@ -13,15 +13,26 @@ robot/
 ├── targeting/             ← Generic target-point registry, resolver math, and robot-system targeting provider
 ├── plane_pose_mapper.py   ← Generic rigid XY frame mapping between robot pose frames
 ├── enums/                 ← RobotAxis, Direction, ImageToRobotMapping
-├── safety/                ← SafetyChecker (workspace bounds enforcement)
+├── safety/                ← SafetyChecker (workspace bounds) + MotionCorridor / MotionCorridorRegistry
 ├── features/              ← NavigationService (named positions), RobotToolService
-├── calibration/           ← Generic calibration builders + calibration provider contract
+├── calibration/           ← calibration services, builders, provider contract, TCP/Z-shift/intrinsic capture
 ├── height_measuring/      ← Generic height-measuring builders + provider contract
 ├── services/              ← MotionService, RobotStateManager, RobotService, factory
+├── path_interpolation/    ← active ContourPathPipeline + debug plotting (legacy under deprecated/)
+├── path_preparation/      ← workpiece pixel contours → WorkpieceExecutionPlan
+├── procedures/            ← ServoUntilConditionProcedure + pickup conditions
 ├── drivers/
+│   ├── ros2_robot.py      ← Ros2Robot: IRobot over the ROS2 bridge
+│   ├── client_adapters/   ← RobotClientAdapter + HTTP/WebSocket and fake transports
 │   └── fairino/           ← FairinoRobot, TestRobotWrapper
+├── base_robot.py          ← empty placeholder (0 bytes)
+├── base_robot_service.py  ← deprecated shim re-exporting services.robot_service.RobotService
+├── motion_sequence.py     ← OrderedMotionType / ordered-motion configuration types
 ├── tool_changer.py        ← ToolChanger (slot ↔ gripper mapping)
-└── tool_manager.py        ← ToolManager (pick-and-place logic)
+├── tool_manager.py        ← ToolManager (pick-and-place logic)
+├── tool_transform.py      ← rotation_matrix / rotate / inverse_rotate / compose_translation
+├── tool_activation_service.py        ← ToolActivationService
+└── relative_tool_calibration_service.py ← relative tool calibration
 ```
 
 ---
@@ -34,8 +45,10 @@ robot/
 IRobotService (public contract — what applications see)
 └── RobotService
       ├── IMotionService → MotionService
-      │     ├── IRobot → FairinoRobot (production) / TestRobotWrapper (dev)
-      │     └── ISafetyChecker → SafetyChecker
+      │     ├── IRobot → Ros2Robot (production; ROS2 bridge via client adapters)
+      │     │            / FairinoRobot (direct SDK) / TestRobotWrapper (dev)
+      │     ├── ISafetyChecker → SafetyChecker
+      │     └── MotionCorridorRegistry (registered corridors for move_linear_in_corridor)
       └── IRobotStateProvider → RobotStateManager
             ├── IRobot (same instance as above)
             └── IStatePublisher → RobotStatePublisher → IMessagingService
@@ -94,6 +107,8 @@ robot_service = create_robot_service(
 )
 ```
 
+In a running system the driver is normally `Ros2Robot(server_url=...)` chosen by the bootstrap provider — see [drivers/](drivers/README.md).
+
 The factory:
 1. Creates `SafetyChecker(settings_service)`
 2. Creates `MotionService(robot, safety_checker)`
@@ -117,7 +132,7 @@ The important `snapshot.state` values are:
 | `error` | State polling itself failed unexpectedly |
 
 For the ROS bridge driver:
-- [FairinoRos2Client](/home/ilv/Desktop/robot_app_platform/src/engine/robot/drivers/fairino/fairino_ros2_client.py) no longer raises during startup when `http://localhost:5000` is unavailable
+- `HttpWebSocketRobotClient` (the ROS-bridge transport behind `Ros2Robot`) no longer raises during startup when `http://localhost:5000` is unavailable
 - instead it reports `disconnected`
 - `RobotStateManager` publishes that state through the normal broker topic
 
@@ -166,7 +181,7 @@ These are related but separate safety layers. The platform contract keeps both:
 
 Current driver support:
 
-- `FairinoRos2Robot`
+- `Ros2Robot` (via `HttpWebSocketRobotClient`)
   - backed by the REST endpoints:
     - `GET /safety/walls/enabled`
     - `GET /safety/walls/status`
@@ -188,7 +203,7 @@ Purpose:
 
 Current driver support:
 
-- `FairinoRos2Robot`
+- `Ros2Robot` (via `HttpWebSocketRobotClient`)
   - backed by the REST endpoint:
     - `POST /reachability/pose`
 
@@ -215,18 +230,21 @@ The Calibration application uses `validate_pose(...)` only for precheck simulati
 
 | Subpackage | Key Classes | Docs |
 |-----------|------------|------|
-| `interfaces/` | `IRobot`, `IMotionService`, `IRobotService`, `ISafetyChecker`, `IRobotStateProvider`, `IStatePublisher`, `IToolChanger`, `IToolService` | [interfaces/](interfaces/README.md) |
-| `configuration/` | `RobotSettings`, `SafetyLimits`, `MovementGroup`, `RobotCalibrationSettings` | [configuration/](configuration/README.md) |
+| `interfaces/` | `IRobot`, `IMotionService`, `IRobotService`, `ISafetyChecker`, `IRobotStateProvider`, `IStatePublisher`, `IToolChanger`, `IToolService`, `ToolDefinition` | [interfaces/](interfaces/README.md) |
+| `configuration/` | `RobotSettings`, `SafetyLimits`, `MovementGroup`, `MovementGroupSettings`, `RobotCalibrationSettings`, `ToolChangerSettings` | [configuration/](configuration/README.md) |
 | `targeting/` | `PointRegistry`, `VisionTargetResolver`, `JogFramePoseResolver`, `RobotSystemTargetingProvider` | [targeting/](targeting/README.md) |
-| `calibration/` | `build_robot_system_calibration_service`, `RobotSystemCalibrationProvider` | [calibration/](calibration/README.md) |
+| `calibration/` | `build_robot_system_calibration_service`, `RobotSystemCalibrationProvider`, `CameraTcpOffsetCalibrationService`, `CameraZShiftCalibrationService`, `ToolTcpCalibrationService`, `RobotCalibrationProcess` | [calibration/](calibration/README.md) |
 | `height_measuring/` | `IHeightMeasuringService`, `IHeightCorrectionService`, `HeightCorrectionService`, `build_robot_system_height_measuring_services` | [height_measuring/](height_measuring/README.md) |
-| `path_interpolation/` | `interpolate_path_linear`, `interpolate_path_spline_with_lambda`, `interpolate_path_two_stage` | [path_interpolation/](path_interpolation/README.md) |
+| `path_interpolation/` | `ContourPathPipeline`, `smooth_points`, `arc_length_resample` (legacy: `interpolate_path_two_stage`) | [path_interpolation/](path_interpolation/README.md) |
+| `path_preparation/` | `IWorkpiecePathPreparationService`, `DefaultWorkpiecePathPreparationService`, `WorkpieceExecutionPlan` | [path_preparation/](path_preparation/README.md) |
+| `procedures/` | `ServoUntilConditionProcedure`, `ServoUntilConditionConfig`, `ServoRetractConfig`, `VacuumPickupCondition`, `TimedDummyPickupCondition` | [procedures/](procedures/README.md) |
 | `../../robot_systems/default_service_builders.py` | `build_tool_service`, `build_vision_service` | centralized shared default builders used by `SystemBuilder` |
 | `plane_pose_mapper.py` | `PlanePose`, `PlanePoseMapper` | reusable 2D rigid frame transform between robot pose frames |
 | `enums/` | `RobotAxis`, `Direction`, `ImageToRobotMapping` | [enums/](enums/README.md) |
-| `safety/` | `SafetyChecker` | [safety/](safety/README.md) |
+| `safety/` | `SafetyChecker`, `MotionCorridor`, `MotionCorridorRegistry` | [safety/](safety/README.md) |
 | `features/` | `NavigationService`, `RobotToolService` | [features/](features/README.md) |
 | `services/` | `MotionService`, `RobotStateManager`, `RobotService`, `create_robot_service` | [services/](services/README.md) |
+| `drivers/` | `Ros2Robot`, `HttpWebSocketRobotClient`, `FakeRobotClient`, `build_robot_client` | [drivers/](drivers/README.md) |
 | `drivers/fairino/` | `FairinoRobot`, `TestRobotWrapper` | [drivers/fairino/](drivers/fairino/README.md) |
 
 ---

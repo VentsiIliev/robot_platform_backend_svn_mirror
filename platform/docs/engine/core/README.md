@@ -173,6 +173,48 @@ class ICoordinateTransformer(ABC):
 
 ---
 
+## `IHealthCheckable`
+
+**File:** `src/engine/core/i_health_checkable.py`
+
+```python
+class IHealthCheckable(ABC):
+    """Optional interface for services that can report their own operational health.
+
+    A service is healthy when it is connected and ready to accept commands.
+    Implement this on any service that has a meaningful connected/ready state."""
+
+    @abstractmethod
+    def is_healthy(self) -> bool: ...
+```
+
+Single method, deliberately optional. `ServiceHealthRegistry`
+(`src/engine/process/service_health_registry.py`) detects implementors with
+`isinstance(service, IHealthCheckable)` and wires `service.is_healthy` as the
+health callable for `BaseProcess`.
+
+Current implementors:
+
+| Service | `is_healthy()` semantics |
+|---|---|
+| `IRobotService` | `get_state()` not in `("error", "disconnected", "fault")` |
+| `IMotorService` | `self._connected` flag — set by `open()` / cleared by `close()`, **no I/O** |
+| `IWeightCellService` | `len(get_connected_cell_ids()) > 0` |
+| `ModbusLaserControl` / `VacuumPumpController` / `ModbusFanControl` / `VacuumSensorService` / `ModbusPhysicalControlButtons` / dryer service / device-control adapters / `VisionService` | last-operation result — **no I/O** |
+
+Services that cannot answer cheaply (`IGeneratorController`, `ILaserControl`
+without a read-back) simply do not implement the interface.
+
+---
+
+## `dependency_container.py`
+
+**Empty file (0 bytes).** It is listed in the package tree only because it
+exists on disk; nothing imports it and no symbol is defined. Remove or implement
+it as a deliberate task — do not assume a container lives here.
+
+---
+
 ## Pub/Sub Topics Reference
 
 Topics are defined as class constants in `src/shared_contracts/events/`.

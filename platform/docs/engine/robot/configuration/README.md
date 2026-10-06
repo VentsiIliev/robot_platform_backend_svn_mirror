@@ -37,6 +37,13 @@ ToolChangerSettings
         ─────────────────────
         ToolChangerSettingsSerializer → ISettingsSerializer[ToolChangerSettings]
         settings_type = "tool_changer"
+
+MovementGroupSettings
+  └── movement_groups: Dict[str, MovementGroup]
+        ─────────────────────
+        MovementGroupSettingsSerializer → ISettingsSerializer[MovementGroupSettings]
+        settings_type = "movement_group_settings"
+        SettingsSpec key: CommonSettingsID.MOVEMENT_GROUPS → robot/movement_groups.json
 ```
 
 ---
@@ -89,6 +96,44 @@ Named groups used by `NavigationService`:
 - `"HOME"` — used by `move_home()`
 - `"LOGIN"` — used by `move_to_login_position()`
 - `"CALIBRATION"` — used by `move_to_calibration_position()`
+
+---
+
+### `MovementGroupSettings`
+
+**File:** `movement_group_settings.py`
+
+Standalone container for the named movement groups only — the same `MovementGroup` objects, persisted as their own settings key instead of being nested inside `RobotSettings`.
+
+```python
+@dataclass
+class MovementGroupSettings:
+    movement_groups: Dict[str, MovementGroup] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data) -> "MovementGroupSettings": ...   # accepts "MOVEMENT_GROUPS" or "movement_groups"
+    def to_dict(self) -> Dict[str, Any]: ...                   # always writes "MOVEMENT_GROUPS"
+
+class MovementGroupSettingsSerializer(ISettingsSerializer[MovementGroupSettings]):
+    settings_type = "movement_group_settings"
+    get_default() -> MovementGroupSettings                     # empty dict
+```
+
+Persisted under `CommonSettingsID.MOVEMENT_GROUPS` → `robot/movement_groups.json`:
+
+```python
+SettingsSpec(CommonSettingsID.MOVEMENT_GROUPS, MovementGroupSettingsSerializer(),
+             "robot/movement_groups.json")
+```
+
+Declaring systems: `GlueRobotSystem`, `PaintRobotSystem`, `WeldingRobotSystem`, `ROBOT_SYSTEM_BLUEPRINT`.
+
+Consumers:
+| Consumer | Use |
+|---|---|
+| `RobotSettingsApplicationService.load_movement_groups()` | reads the key; migrates legacy groups embedded in `RobotSettings` on first load |
+| `RobotSettingsModel` | holds the loaded object for the Movement Groups editor |
+| `NavigationService`, `RobotJogService` | resolve named groups (`HOME`, `LOGIN`, …) at runtime |
 
 ---
 
