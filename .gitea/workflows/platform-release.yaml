@@ -1,0 +1,55 @@
+name: Publish paint tray dry platform
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release:
+    if: ${{ gitea.ref == 'refs/heads/master' }}
+    runs-on: platform-release
+    steps:
+      - name: Check out selected SVN-published source
+        uses: https://github.com/actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          token: ${{ secrets.ROBOT_RELEASE_TOKEN }}
+
+      - name: Prepare platform build environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd platform
+          ./launch_robot_app.sh --setup-only
+          .venv/bin/python -m pip install -r packaging/requirements-build.txt
+
+      - name: Run release checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd platform
+          QT_QPA_PLATFORM=offscreen .venv/bin/python -B -m unittest \
+            tests.engine.updates.test_target_scripts \
+            tests.engine.updates.test_release_targets \
+            tests.engine.updates.test_gitea_release \
+            tests.engine.updates.test_platform_publication -q
+
+      - name: Build with existing wrapper and publish Gitea release
+        shell: bash
+        env:
+          GITEA_TOKEN: ${{ secrets.ROBOT_RELEASE_TOKEN }}
+          GITEA_SERVER_URL: ${{ gitea.server_url }}
+          GITEA_REPOSITORY: ${{ gitea.repository }}
+          RELEASE_STORE: ${{ vars.ROBOT_RELEASE_STORE }}
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          set -euo pipefail
+          test -n "$GITEA_TOKEN" || { echo 'Configure the ROBOT_RELEASE_TOKEN repository secret.' >&2; exit 1; }
+          export GITEA_REPOSITORY_URL="${GITEA_SERVER_URL%/}/${GITEA_REPOSITORY}.git"
+          store="${RELEASE_STORE:-$HOME/.local/share/gitea-platform-releases}/${GITEA_REPOSITORY}"
+          mkdir -p "$store"
+          exec 9>"$store/.release.lock"
+          flock -n 9 || { echo 'Another release job is running; retry later.' >&2; exit 1; }
+          commit="$(git rev-parse HEAD)"
+          cd platform
+          .venv/bin/python -B packaging/platform/publish_platform.py paint_tray_dry --output "$store/$commit"

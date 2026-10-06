@@ -30,6 +30,16 @@ font environment, so OpenCV's bundled Qt 5 paths do not redirect the PyQt6 GUI.
 
 ## Independent system/profile releases
 
+For Gitea Actions, see [platform release setup](GITEA_ACTIONS.md). The manual
+workflow runs the existing `paint_tray_dry/build_release.sh` and publishes its
+installer/update archives using the system's `VERSION` file.
+
+For the combined platform/backend robot release, use the
+[combined release workflow](ROBOT_RELEASE_WORKFLOW.md#publish-to-svn-and-gitea).
+Its `publish` action synchronizes committed source to SVN, builds/verifies the
+selected versions, pushes their exact tags, and uploads a Gitea release. The
+commands below describe the separate platform-only installer workflow.
+
 Select a target from `config/release_targets.json`:
 
 | Target | Product |
