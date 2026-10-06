@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from typing import Optional
+from functools import partial
+
+from PyQt6 import sip
 
 from PyQt6.QtCore import QEvent, QMargins, QPoint, QRect, Qt, QTimer
 from PyQt6.QtGui import QCursor, QMouseEvent
@@ -431,7 +434,17 @@ class _KeyboardMixin:
         if scroll_area is not None and scroll_value is not None:
             bar = scroll_area.verticalScrollBar()
             bar.setValue(scroll_value)
-            QTimer.singleShot(0, lambda: bar.setValue(scroll_value))
+            QTimer.singleShot(0, partial(self._restore_scroll_value, bar, scroll_value))
+
+    @staticmethod
+    def _restore_scroll_value(bar, value: int) -> None:
+        if not sip.isdeleted(bar):
+            bar.setValue(value)
+
+    @staticmethod
+    def _ensure_field_visible(scroll_area: QScrollArea, field: QWidget) -> None:
+        if not sip.isdeleted(scroll_area) and not sip.isdeleted(field):
+            scroll_area.ensureWidgetVisible(field, _FIELD_MARGIN, _FIELD_MARGIN)
 
     def _restore_keyboard_adjustments(self) -> None:
         global _ACTIVE_KEYBOARD_OWNER
@@ -440,7 +453,7 @@ class _KeyboardMixin:
             _ACTIVE_KEYBOARD_OWNER = None
 
     def _scroll_field_above_keyboard(self) -> None:
-        if self._keyboard_dialog is None or not self._keyboard_dialog.isVisible():
+        if sip.isdeleted(self) or self._keyboard_dialog is None or sip.isdeleted(self._keyboard_dialog) or not self._keyboard_dialog.isVisible():
             return
 
         scroll_area = self._nearest_scroll_area()
@@ -451,7 +464,7 @@ class _KeyboardMixin:
             scroll_area.ensureWidgetVisible(self, _FIELD_MARGIN, _FIELD_MARGIN)
             QTimer.singleShot(
                 50,
-                lambda: scroll_area.ensureWidgetVisible(self, _FIELD_MARGIN, _FIELD_MARGIN),
+                partial(self._ensure_field_visible, scroll_area, self),
             )
 
         keyboard_top = self._keyboard_dialog.keyboard_rect_global().top()
