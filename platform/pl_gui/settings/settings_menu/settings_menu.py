@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 import qtawesome as qta
-from src.settings.settings_view.styles import PRIMARY, PRIMARY_LIGHT
+from pl_gui.settings.settings_view.styles import PRIMARY, PRIMARY_LIGHT
 from .menu_icon import MenuIcon
 
 

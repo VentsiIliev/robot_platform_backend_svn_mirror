@@ -2,7 +2,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QSize
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (QPushButton, QGraphicsDropShadowEffect)
 
-from src.settings.settings_view.styles import (
+from pl_gui.settings.settings_view.styles import (
     PRIMARY, PRIMARY_DARK, PRIMARY_HOVER, TEXT_ON_PRIMARY,
     SECONDARY_BG, SECONDARY_HOVER, SECONDARY_PRESSED,
     TERTIARY_BG, TERTIARY_HOVER, TERTIARY_PRESSED, TERTIARY_TEXT,
@@ -10,7 +10,7 @@ from src.settings.settings_view.styles import (
     SHADOW_PRIMARY, SHADOW_PRIMARY_HOVER,
 )
 
-from src.settings.settings_menu.icon_loader import load_icon
+from pl_gui.settings.settings_menu.icon_loader import load_icon
 
 
 class MenuIcon(QPushButton):

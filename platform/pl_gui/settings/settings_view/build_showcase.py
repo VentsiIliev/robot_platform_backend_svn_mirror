@@ -1,5 +1,5 @@
-from src.settings.settings_view import SettingField, SettingGroup
-from src.settings.settings_view import SettingsView
+from pl_gui.settings.settings_view import SettingField, SettingGroup
+from pl_gui.settings.settings_view import SettingsView
 
 
 # ── Demo groups ───────────────────────────────────────────────────────────────

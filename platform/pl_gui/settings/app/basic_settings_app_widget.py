@@ -1,7 +1,7 @@
 from PyQt6.QtCore import pyqtSignal
 
-from settings.settings_menu.build_showcase import build_settings_menu_showcase
-from shell.base_app_widget.AppWidget import AppWidget
+from pl_gui.settings.settings_menu.build_showcase import build_settings_menu_showcase
+from pl_gui.shell.base_app_widget.AppWidget import AppWidget
 
 
 class BasicSettingsAppWidget(AppWidget):

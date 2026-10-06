@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zeroerr-robot-shell"
+version = "0.1.0"
+description = "Reusable Qt shell and widgets for robot applications"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["PyQt6>=6.6,<7", "QtAwesome>=1.3,<2"]
+
+[project.optional-dependencies]
+vision = ["numpy>=1.26,<3", "opencv-python>=4.8,<5", "pillow>=10,<13"]
+
+[tool.setuptools]
+include-package-data = false
+packages = [
+    "pl_gui",
+    "pl_gui.dashboard",
+    "pl_gui.dashboard.app",
+    "pl_gui.dashboard.layout",
+    "pl_gui.dashboard.resources",
+    "pl_gui.dashboard.widgets",
+    "pl_gui.settings",
+    "pl_gui.settings.app",
+    "pl_gui.settings.settings_menu",
+    "pl_gui.settings.settings_view",
+    "pl_gui.shell",
+    "pl_gui.shell.base_app_widget",
+    "pl_gui.shell.ui",
+    "pl_gui.shell.ui.material",
+    "pl_gui.shell.ui.material.managers",
+    "pl_gui.utils",
+    "pl_gui.utils.utils_widgets",
+]
+
+[tool.setuptools.package-dir]
+pl_gui = "."
+
+[tool.setuptools.package-data]
+pl_gui = ["shell/resources/*.ico", "dashboard/resources/*.ico", "dashboard/resources/*.png"]

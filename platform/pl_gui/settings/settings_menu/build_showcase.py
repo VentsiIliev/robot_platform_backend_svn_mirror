@@ -1,6 +1,6 @@
-from src.settings.settings_menu.category_descriptor import CategoryDescriptor
-from src.settings.settings_menu.settings_menu import SettingsNavigationWidget
-from src.settings.settings_view.build_showcase import build_showcase
+from pl_gui.settings.settings_menu.category_descriptor import CategoryDescriptor
+from pl_gui.settings.settings_menu.settings_menu import SettingsNavigationWidget
+from pl_gui.settings.settings_view.build_showcase import build_showcase
 
 def build_settings_menu_showcase():
     CUSTOM_CATEGORIES = [
