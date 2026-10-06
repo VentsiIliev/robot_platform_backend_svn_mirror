@@ -182,7 +182,7 @@ class TestPaintApplicationWiring(unittest.TestCase):
             _navigation=navigation,
             _settings_service=settings_service,
             _vacuum_pump="pump",
-            _workpiece_destination=destination,
+            _dryer_release_coordinator=dryer_release,
             _paint_process_config_service=config_service,
             get_optional_service=MagicMock(return_value=robot_service),
         )
@@ -206,9 +206,8 @@ class TestPaintApplicationWiring(unittest.TestCase):
         self.assertEqual("pump", dependencies.vacuum_pump)
         self.assertEqual("live_robot_config", dependencies.robot_config_provider())
         self.assertIsNone(dependencies.post_execute_callback)
-        self.assertIs(dependencies.workpiece_destination, destination)
-        self.assertEqual((True, ""), dependencies.workpiece_destination.check_ready_for_release())
-        self.assertTrue(dependencies.workpiece_destination.on_release_verified())
+        self.assertEqual((True, ""), dependencies.dryer_ready_for_release())
+        self.assertTrue(dependencies.on_workpiece_release_verified())
         dryer_release.wait_until_ready_for_release.assert_called_once_with()
         dryer_release.on_workpiece_release_verified.assert_called_once_with()
         navigation.move_to_calibration_position.assert_not_called()
@@ -222,24 +221,62 @@ class TestPaintApplicationWiring(unittest.TestCase):
         self.assertEqual(-3.5, contact_motion_config.camera_to_tcp_y_offset)
 
     def test_build_paint_contour_editor_application_wires_factory(self):
+        from src.applications.workpiece_editor import workpiece_editor_factory
+
         robot_system = SimpleNamespace()
         service = MagicMock()
         messaging = object()
         built_widget = object()
         factory = MagicMock()
         factory.build.return_value = built_widget
+        # This unit test owns application wiring; the plugin API is an external
+        # dependency. Supply its contract without requiring an installed wheel.
+        plugin = SimpleNamespace(
+            ContourEditorUiConfig=MagicMock(),
+            CustomEditorButtonSpec=MagicMock(),
+            EditorButton=SimpleNamespace(GENERATE_PATTERN="pattern", PREVIEW="preview"),
+            ToolbarPlacement=SimpleNamespace(TOP_CENTER="top_center"),
+        )
 
         with (
+            patch.dict("sys.modules", {"contour_editor": plugin}),
+            patch(
+                "src.robot_systems.paint.domain.paint_segment_selection.apply_selected_paint_segments",
+                return_value=(True, "created"),
+            ) as apply_selection,
             patch("src.robot_systems.paint.application_wiring._build_paint_workpiece_editor_service", return_value=service),
             patch("src.applications.base.robot_jog_service_builder.build_robot_system_jog_service", return_value="jog"),
-            patch("src.applications.workpiece_editor.workpiece_editor_factory.WorkpieceEditorFactory", return_value=factory),
+            patch.object(workpiece_editor_factory, "WorkpieceEditorFactory", return_value=factory),
         ):
             app = application_wiring._build_paint_contour_editor_application(robot_system)
             app.register(messaging)
             widget = app.create_widget()
 
         self.assertIs(widget, built_widget)
-        factory.build.assert_called_once_with(service, messaging=messaging, jog_service="jog")
+        factory.build.assert_called_once()
+        args, kwargs = factory.build.call_args
+        self.assertEqual(args, (service,))
+        self.assertIs(kwargs["messaging"], messaging)
+        self.assertEqual(kwargs["jog_service"], "jog")
+        self.assertIs(kwargs["ui_config"], plugin.ContourEditorUiConfig.return_value)
+        plugin.ContourEditorUiConfig.assert_called_once_with(
+            hidden_buttons=frozenset(("pattern", "preview")),
+            custom_buttons=(plugin.CustomEditorButtonSpec.return_value,),
+        )
+        from src.robot_systems.paint.domain.paint_segment_selection import APPLY_PAINT_SELECTION_ACTION
+
+        plugin.CustomEditorButtonSpec.assert_called_once_with(
+            action_id=APPLY_PAINT_SELECTION_ACTION,
+            icon_name="fa5s.paint-roller",
+            tooltip="Create paint segments from rectangle selection",
+            placement="top_center",
+            primary=True,
+        )
+        handler = kwargs["custom_action_handler"]
+        self.assertEqual(handler("unknown", object()), (False, "Unknown editor action."))
+        editor = object()
+        self.assertEqual(handler(APPLY_PAINT_SELECTION_ACTION, editor), (True, "created"))
+        apply_selection.assert_called_once_with(editor)
 
     def test_build_paint_process_settings_application_wires_current_position_provider(self):
         movement_groups = SimpleNamespace(
@@ -433,6 +470,8 @@ class TestPaintApplicationWiring(unittest.TestCase):
             "settings",
             vision_service="vision",
             robot_service="robot",
+            messaging=None,
+            include_height_settings=False,
         )
         calibration_factory.build.assert_called_once_with("calibration-service", messaging=messaging, jog_service="jog")
         work_area_service_cls.assert_called_once_with(work_area_service="work_areas", vision_service="vision")
@@ -539,7 +578,6 @@ class TestPaintApplicationWiring(unittest.TestCase):
             robot_config="robot-config",
             robot_config_getter=unittest.mock.ANY,
             navigation="navigation",
-            height_measuring="height",
             default_target_name="tool",
             calibration_frame_name="paint-frame",
             pickup_frame_name="",
@@ -635,6 +673,7 @@ class TestPaintApplicationWiring(unittest.TestCase):
             },
             transformer=None,
             transformer_getter=unittest.mock.ANY,
+            default_settings_getter=unittest.mock.ANY,
         )
         self.assertIs(prep_cls.call_args.kwargs["transformer_getter"](), "transformer")
 
@@ -754,7 +793,7 @@ class TestPaintApplicationWiring(unittest.TestCase):
         )
         tcp_cls.assert_called_once()
         z_cls.assert_called_once()
-        marker_cls.assert_called_once()
+        marker_cls.assert_not_called()
         intrinsic_cls.assert_called_once_with(
             robot_service="robot",
             vision_service=robot_system.get_optional_service(CommonServiceID.VISION),
@@ -764,19 +803,25 @@ class TestPaintApplicationWiring(unittest.TestCase):
             settings_service=settings_service,
         )
         calibration_settings_cls.assert_called_once_with(
-            settings_service, robot_service="robot", messaging="system-messaging"
+            settings_service, robot_service="robot", messaging="system-messaging",
+            include_height_settings=False,
         )
         service = calibration_service_cls.call_args.args[0] if calibration_service_cls.call_args.args else calibration_service_cls.call_args.kwargs
         if isinstance(service, dict):
             observer_position_provider = service["observer_position_provider"]
             self.assertEqual(["observer-pose"], observer_position_provider("observer-group"))
             self.assertIs(settings_service, service["settings_service"])
-        calibration_factory_cls.assert_called_once_with(work_area_definitions=["paint-area"])
+        calibration_factory_cls.assert_called_once_with(work_area_definitions=["paint-area"], show_laser_tab=False, show_height_mapping_tab=False)
         calibration_factory.build.assert_called_once()
 
     def test_build_robot_settings_application_wires_targeting_load_and_save(self):
+        from src.engine.vision.calibration_vision_settings import CalibrationVisionSettings
+        calibration_settings = CalibrationVisionSettings()
         settings_service = MagicMock()
-        settings_service.get.return_value = "existing-targeting"
+        settings_service.get.side_effect = lambda key: (
+            calibration_settings if key == CommonSettingsID.CALIBRATION_VISION_SETTINGS
+            else "existing-targeting"
+        )
         robot_app = SimpleNamespace(
             _settings_service=settings_service,
             _navigation="navigation",
@@ -792,7 +837,7 @@ class TestPaintApplicationWiring(unittest.TestCase):
         factory.build.return_value = "robot-settings-widget"
 
         with (
-            patch("src.robot_systems.paint.targeting.settings_adapter.to_editor_dict", return_value="editor-targeting") as to_editor_dict,
+            patch("src.robot_systems.paint.targeting.settings_adapter.to_editor_dict", return_value={"frames": []}) as to_editor_dict,
             patch("src.robot_systems.paint.targeting.settings_adapter.from_editor_dict", return_value="saved-targeting") as from_editor_dict,
             patch("src.applications.robot_settings.service.robot_settings_application_service.RobotSettingsApplicationService", side_effect=lambda *args, **kwargs: SimpleNamespace(args=args, kwargs=kwargs)) as service_cls,
             patch("src.applications.robot_settings.robot_settings_factory.RobotSettingsFactory", return_value=factory) as factory_cls,
@@ -808,12 +853,16 @@ class TestPaintApplicationWiring(unittest.TestCase):
         self.assertIsNotNone(service)
         self.assertEqual(kwargs["navigation_service"], "navigation")
         self.assertEqual(kwargs["movement_group_definitions"], ["group"])
-        self.assertEqual(kwargs["load_targeting_definitions_fn"](), "editor-targeting")
+        self.assertEqual(kwargs["load_targeting_definitions_fn"](), {"frames": [], "coordinate_calibration_mode": "global"})
         to_editor_dict.assert_called_once_with("existing-targeting", ["point"], ["frame"])
-        kwargs["save_targeting_definitions_fn"]("new-editor-data")
-        from_editor_dict.assert_called_once_with("new-editor-data", "existing-targeting", ["point"], ["frame"])
-        settings_service.save.assert_called_once_with(CommonSettingsID.TARGETING, "saved-targeting")
-        robot_app.invalidate_shared_vision_resolver.assert_called_once_with()
+        editor_data = {"frames": [], "coordinate_calibration_mode": "per_area"}
+        kwargs["save_targeting_definitions_fn"](editor_data)
+        from_editor_dict.assert_called_once_with(editor_data, "existing-targeting", ["point"], ["frame"])
+        settings_service.save.assert_any_call(CommonSettingsID.TARGETING, "saved-targeting")
+        self.assertEqual(settings_service.save.call_count, 2)
+        saved_calibration = settings_service.save.call_args.args[1]
+        self.assertEqual(saved_calibration.coordinate_calibration_mode, "per_area")
+        self.assertEqual(robot_app.invalidate_shared_vision_resolver.call_count, 2)
         factory_cls.assert_called_once_with(movement_group_definitions=["group"])
         factory.build.assert_called_once()
 
@@ -879,9 +928,7 @@ class TestPaintRobotSystemStart(unittest.TestCase):
         with (
             patch("src.robot_systems.paint.navigation.PaintNavigationService", return_value=navigation) as nav_cls,
             patch("src.robot_systems.paint.paint_robot_system.PaintRobotSystemTargetingProvider", return_value=MagicMock()),
-            patch("src.robot_systems.paint.paint_robot_system.PaintRobotSystemHeightMeasuringProvider", return_value=MagicMock()),
             patch("src.robot_systems.paint.paint_robot_system.PaintRobotSystemCalibrationProvider", return_value=MagicMock()),
-            patch("src.robot_systems.paint.paint_robot_system.build_robot_system_height_measuring_services", return_value=(MagicMock(), MagicMock(), MagicMock())),
             patch("src.robot_systems.paint.paint_robot_system.build_robot_system_calibration_service", return_value=MagicMock()),
             patch("src.engine.robot.calibration.robot_calibration_process.RobotCalibrationProcess", return_value=calibration_process),
             patch("src.robot_systems.paint.calibration.coordinator.PaintCalibrationCoordinator", return_value=MagicMock()),
@@ -915,7 +962,7 @@ class TestPaintRobotSystemStart(unittest.TestCase):
         self.assertIs(dashboard_cls.call_args.kwargs["vision_service"], vision)
         self.assertEqual(
             nav_cls.call_args.kwargs["observed_area_by_group"],
-            {"CALIBRATION": "paint", "Magazine": "magazine"},
+            {"CALIBRATION": "paint", "Magazine": "magazine", "Vertical Shaft Alignment": "vertical_shaft_alignment"},
         )
         self.assertIs(system._navigation, navigation)
         self.assertIs(system._dashboard_service, dashboard_service)
@@ -935,9 +982,7 @@ class TestPaintRobotSystemStart(unittest.TestCase):
         with (
             patch("src.robot_systems.paint.navigation.PaintNavigationService", return_value=navigation),
             patch("src.robot_systems.paint.paint_robot_system.PaintRobotSystemTargetingProvider", return_value=MagicMock()),
-            patch("src.robot_systems.paint.paint_robot_system.PaintRobotSystemHeightMeasuringProvider", return_value=MagicMock()),
             patch("src.robot_systems.paint.paint_robot_system.PaintRobotSystemCalibrationProvider", return_value=MagicMock()),
-            patch("src.robot_systems.paint.paint_robot_system.build_robot_system_height_measuring_services", return_value=(MagicMock(), MagicMock(), MagicMock())),
             patch("src.robot_systems.paint.paint_robot_system.build_robot_system_calibration_service", return_value=MagicMock()),
             patch("src.engine.robot.calibration.robot_calibration_process.RobotCalibrationProcess", return_value=MagicMock()),
             patch("src.robot_systems.paint.calibration.coordinator.PaintCalibrationCoordinator", return_value=MagicMock()),

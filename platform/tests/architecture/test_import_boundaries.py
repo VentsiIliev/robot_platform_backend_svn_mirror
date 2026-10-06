@@ -19,10 +19,6 @@ _LEGACY_VIOLATIONS = {
         "src.robot_systems.glue.component_ids",
     ),
     ImportViolation(
-        "src/applications/calibration_v2/controller/calibration_controller.py",
-        "src.robot_systems.glue.component_ids",
-    ),
-    ImportViolation(
         "src/applications/pick_and_place_visualizer/controller/pick_and_place_visualizer_controller.py",
         "src.robot_systems.glue.component_ids",
     ),
@@ -69,10 +65,6 @@ _LEGACY_VIOLATIONS = {
     ImportViolation(
         "src/engine/robot/path_interpolation/new_interpolation/simple_interpolation_pyqt6.py",
         "src.robot_systems.glue.glue_robot_system",
-    ),
-    ImportViolation(
-        "src/robot_systems/paint/processes/robot_calibration_process.py",
-        "src.robot_systems.glue.component_ids",
     ),
     ImportViolation(
         "src/robot_systems/welding/processes/robot_calibration_process.py",

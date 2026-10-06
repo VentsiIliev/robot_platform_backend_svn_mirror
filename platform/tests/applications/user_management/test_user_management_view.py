@@ -225,10 +225,12 @@ class TestUserManagementLocalizationRegression(unittest.TestCase):
     def setUp(self):
         self._temp_dir = tempfile.TemporaryDirectory()
         self._service = LocalizationService(
-            str(self._shared_translations_dir),
+            [str(self._shared_translations_dir),
+             str(self._shared_translations_dir.parent / "user_management/localization")],
             state_file=str(Path(self._temp_dir.name) / "localization.json"),
         )
         self._service.set_language("en")
+        self.addCleanup(self._service._remove_installed_translator, self._app)
 
         self._selector = LanguageSelectorWidget(languages=self._service.available_languages())
         self._service.sync_selector(self._selector)

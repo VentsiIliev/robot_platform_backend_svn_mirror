@@ -1,4 +1,5 @@
 import unittest
+import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -31,7 +32,10 @@ class TestDashboardLocalization(unittest.TestCase):
         cls._app = QApplication.instance() or QApplication([])
 
     def setUp(self):
-        self._service = LocalizationService(str(_TRANSLATIONS_DIR))
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self._service = LocalizationService(str(_TRANSLATIONS_DIR), state_file=str(Path(temporary.name) / "language.json"))
+        self.addCleanup(self._service._remove_installed_translator, self._app)
         self._service.set_language("en")
 
     def test_glue_meter_card_retranslates_title_and_state_tooltip(self):

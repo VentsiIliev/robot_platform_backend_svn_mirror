@@ -67,6 +67,7 @@ class TestLocalizationService(unittest.TestCase):
     def test_available_languages_discovers_json_catalogs(self):
         self._write_catalog(".language_state", {"language_code": "bg"})
         service = LocalizationService(str(self._dir), state_file=str(self._state_file))
+        self.addCleanup(service._remove_installed_translator, self._app)
 
         self.assertEqual(
             service.available_languages(),
@@ -75,6 +76,7 @@ class TestLocalizationService(unittest.TestCase):
 
     def test_set_language_installs_selected_translation(self):
         service = LocalizationService(str(self._dir), state_file=str(self._state_file))
+        self.addCleanup(service._remove_installed_translator, self._app)
 
         service.set_language("bg")
 
@@ -86,6 +88,7 @@ class TestLocalizationService(unittest.TestCase):
 
     def test_set_language_falls_back_to_english_for_missing_key(self):
         service = LocalizationService(str(self._dir), state_file=str(self._state_file))
+        self.addCleanup(service._remove_installed_translator, self._app)
 
         service.set_language("bg")
 
@@ -96,6 +99,7 @@ class TestLocalizationService(unittest.TestCase):
 
     def test_translate_uses_qt_translation_chain(self):
         service = LocalizationService(str(self._dir), state_file=str(self._state_file))
+        self.addCleanup(service._remove_installed_translator, self._app)
         service.set_language("bg")
 
         self.assertEqual(
@@ -109,6 +113,7 @@ class TestLocalizationService(unittest.TestCase):
 
     def test_missing_language_falls_back_to_default_language(self):
         service = LocalizationService(str(self._dir), state_file=str(self._state_file))
+        self.addCleanup(service._remove_installed_translator, self._app)
 
         service.set_language("de")
 
@@ -125,6 +130,7 @@ class TestLocalizationService(unittest.TestCase):
             messaging_service=messaging,
             state_file=str(self._state_file),
         )
+        self.addCleanup(service._remove_installed_translator, self._app)
 
         service.set_language("bg")
 
@@ -135,6 +141,7 @@ class TestLocalizationService(unittest.TestCase):
 
     def test_persists_selected_language(self):
         service = LocalizationService(str(self._dir), state_file=str(self._state_file))
+        self.addCleanup(service._remove_installed_translator, self._app)
 
         service.set_language("bg")
 
@@ -146,6 +153,7 @@ class TestLocalizationService(unittest.TestCase):
         self._state_file.write_text(json.dumps({"language_code": "bg"}), encoding="utf-8")
 
         service = LocalizationService(str(self._dir), state_file=str(self._state_file))
+        self.addCleanup(service._remove_installed_translator, self._app)
 
         self.assertEqual(service.get_language(), "bg")
 
@@ -194,6 +202,7 @@ class TestLocalizationService(unittest.TestCase):
             [str(shared_dir), str(system_dir)],
             state_file=str(self._state_file),
         )
+        self.addCleanup(service._remove_installed_translator, self._app)
 
         self.assertEqual(service.available_languages(), [("en", "English"), ("bg", "Български")])
 

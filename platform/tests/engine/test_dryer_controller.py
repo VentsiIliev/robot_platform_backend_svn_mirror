@@ -110,9 +110,9 @@ class TestDryerController(unittest.TestCase):
             self.assertTrue(controller.next_position())
 
         output = "\n".join(captured.output)
-        self.assertIn("Sending NEXT_POSITION command=0x00 command_register=1", output)
+        self.assertIn("Sending NEXT_POSITION command=0x01 command_register=1", output)
         self.assertIn("NEXT_POSITION FC16 write completed success=True", output)
-        transport.write_registers.assert_called_once_with(1, [0])
+        transport.write_registers.assert_called_once_with(1, [1])
         transport.write_register.assert_not_called()
 
     def test_next_position_reports_single_register_write_failure(self) -> None:
@@ -173,7 +173,7 @@ class TestDryerController(unittest.TestCase):
 
         self.assertTrue(controller.next_position())
 
-        transport.write_registers.assert_called_once_with(1, [0])
+        transport.write_registers.assert_called_once_with(1, [1])
         transport.read_register.assert_called_once_with(0)
 
     def test_initialize_writes_config_then_sends_next_position(self) -> None:

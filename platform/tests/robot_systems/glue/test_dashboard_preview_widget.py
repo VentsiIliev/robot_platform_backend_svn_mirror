@@ -108,7 +108,11 @@ class TestDashboardPreviewWidget(unittest.TestCase):
         self.assertEqual(tuple(frame[50, 70]), (88, 194, 122))
 
     def test_preview_controls_retranslate(self):
-        service = LocalizationService(str(_TRANSLATIONS_DIR))
+        import tempfile
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        service = LocalizationService(str(_TRANSLATIONS_DIR), state_file=str(Path(temporary.name) / "language.json"))
+        self.addCleanup(service._remove_installed_translator, QApplication.instance())
         widget = DashboardPreviewWidget(image_width=100, image_height=100, fps_ms=1000)
 
         service.set_language("bg")

@@ -21,7 +21,8 @@ def _clean_test_artifacts() -> None:
 
 
 def run() -> None:
-    logging.disable(logging.CRITICAL)
+    # Keep logging enabled: assertLogs must be able to observe service diagnostics.
+    logging.disable(logging.NOTSET)
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     _clean_test_artifacts()
 
