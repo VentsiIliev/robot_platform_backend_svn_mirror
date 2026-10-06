@@ -18,28 +18,35 @@ if [[ ! -x "${PYTHON}" ]]; then
   fi
 fi
 
-# ZBar is an OS library: installing pyzbar with pip does not supply it on Linux.
-if ! env -u PYTHONPATH "${PYTHON}" -c 'import ctypes; import ctypes.util; ctypes.CDLL(ctypes.util.find_library("zbar") or "libzbar.so.0")' 2>/dev/null; then
+# Native libraries are OS dependencies and are not supplied by pip.
+NATIVE_PACKAGES=()
+for dependency in 'zbar:libzbar.so.0:libzbar0' 'xcb-cursor:libxcb-cursor.so.0:libxcb-cursor0'; do
+  IFS=: read -r library soname package <<< "${dependency}"
+  if ! env -u PYTHONPATH "${PYTHON}" -c 'import ctypes, ctypes.util, sys; ctypes.CDLL(ctypes.util.find_library(sys.argv[1]) or sys.argv[2])' "${library}" "${soname}" 2>/dev/null; then
+    NATIVE_PACKAGES+=("${package}")
+  fi
+done
+if [[ ${#NATIVE_PACKAGES[@]} -gt 0 ]]; then
   if [[ ! -f /etc/os-release ]]; then
-    echo "Missing ZBar shared library. Install ZBar for your operating system, then retry." >&2
+    echo "Missing native dependencies: ${NATIVE_PACKAGES[*]}. Install them for your operating system, then retry." >&2
     exit 1
   fi
   source /etc/os-release
   if [[ "${ID:-}" != "ubuntu" && "${ID:-}" != "debian" ]]; then
-    echo "Missing ZBar shared library. Install ZBar for your operating system, then retry." >&2
+    echo "Missing native dependencies: ${NATIVE_PACKAGES[*]}. Install them for your operating system, then retry." >&2
     exit 1
   fi
-  echo "Installing missing system dependency: libzbar0 (administrator access required)..."
+  echo "Installing missing system dependencies: ${NATIVE_PACKAGES[*]} (administrator access required)..."
   APT_COMMAND=(apt-get)
   if [[ "${EUID}" -ne 0 ]]; then
     if ! command -v sudo >/dev/null; then
-      echo "Ask an administrator to install libzbar0, then retry." >&2
+      echo "Ask an administrator to install ${NATIVE_PACKAGES[*]}, then retry." >&2
       exit 1
     fi
     APT_COMMAND=(sudo apt-get)
   fi
   "${APT_COMMAND[@]}" update
-  "${APT_COMMAND[@]}" install -y libzbar0
+  "${APT_COMMAND[@]}" install -y "${NATIVE_PACKAGES[@]}"
 fi
 
 REQUIREMENTS="${APP_DIR}/requirements.txt"
@@ -101,6 +108,6 @@ cleanup() {
 
 trap cleanup INT TERM HUP EXIT
 
-"${PYTHON}" "${APP_DIR}/src/bootstrap/run_main.py" &
+"${PYTHON}" "${APP_DIR}/scripts/run_platform.py" &
 APP_PID=$!
 wait "${APP_PID}"

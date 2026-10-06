@@ -12,18 +12,21 @@ Python requirements when their hash changes, and verifies native/GUI imports.
 Use `./launch_robot_app.sh --setup-only` to prepare the environment without
 starting the application or robot services.
 
-On Ubuntu/Debian, a missing ZBar shared library triggers `apt-get update` and
-installation of `libzbar0`, using `sudo` when needed. ZBar is an OS dependency
-of `pyzbar` and is not installed by pip. An administrator password may be
+On Ubuntu/Debian, missing ZBar or XCB cursor libraries trigger `apt-get update`
+and installation of `libzbar0` and/or `libxcb-cursor0`, using `sudo` when needed.
+ZBar is an OS dependency of `pyzbar`; XCB cursor support is required by Qt's X11
+display plugin. These are not installed by pip. An administrator password may be
 required on first setup. If installing manually, run:
 
 ```bash
 sudo apt-get update
-sudo apt-get install libzbar0
+sudo apt-get install libzbar0 libxcb-cursor0
 ```
 
 Python environment creation also requires the OS `python3-venv` package. Other
 native or GUI import failures are reported with their original traceback.
+The source launcher imports OpenCV before restoring the caller's Qt plugin and
+font environment, so OpenCV's bundled Qt 5 paths do not redirect the PyQt6 GUI.
 
 ## Independent system/profile releases
 
