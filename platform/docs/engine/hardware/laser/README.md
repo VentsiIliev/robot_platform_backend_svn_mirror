@@ -82,3 +82,11 @@ covers it with a stub transport.
 - **Semantic alias transports** (`IMotorTransport`, `IGeneratorTransport`,
   `IVacuumPumpTransport`) exist for other devices; the laser deliberately takes
   the base `IRegisterTransport` because it needs nothing more than one write.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

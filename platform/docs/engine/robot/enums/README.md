@@ -154,3 +154,11 @@ robot_dx, robot_dy = mapping.map(camera_x=3.5, camera_y=-2.0)
 - **`RobotAxis` integer values match the FairinoRobot SDK**: The SDK's `StartJOG` call accepts axis numbers 1–6. `RobotAxis` values map directly, so `axis.value` is passed without conversion.
 - **`Direction` integer values are applied as multipliers**: `PLUS = 1` and `MINUS = -1` are used both as SDK `dir` arguments and as multipliers in `AxisMapping.apply()`.
 - **`ImageToRobotMapping` is a pure data-transform type**: It has no dependencies on the robot service or settings. Camera-space offsets are measured in mm (after pixel-to-mm calibration) and the output is also in mm.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

@@ -178,3 +178,18 @@ Scenarios: `turn_on/off`, `persistent_connection`, `health_check_healthy`, `heal
 - **Robot-system settings can own the register map** — for the glue system, `src/robot_systems/glue/settings/device_control.py` persists board registers and motor topology in `hardware/motors.json`, then `build_motor_service()` maps that into `MotorConfig`.
 - **`IHealthCheckable` integration** — `MotorService` is automatically registered in `ServiceHealthRegistry` by `BaseRobotSystem._build_health_registry()`. No manual wiring needed.
 - **Error decoder placement** — `ModbusMotorErrorDecoder` and `ModbusMotorErrorCode` live in `src/robot_systems/glue/motor/`, not here. The glue system owns the board firmware knowledge.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `health/` | [health](health/README.md) |
+| `interfaces/` | [interfaces](interfaces/README.md) |
+| `modbus/` | [modbus](modbus/README.md) |
+| `models/` | [models](models/README.md) |
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

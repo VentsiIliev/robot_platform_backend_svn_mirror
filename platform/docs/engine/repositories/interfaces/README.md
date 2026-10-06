@@ -134,3 +134,11 @@ class ISettingsService(ABC):
 - **Generic typing**: `ISettingsSerializer[T]` and `ISettingsRepository[T]` are generic, allowing the type checker to verify that the serializer and repository are paired correctly for the same type `T`.
 - **`settings_type` for logging only**: The `settings_type` property on `ISettingsSerializer` is used in log messages to identify which settings file is being read or written. It does not affect behavior.
 - **Forward-compatible deserialization**: All `from_dict` implementations should use `data.get("key", default)` rather than `data["key"]` to handle missing fields gracefully when a new field is added to the settings class.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

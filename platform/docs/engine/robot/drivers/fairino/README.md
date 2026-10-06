@@ -151,3 +151,15 @@ Both always return `0.0`. The FairinoRobot SDK does not expose these values dire
 ### `jog` Reference Frame
 
 `start_jog` uses `ref=4` (Cartesian TCP frame). This means jog moves are in the tool coordinate frame, which is the expected behavior for manual robot teaching.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `fairino/` | [fairino](fairino/README.md) |
+
+[Complete source index](../../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

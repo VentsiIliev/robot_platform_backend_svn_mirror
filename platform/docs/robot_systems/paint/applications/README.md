@@ -17,10 +17,10 @@ At startup the paint shell receives only app metadata from those declarations. T
 
 | Folder | Applications |
 |--------|--------------|
-| Production | `PaintDashboard` |
-| Service | `RobotSettings`, `WorkAreaSettings`, `CameraSettings`, `CalibrationSettings`, `Calibration` |
-| Administration | `UserManagement` |
-| Tests | `WorkpieceLibrary`, `WorkpieceEditor`, `BrokerDebug`, `IntrinsicCapture`, `HandEyeCalibration`, `PickTarget` |
+| Production | `PaintDashboard`, `PaintAdjustment`, `WorkpieceLibrary`, `WorkpieceEditor` |
+| Service | Robot/tool/Modbus/device/work-area/camera/calibration/process settings, calibration and network settings; EtherCAT diagnostics is declared but currently disabled by a switch |
+| Administration | `UserManagement`, `SoftwareUpdate`, `RemoteSupport` |
+| Tests | Broker debug, contour matching, intrinsic capture, hand-eye, target probing, motion-plane setup, motion recipe and shaft alignment (subject to app switches) |
 
 ---
 
@@ -30,7 +30,7 @@ At startup the paint shell receives only app metadata from those declarations. T
 
 **Files:** `applications/dashboard/`
 
-This is the only fully paint-owned application package in the system today.
+This is one of several paint-owned application packages. Other packages include incremental adjustment, process settings, motion-plane setup, motion recipes, pickup strategies and paint-head settings; see the source navigation.
 
 Key pieces:
 
@@ -78,15 +78,14 @@ Primary responsibility:
 - optionally show the resolved Velocity and Acceleration percentages below each combined Speed input as a commissioning aid
 - expose the independently addressed tray fan in the Device Control application
 - show the shared plate-layout state in manual drying mode, including committed and pending workpieces
-- allow stopped-state operators to confirm a new tray or press-and-hold a committed workpiece to remove it
+- require a stopped-state confirmation for New Tray; individual committed placements can be removed while production is active
 
 Tray edits are routed through `PaintDashboardService` to the same `PlateLayoutService`
-instance used by robot drop-off. They are rejected while the process is running or
-paused. Tray occupancy is runtime state and is not restored after an application restart.
+instance used by robot drop-off. Clearing the entire tray is rejected while the process is running or paused; individual placement removal has no such process-state gate. Tray occupancy is runtime state and is not restored after an application restart.
 
 `PaintDashboardUiConfig.show_camera_preview` selects the dashboard composition.
 Its paint-system switch is `paint_system_config.SHOW_DASHBOARD_CAMERA_PREVIEW`.
-The default `True` preserves the camera-first layout unchanged. With `False`,
+The UI configuration type defaults to camera preview enabled, but the checked-in paint-system switch is `False`. With `False`,
 the main area contains `Paint Settings` and `Tray` tabs, the existing two-pass
 paint editor and process-scaling controls move into `Paint Settings`, the duplicate quick
 controls are omitted, and Start/Pause/Stop use the full bottom width. Drying
@@ -105,7 +104,7 @@ The paint-system switch is
 are persisted immediately but the active workpiece keeps its immutable settings
 snapshot; the updated settings are captured at the start of the next workpiece
 cycle. When disabled, the previous stopped-state-only editing behavior is kept.
-Drying-mode and tray-state edits remain locked during an active process.
+Drying-mode and New Tray edits remain locked during an active process; individual tray placement removal is permitted.
 
 The dashboard also shows a separate Paint Control section directly below
 Apply All. Its +/− buttons move the paint head by the chosen register-unit step
@@ -222,3 +221,20 @@ and pressing `Set Current` captures the current robot pose and records the tool
 and user configured in Robot Settings; mixed-frame corner captures are rejected.
 Each selected corner can also be edited manually or sent to the robot through a
 low-speed PTP `Move To` action using that configured tool and user.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `dashboard/` | [dashboard](dashboard/README.md) |
+| `paint_adjustment/` | [paint_adjustment](paint_adjustment/README.md) |
+| `paint_head_settings/` | [paint_head_settings](paint_head_settings/README.md) |
+| `paint_motion_plane_setup/` | [paint_motion_plane_setup](paint_motion_plane_setup/README.md) |
+| `paint_motion_recipe/` | [paint_motion_recipe](paint_motion_recipe/README.md) |
+| `paint_process_settings/` | [paint_process_settings](paint_process_settings/README.md) |
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

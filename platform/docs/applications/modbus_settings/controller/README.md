@@ -80,3 +80,11 @@ controller.load()
 - **`_active` list prevents GC**: `QThread` objects would be immediately garbage collected after `thread.start()` if not stored. Keeping them in `_active` ensures they live until the work is done.
 - **No broker subscriptions**: This application does not subscribe to any messaging topics. `stop()` only cleans up threads.
 - **`set_busy` guards**: While a thread is running, `set_busy(True)` prevents the user from triggering duplicate operations.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

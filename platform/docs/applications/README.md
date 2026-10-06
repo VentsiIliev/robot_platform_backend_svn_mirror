@@ -55,8 +55,16 @@ Live data    →  Broker sub   →  Bridge      →  View setter
 | `aruco_z_probe/` | ArUco marker Z-sweep tool for measuring camera-Z displacement relationships |
 | `pick_and_place_visualizer/` | Live placement plane visualizer, step-mode debugger, and log panel for pick-and-place |
 | `work_area_settings/` | Shared work-area and detection ROI editor (separate from camera settings) |
+| `calibration_settings/` | Shared calibration configuration |
+| `ethercat_diagnostics/` | Master/slave diagnostics and optional error reset |
+| `hand_eye_calibration/` | Robot/chessboard pose capture and camera-to-flange solve |
+| `intrinsic_calibration_capture/` | Automated chessboard/ChArUco calibration acquisition |
+| `shaft_alignment/` | Camera/marker reference capture and alignment comparison |
+| `network_settings/` | Host network configuration |
+| `remote_support/` | Restricted support-service controls |
+| `software_update/` | Signed product update UI |
 
-Robot-system-specific dashboards may expose process-owned quick settings while retaining the same MVC boundary. The paint dashboard's unmatched controls use a one/two-pass selector and pass tabs. Pass two defaults to an explicit “Use Pass 1 settings” mode; disabling inheritance enables independent velocity, acceleration, and press-offset fields. The service rejects changes while the process is running or paused and saves the complete configuration atomically.
+Robot-system-specific dashboards may expose process-owned quick settings while retaining the same MVC boundary. The paint dashboard's unmatched controls use a one/two-pass selector and pass tabs. Pass two defaults to an explicit “Use Pass 1 settings” mode; disabling inheritance enables independent velocity, acceleration, and press-offset fields. The service validates/saves the complete configuration; whether pass settings may change during a run depends on `allow_running_paint_settings_updates`. When enabled, the active workpiece retains its snapshot and the next cycle captures the update.
 
 ---
 
@@ -118,5 +126,47 @@ class YourRobotApp(BaseRobotSystem):
 - **Cross-thread safety**: When broker callbacks arrive from background threads (e.g., weight readings), controllers use a `_Bridge(QObject)` with `pyqtSignal` attributes to marshal data back to the Qt main thread safely. See `glue_cell_settings/controller/`.
 - **Blocking service calls**: When a service call may block the GUI (e.g., serial port detection), controllers dispatch a `QThread + _Worker` pair and track them in `_active: List[Tuple[QThread, _Worker]]`. See `modbus_settings/controller/`.
 - **Localization**: Views should prefer `self.tr(...)` for static strings and implement `retranslateUi()` when they own localizable widget text. `IApplicationView` now handles `LanguageChange` by default and emits `language_changed` for controllers that need to refresh dynamic text via `QCoreApplication.translate(...)`.
-- **Shared view styling**: Reusable application card/button/section styles should come from `src/applications/base/app_styles.py`. Avoid creating new per-application style modules for common patterns.
-- **Virtual keyboard**: Editable touch fields should use shared keyboard widgets (`KeyboardLineEdit`, `KeyboardSpinBox`, `KeyboardDoubleSpinBox`), `KeyboardSettingsView` for schema tabs, or `VirtualKeyboardWidgetFactory()` for builder-style forms. Dialogs with editable fields should be scrollable and restore keyboard spacing on hide.
+- **Shared view styling**: Use `pl_gui.settings.settings_view.styles` for titles, backgrounds, cards and action buttons. `src/applications/base/app_styles.py` provides additional shared application styling; avoid duplicating common patterns locally.
+- **Virtual keyboard**: Direct numeric fields use `KeyboardNumberField`, text fields use `KeyboardLineEdit`; schema tabs use keyboard settings handlers, and existing factory seams use `VirtualKeyboardWidgetFactory()`. Spin-box subclasses are reserved for contracts requiring an actual Qt spin box. The startup flag controls the shared keyboard; dialogs must restore spacing on hide.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Resource reference](RESOURCES.md) — non-Python files and their formats; values remain in the owning storage/source files.
+
+| Source subdirectory | Guide |
+|---|---|
+| `APPLICATION_BLUEPRINT/` | [APPLICATION_BLUEPRINT](APPLICATION_BLUEPRINT/README.md) |
+| `aruco_z_probe/` | [aruco_z_probe](aruco_z_probe/README.md) |
+| `base/` | [base](base/README.md) |
+| `broker_debug/` | [broker_debug](broker_debug/README.md) |
+| `calibration/` | [calibration](calibration/README.md) |
+| `calibration_settings/` | [calibration_settings](calibration_settings/README.md) |
+| `camera_settings/` | [camera_settings](camera_settings/README.md) |
+| `contour_matching_tester/` | [contour_matching_tester](contour_matching_tester/README.md) |
+| `device_control/` | [device_control](device_control/README.md) |
+| `ethercat_diagnostics/` | [ethercat_diagnostics](ethercat_diagnostics/README.md) |
+| `glue_cell_settings/` | [glue_cell_settings](glue_cell_settings/README.md) |
+| `hand_eye_calibration/` | [hand_eye_calibration](hand_eye_calibration/README.md) |
+| `height_measuring/` | [height_measuring](height_measuring/README.md) |
+| `intrinsic_calibration_capture/` | [intrinsic_calibration_capture](intrinsic_calibration_capture/README.md) |
+| `localization/` | [localization](localization/README.md) |
+| `login/` | [login](login/README.md) |
+| `modbus_settings/` | [modbus_settings](modbus_settings/README.md) |
+| `network_settings/` | [network_settings](network_settings/README.md) |
+| `pick_and_place_visualizer/` | [pick_and_place_visualizer](pick_and_place_visualizer/README.md) |
+| `pick_target/` | [pick_target](pick_target/README.md) |
+| `remote_support/` | [remote_support](remote_support/README.md) |
+| `robot_settings/` | [robot_settings](robot_settings/README.md) |
+| `shaft_alignment/` | [shaft_alignment](shaft_alignment/README.md) |
+| `software_update/` | [software_update](software_update/README.md) |
+| `tool_settings/` | [tool_settings](tool_settings/README.md) |
+| `user_management/` | [user_management](user_management/README.md) |
+| `work_area_settings/` | [work_area_settings](work_area_settings/README.md) |
+| `workpiece_editor/` | [workpiece_editor](workpiece_editor/README.md) |
+| `workpiece_library/` | [workpiece_library](workpiece_library/README.md) |
+
+[Complete source index](../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

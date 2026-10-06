@@ -242,3 +242,11 @@ Abstract adapter that robot systems implement to supply targeting runtime pieces
 - **Arc-length rotation in jog** — `_tool_frame_delta()` builds the full ZYX rotation matrix from the current pose to project the jog step along the correct world-space direction.
 - **Name normalisation** — all registry lookups normalise to lowercase + stripped whitespace. Robot systems should use lowercase names in declarations to avoid surprises.
 - **Fallback for missing frames** — `VisionTargetResolver.resolve(frame="unknown")` silently ignores the unknown frame name and falls back to calibration XY with no plane mapping or height correction.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

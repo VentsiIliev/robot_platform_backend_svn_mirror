@@ -140,3 +140,18 @@ When step mode is enabled the pick-and-place process pauses at each configured c
 - **`_BridgeLogHandler` lifetime** — it is installed globally on the root logger, so it captures log records from any thread. It must be removed in `stop()` to avoid holding a reference to the destroyed view.
 - **`_active` flag** — all bridge slot handlers check `self._active` before touching the view, guarding against queued signals arriving after `stop()` has run.
 - **Plane canvas origin** — robot Y increases upward in physical space; the canvas maps robot Y to screen Y without flipping, so the visual orientation matches the robot's coordinate system convention.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `controller/` | [controller](controller/README.md) |
+| `model/` | [model](model/README.md) |
+| `service/` | [service](service/README.md) |
+| `view/` | [view](view/README.md) |
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

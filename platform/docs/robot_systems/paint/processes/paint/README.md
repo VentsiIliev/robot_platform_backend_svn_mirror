@@ -1,221 +1,48 @@
-# `src/robot_systems/paint/processes/paint/` — Paint Production Package
-
-This package contains the full paint production workflow used both by the background paint process and by parts of the workpiece editor preview path.
-
-Deep technical references:
-
-- [ALIGNMENT.md](ALIGNMENT.md)
-- [TRAJECTORY_AND_EXECUTION.md](TRAJECTORY_AND_EXECUTION.md)
-
-It is now organized by responsibility:
-
-```text
-paint/
-├── paint_process.py
-├── paint_production_service.py
-├── config.py
-├── align/
-│   ├── __init__.py
-│   ├── dxf_image_placement.py
-│   └── alignment/
-│       ├── core.py
-│       ├── io.py
-│       └── sampling.py
-├── plan/
-│   ├── workpiece_matching_service.py
-│   └── workpiece_preparation_service.py
-└── execute/
-    ├── workpiece_path_executor.py
-    ├── paint_debug_artifacts.py
-    ├── execution_plane/
-    │   └── strategies.py
-    └── pivot_projection/
-        └── core.py
-```
-
----
-
-## End-To-End Flow
-
-The production path is:
-
-1. `PaintProcess` starts a background run
-2. `PaintProductionService` captures a contour and prepares a workpiece
-3. `DefaultWorkpiecePathPreparationService` builds the execution plan
-4. `PaintWorkpiecePathExecutor` performs pickup, staging, pivot projection, and paint execution
-
-For plate-layout drop-off, `PlateLayoutService` owns explicit runtime placement
-records. A reservation becomes occupied only after `commit()`. The dashboard may
-clear all records for a physically new tray or remove an individual committed
-record while the process is stopped; the allocator then reuses any compatible
-free area. Access is lock-protected because robot execution and dashboard refresh
-run on different threads.
-
-At a plate-layout release, vacuum OFF and blow-off ON are written before the
-exit chain is submitted, but the configured blow-off pulse finishes in the
-background. This overlaps the pulse with plate-exit motion. Other drop-off and
-device-control paths retain the blocking pump-off behavior.
-
-Each reservation also captures the execution plan's normalized XY outlines.
-The dashboard draws those outlines at the reserved tray location, while the
-minimum-area rectangle remains the allocator's conservative collision footprint
-and the visual fallback for plans without usable outline geometry.
-
-The workpiece editor reuses large parts of the same stack for preview and DXF-assisted authoring.
-
----
-
-## `align/`
-
-`align/` owns geometry preparation before path planning.
-
-### Responsibilities
-
-- map DXF/mm-space workpiece geometry into image space
-- extract and normalize raw contour payload points
-- align DXF-based workpieces to captured contours
-- resample and smooth contour geometry used by alignment
-
-### Key entry points
-
-| Function | Purpose |
-|----------|---------|
-| `map_raw_workpiece_mm_to_image()` | place DXF geometry into image coordinates |
-| `estimate_local_image_basis()` | derive local image basis for DXF placement |
-| `align_raw_workpiece_to_contour()` | fit a raw workpiece to a captured contour |
-
-### Internal split
-
-| Module | Responsibility |
-|--------|----------------|
-| `dxf_image_placement.py` | image-space placement from DXF/mm geometry |
-| `alignment/io.py` | raw contour payload extraction/rewrite helpers |
-| `alignment/sampling.py` | resampling, smoothing, contour stats |
-| `alignment/core.py` | alignment solve, transform application, scoring |
-
----
-
-## `plan/`
-
-`plan/` owns workpiece selection and transformation from captured contour to execution-ready raw workpiece payload.
-
-### `workpiece_matching_service.py`
-
-`PaintWorkpieceMatchingService` bridges the vision matcher and stored workpiece library.
-
-Responsibilities:
-
-- capture a snapshot for matching
-- choose a usable contour
-- provide saved-workpiece candidates to the matcher
-- return match metadata and matched raw payload
-
-### `workpiece_preparation_service.py`
-
-`PaintWorkpiecePreparationService` decides which preparation branch to take:
-
-- use matched saved workpiece when available
-- fall back to wrapping the captured contour as a minimal workpiece
-- align DXF-based workpieces after image placement
-
-Outputs:
-
-- a raw workpiece payload compatible with path preparation
-- a human-readable description string for the operator/process log
-
----
-
-## `execute/`
-
-`execute/` owns the transition from prepared execution plan to actual robot motion.
-
-### `workpiece_path_executor.py`
-
-`PaintWorkpiecePathExecutor` is the main orchestration class.
-
-Responsibilities include:
-
-- resolve pickup and paint base poses
-- apply camera-to-TCP pickup compensation
-- build pickup, approach, lift, plane-change, align, and staged poses
-- project source paint paths into pivot motion
-- run execution-plane-specific logic through strategy objects
-- emit debug artifacts for executed paths
-
-### `pivot_projection/`
-
-Projection converts planar source paint geometry into robot poses around a pivot.
-
-Public entry points:
-
-- `project_paint_motion_geometry()`
-- `rebase_projected_paint_path_to_zero_start_rz()`
-
-Detailed operator/debug notes are in [../../../../pivot_painting_reference.md](../../../../pivot_painting_reference.md).
-
-### `execution_plane/strategies.py`
-
-This package removes scattered `if plane == ...` branching by giving each supported motion plane its own strategy.
-
-Current strategies:
-
-- `XyZRzExecutionPlaneStrategy`
-- `XzYRyExecutionPlaneStrategy`
-
-Owned behavior:
-
-- pivot offset axis selection
-- pickup alignment rotation handling
-- XZ/RY preflight reachability checks
-- execution-rotation direction flipping
-
-### `paint_debug_artifacts.py`
-
-This module owns debug dump/plot generation rather than leaving plotting code in the executor.
-
-Key helpers:
-
-- `write_pivot_debug_dump()`
-- `write_pivot_debug_plot()`
-- `build_executed_snapshot_series()`
-
----
-
-## Motion Planes
-
-The package currently supports two pivot motion planes:
-
-| Plane | Active planar axes | Fixed axis | Active rotation |
-|-------|--------------------|------------|-----------------|
-| `xy_z_rz` | `X`, `Y` | `Z` | `RZ` |
-| `xz_y_ry` | `X`, `Z` | `Y` | `RY` |
-
-The axis/index mapping lives in `PaintProjectionRules` inside `config.py`.
-
----
-
-## Key Integration Points Outside This Package
-
-| External module | Why it matters |
-|-----------------|----------------|
-| `src/robot_systems/paint/application_wiring.py` | constructs all runtime paint services |
-| `src/robot_systems/paint/domain/dxf_path_form_behavior.py` | uses align helpers during DXF import in the editor |
-| `src/applications/workpiece_editor/service/workpiece_editor_service.py` | consumes paint editor/runtime helpers |
-| `src/engine/robot/path_preparation/default_workpiece_path_preparation_service.py` | builds execution plans from prepared workpieces |
-
----
-
-## Tests
-
-Focused coverage for this package lives in:
-
-- `test_paint_workpiece_alignment.py`
-- `test_paint_matching_service.py`
-- `test_paint_workpiece_preparation_service.py`
-- `test_paint_pivot_projection.py`
-- `test_paint_execution_plane_strategies.py`
-- `test_paint_workpiece_path_executor.py`
-- `test_paint_geometry_and_config.py`
-- `test_paint_process_integration.py`
-
-These tests are meant to keep the `align / plan / execute` package boundaries safe to refactor.
+# Paint production package
+
+This is the shared production implementation used by the paint family. System classes own storage, profile restrictions and runtime wiring; this package owns paint orchestration and its collaborators.
+
+| Package/module | Responsibility |
+|---|---|
+| `paint_process.py` | Process state, background run, stop worker, manual/adjustment/retry entry points |
+| `paint_production_service.py` | Capture, magazine/production flow and business execution-machine coordination |
+| `config.py`, config service/serializer | Typed defaults, validated persisted configuration and runtime snapshots |
+| [match](match/README.md) | Saved-workpiece candidate selection, matcher adapter and diagnostics |
+| [align](align/README.md) | Raw contour payload IO, normalization and sampling helpers |
+| [plan](plan/README.md) | Raw workpiece preparation, pickup transfer and paint-contact planning |
+| [motion](motion/README.md) | Pose comparison, fresh-pose sampling and path geometry helpers |
+| [execute](execute/README.md) | Path-executor facade, pickup/contact/motion/dropoff/cleanup collaborators and preview |
+| [execution_machine](execution_machine/README.md) | Business states, context, transitions and per-phase handlers |
+| [destination](destination/README.md) | Workpiece destination abstraction |
+| [tray_dry](tray_dry/README.md) | Plate-layout reservations, occupancy and placement |
+| [auto_dryer](auto_dryer/README.md) | Dryer release coordination |
+
+`PaintWorkpiecePreparationService` returns a matched saved payload when matching is available/enabled and succeeds. Failed matching in that mode returns `Unknown workpiece`; it does not silently fall back to the captured contour. A captured-contour fallback is used when matching is disabled/unavailable. Shared path preparation converts the raw payload into a `WorkpieceExecutionPlan` before pickup/contact planning.
+
+Cooperative execution controls coordinate pause, resume and stop across the active context, magazine navigation and path execution. The business machine includes magazine phases, capture/prepare/plan, pickup, paint contact, edge cleanup, prepare/dropoff/post-return and lifecycle states. See [trajectory/execution](TRAJECTORY_AND_EXECUTION.md) for responsibilities and [alignment](ALIGNMENT.md) for the current geometry path.
+
+Plate layout separates reservations from committed occupied records. Outlines support dashboard placement display; conservative footprints support allocation. Automatic-dryer coordination and tray dropoff are selected/configured at composition/runtime rather than duplicated into separate full process packages.
+
+The current tree no longer has `align/alignment/core.py`, `align/dxf_image_placement.py` or `execute/pivot_projection/core.py`. Earlier descriptions are retained in [archive](../../../../archive/robot_systems/paint/processes/paint/README.md), not treated as current APIs.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Resource reference](RESOURCES.md) — non-Python files and their formats; values remain in the owning storage/source files.
+
+| Source subdirectory | Guide |
+|---|---|
+| `align/` | [align](align/README.md) |
+| `auto_dryer/` | [auto_dryer](auto_dryer/README.md) |
+| `destination/` | [destination](destination/README.md) |
+| `execute/` | [execute](execute/README.md) |
+| `execution_machine/` | [execution_machine](execution_machine/README.md) |
+| `match/` | [match](match/README.md) |
+| `motion/` | [motion](motion/README.md) |
+| `plan/` | [plan](plan/README.md) |
+| `tray_dry/` | [tray_dry](tray_dry/README.md) |
+
+[Complete source index](../../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

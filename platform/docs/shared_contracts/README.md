@@ -18,7 +18,7 @@ from src.shared_contracts.events.robot_events import RobotTopics
 messaging.subscribe(RobotTopics.POSITION, self._on_position)
 ```
 
-This guarantees that renaming a topic (in the contracts file) immediately causes import errors everywhere it is used — compile-time safety instead of silent mismatches.
+Shared imports reduce spelling drift. Renaming/removing a Python constant can break imports at runtime; changing only its string value does not produce compile-time validation, and literal-string/external consumers need coordinated migration.
 
 ---
 
@@ -26,14 +26,17 @@ This guarantees that renaming a topic (in the contracts file) immediately causes
 
 | File | Status | Description |
 |------|--------|-------------|
-| `events/robot_events.py` | Implemented | `RobotTopics` — 4 robot state topics |
+| `events/robot_events.py` | Implemented | `RobotTopics` — four snapshot topics plus targeting/configuration change notifications |
 | `events/weight_events.py` | Implemented | `WeightTopics`, `WeightReading`, `CellStateEvent`, `CellState` |
 | `events/process_events.py` | Implemented | `ProcessState`, `ProcessStateEvent`, `ProcessTopics` — process lifecycle state machine contract |
 | `events/notification_events.py` | Implemented | `UserNotificationEvent`, `NotificationSeverity`, `NotificationTopics` — generic operator notification contract |
 | `events/localization_events.py` | Implemented | `LanguageChangedEvent`, `LocalizationTopics` — runtime language-change notification |
 | `events/pick_and_place_events.py` | Implemented | Pick-and-place visualizer and diagnostics topics |
 | `events/glue_overlay_events.py` | Implemented | Glue job preview overlay contract for the production dashboard |
-| `events/vision_events.py` | **Placeholder** | Empty — reserved for vision / camera events |
+| `events/vision_events.py` | Implemented | `VisionTopics` and named `CameraTopics.frame(role)` streams |
+| `events/shell_events.py` | Implemented | Shell navigation, visible application requests and shortcut payloads |
+| `events/workpiece_events.py` | Implemented | Workpiece lifecycle/editor topics |
+| `declarations/` | Implemented | System/spec/work-area/target/tool/channel declarations |
 | `enums.py` | **Placeholder** | Empty — reserved for shared platform enums |
 | `constants.py` | **Placeholder** | Empty — reserved for shared platform constants |
 
@@ -45,10 +48,10 @@ This guarantees that renaming a topic (in the contracts file) immediately causes
 
 | Constant | Topic String | Published By | Payload Type | Frequency |
 |----------|-------------|--------------|--------------|-----------|
-| `RobotTopics.STATE` | `"robot/state"` | `RobotStatePublisher` | `RobotStateSnapshot` | Every 0.5s |
-| `RobotTopics.POSITION` | `"robot/position"` | `RobotStatePublisher` | `List[float]` [x,y,z,rx,ry,rz] mm/° | Every 0.5s |
-| `RobotTopics.VELOCITY` | `"robot/velocity"` | `RobotStatePublisher` | `float` | Every 0.5s |
-| `RobotTopics.ACCELERATION` | `"robot/acceleration"` | `RobotStatePublisher` | `float` | Every 0.5s |
+| `RobotTopics.STATE` | `"robot/state"` | `RobotStatePublisher` | `RobotStateSnapshot` | Nominal 0.02s poll; IO-dependent |
+| `RobotTopics.POSITION` | `"robot/position"` | `RobotStatePublisher` | `List[float]` [x,y,z,rx,ry,rz] mm/° | Nominal 0.02s poll; IO-dependent |
+| `RobotTopics.VELOCITY` | `"robot/velocity"` | `RobotStatePublisher` | `float` | Nominal 0.02s poll; IO-dependent |
+| `RobotTopics.ACCELERATION` | `"robot/acceleration"` | `RobotStatePublisher` | `float` | Nominal 0.02s poll; IO-dependent |
 
 ### Weight Topics (`weight_events.py`)
 
@@ -251,3 +254,16 @@ For user-facing notifications:
 `vision_events.py`, `enums.py`, and `constants.py` are currently empty. They exist to reserve module locations for future capabilities. Do not remove them — imports referencing these modules should fail visibly rather than silently when the time comes to implement them.
 
 → Details: [events/README.md](events/README.md)
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `declarations/` | [declarations](declarations/README.md) |
+| `events/` | [events](events/README.md) |
+
+[Complete source index](../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

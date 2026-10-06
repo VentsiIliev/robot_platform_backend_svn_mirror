@@ -672,3 +672,16 @@ This is the recommended pattern for future robot systems:
 - Application-level calibration UI: [`docs/applications/calibration/README.md`](../../../applications/calibration/README.md)
 - Intrinsic capture application: `src/applications/intrinsic_calibration_capture/`
 - `ExecutableStateMachine`: `src/engine/process/executable_state_machine.py`
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `intrinsic_capture/` | [intrinsic_capture](intrinsic_capture/README.md) |
+| `robot_calibration/` | [robot_calibration](robot_calibration/README.md) |
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

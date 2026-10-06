@@ -15,9 +15,9 @@ It does not depend on any specific robot system.
 
 | File | Responsibility |
 |------|----------------|
-| [i_localization_service.py](/home/ilv/Desktop/robot_app_platform/src/engine/localization/i_localization_service.py) | Service contract: set/get language, available languages, translate |
-| [dict_translator.py](/home/ilv/Desktop/robot_app_platform/src/engine/localization/dict_translator.py) | `QTranslator` subclass backed by JSON dictionaries |
-| [localization_service.py](/home/ilv/Desktop/robot_app_platform/src/engine/localization/localization_service.py) | Catalog discovery, fallback merge, translator lifecycle, language-change event publishing |
+| [i_localization_service.py](../../../src/engine/localization/i_localization_service.py) | Service contract: set/get language, available languages, translate |
+| [dict_translator.py](../../../src/engine/localization/dict_translator.py) | `QTranslator` subclass backed by JSON dictionaries |
+| [localization_service.py](../../../src/engine/localization/localization_service.py) | Catalog discovery, fallback merge, translator lifecycle, language-change event publishing |
 
 ---
 
@@ -70,7 +70,7 @@ src/robot_systems/glue/storage/translations/
 ```
 
 Bootstrap resolves the active robot-system directory from:
-- [SystemMetadata.translations_root](/home/ilv/Desktop/robot_app_platform/src/robot_systems/base_robot_system.py)
+- [SystemMetadata.translations_root](../../../src/robot_systems/base_robot_system.py)
 
 Shared shell catalogs load first. App-local catalogs load next. Robot-system catalogs load last and can override shared wording when needed.
 
@@ -121,7 +121,7 @@ With Paint active, the UI shows `Операторски вход`. Other robot s
 ### 3. Language changes are also published on the broker
 
 `LocalizationService.set_language(...)` publishes:
-- [LocalizationTopics.LANGUAGE_CHANGED](/home/ilv/Desktop/robot_app_platform/src/shared_contracts/events/localization_events.py)
+- [LocalizationTopics.LANGUAGE_CHANGED](../../../src/shared_contracts/events/localization_events.py)
 
 This is useful for non-widget consumers later, such as presenters or controller-owned formatted text.
 
@@ -705,3 +705,11 @@ This is intentionally a pilot slice to validate the full path before translating
 - The service keeps a strong reference to the active translator so Qt does not lose it to GC.
 - `translate(...)` is available on the service for non-widget text, but widgets should still prefer `self.tr(...)`.
 - The persisted language state is intentionally tiny and separate from the main settings serializers, because it is platform/UI state rather than domain configuration.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

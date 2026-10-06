@@ -116,3 +116,11 @@ def stop(self) -> None:
 - **Re-entrant for same owner** — a process can call `acquire()` multiple times with the same `process_id` without deadlocking.
 - **No timeout** — the lock is held until `release()` is explicitly called. Processes must ensure `release()` runs in their `_on_stop` hook even if work fails.
 - **Injected everywhere as `ISystemManager`** — never import `SystemManager` directly in application code.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

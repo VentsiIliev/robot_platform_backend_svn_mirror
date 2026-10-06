@@ -141,3 +141,11 @@ service.start_monitoring(cell_ids=[1, 2], interval_s=0.5)
 - **`get_config` returns local data**: The server has no endpoint for reading back calibration parameters. `get_config()` returns the `CalibrationConfig` embedded in the local `CellConfig` from settings.
 - **All calibration calls use GET**: This matches the existing firmware API design. The query-parameter-based update approach avoids body parsing on the embedded server.
 - **`requests` is a hard dependency**: Unlike `pyserial` in the Modbus package, `requests` is imported at module level and must be installed.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

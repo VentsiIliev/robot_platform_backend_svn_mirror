@@ -100,3 +100,20 @@ WorkpieceEditor's _PendingLoader.on_open_requested() receives the payload
   → stores raw + storage_id
   → on next create_widget() call, auto-loads the workpiece into the editor canvas
 ```
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `controller/` | [controller](controller/README.md) |
+| `domain/` | [domain](domain/README.md) |
+| `localization/` | [localization](localization/README.md) |
+| `model/` | [model](model/README.md) |
+| `service/` | [service](service/README.md) |
+| `view/` | [view](view/README.md) |
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

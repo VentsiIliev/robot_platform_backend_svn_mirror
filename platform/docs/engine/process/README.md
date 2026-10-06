@@ -419,3 +419,11 @@ sequence.stop()    # stops current process; cancels pending auto-advance
 - **Bound method subscription**: `_on_current_stopped` is a bound method kept alive by `self`. No lambda risk. The subscription is unsubscribed before advancing to avoid double-firing.
 - **Thread-safe index management**: `_lock` guards `_current`, `_current_index`, and the subscribe/unsubscribe pair so concurrent stop/advance calls cannot corrupt state.
 - **`GlueOperationCoordinator` uses one sequence per mode**: `SPRAY_ONLY` → `[GlueProcess]`, `PICK_AND_SPRAY` → `[PickAndPlaceProcess, GlueProcess]`. Adding a mode means adding one entry to the sequences dict — no logic changes in the runner.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

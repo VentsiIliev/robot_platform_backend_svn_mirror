@@ -251,9 +251,33 @@ The Calibration application uses `validate_pose(...)` only for precheck simulati
 
 ## Design Notes
 
-- **No Qt in `robot/`**: Every class in this package is pure Python. Qt widgets subscribe to topics on the messaging bus to receive robot state updates.
-- **State monitoring runs in a daemon thread**: `RobotStateManager` polls the robot at 0.5s intervals. The thread is daemonized and doesn't block process exit.
+- **Production robot services avoid Qt widgets**: GUI consumers subscribe to state topics. The interpolation demo `path_interpolation/new_interpolation/simple_interpolation_pyqt6.py` is an explicit Qt exception and imports glue composition for demonstration.
+- **State monitoring runs in a daemon thread**: `RobotStateManager` uses a nominal 0.02-second poll interval, with actual rate dependent on driver work. The thread is daemonized and doesn't block process exit.
 - **Position format**: All positions are `List[float]` with 6 elements: `[x, y, z, rx, ry, rz]` in mm and degrees.
 - **Return codes vs booleans**: `IRobot` methods return `int` (`0` = started immediately, `>0` = accepted and queued, negative = error). `IMotionService` wraps these and returns `bool` (`True` = accepted motion command). This distinction is maintained at the interface boundary.
 - **Blocking waits are pose-aware**: when `wait_to_reach=True`, the default `MotionService` waits for Cartesian convergence and, for 6D targets, orientation convergence with wrapped-angle handling. This prevents orientation-only moves from being acknowledged early.
 - **Bridge-down is not bootstrap-fatal**: for the ROS bridge transport, unavailable hardware should surface as `robot/state = disconnected`, allowing the rest of the platform to boot and show degraded availability.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `calibration/` | [calibration](calibration/README.md) |
+| `configuration/` | [configuration](configuration/README.md) |
+| `drivers/` | [drivers](drivers/README.md) |
+| `enums/` | [enums](enums/README.md) |
+| `features/` | [features](features/README.md) |
+| `height_measuring/` | [height_measuring](height_measuring/README.md) |
+| `interfaces/` | [interfaces](interfaces/README.md) |
+| `path_interpolation/` | [path_interpolation](path_interpolation/README.md) |
+| `path_preparation/` | [path_preparation](path_preparation/README.md) |
+| `procedures/` | [procedures](procedures/README.md) |
+| `safety/` | [safety](safety/README.md) |
+| `services/` | [services](services/README.md) |
+| `targeting/` | [targeting](targeting/README.md) |
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

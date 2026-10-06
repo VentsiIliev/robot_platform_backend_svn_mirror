@@ -1,3 +1,5 @@
+> Documentation status: historical report, not a current source inventory or coverage result. See the [audit notes](../DOCUMENTATION_AUDIT.md).
+
 # Robot System Platform — Refactoring & Extraction Report
 
 **Date:** March 28, 2026  

@@ -164,3 +164,18 @@ A semantic type alias — extends `IRegisterTransport` without adding new method
 - **No state published to broker** — `GeneratorController` does not depend on `IMessagingService`. If you need to broadcast state changes, wrap calls in a robot-system service that holds both `IGeneratorController` and `IMessagingService`.
 - **Transport exceptions never propagate** — `turn_on()` / `turn_off()` / `get_state()` all catch exceptions and return safe values. Callers should check the return value or inspect `GeneratorState.is_healthy`.
 - **Robot-system owns config** — register addresses and timeout are specific to the hardware board; do not rely on the `GeneratorConfig` defaults being correct for your board.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `interfaces/` | [interfaces](interfaces/README.md) |
+| `modbus/` | [modbus](modbus/README.md) |
+| `models/` | [models](models/README.md) |
+| `timer/` | [timer](timer/README.md) |
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

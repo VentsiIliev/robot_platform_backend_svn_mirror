@@ -124,7 +124,7 @@ class IMotionService(ABC):
                                 wait_to_reach: bool = False) -> bool: ...           # default: False
 ```
 
-- `wait_to_reach=True`: blocks until the robot reaches the target pose. The default `MotionService` implementation requires Euclidean position error ≤ 2mm on `x,y,z` and, when the target includes orientation, wrapped angular error ≤ 1.0° on `rx,ry,rz`, or it times out after 10s.
+- `wait_to_reach=True`: blocks until the robot reaches the target pose. The default `MotionService` implementation requires Euclidean position error ≤ 5mm on `x,y,z` and, when the target includes orientation, wrapped angular error ≤ 1.2° on `rx,ry,rz`, for three consecutive samples, or it times out after 10s. It prefers a fresh driver pose and checks cooperative wait cancellation between samples.
 - `wait_cancelled`: optional callback checked during that wait loop; when it returns `True`, the wait aborts early.
 
 Implementation: `MotionService`
@@ -281,3 +281,11 @@ Consumers: `ToolChanger`, `ToolManager`, `ToolService`, `tool_settings` applicat
 - **`IRobot` vs `IMotionService`**: `IRobot` is SDK-level (int codes, no safety). `IMotionService` is application-level (bool success, safety-checked, optional blocking wait). Applications never use `IRobot`.
 - **`IRobotService` is the application boundary**: Application services import only `IRobotService`. Everything below it is hidden.
 - **All properties on `IRobotStateProvider` are thread-safe**: `RobotStateManager` uses a lock on all property reads.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

@@ -170,3 +170,11 @@ build_robot_system_height_measuring_services()
 - **Session bracketing** — callers must call `begin_measurement_session()` before a batch of `measure_at()` calls and `end_measurement_session()` after. The service may leave the laser on between measurements for performance.
 - **`already_at_xy=True`** — skip the robot move when the robot is already positioned; avoids redundant motion when the caller manages positioning externally.
 - **Lazy model loading** — `HeightCorrectionService` builds the interpolation model on first use and caches it. Call `reload()` after a new height map is saved.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

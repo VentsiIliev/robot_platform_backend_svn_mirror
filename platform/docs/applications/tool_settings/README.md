@@ -83,11 +83,11 @@ Use this app directly in any robot system that declares the common tool settings
 The application edits `CommonSettingsID.TOOL_CHANGER_CONFIG`. The runtime
 `IToolService` is built separately by `SystemBuilder` through the shared
 default builder in
-[default_service_builders.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/default_service_builders.py).
+[default_service_builders.py](../../../src/robot_systems/default_service_builders.py).
 
 `ToolChangerSettings` and `ToolChangerSettingsSerializer` are now engine-level
 types in
-[tool_changer_settings.py](/home/ilv/Desktop/robot_app_platform/src/engine/robot/configuration/tool_changer_settings.py),
+[tool_changer_settings.py](../../../src/engine/robot/configuration/tool_changer_settings.py),
 not glue-specific settings classes.
 
 The default tool catalog and default slot layout are robot-system declarations,
@@ -97,3 +97,19 @@ not engine defaults. A robot system should declare:
 
 and wire those into `ToolChangerSettingsSerializer(default_tools=..., default_slots=...)`
 inside its `settings_specs`.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `controller/` | [controller](controller/README.md) |
+| `localization/` | [localization](localization/README.md) |
+| `model/` | [model](model/README.md) |
+| `service/` | [service](service/README.md) |
+| `view/` | [view](view/README.md) |
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

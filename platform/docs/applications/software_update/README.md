@@ -28,3 +28,19 @@ dialog (new version or up to date), or a critical dialog when the check fails.
 The status line retains the same result. Request/completion/failure logs help
 diagnose signal or worker issues. Frozen self-tests exercise the Check button and
 background result callback without hardware or interactive dialogs.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `controller/` | [controller](controller/README.md) |
+| `localization/` | [localization](localization/README.md) |
+| `model/` | [model](model/README.md) |
+| `service/` | [service](service/README.md) |
+| `view/` | [view](view/README.md) |
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

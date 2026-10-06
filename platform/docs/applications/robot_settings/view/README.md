@@ -85,3 +85,11 @@ The tab itself is generic. Robot-system-specific protected rows and serializatio
 
 - **Named forwarders for all signal bridging**: `_on_inner_save`, `_on_inner_value_changed`, `_on_inner_movement_changed` are named bound methods — no lambdas or `.emit` references are used as connection targets.
 - **`SettingsView.add_raw_tab`**: The Movement Groups and Targeting tabs are added with `add_raw_tab()` which accepts any `QWidget` directly, bypassing schema-driven field generation.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

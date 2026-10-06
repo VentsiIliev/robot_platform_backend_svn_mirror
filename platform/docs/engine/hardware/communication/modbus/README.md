@@ -402,3 +402,11 @@ class ModbusExceptionType(Enum):
 exc_type = ModbusExceptionType.from_exception(exc)
 print(exc_type.description())   # "Serial port error — port unavailable or misconfigured"
 ```
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

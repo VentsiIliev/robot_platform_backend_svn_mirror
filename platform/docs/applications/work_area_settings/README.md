@@ -40,8 +40,24 @@ work_area_settings/
 - offers zoom controls below the preview while retaining drag editing and wheel zoom
 
 The preview uses the shared `CameraView` widget and the shared application style helpers from
-[app_styles.py](/home/ilv/Desktop/robot_app_platform/src/applications/base/app_styles.py).
+[app_styles.py](../../../src/applications/base/app_styles.py).
 The view hides `CameraView`'s built-in toolbar through its public API and places
 zoom controls in the preview card footer. Saving still goes through the existing
 controller and `IWorkAreaService` path.
 Vision state events display their `state` value rather than the raw broker payload.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `controller/` | [controller](controller/README.md) |
+| `localization/` | [localization](localization/README.md) |
+| `model/` | [model](model/README.md) |
+| `service/` | [service](service/README.md) |
+| `view/` | [view](view/README.md) |
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

@@ -109,3 +109,11 @@ WeightCellService daemon thread publishes WeightReading
 - **`_active` guard**: `_on_save` and `_on_tare` check `self._active` before acting, preventing callbacks from being processed after `stop()` is called.
 - **`_Bridge` instance ownership**: `_Bridge` is stored as `self._bridge`, which keeps it alive as long as the controller is alive. Because `view._controller = controller` (set by `ApplicationFactory`), the bridge lives as long as the view.
 - **Lambda subscriptions are safe here**: The lambdas passed to `broker.subscribe` are stored in `_subs`. The broker uses `weakref` for bound methods but the lambda references are kept alive by `_subs`.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

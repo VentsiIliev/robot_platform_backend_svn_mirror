@@ -348,3 +348,11 @@ print(f"Z target: {calib.z_target}mm")
 - **Position strings in JSON**: `MovementGroup.position` stores positions as `"[x, y, z, rx, ry, rz]"` strings for easy human editing. `parse_position()` converts them to `List[float]` at runtime.
 - **JSON keys are uppercase**: The JSON file uses `"ROBOT_IP"`, `"MOVEMENT_GROUPS"`, etc. (uppercase), while the Python fields use `snake_case`. This is a deliberate convention matching the original configuration format.
 - **`RobotSettingsSerializer.settings_type = "robot_config"`**: The `name` used in `settings_service.get()` calls must match the key in `SettingsSpec`, not necessarily `settings_type`.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

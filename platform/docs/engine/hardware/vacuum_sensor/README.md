@@ -312,3 +312,17 @@ sensor.close()
   constructor, so a bad point name fails at startup rather than on first use.
 - **`detected_value` is compared to the raw reading**, so active-low sensors are
   first-class — set `detected_value=0` and nothing else changes.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `interfaces/` | [interfaces](interfaces/README.md) |
+| `modbus/` | [modbus](modbus/README.md) |
+| `models/` | [models](models/README.md) |
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

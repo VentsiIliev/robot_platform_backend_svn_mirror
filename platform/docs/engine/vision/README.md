@@ -2,14 +2,14 @@
 
 Camera-based alignment and detection system. Defines `IVisionService` and hosts the full `VisionSystem` implementation backed by OpenCV and the `PLVision` library.
 
-The engine vision layer also declares [ICaptureSnapshotService](/home/ilv/Desktop/robot_app_platform/src/engine/vision/i_capture_snapshot_service.py), the interface used by higher-level robot-system code to pair:
+The engine vision layer also declares [ICaptureSnapshotService](../../../src/engine/vision/i_capture_snapshot_service.py), the interface used by higher-level robot-system code to pair:
 - latest frame
 - latest contours
 - robot pose at capture time
 - timestamp / source metadata
 
 The default engine implementation now lives in:
-- [capture_snapshot_service.py](/home/ilv/Desktop/robot_app_platform/src/engine/vision/capture_snapshot_service.py)
+- [capture_snapshot_service.py](../../../src/engine/vision/capture_snapshot_service.py)
 
 This gives applications and processes one stable abstraction for capture-time geometry while keeping the capture logic reusable across robot systems.
 
@@ -19,7 +19,7 @@ This gives applications and processes one stable abstraction for capture-time ge
 
 ```
 src/engine/vision/
-├── i_vision_service.py                        ← IVisionService ABC (16 methods)
+├── i_vision_service.py                        ← IVisionService ABC (see module reference for current methods)
 ├── homography_transformer.py                  ← HomographyTransformer (ICoordinateTransformer impl)
 ├── camera_settings_serializer.py              ← CameraSettingsSerializer (engine ↔ settings layer)
 └── implementation/
@@ -51,11 +51,9 @@ src/engine/vision/
     │   └── features/                          ← Self-contained subsystems (not all active by default)
     │       ├── contour_matching/              ← Workpiece-to-camera contour matching + alignment
     │       ├── calibration/                   ← CameraCalibrationService (chessboard solver)
-    │       ├── laser_detection/               ← Structured-light height measurement
-    │       ├── brightness_control/            ← BrightnessManager (PID brightness controller)
+    │       ├── brigthtness_control/            ← BrightnessManager (PID brightness controller)
     │       ├── hand_eye/                      ← Hand-eye calibration data collection
     │       ├── camera_pose_solver/            ← Camera pose estimation
-    │       ├── heightMeasuring/               ← Height measurement abstraction
     │       └── qr_scanner/                   ← QRcodeScanner
     └── plvision/
         └── PLVision/                         ← Internal vision library (OpenCV utilities)
@@ -196,10 +194,10 @@ Used in robot-system `settings_specs` under key `CommonSettingsID.VISION_CAMERA_
 
 See [VisionSystem.py](../../../src/engine/vision/implementation/VisionSystem/VisionSystem.py) for full API. Key points:
 
-- Constructed once by the default `build_vision_service()` in [src/robot_systems/default_service_builders.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/default_service_builders.py)
-- Runs a background `FrameGrabber` thread from construction
+- Constructed once by the default `build_vision_service()` in [src/robot_systems/default_service_builders.py](../../../src/robot_systems/default_service_builders.py)
+- Defers camera initialization to its background startup path; `FrameGrabber` starts after a camera is available
 - When the camera backend starts returning repeated `None` frames, `FrameGrabber` now attempts in-place stream recovery with `stop_stream()` / `start_stream()` instead of spinning forever on stale data
-- `start_system()` starts the main `_loop` daemon thread; `stop_system()` joins it
+- `start_system()` starts background initialization/processing; `stop_system()` signals shutdown and handles camera/frame-grabber/process-thread cleanup
 - `run()` is the per-tick processing method (called by `_loop`):
   1. Grab latest frame from `FrameGrabber`
   2. Auto-brightness if enabled
@@ -223,3 +221,15 @@ To mitigate that:
 - restart attempts are throttled to avoid a tight reconnect loop if the remote endpoint is still unhealthy
 
 This does not fix a broken MJPEG producer, but it prevents a single stream desynchronization from permanently freezing frame updates until the whole application is restarted.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `implementation/` | [implementation](implementation/README.md) |
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

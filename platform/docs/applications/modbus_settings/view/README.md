@@ -49,3 +49,11 @@ Defines the field schema for the settings form — groups of labeled fields with
 
 - **`set_busy(True)`** is called before any blocking action (`detect_ports_requested`, `test_connection_requested`). The controller sets it back to `False` after the worker thread finishes.
 - The view has no knowledge of threads or services — it only emits signals and accepts data through setters.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

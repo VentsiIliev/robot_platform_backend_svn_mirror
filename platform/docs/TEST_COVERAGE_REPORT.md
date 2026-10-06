@@ -1,3 +1,5 @@
+> Documentation status: historical report, not a current source inventory or coverage result. See the [audit notes](DOCUMENTATION_AUDIT.md).
+
 # Test Coverage Report
 
 **Date:** 2026-02-27

@@ -93,7 +93,7 @@ This keeps the login/authentication path reusable without forcing the CRUD-orien
 
 ## Glue System Schema
 
-The glue robot system now declares its role and permission policy on [glue_robot_system.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/glue_robot_system.py) via `role_policy`. The user schema itself is built from that declaration by [glue_user_schema.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/domain/users/glue_user_schema.py). The `UserManagement` application is still wired without knowing what fields or roles the glue system chose.
+The glue robot system now declares its role and permission policy on [glue_robot_system.py](../../../src/robot_systems/glue/glue_robot_system.py) via `role_policy`. The user schema itself is built from that declaration by [glue_user_schema.py](../../../src/robot_systems/glue/domain/users/glue_user_schema.py). The `UserManagement` application is still wired without knowing what fields or roles the glue system chose.
 
 ---
 
@@ -175,3 +175,21 @@ Current shared keys include:
 - **CSV persistence**: straightforward for operator-level access management; not intended for high-security production use.
 - **Auth is now a thin adapter**: login/authentication no longer depends directly on `IUserRepository`. Instead, `AuthUserRepositoryAdapter` exposes only the minimal auth-facing data needed by the shared engine `AuthenticationService`.
 - **Roles are robot-system-defined**: the permissions tab and first-admin creation no longer rely on a fixed shared `Role` enum. The robot system supplies the available role values, the default permission role values, and any protected app-role invariants.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `controller/` | [controller](controller/README.md) |
+| `domain/` | [domain](domain/README.md) |
+| `localization/` | [localization](localization/README.md) |
+| `model/` | [model](model/README.md) |
+| `service/` | [service](service/README.md) |
+| `ui/` | [ui](ui/README.md) |
+| `view/` | [view](view/README.md) |
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

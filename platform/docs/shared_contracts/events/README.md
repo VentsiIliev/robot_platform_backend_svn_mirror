@@ -15,7 +15,7 @@ class RobotTopics:
     TARGETING_DEFINITIONS_CHANGED = "robot/targeting_definitions_changed"
 ```
 
-All four topics are published together on every polling tick (every 0.5s) by `RobotStatePublisher`.
+The four snapshot topics (`STATE`, `POSITION`, `VELOCITY`, `ACCELERATION`) are published together by `RobotStatePublisher`. `RobotStateManager` has a nominal 0.02-second poll interval; actual frequency depends on driver work. Targeting/configuration notifications are separate change events, not emitted on every snapshot.
 
 | Topic | Payload | Subscribers |
 |-------|---------|-------------|
@@ -381,3 +381,11 @@ Diagnostics snapshot `dict` — structure is defined by the glue process publish
 - **`WeightTopics` uses static methods, not constants**: Because cell IDs are runtime values, generating topics programmatically is cleaner than declaring `CELL_0_STATE = "weight/cell/0/state"` for each possible ID.
 - **Payloads cross thread boundaries**: Both `WeightReading` and `CellStateEvent` are published from daemon threads. Using frozen dataclasses (immutable) means no locking is needed for read access.
 - **Notification events are semantic, not UI-specific**: Publishers send severity, keys, params, and fallback text. They do not import Qt or decide how a dialog looks. Presentation happens in the application layer.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

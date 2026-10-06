@@ -342,3 +342,15 @@ Both accept `debug_dir` and return silently when it is empty.
   a plan build never dies because an optional processor misbehaved.
 - **Debug output is off the hot path.** A single background worker plus a bounded
   queue keeps plotting from blocking motion planning.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `pixel_to_mm/` | [pixel_to_mm](pixel_to_mm/README.md) |
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

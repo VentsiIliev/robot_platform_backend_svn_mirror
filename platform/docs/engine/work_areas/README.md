@@ -109,3 +109,11 @@ class WorkAreaService(IWorkAreaService):
 - **Definitions vs config** — `WorkAreaDefinition` (from `shared_contracts.declarations`) is the static, class-level declaration of a work area (name, bounds, etc.). `WorkAreaConfig` is the persisted user-drawn polygon for that area. The service holds both.
 - **No broker events** — work-area changes are not published to the message broker; callers poll `get_active_area_id()` or hold a reference to the service.
 - **Normalised coordinates** — all stored polygons use [0, 1] range so they are resolution-independent. Convert to pixels at render time using the actual image dimensions.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

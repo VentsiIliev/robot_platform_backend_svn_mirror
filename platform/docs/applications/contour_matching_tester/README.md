@@ -83,3 +83,19 @@ return WidgetApplication(widget_factory=lambda ms: ContourMatchingTesterFactory(
 - **Snapshot-first contour reads**: the tester now uses the shared capture snapshot path for live contours when available, which keeps it aligned with the production matching input path.
 - **Vision optional**: the application loads and shows workpieces even without a camera. The "Run Match" button is disabled or returns a clear error when vision is unavailable.
 - **No robot interaction**: purely a vision + file I/O tool. Safe to use during maintenance without robot enabled.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `controller/` | [controller](controller/README.md) |
+| `localization/` | [localization](localization/README.md) |
+| `model/` | [model](model/README.md) |
+| `service/` | [service](service/README.md) |
+| `view/` | [view](view/README.md) |
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

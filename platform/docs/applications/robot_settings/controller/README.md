@@ -64,3 +64,11 @@ _on_save(_values)               ← _values is the dict from save_requested, ign
 - **Calibration fields share the flat dict**: The view's `SettingsView` renders calibration fields as part of the same form. `get_values()` returns them all in one dict. The mapper knows which keys belong to calibration and which to robot config.
 - **Targeting definitions are separate from the flat dict**: The raw targeting tab returns a generic payload with named points and frames. The controller saves it alongside the normal robot/calibration settings, but the app layer stays robot-system agnostic.
 - **`view.get_values()` not `_values`**: The `_values` argument from `save_requested` is discarded. The controller calls `view.get_values()` to get the current state of all fields, ensuring the latest values are read (not just those that triggered the signal).
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

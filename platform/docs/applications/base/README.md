@@ -208,7 +208,7 @@ Responsibilities:
 - subscribe to `NotificationTopics.USER`
 - resolve localization-ready notification keys into display text
 - fall back to provided English text when no translation is available
-- present the notification with the shared [styled message box](/home/ilv/Desktop/robot_app_platform/src/applications/base/styled_message_box.py)
+- present the notification with the shared [styled message box](../../../src/applications/base/styled_message_box.py)
 
 The presenter intentionally lives in `src/applications/base/` because it depends on Qt and dialog rendering. Backend layers must not import it.
 
@@ -470,3 +470,17 @@ Schema-based forms built through `KeyboardSettingsView` or `build_with_keyboard_
 - **`WidgetApplication` is the universal adapter**: The bootstrap works with `IApplication` references. `WidgetApplication` decouples the typed factory from the bootstrap protocol, enabling lazy widget creation.
 - **`build()` is the only entry point**: Subclasses implement `_create_model`, `_create_view`, `_create_controller` only. The wiring order and GC fix are handled by the base class exactly once.
 - **Notifications stay out of backend layers**: Processes, coordinators, and services should publish typed notification events via the broker. Controllers render them through `UserNotificationPresenter`. This avoids Qt imports in engine or robot-system code and keeps the mechanism reusable across robot systems.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `config/` | [config](config/README.md) |
+| `resources/` | [resources](resources/README.md) |
+| `widgets/` | [widgets](widgets/README.md) |
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

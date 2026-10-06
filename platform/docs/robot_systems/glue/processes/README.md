@@ -121,3 +121,16 @@ All four processes follow the same wiring conventions inherited from `BaseProces
 - Check `ProcessRequirements` (service health) before allowing transition to RUNNING.
 - Long-running work executes on a daemon thread; hooks must be non-blocking.
 - `set_error(msg)` transitions to ERROR; `reset_errors()` returns to IDLE.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `glue_dispensing/` | [glue_dispensing](glue_dispensing/README.md) |
+| `pick_and_place/` | [pick_and_place](pick_and_place/README.md) |
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

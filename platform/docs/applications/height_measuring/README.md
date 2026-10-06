@@ -104,3 +104,18 @@ service = HeightMeasuringApplicationService(
 - **`reload_calibration()`** — forces the service to re-read the calibration file from disk; call after a successful `run_calibration()` to make `is_calibrated()` reflect the new state immediately.
 - **`LaserDetectionResult.debug_image`** — the annotated frame is only available when `detect_once()` succeeds. Controllers should check `ok` before trying to display it.
 - **Gaussian blur kernel** — `blur_kernel_size` must be odd; the mapper enforces this by incrementing even values before applying them.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `controller/` | [controller](controller/README.md) |
+| `model/` | [model](model/README.md) |
+| `service/` | [service](service/README.md) |
+| `view/` | [view](view/README.md) |
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

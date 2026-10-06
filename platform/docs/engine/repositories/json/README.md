@@ -143,3 +143,11 @@ print("File exists:", repo.exists())
 - **Atomic file creation on first load**: When the file is missing, `load()` creates it before returning. This means the platform always produces a complete, editable settings file on first run, even with no prior configuration.
 - **Graceful JSON error fallback**: If the settings file is corrupted (invalid JSON), the platform logs an error and continues with defaults rather than crashing. This is important for robustness in production environments.
 - **`Generic[T]` on both bases**: Both `ISettingsRepository[T]` and `BaseJsonSettingsRepository` carry the type parameter, enabling mypy/pyright to verify type correctness when a specific serializer is paired with a repository.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

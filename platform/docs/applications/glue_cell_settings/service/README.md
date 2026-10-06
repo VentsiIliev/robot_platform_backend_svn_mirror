@@ -71,3 +71,11 @@ In-memory implementation backed by a default `CellsConfig`. `tare()` always retu
 
 - **Optional `IWeightCellService`**: The weight cell service may not be available if hardware is disconnected or `required=False` in `ServiceSpec`. The service gracefully degrades — `tare` returns `False`, `push_calibration` is skipped.
 - **`get_cell_ids()` is called at factory build time**: `GlueCellSettingsFactory` calls this before creating the view to determine how many tabs to build.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

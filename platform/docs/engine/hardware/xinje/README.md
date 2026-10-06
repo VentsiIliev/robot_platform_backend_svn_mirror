@@ -87,3 +87,11 @@ than using the address map, because it inherits the whole coil-write protocol.
   resolve immediately, so a settings file may store either form.
 - **Adding a model** means adding one more `XinjeMAIOAddressMap` instance; no
   class changes are required.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

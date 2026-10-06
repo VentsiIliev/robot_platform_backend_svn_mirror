@@ -101,3 +101,11 @@ Additional keys used by the in-main-calibration capture flow:
 - **`deepcopy` before mutation**: Both mappers use `deepcopy(base)` before applying flat values. This prevents accidental mutation of the cached `_config` / `_calibration` objects.
 - **`movement_groups` bypasses the flat dict**: The `MovementGroupsTab` widget produces `Dict[str, MovementGroup]` objects directly, not flat string values. The model receives them as a separate argument and assigns them after mapping.
 - **Targeting stays generic in the app layer**: The model stores targeting definitions as plain dictionaries. Robot-system-specific conversion between that editor payload and real settings objects happens in the service/wiring layer, not in the reusable application package.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

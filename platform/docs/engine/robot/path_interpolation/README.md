@@ -218,3 +218,16 @@ path = result.sampled.tolist()
 - **Input never mutated** — both legacy functions always return new lists.
 - **`debug=True` (legacy)** prints stage summaries to stdout; the active package uses `debug_plotting` instead.
 - **Lazy debug imports** — matplotlib/OpenCV figure helpers are imported inside call sites to keep module import cost and side effects out of the hot path.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `deprecated/` | [deprecated](deprecated/README.md) |
+| `new_interpolation/` | [new_interpolation](new_interpolation/README.md) |
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

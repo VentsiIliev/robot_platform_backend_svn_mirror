@@ -310,3 +310,11 @@ failed retract; `message == "retract_timeout"` sets `timed_out=True`.
 - **No platform imports beyond `src.engine.robot.enums`.** The package takes
   `robot` and `condition` as opaque collaborators, which is why it can be reused
   by any robot system.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

@@ -181,3 +181,26 @@ services = [
     ),
 ]
 ```
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `communication/` | [communication](communication/README.md) |
+| `dryer/` | [dryer](dryer/README.md) |
+| `fan/` | [fan](fan/README.md) |
+| `generator/` | [generator](generator/README.md) |
+| `laser/` | [laser](laser/README.md) |
+| `motor/` | [motor](motor/README.md) |
+| `peripherals/` | [peripherals](peripherals/README.md) |
+| `physical_control_buttons/` | [physical_control_buttons](physical_control_buttons/README.md) |
+| `vacuum_pump/` | [vacuum_pump](vacuum_pump/README.md) |
+| `vacuum_sensor/` | [vacuum_sensor](vacuum_sensor/README.md) |
+| `weight/` | [weight](weight/README.md) |
+| `xinje/` | [xinje](xinje/README.md) |
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

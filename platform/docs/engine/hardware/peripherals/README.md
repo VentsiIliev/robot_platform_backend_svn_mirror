@@ -276,3 +276,11 @@ device's own `read_state()` when callable.
 - **Command codes are data, not code.** `commands` maps action names to numeric
   codes, so new device commands can be added through settings without changing
   this module.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

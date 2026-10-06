@@ -340,7 +340,7 @@ Within pick-and-place, camera-to-robot conversion is now also split explicitly b
 - homography maps image points into calibration-plane robot coordinates
 - matching captures contours and the current robot pose together through `ICaptureSnapshotService`
 - a dedicated `PlanePoseMapper` is rebuilt at transform time to convert those coordinates into the actual capture-pose frame
-- `VisionTargetResolver` (from [`src/engine/robot/targeting/`](/home/ilv/Desktop/robot_app_platform/src/engine/robot/targeting)) then resolves the requested target point in that plane:
+- `VisionTargetResolver` (from [`src/engine/robot/targeting/`](../../../src/engine/robot/targeting)) then resolves the requested target point in that plane:
   - `camera`
   - `tool`
   - `gripper`
@@ -383,3 +383,27 @@ The calibration service now refreshes both `robot/calibration.json` and `robot/c
 | `device_control.py` | Defines `GlueMotorConfig`, `MotorSpec`, and `GlueMotorConfigSerializer` for `hardware/motors.json` |
 
 → Subpackages: [settings/](settings/README.md) · [dashboard/](dashboard/README.md) · [glue_settings/](glue_settings/README.md) · [processes/](processes/README.md) · [targeting/](targeting/README.md) · [navigation/](navigation/README.md) · [domain/](domain/README.md) · [motor/](motor/README.md)
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Resource reference](RESOURCES.md) — non-Python files and their formats; values remain in the owning storage/source files.
+
+| Source subdirectory | Guide |
+|---|---|
+| `applications/` | [applications](applications/README.md) |
+| `calibration/` | [calibration](calibration/README.md) |
+| `domain/` | [domain](domain/README.md) |
+| `height_measuring/` | [height_measuring](height_measuring/README.md) |
+| `motor/` | [motor](motor/README.md) |
+| `processes/` | [processes](processes/README.md) |
+| `settings/` | [settings](settings/README.md) |
+| `storage/` | [storage](storage/README.md) |
+| `targeting/` | [targeting](targeting/README.md) |
+| `tools/` | [tools](tools/README.md) |
+| `workpieces/` | [workpieces](workpieces/README.md) |
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

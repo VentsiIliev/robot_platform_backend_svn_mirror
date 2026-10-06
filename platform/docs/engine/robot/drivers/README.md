@@ -194,3 +194,16 @@ To add a new **transport for the ROS2 driver** instead, subclass `RobotClientAda
 - **Fake is selected by URL, not by flag**: `server_url="fake://local"` is the documented way to run a robot system without a bridge — no settings or env var needed.
 - **Normalisation happens at the driver**: bridge payloads may be dicts, bools, or ints; `Ros2Robot` collapses all of them to `int` before `MotionService` sees them, so `ret >= 0` is always a valid success test.
 - **`zeroerr_robot.py` is empty** (1 byte placeholder) — do not assume a ZeroErr driver exists.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `client_adapters/` | [client_adapters](client_adapters/README.md) |
+| `fairino/` | [fairino](fairino/README.md) |
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

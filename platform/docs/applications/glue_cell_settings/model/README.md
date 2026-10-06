@@ -76,3 +76,11 @@ Uses `dataclasses.replace()` for immutable `CellConfig` fields, preserving all u
 
 - **`push_calibration` is called in `save()`**: After persisting the updated `CellsConfig`, the model immediately pushes the new calibration config to the running hardware service. This ensures the weight cell starts using the new calibration without requiring a restart.
 - **`get_cell_flat` returns `None` on unknown ID**: The controller checks for `None` before calling `view.load_cell()`, making missing cells a no-op rather than an error.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

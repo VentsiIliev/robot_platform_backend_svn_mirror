@@ -151,3 +151,18 @@ The factory assigns `view._controller = ctrl` to keep the controller alive while
 - **QR safety warning** — Switching to the QR tab shows a `QMessageBox.warning` because the robot moves to the scan position. If the operator cancels, the tab reverts to Login.
 - **First-run flow** — If `is_first_run()` is True, the first-admin creation form is shown instead of the normal login. After a successful admin creation the dialog immediately logs in with the new credentials.
 - **Localization** — `LoginView` implements `retranslateUi()` and `changeEvent(LanguageChange)`. Translated via `QCoreApplication.translate("Login", text)` with source-text fallback. Default shared translations live in `src/applications/login/localization/`; robot systems can override the `Login` context in their own translation catalogs.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `controller/` | [controller](controller/README.md) |
+| `localization/` | [localization](localization/README.md) |
+| `model/` | [model](model/README.md) |
+| `view/` | [view](view/README.md) |
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

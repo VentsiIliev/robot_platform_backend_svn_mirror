@@ -159,3 +159,16 @@ fresh = settings_service.reload("robot_config")
 - **Write-through cache**: `save()` writes to disk and immediately updates the cache, so subsequent `get()` calls see the new value without a disk round-trip.
 - **Auto-create defaults**: If the settings file does not exist, `BaseJsonSettingsRepository.load()` creates it with default values from `serializer.get_default()`. This ensures the app always starts successfully even on a fresh installation.
 - **Error handling**: JSON parse errors fall back to defaults and log a warning. Other I/O errors raise `SettingsLoadError` / `SettingsSaveError`.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `interfaces/` | [interfaces](interfaces/README.md) |
+| `json/` | [json](json/README.md) |
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

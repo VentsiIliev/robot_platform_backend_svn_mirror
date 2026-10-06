@@ -232,3 +232,11 @@ This is the correct fail-safe for a development platform where the safety system
 ### Singleton-Free
 
 `SafetyChecker` has no singleton or class-level state. Each `MotionService` receives its own instance, configured with (or without) a settings service.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

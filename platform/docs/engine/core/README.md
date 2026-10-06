@@ -282,3 +282,11 @@ messaging.subscribe("robot/state", self._on_robot_state)
 - Returns the **first non-`None`** result
 - Returns `None` if no subscriber responds
 - The `timeout` parameter is accepted for API compatibility but is not currently enforced (all calls are synchronous)
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

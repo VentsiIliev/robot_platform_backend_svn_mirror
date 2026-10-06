@@ -111,3 +111,18 @@ python src/applications/modbus_settings/example_usage.y_pixels
 - **Blocking calls on `QThread`**: `detect_ports` and `test_connection` call `pyserial` which may block for several seconds. `ModbusSettingsController` dispatches each call in a `QThread + _Worker` pair tracked in `_active: List[Tuple[QThread, _Worker]]`. Threads are removed from `_active` on finish and cleaned up in `stop()`.
 
 → Subpackages: [service/](service/README.md) · [model/](model/README.md) · [view/](view/README.md) · [controller/](controller/README.md)
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `controller/` | [controller](controller/README.md) |
+| `model/` | [model](model/README.md) |
+| `service/` | [service](service/README.md) |
+| `view/` | [view](view/README.md) |
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

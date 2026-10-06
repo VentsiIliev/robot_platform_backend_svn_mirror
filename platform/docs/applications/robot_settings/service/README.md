@@ -58,3 +58,11 @@ The only file in this application allowed to import `ISettingsService`.
 - **No stub in this application**: `RobotSettingsApplication` is always instantiated with the real `ISettingsService` in the robot system. Unit tests use the settings service's own stub/in-memory implementation directly.
 - **Robot-system targeting stays outside the app**: The reusable application does not import glue-specific settings classes. Optional load/save callbacks adapt robot-system targeting data into the generic editor payload.
 - **Two separate keys**: `robot_config` and `robot_calibration` map to separate JSON files under `storage/settings/<app_name>/`. Keeping calibration in its own file makes it easy to back up and restore independently.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

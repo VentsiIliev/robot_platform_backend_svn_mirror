@@ -262,3 +262,16 @@ service.tare(1)
 - **Reconnect interval**: hardcoded at `_RECONNECT_INTERVAL_S = 5.0` seconds. The monitor thread accumulates elapsed time and reconnects when the threshold is crossed.
 - **Factory pattern**: `WeightCellService.__init__` accepts `transport_factory` and `calibrator_factory` callables rather than concrete objects. Swapping transport (e.g., from HTTP to serial) requires only a different factory — the service itself is unchanged.
 - **`data_fetch_interval_ms`**: if non-zero in `CellConfig`, it overrides the `interval_s` argument to `start_monitoring` for that specific cell.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `http/` | [http](http/README.md) |
+| `interfaces/` | [interfaces](interfaces/README.md) |
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

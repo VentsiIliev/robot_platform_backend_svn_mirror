@@ -56,3 +56,11 @@ Converts between `ModbusConfig` and a flat `dict` of string-keyed form values. `
 
 - **Model holds two services**: Unlike the blueprint model which holds one, `ModbusSettingsModel` requires both `IModbusSettingsService` (persistence) and `IModbusActionService` (hardware) because both are needed for its five public methods.
 - **`config_from_flat` does not save**: It is a helper for the controller to build a config for `test_connection()` without persisting it — the user may want to test before saving.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

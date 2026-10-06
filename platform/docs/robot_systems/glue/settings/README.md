@@ -146,7 +146,7 @@ These shared settings now live in the engine layer and should be imported direct
 - `ModbusConfig`, `ModbusConfigSerializer`
 - `RobotSettings`, `RobotSettingsSerializer`
 - `RobotCalibrationSettings`, `RobotCalibrationSettingsSerializer`
-- [tool_changer_settings.py](/home/ilv/Desktop/robot_app_platform/src/engine/robot/configuration/tool_changer_settings.py)
+- [tool_changer_settings.py](../../../../src/engine/robot/configuration/tool_changer_settings.py)
 
 ---
 
@@ -154,3 +154,11 @@ These shared settings now live in the engine layer and should be imported direct
 
 - **`GlueSettingKey` enum**: All 19 field names are declared as enum values. This prevents typos in key access (`GlueSettingKey.FAN_SPEED.value` rather than `"fan_speed"`). The `GlueSettings.from_dict()` and `to_dict()` methods use enum values as keys.
 - **`device_control.py` keeps the old alias names alive**: `DeviceControlConfig` and `DeviceControlConfigSerializer` are backwards-compatible aliases for `GlueMotorConfig` and `GlueMotorConfigSerializer`.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

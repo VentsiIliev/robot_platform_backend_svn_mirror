@@ -48,3 +48,11 @@ Verify expiry with the GUI closed, controller stopped, and across reboot;
 verify failed-stop retries and startup refusal for expired markers. Test password
 changes against the deployed branded RustDesk version, including rejection,
 confirmation, removal, and the platform Admin credential check.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

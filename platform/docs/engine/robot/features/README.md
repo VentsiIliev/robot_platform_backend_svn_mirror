@@ -87,7 +87,7 @@ Both `pickup_gripper` and `drop_off_gripper` return `(success, error_message_or_
 Internally creates a `ToolManager` with the provided motion service, robot config, and tool changer.
 
 In robot-system wiring, `IToolService` is now normally built through the shared
-default builder in [default_service_builders.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/default_service_builders.py),
+default builder in [default_service_builders.py](../../../../src/robot_systems/default_service_builders.py),
 not by per-system custom code. A robot system that declares `IToolService`
 must also declare:
 
@@ -204,3 +204,11 @@ ok = nav.move_to_calibration_position(z_offset=0.0)
 - **`NavigationService` does not inherit `IMotionService`**: It is a feature service, not a motion service. It is not part of the `IRobotService` interface and is consumed separately by robot system logic.
 - **`ToolManager` uses a lock**: All `pickup_gripper` and `drop_off_gripper` operations acquire a `threading.Lock`, making them safe to call from different threads.
 - **`robot_config` in `ToolManager`**: The `robot_config` argument is untyped because it accesses gripper-specific methods (`getSlot0PickupPointsParsed`, etc.) that are specific to the concrete glue robot config class, not to the generic `RobotSettings` dataclass.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

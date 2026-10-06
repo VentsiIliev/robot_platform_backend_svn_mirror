@@ -76,3 +76,18 @@ return WidgetApplication(
 - **No model-level state**: all state lives in the service (`_spies`, `_received`). The model is a pure pass-through.
 - **Spy lifetime**: spy callbacks are plain bound methods stored in `_spies`. They are unregistered on `unsubscribe()`. No lambda risk.
 - **Cross-thread**: spy callbacks arrive on the broker's caller thread (potentially a hardware daemon). The controller must use a `_Bridge` with `pyqtSignal` to marshal to the Qt thread.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `controller/` | [controller](controller/README.md) |
+| `model/` | [model](model/README.md) |
+| `service/` | [service](service/README.md) |
+| `view/` | [view](view/README.md) |
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

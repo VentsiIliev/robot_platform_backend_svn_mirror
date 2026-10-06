@@ -1,3 +1,5 @@
+> Documentation status: design plan/backlog or historical review. Proposed paths and behaviors may not exist in the current checkout. Use the [source index](../SOURCE_INDEX.md) and current package guides to verify implementation.
+
 # План за автоматично локализиране и подравняване на вертикалния вал чрез ArUco/ChArUco
 
 ## 1. Цел

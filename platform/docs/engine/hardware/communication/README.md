@@ -195,5 +195,21 @@ restart.
 - **Device semantics live above this layer.** Transports move integers; they do
   not know that address `128` means "vacuum pump on".
 - **One port, one lock.** Every Modbus exchange runs inside `serial_bus_session()`
-  (see [modbus/README.md](modbus/README.md#serial_buspy)) so that multiple
+  (see [modbus/README.md](modbus/README.md#serial_buspy--port-transaction-locking)) so that multiple
   peripherals sharing one RS-485 adapter cannot interleave frames.
+
+## Default write-method limitation
+
+`IRegisterTransport` makes only `read_register()` abstract. Its default single and batch writes delegate to each other, so an implementation must override at least one write method to support writing. A subclass implementing only the abstract read operation can instantiate but gets `RecursionError` on a nonempty write. Existing Modbus implementations override writes. See [code issues](../../../CODE_ISSUES.md).
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `modbus/` | [modbus](modbus/README.md) |
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

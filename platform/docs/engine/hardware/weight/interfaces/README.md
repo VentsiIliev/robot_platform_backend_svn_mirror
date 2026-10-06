@@ -110,3 +110,11 @@ Concrete implementation: `WeightCellService` (see [weight/README.md](../README.m
 - **Separation of concerns**: `ICellTransport` and `ICellCalibrator` are kept separate so a transport-only implementation (e.g., a read-only sensor) doesn't need to implement calibration methods.
 - **`cell_id` in calibrator methods**: The `cell_id` argument lets a single calibrator instance serve multiple cells if needed. In the HTTP implementation, the calibrator already knows the cell's URL from construction, so `cell_id` is only used for logging.
 - **`CalibrationConfig` return type**: `ICellCalibrator.get_config()` returns a `CalibrationConfig` from `src/engine/hardware/weight/config.py`. For the HTTP transport, this returns the locally cached config from settings (the remote server has no get-config endpoint).
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

@@ -2,8 +2,8 @@
 
 Configures the vision system camera: resolution, brightness, contour thresholds, preprocessing, and ArUco options. Persists camera settings via `ISettingsService` and pushes live camera-setting updates to the running `VisionSystem`.
 
-Work-area ROI editing has been moved into the shared [Work Area Settings](/home/ilv/Desktop/robot_app_platform/docs/applications/work_area_settings/README.md) application.
-Calibration-related settings have been moved into the shared [Calibration Settings](/home/ilv/Desktop/robot_app_platform/docs/applications/calibration_settings/README.md) application.
+Work-area ROI editing has been moved into the shared [Work Area Settings](../work_area_settings/README.md) application.
+Calibration-related settings have been moved into the shared [Calibration Settings](../calibration_settings/README.md) application.
 
 `CameraDevicesWidget(device_control_mode=True)` is the compact camera panel in
 the paint system's Devices screen. It shows one role's assignment and orientation
@@ -160,3 +160,19 @@ return WidgetApplication(widget_factory=lambda ms: CameraSettingsFactory().build
 ```
 
 Use this app directly in any robot system that declares the shared vision contract. `ApplicationSpec` is typically placed in the Service folder with icon `fa5s.camera`.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `controller/` | [controller](controller/README.md) |
+| `localization/` | [localization](localization/README.md) |
+| `model/` | [model](model/README.md) |
+| `service/` | [service](service/README.md) |
+| `view/` | [view](view/README.md) |
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

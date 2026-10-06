@@ -100,3 +100,18 @@ The `stop_event` (`threading.Event`) is set by the view's Stop button. The servi
 - **Stabilization delay** — after each robot move, the service waits `stabilization_delay` seconds before capturing, to let vibration settle.
 - **Returns to start** — both `run_sweep()` and `run_verification()` move the robot back to the starting Z height when done (success or failure), so the operator is not left with the robot in a mid-sweep position.
 - **`log_cb` optional** — when provided, called with human-readable move/detection status messages. The view can route these to a scrollable log area.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `controller/` | [controller](controller/README.md) |
+| `model/` | [model](model/README.md) |
+| `service/` | [service](service/README.md) |
+| `view/` | [view](view/README.md) |
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

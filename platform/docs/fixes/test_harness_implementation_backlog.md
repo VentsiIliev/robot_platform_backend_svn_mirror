@@ -1,11 +1,13 @@
+> Documentation status: design plan/backlog or historical review. Proposed paths and behaviors may not exist in the current checkout. Use the [source index](../SOURCE_INDEX.md) and current package guides to verify implementation.
+
 # Test Harness Implementation Backlog
 
 Review date: `2026-05-06`
 
 Source inputs:
-- [QA-SKILL.md](/home/ilv/Desktop/robot_app_platform/QA-SKILL.md:1)
-- [TEST_FAKE_TESTS_REVIEW.md](/home/ilv/Desktop/robot_app_platform/TEST_FAKE_TESTS_REVIEW.md:1)
-- [TEST_HARNESS_FINDINGS.md](/home/ilv/Desktop/robot_app_platform/TEST_HARNESS_FINDINGS.md:1)
+- [QA-SKILL.md](../../QA-SKILL.md)
+- `TEST_FAKE_TESTS_REVIEW.md` (referenced historical artifact; absent from this checkout)
+- `TEST_HARNESS_FINDINGS.md` (referenced historical artifact; absent from this checkout)
 
 Current observed suite status:
 - `QT_QPA_PLATFORM=offscreen python tests/run_tests.py`
@@ -39,8 +41,8 @@ Current observed suite status:
 Priority: `P0`
 
 Files:
-- [tests/run_tests.py](/home/ilv/Desktop/robot_app_platform/tests/run_tests.py:1)
-- [.coveragerc](/home/ilv/Desktop/robot_app_platform/.coveragerc:1)
+- [tests/run_tests.py](../../tests/run_tests.py)
+- [.coveragerc](../../.coveragerc)
 - new shared test bootstrap module under `tests/`
 
 Tasks:
@@ -64,12 +66,12 @@ Goal:
 - convert the current red suite into actionable buckets instead of one mixed failure set
 
 Initial failing targets:
-- [tests/applications/workpiece_editor/test_workpiece_editor_view.py](/home/ilv/Desktop/robot_app_platform/tests/applications/workpiece_editor/test_workpiece_editor_view.py:1)
-- [tests/robot_systems/glue/test_pick_and_place_workflow.py](/home/ilv/Desktop/robot_app_platform/tests/robot_systems/glue/test_pick_and_place_workflow.py:1)
-- [tests/engine/robot/calibration/test_calibration_vision.py](/home/ilv/Desktop/robot_app_platform/tests/engine/robot/calibration/test_calibration_vision.py:1)
-- [tests/engine/robot/calibration/test_compute_offsets_handler.py](/home/ilv/Desktop/robot_app_platform/tests/engine/robot/calibration/test_compute_offsets_handler.py:1)
-- [tests/engine/robot/test_motion_service.py](/home/ilv/Desktop/robot_app_platform/tests/engine/robot/test_motion_service.py:1)
-- [tests/applications/robot_settings/test_robot_settings_mapper.py](/home/ilv/Desktop/robot_app_platform/tests/applications/robot_settings/test_robot_settings_mapper.py:1)
+- [tests/applications/workpiece_editor/test_workpiece_editor_view.py](../../tests/applications/workpiece_editor/test_workpiece_editor_view.py)
+- [tests/robot_systems/glue/test_pick_and_place_workflow.py](../../tests/robot_systems/glue/test_pick_and_place_workflow.py)
+- [tests/engine/robot/calibration/test_calibration_vision.py](../../tests/engine/robot/calibration/test_calibration_vision.py)
+- [tests/engine/robot/calibration/test_compute_offsets_handler.py](../../tests/engine/robot/calibration/test_compute_offsets_handler.py)
+- [tests/engine/robot/test_motion_service.py](../../tests/engine/robot/test_motion_service.py)
+- [tests/applications/robot_settings/test_robot_settings_mapper.py](../../tests/applications/robot_settings/test_robot_settings_mapper.py)
 
 Tasks:
 1. Mark each current failure as `stale test`, `contract drift`, or `likely product regression`.
@@ -99,11 +101,11 @@ Known weak patterns:
 - exact full-key-set mapper assertions when schema growth is allowed
 
 Representative targets:
-- [tests/engine/vision/test_vision_service_matching.py](/home/ilv/Desktop/robot_app_platform/tests/engine/vision/test_vision_service_matching.py:1)
-- [tests/bootstrap/test_main.py](/home/ilv/Desktop/robot_app_platform/tests/bootstrap/test_main.py:19)
-- [tests/robot_systems/glue/test_broker_debug_plugin_integration.py](/home/ilv/Desktop/robot_app_platform/tests/robot_systems/glue/test_broker_debug_plugin_integration.py:1)
-- [tests/applications/camera_settings/test_camera_settings_service.py](/home/ilv/Desktop/robot_app_platform/tests/applications/camera_settings/test_camera_settings_service.py:1)
-- [tests/engine/hardware/communication/modbus/test_modbus_action_service.py](/home/ilv/Desktop/robot_app_platform/tests/engine/hardware/communication/modbus/test_modbus_action_service.py:1)
+- [tests/engine/vision/test_vision_service_matching.py](../../tests/engine/vision/test_vision_service_matching.py)
+- [tests/bootstrap/test_main.py](../../tests/bootstrap/test_main.py)
+- [tests/robot_systems/glue/test_broker_debug_plugin_integration.py](../../tests/robot_systems/glue/test_broker_debug_plugin_integration.py)
+- [tests/applications/camera_settings/test_camera_settings_service.py](../../tests/applications/camera_settings/test_camera_settings_service.py)
+- [tests/engine/hardware/communication/modbus/test_modbus_action_service.py](../../tests/engine/hardware/communication/modbus/test_modbus_action_service.py)
 
 Tasks:
 1. Delete or restore commented-out tests so visible files always represent executable coverage.
@@ -186,7 +188,7 @@ Acceptance criteria:
 
 ### Phase 1: unblock the harness
 
-1. Fix headless execution in [tests/run_tests.py](/home/ilv/Desktop/robot_app_platform/tests/run_tests.py:1).
+1. Fix headless execution in [tests/run_tests.py](../../tests/run_tests.py).
 2. Stop artifact pollution under `tests/`.
 3. Add shared bootstrap utilities.
 4. Add coverage execution and reporting.

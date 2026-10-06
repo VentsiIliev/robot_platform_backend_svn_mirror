@@ -584,3 +584,11 @@ Called from `src/bootstrap/run_main.py`,
 - **Machine data and software are separate trees.** Releases carry no live data;
   `data/` carries no code; migrations and factory defaults are the only sanctioned
   bridge between them.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

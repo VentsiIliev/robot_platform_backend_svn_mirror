@@ -186,3 +186,16 @@ if buttons is not None:
   but has no paired output.
 - **Health is flag-based.** Safe to call on a timer; use `read_states()` when the
   actual button positions matter.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `interfaces/` | [interfaces](interfaces/README.md) |
+| `modbus/` | [modbus](modbus/README.md) |
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

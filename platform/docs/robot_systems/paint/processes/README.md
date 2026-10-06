@@ -1,115 +1,23 @@
-# `src/robot_systems/paint/processes/` — Paint Processes Overview
+# Paint processes
 
-The paint robot system currently owns two process paths:
+The paint system composes `PaintProcess` for production and the shared engine `RobotCalibrationProcess` for calibration. The calibration implementation is [src/engine/robot/calibration/robot_calibration_process.py](../../../../src/engine/robot/calibration/robot_calibration_process.py); `PaintCalibrationCoordinator` adapts launch/context to paint navigation and observers.
 
-| Process | Class | `ProcessID` | Purpose |
-|--------|-------|-------------|---------|
-| Main paint production | `PaintProcess` | `MAIN_PROCESS` | one-shot paint cycle |
-| Robot calibration | `RobotCalibrationProcess` | `ROBOT_CALIBRATION` | shared calibration workflow |
+`PaintProcess` starts a daemon production worker and reports `RUNNING`, `PAUSED`, `STOPPED` or `ERROR` through `BaseProcess`. It supports cooperative pause/resume via `PaintProductionService`, manual single-cycle requests, incremental adjustment and unmatched-workpiece retry. Stop requests signal the phase and start a separate hardware-stop worker for robot/vacuum operations. A successful background run calls `stop()`; a failure calls `set_error()` unless stopping has already been requested.
 
-The process package layout is:
+`PaintProductionService.run_once()` orchestrates a business execution machine, optional magazine loading, capture/preparation/planning, pickup/painting, dropoff and post-return behavior. Configuration influences whether multiple workpieces/cycles are processed; describing all production as an unconditionally one-shot, five-step capture/paint path is inaccurate.
 
-```text
-src/robot_systems/paint/processes/
-├── robot_calibration_process.py
-└── paint/
-    ├── paint_process.py
-    ├── paint_production_service.py
-    ├── config.py
-    ├── align/
-    ├── plan/
-    └── execute/
-```
+Source-controlled defaults/types are in `paint/config.py`. `PaintProcessConfigService` and its serializer own persisted/live process configuration, and production uses snapshots. See [production package](paint/README.md), [execution machine](paint/execution_machine/README.md), and the module references for exact method contracts.
 
----
+Earlier package layout and no-pause descriptions are preserved only in [archive](../../../archive/robot_systems/paint/processes/README.md).
 
-## `PaintProcess`
+<!-- source-navigation:start -->
+## Source navigation
 
-**File:** `src/robot_systems/paint/processes/paint/paint_process.py`
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
 
-`PaintProcess` is a `BaseProcess` wrapper around one background paint-production run.
+| Source subdirectory | Guide |
+|---|---|
+| `paint/` | [paint](paint/README.md) |
 
-Responsibilities:
-
-- start one daemon thread
-- delegate the real work to `PaintProductionService.run_once()`
-- translate success/failure into `STOPPED` or `ERROR`
-- honor stop requests through a shared `_stopping` flag
-
-Important behavior:
-
-- it is not a looping production process
-- it does not currently implement pause/resume semantics
-- it is safe to reset after errors because `_on_reset_errors()` clears the stop flag
-
----
-
-## `PaintProductionService`
-
-**File:** `src/robot_systems/paint/processes/paint/paint_production_service.py`
-
-`PaintProductionService` owns the actual one-cycle production flow:
-
-1. capture snapshot
-2. pick the largest usable contour
-3. prepare a workpiece payload
-4. build the execution plan
-5. execute pickup and paint
-
-It is intentionally UI-free. The workpiece editor uses the same lower-level services, but the production service owns the background-process version of that flow.
-
----
-
-## Configuration
-
-**File:** `src/robot_systems/paint/processes/paint/config.py`
-
-`PAINT_PROCESS_CONFIG` is the single source of truth for platform-side paint-process behavior.
-
-Main config areas:
-
-- execution target point selection
-- DXF alignment strategy
-- pivot motion plane
-- paint/pickup base group selection
-- pivot translation axis and direction
-- XZ/RY behavior toggles
-- pickup motion defaults
-
-Supporting typed config objects:
-
-- `PickupMotionConfig`
-- `PaintProjectionTuning`
-- `PaintMotionPlaneSpec`
-- `PaintProjectionRules`
-- `PaintSimulationConfig`
-
----
-
-## Paint Process Package
-
-The paint production package is documented separately in:
-
-- [paint/README.md](paint/README.md)
-
-That document covers the `align / plan / execute` split in detail.
-
----
-
-## Calibration Process
-
-**File:** `src/robot_systems/paint/processes/robot_calibration_process.py`
-
-The calibration process is shared-engine-oriented rather than paint-production-specific. The paint system wraps it with `PaintCalibrationCoordinator` so calibration can be launched from the paint shell using paint observer/navigation context.
-
----
-
-## Test Coverage
-
-Primary process-level coverage:
-
-- `tests/robot_systems/paint/test_paint_process_integration.py`
-- `tests/robot_systems/paint/test_paint_system_integration.py`
-- `tests/robot_systems/paint/test_paint_workpiece_path_executor.py`
-
-Those tests are the first place to update when changing process orchestration or composition.
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

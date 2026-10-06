@@ -1,6 +1,6 @@
 # `src/engine/` — Engine Overview
 
-The `engine` package is the core of the robot system platform. It provides the foundational infrastructure that all robot applications and applications build on: messaging, robot control, hardware I/O, and settings persistence. Nothing in `engine` depends on `pl_gui` (the Qt layer) or on any specific robot application.
+The `engine` package is the core of the robot system platform. It provides the foundational infrastructure that all robot applications and applications build on: messaging, robot control, hardware I/O, and settings persistence. The intended boundary is reusable infrastructure. Current exceptions include glue-specific weight configuration imports and Qt-dependent localization/demo utilities; see [code issues](../CODE_ISSUES.md).
 
 The [remote support controller](remote_support/README.md) is a standalone
 engine component installed as a restricted systemd socket service on Ubuntu
@@ -21,6 +21,7 @@ src/engine/
 │   ├── i_health_checkable.py
 │   ├── i_coordinate_transformer.py
 │   └── dependency_container.py  ← empty placeholder (0 bytes, not imported)
+├── cad/                        ← empty reserved directory; no implemented CAD service
 ├── geometry/                   ← planar.py: rotate/unwrap/normalize/axis-equivalent angles
 ├── hardware/                   ← Hardware I/O drivers
 │   ├── communication/          ← IRegisterTransport, transport registry, live transport
@@ -226,8 +227,7 @@ The engine is wired together during platform startup
    then rebuilds the shell's folder page
 ```
 
-All engine objects are created once and injected as interfaces — no engine
-module instantiates itself at import time.
+Runtime services are assembled by factories and system composition. Module-level constants and optional/demo code exist; inspect module imports before assuming import-time execution is side-effect free.
 
 Robot-system-specific startup composition does not belong in `engine/` and must
 not be hardcoded in `../../src/bootstrap/run_main.py`. Concrete robot driver
@@ -238,12 +238,12 @@ active robot system's bootstrap provider (`src/bootstrap/startup_config.py`).
 
 ## Design Principles
 
-- **No Qt dependency** — every class in `engine/` is pure Python, testable without a `QApplication`.
+- **GUI separation** — production services generally avoid widget dependencies. Localization uses Qt core; interpolation and vacuum-sensor demo runners also import Qt widgets. Hardware/vision dependencies still need their environment even when no `QApplication` is required.
 - **Interface-first** — all cross-module calls go through abstract base classes (`IRobotService`, `ISettingsService`, `IMessagingService`). Concrete classes are an implementation detail.
 - **Dependency injection** — factories wire dependencies explicitly; no global state except the `MessageBroker` singleton.
 - **Daemon threads** — background polling loops (`RobotStateManager`, `WeightCellService`) use daemon threads so they don't block process exit.
 
-Note: `engine/localization/` is the one engine subsystem that intentionally touches Qt core translation APIs (`QCoreApplication`, `QTranslator`). It still remains GUI-agnostic: it does not import views, widgets, or application-specific code. It also persists the selected language in a small JSON state file so the shell selector and installed translator stay in sync across restarts, and it now supports layered shared-plus-robot-system catalog loading.
+Note: `engine/localization/` intentionally touches Qt core translation APIs (`QCoreApplication`, `QTranslator`). It still remains GUI-agnostic: it does not import views, widgets, or application-specific code. It also persists the selected language in a small JSON state file so the shell selector and installed translator stay in sync across restarts, and it now supports layered shared-plus-robot-system catalog loading.
 
 Platform release configuration, signed updates, external data paths and explicit
 JSON schema migrations and product/profile compatibility checks live in `src/engine/updates/`. See
@@ -253,3 +253,28 @@ Factory configuration seeding in `src/engine/updates/factory_defaults.py` create
 missing files atomically from product/profile templates and preserves existing
 files, including empty ones. Activation seeds its staged data copy; standalone
 startup seeds before runtime settings are loaded.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `auth/` | [auth](auth/README.md) |
+| `cad/` | [cad](cad/README.md) |
+| `core/` | [core](core/README.md) |
+| `geometry/` | [geometry](geometry/README.md) |
+| `hardware/` | [hardware](hardware/README.md) |
+| `localization/` | [localization](localization/README.md) |
+| `process/` | [process](process/README.md) |
+| `remote_support/` | [remote_support](remote_support/README.md) |
+| `repositories/` | [repositories](repositories/README.md) |
+| `robot/` | [robot](robot/README.md) |
+| `system/` | [system](system/README.md) |
+| `updates/` | [updates](updates/README.md) |
+| `vision/` | [vision](vision/README.md) |
+| `work_areas/` | [work_areas](work_areas/README.md) |
+
+[Complete source index](../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

@@ -728,3 +728,16 @@ ERROR
 - `WAITING_FOR_PUMP_THREAD` is the canonical source of progress capture during dynamic pump adjustment, because the thread result can carry both progress and a worker exception.
 - `COMPLETED` only performs final pump cleanup. The completion flag is set in `TURNING_OFF_GENERATOR`, not earlier.
 - `GlueProcess.reset_errors()` clears both the outer `ProcessState.ERROR` and `DispensingContext.last_error` when a dispensing context exists.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `context_ops/` | [context_ops](context_ops/README.md) |
+| `state_handlers/` | [state_handlers](state_handlers/README.md) |
+
+[Complete source index](../../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

@@ -1,3 +1,5 @@
+> Documentation status: design plan/backlog or historical review. Proposed paths and behaviors may not exist in the current checkout. Use the [source index](../SOURCE_INDEX.md) and current package guides to verify implementation.
+
 # Test Gap Plan: Full Project
 
 Audit of all 62 test files. Organised by layer, highest risk first.

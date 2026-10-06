@@ -87,3 +87,11 @@ Returns hardcoded ports and always reports connection success. Used for standalo
 
 - **Two interfaces, not one**: The application needs two distinct capabilities — persistence and hardware detection. Merging them would force stubs to implement unrelated methods. Keeping them separate allows either to be substituted independently.
 - **`IModbusActionService` lives in the engine layer**: It is defined in `src/engine/hardware/communication/modbus/`, making it available to both the application and any engine-level code that needs to test connectivity without a GUI.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

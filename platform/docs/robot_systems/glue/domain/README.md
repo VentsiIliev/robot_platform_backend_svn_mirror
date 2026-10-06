@@ -1,6 +1,6 @@
 # `src/robot_systems/glue/domain/` — Glue Domain Layer
 
-The domain layer contains all glue-robot-specific business objects and services that sit between the robot-system declaration and the individual applications. None of these modules import Qt or depend on the platform engine directly — they work through injected interfaces.
+The domain layer contains all glue-robot-specific business objects and services that sit between the robot-system declaration and the individual applications. The service adapters use injected engine vision/targeting/messaging contracts; this is a robot-system domain/composition layer, not a standard-library-only domain package.
 
 ---
 
@@ -33,7 +33,7 @@ domain/
 ├── users/
 │   └── glue_user_schema.py           ← User form schema for glue system
 └── vacuum_pump/
-    └── vacuum_pump_controller.py     ← (stub — not active)
+    └── vacuum_pump_controller.py     ← robot-backed vacuum controller adapter
 ```
 
 ---
@@ -297,7 +297,23 @@ class IDispenseChannelService(ABC):
 
 ## Design Notes
 
-- **No Qt, no engine imports** — Domain objects and services are pure Python. They depend only on injected interfaces and the standard library.
+- **Injected dependencies** — domain services import engine interfaces and targeting/capture DTOs where required. UI schemas/adapters are distinct from data-only workpiece models.
 - **`GlueWorkpiece` serialisation** — numpy arrays are not JSON-serialisable. `serialize()` / `deserialize()` handle the conversion; application code should use these rather than `to_dict()` / `from_dict()` directly.
 - **`GlueJobBuilderService` is stateless** — It holds no mutable state between calls. It can be shared across calls as long as the injected `VisionTargetResolver` is thread-safe.
 - **`GlueJobExecutionService` is single-threaded per call** — Only one preparation pipeline should run at a time. The `_running` flag enforces this; `cancel_pending()` returns `False` when idle.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `dispense_channels/` | [dispense_channels](dispense_channels/README.md) |
+| `matching/` | [matching](matching/README.md) |
+| `users/` | [users](users/README.md) |
+| `vacuum_pump/` | [vacuum_pump](vacuum_pump/README.md) |
+| `workpieces/` | [workpieces](workpieces/README.md) |
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

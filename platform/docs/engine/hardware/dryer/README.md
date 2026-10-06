@@ -588,3 +588,17 @@ local flag and delegates `is_enabled()` / `last_error()` to the service. Its
   burst to a non-contiguous map would write the wrong registers.
 - **Failure is data, not exceptions.** Disabled service, dead transport, and
   exhausted retries all surface as `DryerState(is_healthy=False, …)` or `False`.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `interfaces/` | [interfaces](interfaces/README.md) |
+| `modbus/` | [modbus](modbus/README.md) |
+| `models/` | [models](models/README.md) |
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

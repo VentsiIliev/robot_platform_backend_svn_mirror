@@ -94,3 +94,11 @@ Without a decoder, `MotorHealthChecker` logs raw integer codes. With this decode
 
 - **Board-specific knowledge stays in the robot system** — `GlueMotorErrorCode` and `GlueMotorErrorDecoder` live here, not in `src/engine/hardware/motor/`. The engine motor layer intentionally has no knowledge of any particular board's firmware error table.
 - **`address_to_error_prefix` mapping** — The `GlueMotorConfig` in `src/robot_systems/glue/settings/device_control.py` declares an `address_to_error_prefix` dict (e.g., `{0: 1}` for motor address 0 owning errors `11–14`). `MotorHealthChecker` uses this to attribute each error code to the correct motor address.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

@@ -161,3 +161,16 @@ if fan is not None:
   special case in the implementation.
 - **Wired through `peripherals`.** Both the register label and the on/off values
   come from `PeripheralBinding`, so hardware differences are settings-only.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `interfaces/` | [interfaces](interfaces/README.md) |
+| `modbus/` | [modbus](modbus/README.md) |
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

@@ -3,7 +3,7 @@
 Workflow application for executing calibration tasks. Delegates camera calibration to `VisionSystem`, robot calibration to an optional process controller (e.g. `GlueOperationCoordinator`), laser calibration to the height-measuring calibration service, and shared area polygon persistence to the shared work-area service.
 
 Its view layer now uses the shared application style helpers from
-[app_styles.py](/home/ilv/Desktop/robot_app_platform/src/applications/base/app_styles.py)
+[app_styles.py](../../../src/applications/base/app_styles.py)
 instead of a calibration-local style module.
 
 ---
@@ -319,3 +319,19 @@ service = CalibrationApplicationService(
 - Engine-level robot calibration pipeline: [`docs/engine/robot/calibration/README.md`](../../engine/robot/calibration/README.md)
 - `ICoordinateTransformer` / `HomographyTransformer`: [`docs/engine/core/README.md`](../../engine/core/README.md) · [`docs/engine/vision/README.md`](../../engine/vision/README.md)
 - `GlueOperationCoordinator.calibrate()` / `stop_calibration()` — in `src/robot_systems/glue/processes/glue_operation_coordinator.py`
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `controller/` | [controller](controller/README.md) |
+| `localization/` | [localization](localization/README.md) |
+| `model/` | [model](model/README.md) |
+| `service/` | [service](service/README.md) |
+| `view/` | [view](view/README.md) |
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

@@ -91,3 +91,11 @@ Shows a colored status indicator and a live weight label. Internally uses `_Moni
 - **`_MonitorBridge` in `CellMonitorWidget`**: Weight and state updates arrive from background threads via the broker. `CellMonitorWidget` has its own bridge so that both `set_weight` and `set_state` are safe to call from any thread — they emit through PyQt6 signals which queue to the main thread automatically.
 - **`GlueCellSettingsController` also has a `_Bridge`**: The controller-level `_Bridge(QObject)` with `weight_updated(int, float)` and `state_updated(int, str)` signals routes broker callbacks to the view's per-cell setters. The view then routes to `CellMonitorWidget` which has its own bridge for fine-grained thread safety.
 - **`glue_cell_schema.py`**: Not a runtime registry — it is imported at construction time by `CellSettingsTab` to define form field groups.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

@@ -212,3 +212,17 @@ spirit as `hardware/generator/mock_runner.py` and `hardware/motor/mock_runner.py
   firing on another thread.
 - **Health is "last operation", not a probe.** Same semantics as
   `ModbusLaserControl` — neither performs I/O from `is_healthy()`.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `interfaces/` | [interfaces](interfaces/README.md) |
+| `modbus/` | [modbus](modbus/README.md) |
+| `models/` | [models](models/README.md) |
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

@@ -136,3 +136,20 @@ service = WorkpieceEditorService(
 - **System-owned capture mapping**: captured geometry is passed through the injected workpiece data adapter before it is loaded. This lets paint show an independent process-contour copy while glue retains its own layer mapping.
 - **Injected custom actions**: robot systems may add toolbar actions through `ContourEditorUiConfig` and handle them through the factory's `custom_action_handler`. The handler receives the action ID and inner editor, keeping robot-system geometry operations outside the shared view.
 - **Vision optional**: contour overlay and `get_contours()` gracefully return empty lists when vision is unavailable.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `controller/` | [controller](controller/README.md) |
+| `editor_core/` | [editor_core](editor_core/README.md) |
+| `localization/` | [localization](localization/README.md) |
+| `model/` | [model](model/README.md) |
+| `service/` | [service](service/README.md) |
+| `view/` | [view](view/README.md) |
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

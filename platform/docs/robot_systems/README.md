@@ -3,17 +3,21 @@
 The `robot_systems` package contains `BaseRobotSystem` (the abstract declaration contract), `SystemBuilder` (the wiring engine), and one concrete robot system per machine/domain. Each robot system declares what it needs via class-level specs; `SystemBuilder` constructs and injects everything.
 
 For new robot-system development, start from:
-- [ROBOT_SYSTEM_BLUEPRINT](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT)
-- [ROBOT_SYSTEM_GUIDE.MD](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/ROBOT_SYSTEM_GUIDE.MD)
-- [settings/README.md](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/settings/README.md)
+- [ROBOT_SYSTEM_BLUEPRINT](../../src/robot_systems/ROBOT_SYSTEM_BLUEPRINT)
+- [ROBOT_SYSTEM_GUIDE.MD](../../src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/ROBOT_SYSTEM_GUIDE.MD)
+- [settings/README.md](../../src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/settings/README.md)
 
-Concrete system docs in this tree:
+Concrete system docs in this tree (selection is controlled by startup configuration):
 
-- [glue/README.md](/home/ilv/Desktop/robot_app_platform/docs/robot_systems/glue/README.md)
-- [paint/README.md](/home/ilv/Desktop/robot_app_platform/docs/robot_systems/paint/README.md)
+- [glue/README.md](glue/README.md)
+- [paint/README.md](paint/README.md)
+- [paint_auto_dry/README.md](paint_auto_dry/README.md)
+- [paint_tray_dry/README.md](paint_tray_dry/README.md)
+- [welding/README.md](welding/README.md)
+- [twin_robot/README.md](twin_robot/README.md)
 
 Reusability rule:
-- new shared robot-system features should be proven in [ROBOT_SYSTEM_BLUEPRINT](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT) first
+- new shared robot-system features should be proven in [ROBOT_SYSTEM_BLUEPRINT](../../src/robot_systems/ROBOT_SYSTEM_BLUEPRINT) first
 - if a feature cannot be demonstrated cleanly in the blueprint demo, it is not yet standardized enough for platform-level reuse
 
 ---
@@ -145,9 +149,13 @@ On `app.start()`, `_validate_and_inject()`:
 
 Access after start:
 ```python
-robot_service   = self.get_service("robot")           # raises if missing
-weight_service  = self.get_optional_service("weight") # returns None if missing
-robot_config    = self.get_settings("robot_config")   # raises if no settings service
+from src.engine.common_service_ids import CommonServiceID
+from src.engine.common_settings_ids import CommonSettingsID
+from src.robot_systems.glue.component_ids import ServiceID
+
+robot_service = self.get_service(CommonServiceID.ROBOT)
+weight_service = self.get_optional_service(ServiceID.WEIGHT)
+robot_config = self.get_settings(CommonSettingsID.ROBOT_CONFIG)
 ```
 
 ---
@@ -254,8 +262,8 @@ app   = (
 - **Language persistence uses robot-system storage**: Bootstrap also stores the selected language under the active robot system's `settings_root`, so localization state follows the robot system instead of using a hardcoded global file.
 - **Bootstrap stays generic**: startup-specific composition such as concrete robot driver selection, login/auth wiring, and authorization/permissions wiring should live in a robot-system bootstrap provider, not directly in `../../src/bootstrap/run_main.py`.
 - **`SystemBuilder.register()`**: Allows overriding or extending the default service registry at the call site. Use when a service requires dependencies not available in the standard context.
-- **Common vs robot-system settings ids**: Shared infrastructure ids now live in [`CommonSettingsID`](/home/ilv/Desktop/robot_app_platform/src/engine/common_settings_ids.py). Robot-system [`component_ids.py`](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/component_ids.py) files should keep only system-specific `SettingsID` values.
-- **Common vs robot-system service ids**: Shared infrastructure service names now live in [`CommonServiceID`](/home/ilv/Desktop/robot_app_platform/src/engine/common_service_ids.py). Robot-system [`component_ids.py`](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/component_ids.py) files should keep only system-specific `ServiceID` values.
+- **Common vs robot-system settings ids**: Shared infrastructure ids now live in [`CommonSettingsID`](../../src/engine/common_settings_ids.py). Robot-system [`component_ids.py`](../../src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/component_ids.py) files should keep only system-specific `SettingsID` values.
+- **Common vs robot-system service ids**: Shared infrastructure service names now live in [`CommonServiceID`](../../src/engine/common_service_ids.py). Robot-system [`component_ids.py`](../../src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/component_ids.py) files should keep only system-specific `ServiceID` values.
 - **Default builders vs providers**:
   - use shared default builders for truly common services such as `IVisionService` and `IToolService`
   - use robot-system providers when only part of the assembly is system-specific, such as targeting, calibration, and height measuring
@@ -267,7 +275,7 @@ app   = (
   - if the dashboard service exposes `get_process_id()`, use the shared dashboard process-state mixin so `ProcessTopics.ACTIVE` is wired automatically too
   - use the blueprint dashboard package as the starting pattern for new systems
 - **Robot system blueprint**:
-  - use [ROBOT_SYSTEM_BLUEPRINT](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT) as the starting template
+  - use [ROBOT_SYSTEM_BLUEPRINT](../../src/robot_systems/ROBOT_SYSTEM_BLUEPRINT) as the starting template
   - the blueprint now includes targeting registry/frames/settings adapter skeletons plus calibration, height-measuring, bootstrap provider, and dashboard skeletons
   - treat the blueprint demo as the proof-of-reusability target for new shared robot-system patterns before depending on them in concrete systems
 - **System-specific settings pattern**:
@@ -309,3 +317,21 @@ system class and configuration overrides; shared implementation remains in
 Paint, Glue, Welding and Twin expose the
 shared Software Update application to administrators. Each release target owns
 a dedicated product identity, update config, repository and installation root. See [platform updates](../../packaging/platform/README.md).
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `ROBOT_SYSTEM_BLUEPRINT/` | [ROBOT_SYSTEM_BLUEPRINT](ROBOT_SYSTEM_BLUEPRINT/README.md) |
+| `glue/` | [glue](glue/README.md) |
+| `paint/` | [paint](paint/README.md) |
+| `paint_auto_dry/` | [paint_auto_dry](paint_auto_dry/README.md) |
+| `paint_tray_dry/` | [paint_tray_dry](paint_tray_dry/README.md) |
+| `twin_robot/` | [twin_robot](twin_robot/README.md) |
+| `welding/` | [welding](welding/README.md) |
+
+[Complete source index](../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

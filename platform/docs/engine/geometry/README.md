@@ -84,3 +84,11 @@ current`. Returns `0.0`, `+180.0`, or `-180.0` (after unwrap).
   orientation selection.
 - **Degrees in, degrees out.** Conversion to radians happens only inside
   `rotate_xy`.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

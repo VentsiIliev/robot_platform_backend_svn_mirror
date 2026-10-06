@@ -254,3 +254,11 @@ session       = UserSession()
 - **`IAuthorizationService` is read-only by design** — only the narrow write interface (`IPermissionsAdminService`) is exposed where needed, following the principle of least privilege.
 - **Never access `UserSession` via a global** — always inject `ISessionService` so components remain testable.
 - **`protect_app_role_values`** — when set, `set_permissions()` merges the protected roles back in after any update, preventing accidental lockout of admin roles.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

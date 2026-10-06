@@ -28,7 +28,6 @@ src/robot_systems/paint/
 ├── targeting/                        # targeting provider + frame/point builders
 ├── domain/                           # paint-specific schemas, adapters, repositories
 ├── processes/
-│   ├── robot_calibration_process.py  # system-level calibration process
 │   └── paint/                        # paint production process package
 ├── applications/dashboard/           # paint dashboard MVC package
 ├── service_builders.py               # paint-only service builders (vacuum pump)
@@ -68,36 +67,11 @@ is migrated during installed update activation; see
 
 `PaintRobotSystem` declares the shell, settings, services, movement groups, target points, target frames, work areas, and role policy that the platform consumes through `SystemBuilder`.
 
-### Declared movement groups
+### Movement, targeting and work-area declarations
 
-| Group | Purpose |
-|-------|---------|
-| `HOME` | return-to-home pose |
-| `CALIBRATION` | calibration observer pose |
-| `JOG` | velocity-only jogging |
-| `PAINTING` | primary paint / pickup base |
-| `PAINTING_NEW` | secondary paint base used by some pivot-plane execution modes |
+Current movement-group IDs include `HOME`, `CALIBRATION`, `JOG`, `Horizontal Shaft`, `Vertical Shaft`, `Vertical Shaft Alignment`, `Clean`, `Dropoff`, `Magazine`, and `Magazine Fixed Pickup`. The older `PAINTING` / `PAINTING_NEW` names are not the current class declarations. Their pose/velocity values remain settings-owned.
 
-### Declared target points
-
-| Point | Purpose |
-|-------|---------|
-| `camera` | camera TCP offset definition |
-| `tool` | tool TCP offset definition |
-
-### Declared target frames
-
-| Frame | Work area | Notes |
-|-------|-----------|-------|
-| `calibration` | `paint` | supports height correction |
-
-### Declared work areas
-
-| Area | Purpose |
-|------|---------|
-| `paint` | primary work area for capture, targeting, and painting |
-
-The default active work area is `paint`.
+Remote TCP points are `camera` and `tool`. Target frames and work areas include `calibration`/`paint`, `magazine`, and `vertical_shaft_alignment`, with observer bindings to their respective movement groups. The default active work area is `paint`. Tool/slot declarations and role/application metadata also live on the class; use [the source reference](MODULES.md) for their exact fields and values.
 
 ---
 
@@ -342,3 +316,24 @@ are stored as one paint segment while preserving the matching and pickup referen
 - [processes/paint/README.md](processes/paint/README.md)
 - [../../pivot_painting_reference.md](../../pivot_painting_reference.md)
 - [../paint_process_refactor_review.md](../paint_process_refactor_review.md)
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Resource reference](RESOURCES.md) — non-Python files and their formats; values remain in the owning storage/source files.
+
+| Source subdirectory | Guide |
+|---|---|
+| `applications/` | [applications](applications/README.md) |
+| `calibration/` | [calibration](calibration/README.md) |
+| `destinations/` | [destinations](destinations/README.md) |
+| `domain/` | [domain](domain/README.md) |
+| `hardware/` | [hardware](hardware/README.md) |
+| `processes/` | [processes](processes/README.md) |
+| `storage/` | [storage](storage/README.md) |
+| `targeting/` | [targeting](targeting/README.md) |
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

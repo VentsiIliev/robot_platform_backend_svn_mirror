@@ -50,3 +50,18 @@ Saving a channel updates:
 The service also keeps the stored cell `motor_address` aligned to the declared channel pump address so the low-level config cannot drift away from the robot-system declaration.
 
 For current runtime compatibility, the selected glue type is mirrored into the bound `CellConfig.type`, because some existing glue services still resolve glue type from `GLUE_CELLS`.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `controller/` | [controller](controller/README.md) |
+| `model/` | [model](model/README.md) |
+| `service/` | [service](service/README.md) |
+| `view/` | [view](view/README.md) |
+
+[Complete source index](../../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

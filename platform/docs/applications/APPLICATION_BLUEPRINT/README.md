@@ -107,3 +107,20 @@ def run_standalone() -> None:
 | `MyView` | Qt, `pl_gui` | model, service, controller |
 | `MyController` | model, view, `IMessagingService` | services, `ISettingsService` |
 | `MyApplicationFactory` | model, view, controller, service | broker directly |
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Resource reference](RESOURCES.md) — non-Python files and their formats; values remain in the owning storage/source files.
+
+| Source subdirectory | Guide |
+|---|---|
+| `controller/` | [controller](controller/README.md) |
+| `model/` | [model](model/README.md) |
+| `service/` | [service](service/README.md) |
+| `view/` | [view](view/README.md) |
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

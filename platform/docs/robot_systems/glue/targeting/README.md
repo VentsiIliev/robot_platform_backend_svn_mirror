@@ -352,3 +352,11 @@ base_transformer, resolver = robot_system.get_shared_vision_resolver()
 ```
 
 The helper returns `(None, None)` when vision is unavailable. All callers guard on `None` independently.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+[Complete source index](../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

@@ -102,3 +102,20 @@ Calls `_stop_threads()` from `BackgroundWorker` to join any in-flight threads.
 - **`BackgroundWorker` pattern** — all hardware calls (`laser_on`, `motor_on`, `get_motor_health_snapshot`) run on `QThread + _Worker`. Results are returned to the Qt thread via `on_done` callbacks.
 - **Availability vs active state** — `set_device_available(key, False)` disables buttons. `set_device_active(key, True/False)` reflects the current on/off state after a completed operation.
 - **Motor health on `load()`** — Motor health registers require board I/O. The health check runs once at startup to set the initial enabled state of motor buttons. It does not poll continuously.
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `controller/` | [controller](controller/README.md) |
+| `dryer/` | [dryer](dryer/README.md) |
+| `localization/` | [localization](localization/README.md) |
+| `model/` | [model](model/README.md) |
+| `service/` | [service](service/README.md) |
+| `view/` | [view](view/README.md) |
+
+[Complete source index](../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->

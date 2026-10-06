@@ -1,6 +1,6 @@
 # `src/robot_systems/glue/processes/pick_and_place/` — Pick-And-Place Workflow
 
-This package contains the planning and execution pieces used by [PickAndPlaceProcess](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place_process.py). The process owns the outer `BaseProcess` lifecycle and worker thread; this package owns the workflow internals.
+This package contains the planning and execution pieces used by [PickAndPlaceProcess](../../../../../src/robot_systems/glue/processes/pick_and_place_process.py). The process owns the outer `BaseProcess` lifecycle and worker thread; this package owns the workflow internals.
 
 ---
 
@@ -8,26 +8,26 @@ This package contains the planning and execution pieces used by [PickAndPlacePro
 
 | File | Responsibility |
 |------|----------------|
-| [config/pick_and_place_config.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/config/pick_and_place_config.py) | Runtime config for plane layout, motion profiles, orientation, and height source |
-| [workflow/pick_and_place_workflow.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/workflow/pick_and_place_workflow.py) | Thin workflow orchestrator over small stage handlers |
-| [workflow/handlers](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/workflow/handlers) | Stage-level handlers for startup, matching, transform, tooling, height, planning, pick, place, completion, and shutdown |
-| [context/pick_and_place_context.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/context/pick_and_place_context.py) | Runtime execution context and diagnostics snapshot state |
-| [execution/motion_executor.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/execution/motion_executor.py) | Centralizes robot/tool motions and converts failures into typed results |
-| [errors/pick_and_place_error.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/errors/pick_and_place_error.py) | Typed workflow stages, error codes, and workflow results |
-| [execution/height_resolution_service.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/execution/height_resolution_service.py) | Resolves effective pickup height from config policy |
-| [planning/selection_policy.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/planning/selection_policy.py) | Selects and orders matched workpieces for processing |
-| [planning/placement_strategy.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/planning/placement_strategy.py) | Strategy seam over placement calculation |
-| [planning/pickup_calculator.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/planning/pickup_calculator.py) | Computes pickup poses from transformed pickup point and orientation |
-| [planning/placement_calculator.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/planning/placement_calculator.py) | Computes plane placement target and drop-off poses without mutating the caller’s contour |
-| [plane/plane.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/plane/plane.py) | Mutable plane state for the current run |
-| [plane/plane_management_service.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/plane/plane_management_service.py) | Plane packing rules and row-advance logic |
-| [planning/models.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/planning/models.py) | Pose and placement dataclasses |
+| [config/pick_and_place_config.py](../../../../../src/robot_systems/glue/processes/pick_and_place/config/pick_and_place_config.py) | Runtime config for plane layout, motion profiles, orientation, and height source |
+| [workflow/pick_and_place_workflow.py](../../../../../src/robot_systems/glue/processes/pick_and_place/workflow/pick_and_place_workflow.py) | Thin workflow orchestrator over small stage handlers |
+| [workflow/handlers](../../../../../src/robot_systems/glue/processes/pick_and_place/workflow/handlers) | Stage-level handlers for startup, matching, transform, tooling, height, planning, pick, place, completion, and shutdown |
+| [context/pick_and_place_context.py](../../../../../src/robot_systems/glue/processes/pick_and_place/context/pick_and_place_context.py) | Runtime execution context and diagnostics snapshot state |
+| [execution/motion_executor.py](../../../../../src/robot_systems/glue/processes/pick_and_place/execution/motion_executor.py) | Centralizes robot/tool motions and converts failures into typed results |
+| [errors/pick_and_place_error.py](../../../../../src/robot_systems/glue/processes/pick_and_place/errors/pick_and_place_error.py) | Typed workflow stages, error codes, and workflow results |
+| [execution/height_resolution_service.py](../../../../../src/robot_systems/glue/processes/pick_and_place/execution/height_resolution_service.py) | Resolves effective pickup height from config policy |
+| [planning/selection_policy.py](../../../../../src/robot_systems/glue/processes/pick_and_place/planning/selection_policy.py) | Selects and orders matched workpieces for processing |
+| [planning/placement_strategy.py](../../../../../src/robot_systems/glue/processes/pick_and_place/planning/placement_strategy.py) | Strategy seam over placement calculation |
+| [planning/pickup_calculator.py](../../../../../src/robot_systems/glue/processes/pick_and_place/planning/pickup_calculator.py) | Computes pickup poses from transformed pickup point and orientation |
+| [planning/placement_calculator.py](../../../../../src/robot_systems/glue/processes/pick_and_place/planning/placement_calculator.py) | Computes plane placement target and drop-off poses without mutating the caller’s contour |
+| [plane/plane.py](../../../../../src/robot_systems/glue/processes/pick_and_place/plane/plane.py) | Mutable plane state for the current run |
+| [plane/plane_management_service.py](../../../../../src/robot_systems/glue/processes/pick_and_place/plane/plane_management_service.py) | Plane packing rules and row-advance logic |
+| [planning/models.py](../../../../../src/robot_systems/glue/processes/pick_and_place/planning/models.py) | Pose and placement dataclasses |
 
 ---
 
 ## Workflow Contract
 
-`PickAndPlaceWorkflow.run(stop_event, run_allowed)` now returns a typed [PickAndPlaceWorkflowResult](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/errors/pick_and_place_error.py) instead of only an ad hoc `(state, message)` pair internally.
+`PickAndPlaceWorkflow.run(stop_event, run_allowed)` now returns a typed [PickAndPlaceWorkflowResult](../../../../../src/robot_systems/glue/processes/pick_and_place/errors/pick_and_place_error.py) instead of only an ad hoc `(state, message)` pair internally.
 
 The workflow entrypoint is intentionally thin. Its main job is to:
 - run startup
@@ -37,7 +37,7 @@ The workflow entrypoint is intentionally thin. Its main job is to:
 - plan and execute placement
 - shut down cleanly on terminal conditions
 
-The detailed work for those steps lives under [workflow/handlers](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/workflow/handlers), so no single handler owns transform, tooling, height, planning, pick, place, and completion at once.
+The detailed work for those steps lives under [workflow/handlers](../../../../../src/robot_systems/glue/processes/pick_and_place/workflow/handlers), so no single handler owns transform, tooling, height, planning, pick, place, and completion at once.
 
 The outer process still behaves the same:
 - `STOPPED` on normal completion
@@ -86,7 +86,7 @@ The workflow now explicitly checks place motion success. A failed place move no 
 
 ## Height Source
 
-[PickAndPlaceConfig](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/config/pick_and_place_config.py) now makes the height source explicit:
+[PickAndPlaceConfig](../../../../../src/robot_systems/glue/processes/pick_and_place/config/pick_and_place_config.py) now makes the height source explicit:
 - `zero`
 - `measured`
 - `workpiece`
@@ -249,3 +249,21 @@ This package is now organized into subpackages by concern:
 - `planning/`
 - `plane/`
 - `workflow/`
+
+<!-- source-navigation:start -->
+## Source navigation
+
+[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+
+| Source subdirectory | Guide |
+|---|---|
+| `config/` | [config](config/README.md) |
+| `context/` | [context](context/README.md) |
+| `errors/` | [errors](errors/README.md) |
+| `execution/` | [execution](execution/README.md) |
+| `plane/` | [plane](plane/README.md) |
+| `planning/` | [planning](planning/README.md) |
+| `workflow/` | [workflow](workflow/README.md) |
+
+[Complete source index](../../../../SOURCE_INDEX.md).
+<!-- source-navigation:end -->
