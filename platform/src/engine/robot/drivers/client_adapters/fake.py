@@ -137,7 +137,7 @@ class FakeRobotClient(RobotClientAdapter):
         blocking=False,
         trajectory_optimizer=None,
         orientation_mode="constant",
-    ):
+    ) -> int:
         if not self._drive_enabled and self.enable() != 0:
             return -1
         preflight_error = self._motion_preflight_error("FakeRobotClient.execute_path")
@@ -156,7 +156,7 @@ class FakeRobotClient(RobotClientAdapter):
     def get_last_execute_path_response(self):
         return deepcopy(self._last_execute_path_response)
 
-    def execute_sequence(self, segments, tool=0, user=0, blocking=False):
+    def execute_sequence(self, segments, tool=0, user=0, blocking=False) -> int:
         if not self.set_active_tool(tool):
             return -1
         if not self._drive_enabled and self.enable() != 0:
@@ -172,7 +172,7 @@ class FakeRobotClient(RobotClientAdapter):
         path = [self._to_float_list(segment.position) for segment in segments or []]
         return self._set_path_result(path, blocking=blocking)
 
-    def execute_ordered_motion_chain(self, segments, tool=0, user=0, blocking=False, trajectory_optimizer="TOTG"):
+    def execute_ordered_motion_chain(self, segments, tool=0, user=0, blocking=False, trajectory_optimizer="TOTG") -> int:
         if not self.set_active_tool(tool):
             return -1
         if not self._drive_enabled and self.enable() != 0:

@@ -309,7 +309,7 @@ class RobotService(IRobotService):
         acc=0.1,
         blocking=False,
         orientation_mode: str = "constant",
-    ):
+    ) -> int:
         """Send a Cartesian path to the robot driver as a trajectory (not safety-checked)."""
         return self._robot.execute_trajectory(
             path,
@@ -328,7 +328,7 @@ class RobotService(IRobotService):
         tool: int,
         user: int,
         blocking: bool = False,
-    ):
+    ) -> int:
         return self._robot.execute_ordered_motion_chain(
             segments,
             tool=tool,

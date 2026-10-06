@@ -23,3 +23,7 @@ The public process may already be `STOPPED` while production cancellation or the
 Plate-layout and automatic-dryer paths have their own destination/release coordination. Reservation, committed occupancy, vacuum release, return motion and dryer readiness are separate operations. See [tray](tray_dry/README.md) and [dryer](auto_dryer/README.md).
 
 For exact APIs/defaults use [plan](plan/README.md), [execute](execute/README.md) and [execution machine](execution_machine/README.md). The [previous projection/order description](../../../../archive/robot_systems/paint/processes/paint/TRAJECTORY_AND_EXECUTION.md) is retained for historical context and must not be used as a fixed execution sequence.
+
+## Motion completion and failures
+
+Paint uses `Ros2Robot` exclusively. Pickup ordered chains, paint contact trajectories, incremental adjustment sections and edge-cleanup trajectories/chains use blocking calls and accept only integer `0` as completed success. Booleans, `None`, queued results and other nonzero outcomes follow the existing failure path instead of recording completed motion or advancing the last successful pose. Production failures enter `ERROR` and require operator action. Explicit pause/resume retains its existing interrupted non-contact motion retry behavior.

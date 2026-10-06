@@ -50,6 +50,55 @@ class TestSensorWebSocketSession(unittest.IsolatedAsyncioTestCase):
 
 class TestRobotClientAdapters(unittest.TestCase):
 
+    def test_execution_methods_enforce_integer_completion_contract(self):
+        robot = object.__new__(Ros2Robot)
+        robot._client = MagicMock()
+        operations = [
+            (lambda blocking: robot.execute_trajectory([], blocking=blocking), "execute_path"),
+            (lambda blocking: robot.execute_motion_sequence([], 0, 0, blocking=blocking), "execute_sequence"),
+            (lambda blocking: robot.execute_custom_motion_sequence([], 0, 0, blocking=blocking), "execute_ordered_motion_chain"),
+            (lambda blocking: robot.execute_ordered_motion_chain([], 0, 0, blocking=blocking), "execute_ordered_motion_chain"),
+        ]
+        for invoke, client_method in operations:
+            for value in (None, False, True, "0", 0.0, 1, 2, -12, 0):
+                with self.subTest(method=client_method, value=value):
+                    getattr(robot._client, client_method).return_value = value
+                    expected = value if type(value) is int and value <= 0 else -1
+                    self.assertEqual(invoke(True), expected)
+            getattr(robot._client, client_method).return_value = 2
+            self.assertEqual(invoke(False), 2)
+
+    def test_motion_response_rejects_contradictions_and_non_integer_codes(self):
+        client = object.__new__(HttpWebSocketRobotClient)
+        client._mark_available = MagicMock()
+        client._mark_startup_failure_if_present = MagicMock()
+        for status, raw, blocking, expected in [
+            (500, {"result": 0}, True, -1),
+            (200, {"result": 0, "success": False}, True, -1),
+            (200, {"result": 1}, True, -1),
+            (202, {"result": 2, "queued": True}, False, 2),
+            (200, {"result": "0"}, True, -1),
+            (200, {"result": 0.0}, True, -1),
+            (200, {"result": None}, True, -1),
+            (200, {"result": False}, True, -1),
+            (200, {"result": True}, True, 0),
+            (503, {"result": -12, "success": False}, True, -12),
+            (200, {"result": 0}, True, 0),
+        ]:
+            with self.subTest(status=status, raw=raw, blocking=blocking):
+                response = MagicMock(status_code=status)
+                self.assertEqual(client._parse_motion_response("execute_path", response, raw, blocking=blocking), expected)
+
+    def test_legacy_trajectory_and_simulation_follow_interface(self):
+        from src.engine.robot.drivers.fairino.fairino_robot import FairinoRobot
+        from src.engine.robot.drivers.fairino.test_robot import TestRobotWrapper
+
+        robot = object.__new__(FairinoRobot)
+        robot.robot = MagicMock()
+        self.assertEqual(robot.execute_trajectory([], blocking=True, orientation_mode="per_waypoint"), -1)
+        robot.robot.execute_path.assert_not_called()
+        self.assertEqual(TestRobotWrapper().execute_trajectory([], blocking=True, orientation_mode="per_waypoint"), 0)
+
     def test_conditional_status_ignores_uncorrelated_execution_snapshot(self):
         client = object.__new__(HttpWebSocketRobotClient)
         client._sensor_ws_lock = threading.Lock()

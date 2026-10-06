@@ -125,7 +125,13 @@ class IRobot(ABC):
         acc: float = 0.1,
         blocking: bool = False,
         orientation_mode: str = "constant",
-    ) -> None:
+    ) -> int:
+        """Return an integer motion code (never bool or None).
+
+        Blocking: 0 means completed; negative means failure. Nonblocking:
+        0 means accepted for immediate execution, positive means queue position,
+        and negative means failure. Acceptance does not establish completion.
+        """
         ...
 
     def execute_motion_sequence(
@@ -135,7 +141,12 @@ class IRobot(ABC):
         user: int,
         blocking: bool = False,
     ) -> int:
-        """Optional explicit segmented motion sequence. Returns >=0 on success/queued."""
+        """Return an integer motion code (never bool or None).
+
+        Blocking: 0 means completed; negative means failure. Nonblocking:
+        0 means accepted for immediate execution, positive means queue position,
+        and negative means failure. Acceptance does not establish completion.
+        """
         return -1
 
     def execute_custom_motion_sequence(
@@ -145,7 +156,12 @@ class IRobot(ABC):
         user: int,
         blocking: bool = False,
     ) -> int:
-        """Optional custom queued segmented motion sequence. Returns >=0 on success/queued."""
+        """Return an integer motion code (never bool or None).
+
+        Blocking: 0 means completed; negative means failure. Nonblocking:
+        0 means accepted for immediate execution, positive means queue position,
+        and negative means failure. Acceptance does not establish completion.
+        """
         return -1
 
     def execute_ordered_motion_chain(
@@ -155,7 +171,12 @@ class IRobot(ABC):
         user: int,
         blocking: bool = False,
     ) -> int:
-        """Optional ordered motion chain with mixed segment types."""
+        """Return an integer motion code (never bool or None).
+
+        Blocking: 0 means completed; negative means failure. Nonblocking:
+        0 means accepted for immediate execution, positive means queue position,
+        and negative means failure. Acceptance does not establish completion.
+        """
         return -1
 
     def prepare_ordered_motion_chain(self, segments: list[OrderedMotionInput], start_position: list[float],

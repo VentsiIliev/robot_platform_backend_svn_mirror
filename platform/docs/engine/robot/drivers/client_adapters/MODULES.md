@@ -128,7 +128,7 @@ def set_active_tool(self, tool: int) -> bool
 ```
 
 ```python
-def execute_path(self, path, rx=None, ry=None, rz=None, vel=0.6, acc=0.4, blocking=False, trajectory_optimizer=None, orientation_mode='constant')
+def execute_path(self, path, rx=None, ry=None, rz=None, vel=0.6, acc=0.4, blocking=False, trajectory_optimizer=None, orientation_mode='constant') -> int
 ```
 
 ```python
@@ -136,11 +136,11 @@ def get_last_execute_path_response(self)
 ```
 
 ```python
-def execute_sequence(self, segments, tool=0, user=0, blocking=False)
+def execute_sequence(self, segments, tool=0, user=0, blocking=False) -> int
 ```
 
 ```python
-def execute_ordered_motion_chain(self, segments, tool=0, user=0, blocking=False, trajectory_optimizer='TOTG')
+def execute_ordered_motion_chain(self, segments, tool=0, user=0, blocking=False, trajectory_optimizer='TOTG') -> int
 ```
 
 ```python
@@ -312,7 +312,7 @@ def move_ptp(self, position, tool=0, user=0, vel=30, acc=30, blendR=0, blocking=
 ```
 
 ```python
-def execute_path(self, path, rx=None, ry=None, rz=None, vel=0.6, acc=0.4, blocking=False, trajectory_optimizer=None, orientation_mode='constant')
+def execute_path(self, path, rx=None, ry=None, rz=None, vel=0.6, acc=0.4, blocking=False, trajectory_optimizer=None, orientation_mode='constant') -> int
 ```
 
 ```python
@@ -326,11 +326,11 @@ def get_last_motion_error(self)
 Return the backend's latest motion error text, when available.
 
 ```python
-def execute_sequence(self, segments, tool=0, user=0, blocking=False)
+def execute_sequence(self, segments, tool=0, user=0, blocking=False) -> int
 ```
 
 ```python
-def execute_ordered_motion_chain(self, segments, tool=0, user=0, blocking=False, trajectory_optimizer='TOTG')
+def execute_ordered_motion_chain(self, segments, tool=0, user=0, blocking=False, trajectory_optimizer='TOTG') -> int
 ```
 
 ```python

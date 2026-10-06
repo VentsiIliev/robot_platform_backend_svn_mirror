@@ -268,7 +268,7 @@ def get_current_acceleration(self) -> float
 
 ```python
 @abstractmethod
-def execute_trajectory(self, path, rx: float=180, ry: float=0, rz: float=0, vel: float=0.1, acc: float=0.1, blocking: bool=False, orientation_mode: str='constant') -> None
+def execute_trajectory(self, path, rx: float=180, ry: float=0, rz: float=0, vel: float=0.1, acc: float=0.1, blocking: bool=False, orientation_mode: str='constant') -> int
 ```
 
 ```python
@@ -467,11 +467,11 @@ def get_state_topic(self) -> str
 
 ```python
 @abstractmethod
-def execute_trajectory(self, path, rx: float=180, ry: float=0, rz: float=0, vel: float=0.1, acc: float=0.1, blocking: bool=False, orientation_mode: str='constant')
+def execute_trajectory(self, path, rx: float=180, ry: float=0, rz: float=0, vel: float=0.1, acc: float=0.1, blocking: bool=False, orientation_mode: str='constant') -> int
 ```
 
 ```python
-def execute_ordered_motion_chain(self, segments: list[OrderedMotionInput], tool: int, user: int, blocking: bool=False)
+def execute_ordered_motion_chain(self, segments: list[OrderedMotionInput], tool: int, user: int, blocking: bool=False) -> int
 ```
 
 ```python

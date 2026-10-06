@@ -481,7 +481,7 @@ class PaintContactExecutor:
                         tcp_to_tool_local_xy=tcp_to_tool_local_xy,
                         paint_process_config=owner._paint_process_config(),
                     )
-            if result not in (0, True, None):
+            if not isinstance(result, int) or isinstance(result, bool) or result != 0:
                 _logger.debug(
                     "[TIMING] paint_contact_job index=%d pattern=%s success=false input_pts=%d output_pts=%d execute_elapsed_s=%.3f total_elapsed_s=%.3f",
                     job_index,

@@ -147,7 +147,7 @@ def run_incremental_paint_contact(ctx) -> tuple[bool, str]:
             user=owner._pickup_user,
             blocking=True,
         )
-        if result is False or result not in (0, True, None):
+        if not isinstance(result, int) or isinstance(result, bool) or result != 0:
             session.fail()
             return False, owner._robot_service.get_last_motion_error() or "Paint section motion failed"
         if ctx.should_stop():

@@ -42,6 +42,47 @@ def _square(size: float) -> np.ndarray:
 
 class TestPaintProductionServiceIntegration(unittest.TestCase):
 
+    def test_ordered_pickup_requires_completed_integer_success(self):
+        from src.robot_systems.paint.processes.paint.execute.paint_motion_executor import PaintMotionExecutor
+
+        for value in (False, True, None, 1, 0.0, "0", -12, 0):
+            with self.subTest(value=value):
+                owner = MagicMock()
+                owner._active_execution_control = None
+                owner._pickup_tool = 0
+                owner._pickup_user = 0
+                owner._robot_service.execute_ordered_motion_chain.return_value = value
+                owner._robot_service.get_last_motion_error.return_value = "motion failed"
+                executor = PaintMotionExecutor(owner)
+                self.assertEqual(executor.move_ordered_pickup_sequence("pickup", [object()]), type(value) is int and value == 0)
+                owner._robot_service.execute_ordered_motion_chain.assert_called_once()
+                if type(value) is not int or value != 0:
+                    self.assertEqual(executor.last_motion_error, "motion failed")
+
+    def test_ordered_cleanup_does_not_record_completion_on_invalid_result(self):
+        from src.robot_systems.paint.processes.paint.execute.edge_cleanup_executor import PaintEdgeCleanupExecutor
+        from time import perf_counter
+
+        for value in (False, True, None, 1, 0.0, "0", -12, 0):
+            with self.subTest(value=value):
+                owner = MagicMock()
+                owner._pickup_tool = 0
+                owner._pickup_user = 0
+                owner._dropoff_unwind_prepared = False
+                owner._last_process_end_pose = None
+                owner._robot_service.execute_ordered_motion_chain.return_value = value
+                owner._robot_service.get_last_trajectory_command_info.return_value = {"raw": {"error": "motion failed"}}
+                executor = PaintEdgeCleanupExecutor(owner)
+                pose = [0.0] * 6
+                executor.build_ordered_cleanup_segments = MagicMock(return_value=([object()], pose))
+                ok, message, _ = executor._execute_ordered_cleanup_chain(pose, pose, [pose], started=perf_counter())
+                success = type(value) is int and value == 0
+                self.assertEqual(ok, success)
+                self.assertEqual(owner._dropoff_unwind_prepared, success)
+                self.assertEqual(owner._last_process_end_pose, pose if success else None)
+                if not success:
+                    self.assertIn("motion failed", message)
+
     def _make_service(self):
         return PaintProductionService(
             workpiece_preparation_service=MagicMock(),

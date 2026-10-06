@@ -14,8 +14,11 @@ class TestRobotWrapper(IRobot):
        """
 
     def execute_trajectory(self, path, rx: float = 180, ry: float = 0, rz: float = 0, vel: float = 0.1,
-                           acc: float = 0.1, blocking: bool = False) -> None:
+                           acc: float = 0.1, blocking: bool = False,
+                           orientation_mode: str = "constant") -> int:
         _logger.debug(f"TestRobot: execute_trajectory called with {len(path)} points, rx={rx}, ry={ry}, rz={rz}, vel={vel}, acc={acc}, blocking={blocking}")
+
+        return 0
 
     def __init__(self):
         _logger.info("TestRobot initialized")
@@ -85,8 +88,8 @@ class TestRobotWrapper(IRobot):
         _logger.debug("TestRobot: set_digital_output called with port_id=%s value=%s", port_id, value)
         return 0
 
-    def execute_path(self, path, rx, ry, rz, vel, acc, blocking):
-        pass
+    def execute_path(self, path, rx, ry, rz, vel, acc, blocking) -> int:
+        return 0
 
     def execute_motion_sequence(
         self,

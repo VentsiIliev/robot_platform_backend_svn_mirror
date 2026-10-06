@@ -315,13 +315,13 @@ def get_state_topic(self) -> str
 ```
 
 ```python
-def execute_trajectory(self, path, rx=180, ry=0, rz=0, vel=0.1, acc=0.1, blocking=False, orientation_mode: str='constant')
+def execute_trajectory(self, path, rx=180, ry=0, rz=0, vel=0.1, acc=0.1, blocking=False, orientation_mode: str='constant') -> int
 ```
 
 Send a Cartesian path to the robot driver as a trajectory (not safety-checked).
 
 ```python
-def execute_ordered_motion_chain(self, segments: list[OrderedMotionInput], tool: int, user: int, blocking: bool=False)
+def execute_ordered_motion_chain(self, segments: list[OrderedMotionInput], tool: int, user: int, blocking: bool=False) -> int
 ```
 
 ```python

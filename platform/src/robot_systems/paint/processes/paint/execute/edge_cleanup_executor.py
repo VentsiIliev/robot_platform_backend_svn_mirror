@@ -653,7 +653,7 @@ class PaintEdgeCleanupExecutor:
             stage="edge_cleanup_reverse",
             paint_process_config=self._owner._paint_process_config(),
         )
-        if result not in (0, True, None):
+        if not isinstance(result, int) or isinstance(result, bool) or result != 0:
             _logger.debug(
                 "[TIMING] paint_process success=false stage=edge_cleanup_reverse_xy_rz total_elapsed_s=%.3f",
                 elapsed_s(started),
@@ -697,7 +697,7 @@ class PaintEdgeCleanupExecutor:
             user=self._owner._pickup_user,
             blocking=True,
         )
-        if result not in (0, True, None):
+        if not isinstance(result, int) or isinstance(result, bool) or result != 0:
             _logger.debug(
                 "[TIMING] paint_process success=false stage=edge_cleanup_ordered_chain total_elapsed_s=%.3f",
                 elapsed_s(started),

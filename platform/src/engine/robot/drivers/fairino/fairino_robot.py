@@ -92,8 +92,10 @@ class FairinoRobot(IRobot):
     def disable(self) -> None:
         self.robot.RobotEnable(0)
 
-    def execute_trajectory(self, path, rx=180, ry=0, rz=0, vel=0.1, acc=0.1, blocking=False):
-        self.robot.execute_path(path, rx=rx, ry=ry, rz=rz, vel=vel, acc=acc, blocking=blocking)
+    def execute_trajectory(self, path, rx=180, ry=0, rz=0, vel=0.1, acc=0.1, blocking=False,
+                           orientation_mode: str = "constant") -> int:
+        """Unsupported by the bundled direct SDK; return failure without issuing motion."""
+        return -1
 
     def reset_all_errors(self) -> int:
         return self.robot.ResetAllError() or 0

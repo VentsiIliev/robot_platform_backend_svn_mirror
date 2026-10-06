@@ -219,7 +219,7 @@ def disable(self) -> None
 ```
 
 ```python
-def execute_trajectory(self, path, rx=180, ry=0, rz=0, vel=0.1, acc=0.1, blocking=False, orientation_mode: str='constant')
+def execute_trajectory(self, path, rx=180, ry=0, rz=0, vel=0.1, acc=0.1, blocking=False, orientation_mode: str='constant') -> int
 ```
 
 ```python

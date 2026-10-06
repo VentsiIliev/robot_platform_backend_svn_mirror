@@ -32,7 +32,13 @@ class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
         acc: float = 0.1,
         blocking: bool = False,
         orientation_mode: str = "constant",
-    ):
+    ) -> int:
+        """Return an integer motion code (never bool or None).
+
+        Blocking: 0 means completed; negative means failure. Nonblocking:
+        0 means accepted for immediate execution, positive means queue position,
+        and negative means failure. Acceptance does not establish completion.
+        """
         ...
 
     def execute_ordered_motion_chain(
@@ -41,7 +47,13 @@ class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
         tool: int,
         user: int,
         blocking: bool = False,
-    ):
+    ) -> int:
+        """Return an integer motion code (never bool or None).
+
+        Blocking: 0 means completed; negative means failure. Nonblocking:
+        0 means accepted for immediate execution, positive means queue position,
+        and negative means failure. Acceptance does not establish completion.
+        """
         return -1
 
     def prepare_ordered_motion_chain(self, segments: list[OrderedMotionInput], start_position, tool, user, *,

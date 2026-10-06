@@ -134,7 +134,7 @@ class PaintMotionExecutor:
                 user=owner._pickup_user,
                 blocking=True,
             )
-            if result in (0, True, None):
+            if isinstance(result, int) and not isinstance(result, bool) and result == 0:
                 self.last_motion_error = None
                 return True
             self.last_motion_error = owner._robot_service.get_last_motion_error()

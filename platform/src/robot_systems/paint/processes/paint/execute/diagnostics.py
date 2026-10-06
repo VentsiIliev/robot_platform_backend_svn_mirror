@@ -541,7 +541,7 @@ def execute_paint_trajectory_with_optional_trace(
     stage: str,
     tcp_to_tool_local_xy: tuple[float, float] | None = None,
     paint_process_config: PaintProcessConfig | None = None,
-):
+) -> int:
     """Execute a paint trajectory and optionally write commanded-vs-actual samples."""
     config = paint_process_config or PAINT_PROCESS_CONFIG
     trace = None

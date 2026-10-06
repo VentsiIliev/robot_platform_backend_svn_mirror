@@ -142,7 +142,7 @@ def write_path_shape_comparison_debug(*, debug_dump_dir: str | None, plan: Workp
 ### `execute_paint_trajectory_with_optional_trace`
 
 ```python
-def execute_paint_trajectory_with_optional_trace(*, robot_service, debug_dump_dir: str | None, pivot_config: PaintSimulationConfig, command_pivot_path: list[list[float]], vel: float, acc: float, pivot_pose: list[float] | None, pattern_type: str, stage: str, tcp_to_tool_local_xy: tuple[float, float] | None=None, paint_process_config: PaintProcessConfig | None=None)
+def execute_paint_trajectory_with_optional_trace(*, robot_service, debug_dump_dir: str | None, pivot_config: PaintSimulationConfig, command_pivot_path: list[list[float]], vel: float, acc: float, pivot_pose: list[float] | None, pattern_type: str, stage: str, tcp_to_tool_local_xy: tuple[float, float] | None=None, paint_process_config: PaintProcessConfig | None=None) -> int
 ```
 
 Execute a paint trajectory and optionally write commanded-vs-actual samples.

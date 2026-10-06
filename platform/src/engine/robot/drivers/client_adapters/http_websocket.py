@@ -628,7 +628,7 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
         value = raw.get("result")
         if isinstance(value, bool):
             return 0 if value else -1
-        return value if value is not None else -1
+        return value if isinstance(value, int) else -1
 
     @staticmethod
     def _error_text(raw: dict, fallback: str) -> str:
@@ -659,11 +659,11 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
     def _parse_motion_response(self, label: str, response, raw: dict, *, blocking: bool) -> int:
         result_code = self._parse_result(raw)
         if self._response_failed(label, response, raw):
-            return result_code
+            return result_code if result_code < 0 else -1
 
         queued = bool(raw.get("queued", False))
         final = raw.get("final")
-        if blocking and (queued or final is False):
+        if blocking and (result_code > 0 or queued or final is False):
             logger.warning(
                 "%s returned non-final response to blocking request: http=%s raw=%s",
                 label,
@@ -873,7 +873,7 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
         blocking=False,
         trajectory_optimizer=None,
         orientation_mode="constant",
-    ):
+    ) -> int:
         if not self._drive_enabled and self.enable() != 0:
             return -1
         preflight_error = self._motion_preflight_error("execute_path")
@@ -928,7 +928,7 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             return response.get("error")
         return self._last_command_error or self._last_error
 
-    def execute_sequence(self, segments, tool=0, user=0, blocking=False):
+    def execute_sequence(self, segments, tool=0, user=0, blocking=False) -> int:
         if not self._drive_enabled and self.enable() != 0:
             return -1
         preflight_error = self._motion_preflight_error("execute_sequence")
@@ -975,7 +975,7 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             logger.error("execute_sequence error: %s", e, exc_info=True)
             return -1
 
-    def execute_ordered_motion_chain(self, segments, tool=0, user=0, blocking=False, trajectory_optimizer="TOTG"):
+    def execute_ordered_motion_chain(self, segments, tool=0, user=0, blocking=False, trajectory_optimizer="TOTG") -> int:
         if not self._drive_enabled and self.enable() != 0:
             return -1
         preflight_error = self._motion_preflight_error("execute_ordered_motion_chain")

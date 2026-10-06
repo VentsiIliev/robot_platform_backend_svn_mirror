@@ -321,6 +321,13 @@ class Ros2Robot(IRobot):
         self._client.disable()
         logger.info("disable ← done")
 
+    @staticmethod
+    def _validated_motion_result(result: object, *, blocking: bool, operation: str) -> int:
+        if not isinstance(result, int) or isinstance(result, bool) or (blocking and result > 0):
+            logger.error("%s returned invalid motion result %r (blocking=%s)", operation, result, blocking)
+            return -1
+        return result
+
     def execute_trajectory(
         self,
         path,
@@ -331,7 +338,7 @@ class Ros2Robot(IRobot):
         acc=0.1,
         blocking=False,
         orientation_mode: str = "constant",
-    ):
+    ) -> int:
         logger.debug(
             "execute_trajectory → waypoints=%d rx_degrees=%s ry_degrees=%s rz_degrees=%s vel=%s acc=%s blocking=%s orientation_mode=%s",
             len(path) if path else 0, rx, ry, rz, vel, acc, blocking, orientation_mode)
@@ -346,7 +353,7 @@ class Ros2Robot(IRobot):
             orientation_mode=orientation_mode,
         )
         logger.debug("execute_trajectory ← result=%s", result)
-        return result
+        return self._validated_motion_result(result, blocking=blocking, operation="execute_trajectory")
 
     def execute_motion_sequence(
         self,
@@ -369,7 +376,7 @@ class Ros2Robot(IRobot):
             blocking=blocking,
         )
         logger.debug("execute_motion_sequence ← result=%s", result)
-        return result
+        return self._validated_motion_result(result, blocking=blocking, operation="execute_motion_sequence")
 
     def execute_custom_motion_sequence(
         self,
@@ -402,7 +409,7 @@ class Ros2Robot(IRobot):
             blocking=blocking,
         )
         logger.debug("execute_custom_motion_sequence ← result=%s", result)
-        return result
+        return self._validated_motion_result(result, blocking=blocking, operation="execute_custom_motion_sequence")
 
     def execute_ordered_motion_chain(
         self,
@@ -426,7 +433,7 @@ class Ros2Robot(IRobot):
             trajectory_optimizer="Ruckig",
         )
         logger.debug("execute_ordered_motion_chain ← result=%s", result)
-        return result
+        return self._validated_motion_result(result, blocking=blocking, operation="execute_ordered_motion_chain")
 
     def get_last_motion_error(self):
         getter = getattr(self._client, "get_last_motion_error", None)

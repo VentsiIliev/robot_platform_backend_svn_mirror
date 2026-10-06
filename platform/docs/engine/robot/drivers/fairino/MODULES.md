@@ -92,7 +92,7 @@ def disable(self) -> None
 ```
 
 ```python
-def execute_trajectory(self, path, rx=180, ry=0, rz=0, vel=0.1, acc=0.1, blocking=False)
+def execute_trajectory(self, path, rx=180, ry=0, rz=0, vel=0.1, acc=0.1, blocking=False, orientation_mode: str='constant') -> int
 ```
 
 ```python
@@ -124,7 +124,7 @@ A full mock of the Fairino Robot interface. Implements every method used by Fair
 Directly declared public methods and constructor (inherited methods are documented on their base class):
 
 ```python
-def execute_trajectory(self, path, rx: float=180, ry: float=0, rz: float=0, vel: float=0.1, acc: float=0.1, blocking: bool=False) -> None
+def execute_trajectory(self, path, rx: float=180, ry: float=0, rz: float=0, vel: float=0.1, acc: float=0.1, blocking: bool=False, orientation_mode: str='constant') -> int
 ```
 
 ```python
@@ -204,7 +204,7 @@ def set_digital_output(self, port_id: int, value: bool) -> int
 ```
 
 ```python
-def execute_path(self, path, rx, ry, rz, vel, acc, blocking)
+def execute_path(self, path, rx, ry, rz, vel, acc, blocking) -> int
 ```
 
 ```python
