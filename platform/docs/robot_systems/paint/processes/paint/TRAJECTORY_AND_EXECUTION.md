@@ -27,3 +27,7 @@ For exact APIs/defaults use [plan](plan/README.md), [execute](execute/README.md)
 ## Motion completion and failures
 
 Paint uses `Ros2Robot` exclusively. Pickup ordered chains, paint contact trajectories, incremental adjustment sections and edge-cleanup trajectories/chains use blocking calls and accept only integer `0` as completed success. Booleans, `None`, queued results and other nonzero outcomes follow the existing failure path instead of recording completed motion or advancing the last successful pose. Production failures enter `ERROR` and require operator action. Explicit pause/resume retains its existing interrupted non-contact motion retry behavior.
+
+## Finite configured waypoints
+
+Configured waypoint parsing rejects NaN and positive/negative infinity in X/Y/Z/RX/RY/RZ, velocity, acceleration and blend radius. Errors identify the field and, when parsing a sequence, its one-based waypoint number. An invalid waypoint fails the operation rather than silently skipping a route segment. `ConfiguredMotionWaypoint` also enforces finite fields on direct construction. Blend-radius validation occurs before the existing negative-to-zero clamp; finite settings and supported motion modes retain their behavior.

@@ -959,6 +959,55 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         robot_service.move_ptp.assert_not_called()
         robot_service.move_linear.assert_not_called()
 
+    def test_configured_waypoints_reject_nonfinite_pose_and_profile_fields(self):
+        from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor import PaintWorkpiecePathExecutor
+        axes = ("X", "Y", "Z", "RX", "RY", "RZ")
+        valid = {"position": [0, 1, 2, 3, 4, 5], "vel_percent": 12,
+                 "acc_percent": 13, "motion_type": "ptp", "blendR": 0}
+        for bad in (float('nan'), float('inf'), float('-inf')):
+            for index, axis in enumerate(axes):
+                pose = list(valid['position'])
+                pose[index] = bad
+                for value in (pose, {**valid, 'position': pose}):
+                    with self.subTest(value=value), self.assertRaisesRegex(ValueError, 'position.' + axis + ' must be finite'):
+                        PaintWorkpiecePathExecutor._read_configured_waypoint(value, 50, 20)
+            for field in ('vel_percent', 'acc_percent', 'blendR'):
+                with self.subTest(field=field, bad=bad), self.assertRaisesRegex(ValueError, field + ' must be finite'):
+                    PaintWorkpiecePathExecutor._read_configured_waypoint({**valid, field: bad}, 50, 20)
+            for defaults, field in (((bad, 20), 'vel_percent'), ((50, bad), 'acc_percent')):
+                with self.assertRaisesRegex(ValueError, field + ' must be finite'):
+                    PaintWorkpiecePathExecutor._read_configured_waypoint(valid['position'], *defaults)
+        with self.assertRaisesRegex(ValueError, 'waypoint 2:.*position.X'):
+            PaintWorkpiecePathExecutor._read_configured_waypoints([valid, {**valid, 'position': [float('nan'), 0, 0, 0, 0, 0]}])
+        waypoint = PaintWorkpiecePathExecutor._read_configured_waypoint({**valid, 'blendR': -2}, 50, 20)
+        self.assertEqual(waypoint.position, (0., 1., 2., 3., 4., 5.))
+        self.assertEqual(waypoint.blend_radius, 0.)
+
+    def test_waypoint_container_enforces_finiteness_on_direct_construction(self):
+        from src.robot_systems.paint.processes.paint.configured_motion_waypoint import ConfiguredMotionWaypoint
+        from src.engine.robot.motion_sequence import OrderedMotionType
+        values = dict(position=(0.,) * 6, velocity_percent=50., acceleration_percent=20.,
+                      motion_type=OrderedMotionType.PTP, blend_radius=0.)
+        for field in ('velocity_percent', 'acceleration_percent', 'blend_radius'):
+            with self.assertRaises(ValueError):
+                ConfiguredMotionWaypoint(**{**values, field: float('nan')})
+        with self.assertRaises(ValueError):
+            ConfiguredMotionWaypoint(**{**values, 'position': (float('inf'), 0, 0, 0, 0, 0)})
+
+    def test_safe_travel_rejects_invalid_waypoint_before_robot_submission(self):
+        robot = MagicMock()
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(
+            safe_travel=PaintSafeTravelConfig(enabled=True, positions=[
+                {"position": [float('nan'), 0, 0, 0, 0, 0], "vel_percent": 12,
+                 "acc_percent": 13, "motion_type": "ptp", "blendR": 0}]))
+        executor = _make_executor(robot_service=robot, paint_process_config_service=config_service)
+        executor._paint_process_config_snapshot = config_service.get_snapshot.return_value
+        with self.assertRaisesRegex(ValueError, 'waypoint 1:.*position.X'):
+            executor._pickup_transfer_planner._resolve_safe_travel_waypoints()
+        robot.execute_ordered_motion_chain.assert_not_called()
+        robot.execute_trajectory.assert_not_called()
+
     def test_pickup_plan_inserts_configured_safe_travel_waypoint_before_paint_staging(self):
         safe_pose = [70.0, 80.0, 190.0, 180.0, 0.0, 5.0]
         config_service = MagicMock()

@@ -15,6 +15,7 @@ still being split into smaller collaborators:
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass, replace
 from typing import Callable, Optional
 
@@ -612,6 +613,9 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             raise ValueError("Configured waypoint position must be numeric") from exc
         if len(values) != 6:
             raise ValueError("Configured waypoint position must contain exactly six values")
+        for axis, value in zip(("X", "Y", "Z", "RX", "RY", "RZ"), values):
+            if not math.isfinite(value):
+                raise ValueError(f"Configured waypoint position.{axis} must be finite")
         return values
 
     @classmethod
@@ -625,10 +629,13 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         resolved: list[ConfiguredMotionWaypoint] = []
         if positions:
             raw_positions = list(positions)
-            for item in raw_positions:
-                waypoint = cls._read_configured_waypoint(item, default_vel, default_acc, default_motion_type)
-                if waypoint is None:
-                    raise ValueError("Configured waypoint cannot be empty")
+            for index, item in enumerate(raw_positions, start=1):
+                try:
+                    waypoint = cls._read_configured_waypoint(item, default_vel, default_acc, default_motion_type)
+                    if waypoint is None:
+                        raise ValueError("Configured waypoint cannot be empty")
+                except ValueError as exc:
+                    raise ValueError(f"Configured waypoint {index}: {exc}") from exc
                 resolved.append(waypoint)
         return resolved
 
@@ -666,6 +673,9 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             raw = list(value)
             if len(raw) != 6:
                 raise ValueError("Configured waypoint pose must contain exactly six values")
+        # Validate before clamping: max(0.0, NaN) would hide an invalid radius.
+        if not math.isfinite(blend_r):
+            raise ValueError("Configured waypoint blendR must be finite")
         return ConfiguredMotionWaypoint(
             position=tuple(pose),
             velocity_percent=vel,
