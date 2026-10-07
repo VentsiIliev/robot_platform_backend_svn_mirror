@@ -3,14 +3,15 @@ from __future__ import annotations
 from functools import partial
 
 from src.applications.base.background_worker import BackgroundWorker
+from src.applications.base.i_application_controller import IApplicationController
 
 from .paint_head_settings_model import PaintHeadSettingsModel
 from .paint_head_settings_view import PaintHeadSettingsView
 
 
-class PaintHeadSettingsController(BackgroundWorker):
+class PaintHeadSettingsController(IApplicationController, BackgroundWorker):
     def __init__(self, model: PaintHeadSettingsModel, view: PaintHeadSettingsView) -> None:
-        super().__init__()
+        BackgroundWorker.__init__(self)
         self._model = model
         self._view = view
         self._active = False
@@ -29,6 +30,9 @@ class PaintHeadSettingsController(BackgroundWorker):
             settings.preset_count,
             settings.min_value,
         )
+
+    def has_active_operations(self) -> bool:
+        return self.has_running_workers()
 
     def stop(self) -> None:
         self._active = False

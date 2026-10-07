@@ -8,6 +8,11 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtWidgets import QApplication
 
+from src.applications.base.i_application_controller import IApplicationController
+from src.applications.device_control.controller.device_control_controller import DeviceControlController
+from src.robot_systems.paint.applications.paint_head_settings.paint_head_settings_controller import (
+    PaintHeadSettingsController,
+)
 from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.hardware.communication.modbus.modbus import ModbusConfig
 from src.engine.hardware.peripherals import PeripheralConfig
@@ -24,6 +29,22 @@ from src.robot_systems.paint.component_ids import SettingsID
 
 
 class PaintHeadSettingsTests(unittest.TestCase):
+    def test_device_control_guard_includes_paint_head_save_workers(self):
+        panel_controller = PaintHeadSettingsController(MagicMock(), MagicMock())
+        self.assertIsInstance(panel_controller, IApplicationController)
+        controller = DeviceControlController.__new__(DeviceControlController)
+        controller._device_action_in_flight = False
+        controller._device_poll_in_flight = False
+        controller._pending_device_enabled = {}
+        controller._dryer_controller = None
+        controller._extra_panels = (("paint_head", "Paint Head", None, panel_controller),)
+
+        self.assertFalse(controller.has_active_operations())
+        panel_controller._active_workers.append((MagicMock(), MagicMock(), MagicMock()))
+        self.assertTrue(controller.has_active_operations())
+        panel_controller._active_workers.clear()
+        self.assertFalse(controller.has_active_operations())
+
     def setUp(self) -> None:
         self.modbus = ModbusConfig.from_dict({
             "port": "/dev/test",
