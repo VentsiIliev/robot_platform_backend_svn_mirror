@@ -33,9 +33,28 @@ class WorkpieceWriteError(RuntimeError):
 class JsonPaintWorkpieceRepository:
     def __init__(self, storage_root: str):
         self._lock = RLock()
-        self._root = os.path.abspath(storage_root)
+        self._root = os.path.realpath(storage_root)
         os.makedirs(self._root, exist_ok=True)
         _logger.info("JsonPaintWorkpieceRepository: root -> %s", self._root)
+
+    @staticmethod
+    def _validate_storage_id(storage_id: str) -> None:
+        if (not isinstance(storage_id, str) or not storage_id
+                or storage_id in {".", ".."}
+                or any(character in storage_id for character in ("/", "\\", "\x00"))
+                or os.path.isabs(storage_id)):
+            raise ValueError("Paint workpiece storage ID must be a single nonempty folder name, not a path")
+
+    def _assert_safe_path(self, path: str) -> None:
+        """Reject escapes and symlinks within the configured storage tree."""
+        resolved = os.path.realpath(path)
+        if os.path.commonpath((self._root, resolved)) != self._root or resolved == self._root:
+            raise ValueError("Paint workpiece path escapes its storage root")
+        current = self._root
+        for component in os.path.relpath(path, self._root).split(os.sep):
+            current = os.path.join(current, component)
+            if os.path.islink(current):
+                raise ValueError("Paint workpiece paths must not contain symlinks")
 
     def save(self, workpiece: dict) -> str:
         with self._lock:
@@ -93,6 +112,13 @@ class JsonPaintWorkpieceRepository:
                     if not os.path.isdir(storage_path) or os.path.exists(os.path.join(storage_path, ".incomplete")):
                         continue
                     json_path = os.path.join(storage_path, f"{storage_id}_workpiece.json")
+                    try:
+                        self._validate_storage_id(storage_id)
+                        self._assert_safe_path(json_path)
+                        self._assert_safe_path(os.path.join(storage_path, f"{storage_id}_thumbnail.png"))
+                    except ValueError as exc:
+                        _logger.warning("Skipping unsafe paint workpiece %s: %s", storage_id, exc)
+                        continue
                     if not os.path.exists(json_path):
                         continue
                     try:
@@ -134,6 +160,7 @@ class JsonPaintWorkpieceRepository:
                 return None
             folder = os.path.dirname(path)
             thumb_path = os.path.join(folder, f"{storage_id}_thumbnail.png")
+            self._assert_safe_path(thumb_path)
             if os.path.exists(thumb_path):
                 with open(thumb_path, "rb") as handle:
                     return handle.read()
@@ -172,6 +199,7 @@ class JsonPaintWorkpieceRepository:
             folder = os.path.dirname(path)
             record_id = os.path.basename(folder)
             thumbnail_path = os.path.join(folder, f"{record_id}_thumbnail.png")
+            self._assert_safe_path(thumbnail_path)
             staging = tempfile.mkdtemp(prefix=".paint-update-", dir=folder)
             marker_created = False
             thumbnail_published = False
@@ -229,13 +257,17 @@ class JsonPaintWorkpieceRepository:
         date_str = now.strftime("%Y-%m-%d")
         storage_id = now.strftime("%Y-%m-%d_%H-%M-%S-%f")
         folder = os.path.join(self._root, date_str, storage_id)
+        self._assert_safe_path(folder)
         os.makedirs(os.path.dirname(folder), exist_ok=True)
         return os.path.join(folder, f"{storage_id}_workpiece.json")
 
     def _find_file(self, storage_id: str) -> Optional[str]:
+        self._validate_storage_id(storage_id)
         for date_dir in os.listdir(self._root):
             candidate = os.path.join(self._root, date_dir, storage_id, f"{storage_id}_workpiece.json")
-            if os.path.exists(candidate):
+            if os.path.lexists(candidate):
+                self._assert_safe_path(candidate)
+                self._assert_safe_path(os.path.join(os.path.dirname(candidate), ".incomplete"))
                 if os.path.exists(os.path.join(os.path.dirname(candidate), ".incomplete")):
                     raise WorkpieceWriteError(f"Paint workpiece '{storage_id}' is blocked by an incomplete update; recovery is required")
                 return candidate

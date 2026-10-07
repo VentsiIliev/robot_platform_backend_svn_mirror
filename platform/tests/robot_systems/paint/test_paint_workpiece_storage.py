@@ -208,6 +208,77 @@ class TestJsonPaintWorkpieceRepository(unittest.TestCase):
 
             self.assertEqual(repo.list_all(), [])
 
+    def test_invalid_ids_cannot_read_update_or_delete_outside_storage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / 'storage'
+            repo = JsonPaintWorkpieceRepository(str(root))
+            (root / 'date').mkdir()
+            outside = Path(tmp) / 'outside_workpiece.json'
+            outside.write_text('{"name": "outside"}')
+            for storage_id in (str(Path(tmp) / 'outside'), '../outside', '..', '.', '', 'part/name', 'part\\name', None, 'bad\x00id'):
+                for operation in (repo.load_raw, repo.get_thumbnail_bytes, repo.delete,
+                                  lambda value: repo.update(value, {'name': 'changed'})):
+                    with self.subTest(storage_id=storage_id, operation=operation), self.assertRaises(ValueError):
+                        operation(storage_id)
+                    self.assertEqual(outside.read_text(), '{"name": "outside"}')
+            ok, message = PaintWorkpieceService(repo).delete('../outside')
+            self.assertFalse(ok)
+            self.assertIn('storage ID', message)
+
+    def test_symlink_record_date_and_json_are_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / 'storage'
+            repo = JsonPaintWorkpieceRepository(str(root))
+            date = root / 'date'
+            date.mkdir()
+            outside = Path(tmp) / 'outside'
+            outside.mkdir()
+            external_json = outside / 'part_workpiece.json'
+            external_json.write_text('{"name": "outside"}')
+            record = date / 'part'
+            record.symlink_to(outside, target_is_directory=True)
+            for operation in (repo.load_raw, repo.delete, lambda value: repo.update(value, {})):
+                with self.assertRaises(ValueError):
+                    operation('part')
+            self.assertEqual(repo.list_all(), [])
+            record.unlink()
+            record.mkdir()
+            (record / 'part_workpiece.json').symlink_to(external_json)
+            with self.assertRaises(ValueError):
+                repo.delete('part')
+            self.assertEqual(repo.list_all(), [])
+            (record / 'part_workpiece.json').unlink()
+            record.rmdir()
+            date.rmdir()
+            external_date = outside / 'date'
+            external_record = external_date / 'part'
+            external_record.mkdir(parents=True)
+            (external_record / 'part_workpiece.json').write_text('{"name": "outside"}')
+            date.symlink_to(external_date, target_is_directory=True)
+            with self.assertRaises(ValueError):
+                repo.load_raw('part')
+            self.assertEqual(repo.list_all(), [])
+            self.assertEqual(external_json.read_text(), '{"name": "outside"}')
+
+    def test_thumbnail_symlink_is_not_read_or_overwritten(self):
+        module = 'src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository'
+        with tempfile.TemporaryDirectory() as tmp, patch(module + '.generate_thumbnail_bytes', return_value=b'png'):
+            repo = JsonPaintWorkpieceRepository(str(Path(tmp) / 'storage'))
+            path = Path(repo.save({'name': 'original'}))
+            storage_id = path.parent.name
+            thumb = path.parent / (storage_id + '_thumbnail.png')
+            thumb.unlink()
+            outside = Path(tmp) / 'outside.png'
+            outside.write_bytes(b'outside')
+            thumb.symlink_to(outside)
+            with self.assertRaises(ValueError):
+                repo.get_thumbnail_bytes(storage_id)
+            with self.assertRaises(ValueError):
+                repo.update(storage_id, {'name': 'new'})
+            self.assertEqual(outside.read_bytes(), b'outside')
+            self.assertEqual(repo.load_raw(storage_id)['name'], 'original')
+            self.assertEqual(repo.list_all(), [])
+
     def test_update_missing_storage_id_raises(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = JsonPaintWorkpieceRepository(tmp)
