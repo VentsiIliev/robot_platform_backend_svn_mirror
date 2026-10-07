@@ -7,6 +7,7 @@ Generated from Python ASTs. Signatures, declared defaults, imports and docstring
 ## Files
 
 - [__init__.py](#__init__py)
+- [errors.py](#errorspy)
 - [matching_selection.py](#matching_selectionpy)
 - [paint_workpiece_library_service.py](#paint_workpiece_library_servicepy)
 
@@ -29,6 +30,20 @@ Module declarations (expressions are shown without evaluating them):
 ```python
 __all__ = ['PaintWorkpieceLibraryService', 'build_paint_workpiece_library_schema', 'JsonPaintWorkpieceRepository', 'PaintWorkpieceService']
 ```
+
+## `errors.py`
+
+Source: [src/robot_systems/paint/domain/workpieces/errors.py](../../../../../src/robot_systems/paint/domain/workpieces/errors.py).
+
+Workpiece persistence failures shared by repository and service boundaries.
+
+### `WorkpieceReadError`
+
+```python
+class WorkpieceReadError(OSError):
+```
+
+A persisted workpiece could not be read for production matching.
 
 ## `matching_selection.py`
 

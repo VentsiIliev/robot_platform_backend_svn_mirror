@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from src.robot_systems.paint.processes.paint.results import PaintOperationResult, PaintOutcome
+
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers import (
     unwind_joint6_at_cycle_start,
@@ -10,7 +12,7 @@ from src.robot_systems.paint.processes.paint.execution_machine.state import Pain
 def handle_starting(ctx: PaintExecutionContext) -> PaintExecutionState:
     """Choose the first production phase for this cycle."""
     if ctx.should_stop():
-        ctx.set_result(False, "Paint process stopped")
+        ctx.set_outcome(PaintOperationResult(PaintOutcome.CANCELLED, "Paint process stopped"))
         return PaintExecutionState.STOPPED
     if ctx.is_resuming and ctx.resume_state is not None:
         resume_state = ctx.resume_state

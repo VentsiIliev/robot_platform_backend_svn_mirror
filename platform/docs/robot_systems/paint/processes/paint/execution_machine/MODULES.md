@@ -35,7 +35,7 @@ __all__ = ['PaintExecutionContext', 'PaintExecutionMachineFactory', 'PaintExecut
 
 Source: [src/robot_systems/paint/processes/paint/execution_machine/context.py](../../../../../../src/robot_systems/paint/processes/paint/execution_machine/context.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `dataclasses`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execution_control`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `threading`, `time`, `typing`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `dataclasses`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execution_control`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.results`, `src.robot_systems.paint.processes.paint.tray_dry.errors`, `threading`, `time`, `typing`.
 
 ### `PaintExecutionContext`
 
@@ -66,8 +66,8 @@ current_state: PaintExecutionState | None = None
 paused_from_state: PaintExecutionState | None = None
 resume_state: PaintExecutionState | None = None
 is_resuming: bool = False
-result_ok: bool = False
-result_message: str = 'Paint process stopped'
+tray_failure: TrayFailure | None = None
+result: PaintOperationResult = field(default_factory=lambda: PaintOperationResult(PaintOutcome.CANCELLED, 'Paint process stopped'))
 total_started_at: float = field(default_factory=perf_counter)
 snapshot: object | None = None
 contour: object | None = None
@@ -80,7 +80,7 @@ paint_timing_session: object | None = None
 paint_timing_recorder: object | None = None
 state_timing_recorder: object | None = None
 paint_total_waypoints: int = 0
-paint_ordered_result: tuple[bool, str, int] | None = None
+paint_ordered_result: PaintOperationResult | None = None
 paint_contact_executed_in_ordered_chain: bool = False
 paint_motion_active: bool = False
 cycle_start_unwind_completed: bool = False
@@ -125,8 +125,34 @@ def consume_resume_retry(self) -> bool
 ```
 
 ```python
+@property
+def result_ok(self) -> bool
+```
+
+```python
+@property
+def result_message(self) -> str
+```
+
+```python
+@property
+def operation_failure(self) -> PaintFailure | None
+```
+
+```python
+@operation_failure.setter
+def operation_failure(self, failure: PaintFailure) -> None
+```
+
+```python
+def set_outcome(self, result: PaintOperationResult) -> None
+```
+
+```python
 def set_result(self, ok: bool, message: str) -> None
 ```
+
+Adapter for handlers with simple completion/failure contracts.
 
 ```python
 def snapshot_dict(self) -> dict
@@ -136,7 +162,7 @@ def snapshot_dict(self) -> dict
 
 Source: [src/robot_systems/paint/processes/paint/execution_machine/machine_factory.py](../../../../../../src/robot_systems/paint/processes/paint/execution_machine/machine_factory.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `src.engine.process.executable_state_machine`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.post_return_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.lifecycle.completed_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.lifecycle.error_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.lifecycle.idle_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.lifecycle.pause_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.lifecycle.startup_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.lifecycle.stopped_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.calibration_wait_camera_settle_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_capture_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_move_to_calibration_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_move_to_magazine_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_prepare_pickup_release_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_wait_camera_settle_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.capture_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.edge_cleanup_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.execution_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.paint_contact_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.plan_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.preparation_handler`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.timing`, `time`, `typing`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `logging`, `src.engine.process.executable_state_machine`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.post_return_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.lifecycle.completed_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.lifecycle.error_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.lifecycle.idle_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.lifecycle.pause_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.lifecycle.startup_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.lifecycle.stopped_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.calibration_wait_camera_settle_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_capture_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_move_to_calibration_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_move_to_magazine_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_prepare_pickup_release_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_wait_camera_settle_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.capture_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.edge_cleanup_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.execution_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.paint_contact_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.plan_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.preparation_handler`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.results`, `src.robot_systems.paint.processes.paint.tray_dry.errors`, `src.robot_systems.paint.timing`, `time`, `typing`.
 
 ### `PaintExecutionMachineFactory`
 
@@ -162,6 +188,12 @@ def _record_current_state(context: PaintExecutionContext, state: PaintExecutionS
 
 ```python
 def _register(registry: StateRegistry, context: PaintExecutionContext, state: PaintExecutionState, handler: Callable[[PaintExecutionContext], PaintExecutionState]) -> None
+```
+
+### `_failure_aware_handler`
+
+```python
+def _failure_aware_handler(handler: Callable[[PaintExecutionContext], PaintExecutionState], state: PaintExecutionState) -> Callable[[PaintExecutionContext], PaintExecutionState]
 ```
 
 ### `_timed_handler`

@@ -458,6 +458,7 @@
     "All Magazines Empty": "All Magazines Empty",
     "No workpieces were found in any configured magazine. Refill the magazines and start again.": "No workpieces were found in any configured magazine. Refill the magazines and start again.",
     "Magazine is empty": "Magazine is empty",
+    "Workpiece preparation failed": "Workpiece preparation failed",
     "Unknown Workpiece": "Unknown Workpiece",
     "No matching workpiece. Painting stopped.": "No matching workpiece. Painting stopped."
   },

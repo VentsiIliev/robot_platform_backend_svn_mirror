@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from time import perf_counter
 
+from src.robot_systems.paint.processes.paint.results import PaintOperationResult, PaintOutcome
+
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards import guard_control
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
@@ -50,7 +52,7 @@ def handle_capture_workpiece(ctx: PaintExecutionContext) -> PaintExecutionState:
             cycle=ctx.cycle_index,
         )
         if ctx.should_stop():
-            ctx.set_result(False, "Paint process stopped")
+            ctx.set_outcome(PaintOperationResult(PaintOutcome.CANCELLED, "Paint process stopped"))
             return PaintExecutionState.STOPPED
         if not ctx.retry_capture_until_workpiece or pick_largest_contour(ctx.snapshot.contours) is not None:
             if ctx.adjustment_session is not None:

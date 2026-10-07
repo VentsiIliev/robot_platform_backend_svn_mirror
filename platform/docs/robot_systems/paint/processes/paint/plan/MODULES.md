@@ -349,7 +349,7 @@ def _plot_xy(axis, path: np.ndarray, title: str, units: str) -> None
 
 Source: [src/robot_systems/paint/processes/paint/plan/pickup_transfer_planner.py](../../../../../../src/robot_systems/paint/processes/paint/plan/pickup_transfer_planner.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `dataclasses`, `logging`, `numpy`, `src.engine.geometry.planar`, `src.engine.robot.path_preparation`, `src.robot_systems.paint.processes.paint.configured_motion_waypoint`, `src.robot_systems.paint.processes.paint.execute.projection_preview`, `src.robot_systems.paint.processes.paint.execute.workpiece_path_executor`, `src.robot_systems.paint.processes.paint.plan.paint_contact_motion`, `src.robot_systems.paint.timing`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `dataclasses`, `logging`, `numpy`, `src.engine.geometry.planar`, `src.engine.robot.path_preparation`, `src.robot_systems.paint.processes.paint.configured_motion_waypoint`, `src.robot_systems.paint.processes.paint.execute.projection_preview`, `src.robot_systems.paint.processes.paint.execute.workpiece_path_executor`, `src.robot_systems.paint.processes.paint.plan.paint_contact_motion`, `src.robot_systems.paint.processes.paint.results`, `src.robot_systems.paint.timing`.
 
 Module declarations (expressions are shown without evaluating them):
 
@@ -405,13 +405,19 @@ def __init__(self, owner) -> None
 def build_plan(self, prepared_workpiece: WorkpieceExecutionPlan) -> PickupTransferPlan | None
 ```
 
+Compatibility adapter; production planning uses build_required_plan.
+
+```python
+def build_required_plan(self, prepared_workpiece: WorkpieceExecutionPlan) -> PickupTransferPlan
+```
+
 Build XY/RZ pickup poses and the first staged pose for the active paint process plane.
 
 ## `workpiece_preparation_service.py`
 
 Source: [src/robot_systems/paint/processes/paint/plan/workpiece_preparation_service.py](../../../../../../src/robot_systems/paint/processes/paint/plan/workpiece_preparation_service.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `copy`, `logging`, `src.robot_systems.paint.processes.paint.align`, `src.robot_systems.paint.processes.paint.plan.contour_utils`, `typing`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `copy`, `logging`, `src.robot_systems.paint.processes.paint.align`, `src.robot_systems.paint.processes.paint.match.results`, `src.robot_systems.paint.processes.paint.plan.contour_utils`, `src.robot_systems.paint.processes.paint.results`, `typing`.
 
 ### `PaintWorkpiecePreparationService`
 
@@ -424,7 +430,7 @@ Prepare the raw workpiece payload that paint production should execute.
 Directly declared public methods and constructor (inherited methods are documented on their base class):
 
 ```python
-def __init__(self, *, can_match_fn: Callable[[], bool], match_workpiece_fn: Callable, default_settings: Optional[dict]=None, default_settings_getter: Optional[Callable[[], dict]]=None, transformer=None, transformer_getter: Optional[Callable[[], object]]=None) -> None
+def __init__(self, *, can_match_fn: Callable[[], bool], match_workpiece_fn: Callable, typed_match_workpiece_fn: Callable[[object], MatchResult] | None=None, default_settings: Optional[dict]=None, default_settings_getter: Optional[Callable[[], dict]]=None, transformer=None, transformer_getter: Optional[Callable[[], object]]=None) -> None
 ```
 
 Store matching hooks and the transformer needed for contour preparation.
@@ -433,4 +439,10 @@ Store matching hooks and the transformer needed for contour preparation.
 def prepare_workpiece(self, captured_contour, frame, *, enable_matching: bool=True, default_settings_override: Optional[dict]=None) -> tuple[dict | None, str]
 ```
 
-Choose between a matched saved workpiece and a raw captured-contour fallback.
+Legacy adapter; production consumes prepare_result.
+
+```python
+def prepare_result(self, captured_contour, frame, *, enable_matching: bool=True, default_settings_override: Optional[dict]=None) -> PreparationResult
+```
+
+Preserve matching failure categories; absence is a separate result.

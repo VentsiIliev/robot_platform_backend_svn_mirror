@@ -6,6 +6,8 @@ Planning converts selected workpiece geometry/configuration into raw execution i
 
 Shared pixel/robot conversion and `WorkpieceExecutionPlan` ownership remain in the engine path-preparation package. Exact defaults, result fields and parameters are in the references below.
 
+`PaintPickupTransferPlanner.build_required_plan()` raises `PaintPlanningError` with explicit context for missing jobs, poses, source/pickup geometry, empty projection or unavailable safe travel. Production receives the failure through the pickup result contract. The old `build_plan()` optional return remains a preview compatibility adapter. `PaintWorkpiecePreparationService.prepare_result()` preserves typed matching failures and fails explicitly if live defaults cannot be read.
+
 <!-- source-navigation:start -->
 ## Source navigation
 

@@ -4,6 +4,10 @@ from dataclasses import dataclass
 import math
 from threading import RLock
 from typing import Sequence
+from src.robot_systems.paint.processes.paint.results import (
+    Ready, PaintOperationResult, PaintOutcome, PaintFailureCode,
+)
+
 
 
 @dataclass(frozen=True)
@@ -41,6 +45,19 @@ class WorkAreaNestingService:
         margin_mm: float,
         padding_mm: float,
     ) -> tuple[WorkAreaNestingReservation | None, str]:
+        result = self.reserve_result(boundary_xy, width_mm=width_mm, height_mm=height_mm,
+                                     margin_mm=margin_mm, padding_mm=padding_mm)
+        return (result.value, "") if isinstance(result, Ready) else (None, result.message)
+
+    def reserve_result(
+        self,
+        boundary_xy: Sequence[Sequence[float]],
+        *,
+        width_mm: float,
+        height_mm: float,
+        margin_mm: float,
+        padding_mm: float,
+    ) -> Ready[WorkAreaNestingReservation] | PaintOperationResult:
         with self._lock:
             points = _finite_points(boundary_xy)
             numeric = (width_mm, height_mm, margin_mm, padding_mm)
@@ -49,12 +66,12 @@ class WorkAreaNestingService:
                 or abs(_polygon_area(points)) <= 1e-6
                 or not all(math.isfinite(float(value)) for value in numeric)
             ):
-                return None, "Batch nesting requires a valid work area and finite dimensions"
+                return PaintOperationResult.failed(PaintFailureCode.INVALID_CONFIGURATION, "work_area_nesting", 'Batch nesting requires a valid work area and finite dimensions')
             width, height, margin, padding = (float(value) for value in numeric)
             if width <= 0.0 or height <= 0.0 or margin < 0.0 or padding < 0.0:
-                return None, "Batch nesting dimensions must be positive with non-negative spacing"
+                return PaintOperationResult.failed(PaintFailureCode.INVALID_CONFIGURATION, "work_area_nesting", 'Batch nesting dimensions must be positive with non-negative spacing')
             if self._pending is not None:
-                return None, "Batch nesting already has an active reservation"
+                return PaintOperationResult.failed(PaintFailureCode.INVALID_CONFIGURATION, "work_area_nesting", 'Batch nesting already has an active reservation')
 
             signature = tuple(round(value, 4) for point in points for value in point) + (
                 round(margin, 4), round(padding, 4)
@@ -66,7 +83,7 @@ class WorkAreaNestingService:
             left, bottom, right, top = self._usable
             candidate = self._candidate(width, height)
             if candidate is None:
-                return None, "Paint work area has no space for another staged workpiece"
+                return PaintOperationResult(PaintOutcome.WORK_AREA_FULL, 'Paint work area has no space for another staged workpiece')
             x, y = candidate
             self._pending = (x, y, width, height)
             occupied = [*self._placements, self._pending]
@@ -77,7 +94,7 @@ class WorkAreaNestingService:
                 self._origin[0] + self._u[0] * center_u + self._v[0] * center_v,
                 self._origin[1] + self._u[1] * center_u + self._v[1] * center_v,
             )
-            return WorkAreaNestingReservation(center, width, height, has_more), ""
+            return Ready(WorkAreaNestingReservation(center, width, height, has_more))
 
     def commit(self) -> None:
         with self._lock:

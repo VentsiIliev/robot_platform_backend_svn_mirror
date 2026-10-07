@@ -5,6 +5,8 @@ import math
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 
+from src.robot_systems.paint.processes.paint.results import PaintOperationResult, PaintOutcome
+
 from src.engine.geometry.planar import unwrap_degrees
 from src.engine.robot.motion_sequence import OrderedMotionType, OrderedPositionCommand
 from src.engine.robot.enums.axis import Direction, RobotAxis
@@ -849,7 +851,7 @@ def handle_magazine_execute_pickup_release(ctx: PaintExecutionContext) -> PaintE
         if interrupted is not None:
             return interrupted
         if msg == NO_WORKPIECE_AT_MAGAZINE:
-            ctx.set_result(False, NO_WORKPIECE_AT_MAGAZINE)
+            ctx.set_outcome(PaintOperationResult(PaintOutcome.NO_WORKPIECE, NO_WORKPIECE_AT_MAGAZINE))
             return PaintExecutionState.COMPLETED
         return interrupted_or_error(
             ctx,

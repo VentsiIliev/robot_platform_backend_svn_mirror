@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from math import dist, isfinite
 from threading import Condition
-from typing import Sequence
+from typing import Callable, NamedTuple, Sequence, TypeAlias
 
 
 @dataclass(frozen=True)
@@ -85,33 +86,71 @@ class PaintPathCursor:
         return chunk
 
 
+class AdjustmentPhase(StrEnum):
+    STARTING = "starting"
+    WAITING_FOR_WORKPIECE = "waiting_for_workpiece"
+    INSPECT = "inspect"
+    MOVING = "moving"
+    FINISHING = "finishing"
+    ERROR = "error"
+
+
+class AdjustmentSnapshot(NamedTuple):
+    phase: AdjustmentPhase
+    travelled_mm: float
+    total_mm: float
+
+
+@dataclass(frozen=True)
+class NextPaintSection:
+    step: AdjustmentStep
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.step, AdjustmentStep):
+            raise TypeError("Next paint section requires an AdjustmentStep")
+        self.step.validate()
+
+
+@dataclass(frozen=True)
+class FinishAdjustment:
+    pass
+
+
+@dataclass(frozen=True)
+class CancelAdjustment:
+    pass
+
+
+AdjustmentCommand: TypeAlias = NextPaintSection | FinishAdjustment | CancelAdjustment
+
+
 class PaintAdjustmentSession:
     """Single operator command slot with explicit inspect and finish states."""
 
     def __init__(self) -> None:
         self._condition = Condition()
-        self._command: tuple[str, AdjustmentStep | None] | None = None
-        self._phase = "starting"
+        self._command: NextPaintSection | FinishAdjustment | None = None
+        self._phase = AdjustmentPhase.STARTING
         self._complete = False
         self._travelled_mm = 0.0
         self._total_mm = 0.0
 
-    def snapshot(self) -> tuple[str, float, float]:
+    def snapshot(self) -> AdjustmentSnapshot:
         with self._condition:
-            return self._phase, self._travelled_mm, self._total_mm
+            return AdjustmentSnapshot(self._phase, self._travelled_mm, self._total_mm)
 
     def workpiece_not_found(self) -> None:
         with self._condition:
-            self._phase = "waiting_for_workpiece"
+            self._phase = AdjustmentPhase.WAITING_FOR_WORKPIECE
 
     def workpiece_found(self) -> None:
         with self._condition:
-            if self._phase == "waiting_for_workpiece":
-                self._phase = "starting"
+            if self._phase is AdjustmentPhase.WAITING_FOR_WORKPIECE:
+                self._phase = AdjustmentPhase.STARTING
 
     def inspection_ready(self, travelled_mm: float, total_mm: float, *, complete: bool) -> None:
         with self._condition:
-            self._phase = "inspect"
+            self._phase = AdjustmentPhase.INSPECT
             self._travelled_mm = travelled_mm
             self._total_mm = total_mm
             self._complete = complete
@@ -120,10 +159,10 @@ class PaintAdjustmentSession:
     def request_next(self, step: AdjustmentStep) -> bool:
         step.validate()
         with self._condition:
-            if self._phase != "inspect" or self._complete or self._command is not None:
+            if self._phase is not AdjustmentPhase.INSPECT or self._complete or self._command is not None:
                 return False
-            self._command = ("next", step)
-            self._phase = "moving"
+            self._command = NextPaintSection(step)
+            self._phase = AdjustmentPhase.MOVING
             self._condition.notify_all()
             return True
 
@@ -131,23 +170,36 @@ class PaintAdjustmentSession:
         with self._condition:
             # Before the first section the robot is still at the pickup staging pose,
             # not at a known inspection pose from which dropoff can be planned.
-            if self._phase != "inspect" or self._travelled_mm <= 1e-6 or self._command is not None:
+            if self._phase is not AdjustmentPhase.INSPECT or self._travelled_mm <= 1e-6 or self._command is not None:
                 return False
-            self._command = ("finish", None)
-            self._phase = "finishing"
+            self._command = FinishAdjustment()
+            self._phase = AdjustmentPhase.FINISHING
             self._condition.notify_all()
             return True
 
-    def wait_for_command(self, should_stop) -> tuple[str, AdjustmentStep | None] | None:
+    def wait_for_command(self, should_stop: Callable[[], bool]) -> tuple[str, AdjustmentStep | None] | None:
+        """Legacy command adapter; execution consumes wait_for_command_result."""
+        command = self.wait_for_command_result(should_stop)
+        if isinstance(command, CancelAdjustment):
+            return None
+        if isinstance(command, FinishAdjustment):
+            return "finish", None
+        return "next", command.step
+
+    def wait_for_command_result(self, should_stop: Callable[[], bool]) -> AdjustmentCommand:
         with self._condition:
-            while self._command is None and not should_stop():
+            while self._command is None:
+                if should_stop():
+                    return CancelAdjustment()
                 self._condition.wait(timeout=0.1)
             if should_stop():
-                return None
+                self._command = None
+                return CancelAdjustment()
             command = self._command
             self._command = None
+            assert command is not None
             return command
 
     def fail(self) -> None:
         with self._condition:
-            self._phase = "error"
+            self._phase = AdjustmentPhase.ERROR

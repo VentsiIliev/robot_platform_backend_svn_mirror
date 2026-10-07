@@ -32,12 +32,31 @@ from src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service 
 )
 from src.shared_contracts.events.process_events import ProcessState, ProcessTopics
 
+from src.robot_systems.paint.processes.paint.results import Ready, PaintOperationResult, PaintOutcome, PaintFailureCode
+from src.robot_systems.paint.processes.paint.match.results import NoMatch, PreparedWorkpiece
+
 
 def _square(size: float) -> np.ndarray:
     return np.array(
         [[[0.0, 0.0]], [[size, 0.0]], [[size, size]], [[0.0, size]]],
         dtype=np.float32,
     )
+
+
+def _cycle_result(ok, message):
+    # Adapt pre-existing test fixtures to the typed collaborator contract.
+    if message in {NO_WORKPIECE_AT_MAGAZINE, ALL_MAGAZINES_EMPTY, "No usable contour detected",
+                   "No workpiece detected after 2 paint cycle(s)"}:
+        return (PaintOperationResult(PaintOutcome.COMPLETED, message, stop_reason=PaintOutcome.NO_WORKPIECE)
+                if ok else PaintOperationResult(PaintOutcome.NO_WORKPIECE, message))
+    if message == "Paint process stopped":
+        return PaintOperationResult(PaintOutcome.CANCELLED, message)
+    return (PaintOperationResult(PaintOutcome.COMPLETED, message) if ok else
+            PaintOperationResult.failed(PaintFailureCode.MOTION, "test_cycle", message))
+
+
+def _prepared_result(raw, message):
+    return NoMatch(message) if raw is None else Ready(PreparedWorkpiece(raw, message))
 
 
 class TestPaintProductionServiceIntegration(unittest.TestCase):
@@ -110,15 +129,16 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         service._last_execution_context = SimpleNamespace(
             raw_workpiece=None,
             workpiece_description="Unknown workpiece",
+            result=PaintOperationResult(PaintOutcome.UNMATCHED, "Unknown workpiece"),
             magazine_stage_only=False,
             cached_workpiece_contour=None,
         )
         service._capture_snapshot_service.capture_snapshot.return_value = VisionCaptureSnapshot(
             frame="new-frame", contours=[_square(2.0)], source="paint_process"
         )
-        service._workpiece_preparation.prepare_workpiece.return_value = (
+        service._workpiece_preparation.prepare_result.return_value = _prepared_result(*(
             {"id": "wp-1"}, "Prepared workpiece"
-        )
+        ))
         service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
         service._path_executor.execute_paint_process.return_value = (True, "Paint completed")
 
@@ -130,7 +150,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         )
         navigation.move_to_calibration_position.assert_not_called()
         magazine_load.load_to_calibration.assert_not_called()
-        service._workpiece_preparation.prepare_workpiece.assert_called_once()
+        service._workpiece_preparation.prepare_result.assert_called_once()
         service._path_executor.execute_paint_process.assert_called_once()
         self.assertIsNone(service._last_execution_context.magazine_config)
 
@@ -139,17 +159,18 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         service._last_execution_context = SimpleNamespace(
             raw_workpiece=None,
             workpiece_description="Camera unavailable",
+            result=PaintOperationResult.failed(PaintFailureCode.UNAVAILABLE, "capture", "Camera unavailable"),
             magazine_stage_only=False,
             cached_workpiece_contour=None,
         )
-        service._run_single_cycle = MagicMock()
+        service.run_cycle_result = MagicMock()
 
         self.assertFalse(service.can_retry_unmatched_workpiece())
         self.assertEqual(
             service.run_once(retry_unmatched_workpiece=True),
             (False, "No unmatched workpiece is ready for recapture"),
         )
-        service._run_single_cycle.assert_not_called()
+        service.run_cycle_result.assert_not_called()
 
     def test_manual_single_cycle_skips_magazine_and_repeat_even_when_enabled(self):
         service = self._make_service()
@@ -159,16 +180,16 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         )
         service._get_process_config = MagicMock(return_value=(True, "", config))
         service._move_to_calibration_before_manual_cycle = MagicMock(return_value=(True, ""))
-        service._run_single_cycle = MagicMock(return_value=(True, "Paint completed"))
+        service.run_cycle_result = MagicMock(return_value=_cycle_result(*(True, "Paint completed")))
         service._run_magazine_loop = MagicMock()
         service._run_manual_loop = MagicMock()
 
         self.assertEqual(service.run_once(manual_single_cycle=True), (True, "Paint completed"))
         service._move_to_calibration_before_manual_cycle.assert_called_once()
-        service._run_single_cycle.assert_called_once()
-        self.assertIsNone(service._run_single_cycle.call_args.kwargs["magazine_config"])
-        self.assertTrue(service._run_single_cycle.call_args.kwargs["suppress_magazine_load"])
-        self.assertTrue(service._run_single_cycle.call_args.kwargs["retry_capture_until_workpiece"])
+        service.run_cycle_result.assert_called_once()
+        self.assertIsNone(service.run_cycle_result.call_args.kwargs["magazine_config"])
+        self.assertTrue(service.run_cycle_result.call_args.kwargs["suppress_magazine_load"])
+        self.assertTrue(service.run_cycle_result.call_args.kwargs["retry_capture_until_workpiece"])
         service._run_magazine_loop.assert_not_called()
         service._run_manual_loop.assert_not_called()
 
@@ -299,7 +320,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             service._last_execution_context = None
             return True, "painted"
 
-        service._run_single_cycle = MagicMock(side_effect=run_cycle)
+        service.run_cycle_result = MagicMock(side_effect=lambda *args, **kwargs: _cycle_result(*run_cycle(*args, **kwargs)))
         config = PaintMagazineLoadConfig(
             enabled=True,
             pickup_mode="auto_discovery_sensor_controlled_fast_lin",
@@ -373,7 +394,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         service._capture_snapshot_service.capture_snapshot.return_value = snapshot
         raw_workpiece = {"id": "wp-1"}
         execution_plan = {"plan": 1}
-        service._workpiece_preparation.prepare_workpiece.return_value = (raw_workpiece, "Prepared workpiece")
+        service._workpiece_preparation.prepare_result.return_value = _prepared_result(*(raw_workpiece, "Prepared workpiece"))
         service._path_preparation_service.build_execution_plan.return_value = execution_plan
         service._path_executor.execute_paint_process.return_value = (True, "Paint completed")
 
@@ -382,7 +403,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         self.assertTrue(ok)
         self.assertEqual(msg, "Prepared workpiece: Paint completed")
         service._capture_snapshot_service.capture_snapshot.assert_called_once_with(source="paint_process")
-        prepared_contour, prepared_frame = service._workpiece_preparation.prepare_workpiece.call_args.args
+        prepared_contour, prepared_frame = service._workpiece_preparation.prepare_result.call_args.args
         self.assertTrue(np.array_equal(prepared_contour, large))
         self.assertEqual(prepared_frame, "frame")
         service._path_preparation_service.build_execution_plan.assert_called_once_with(
@@ -400,15 +421,15 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             contours=[_square(2.0)],
             source="paint_process",
         )
-        service._workpiece_preparation.prepare_workpiece.return_value = (
+        service._workpiece_preparation.prepare_result.return_value = _prepared_result(*(
             None,
             "No matched workpiece",
-        )
+        ))
 
         ok, msg = service.run_once()
 
         self.assertFalse(ok)
-        self.assertEqual(msg, "No matched workpiece")
+        self.assertEqual(msg, "Unknown workpiece")
         service._path_preparation_service.build_execution_plan.assert_not_called()
         service._path_executor.execute_paint_process.assert_not_called()
 
@@ -425,7 +446,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
                 source="paint_process",
             )
         )
-        service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared workpiece")
+        service._workpiece_preparation.prepare_result.return_value = _prepared_result(*({"id": "wp-1"}, "Prepared workpiece"))
         service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
         service._path_executor.execute_paint_process.side_effect = (
             lambda *args, **kwargs: events.append("execute") or (True, "Paint completed")
@@ -471,7 +492,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
                 source="paint_process",
             )
         )
-        service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared workpiece")
+        service._workpiece_preparation.prepare_result.return_value = _prepared_result(*({"id": "wp-1"}, "Prepared workpiece"))
         service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
         service._path_executor.execute_paint_process.side_effect = (
             lambda *args, **kwargs: events.append("paint_execution") or (True, "Paint completed")
@@ -510,7 +531,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             contours=[_square(2.0)],
             source="paint_process",
         )
-        service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared workpiece")
+        service._workpiece_preparation.prepare_result.return_value = _prepared_result(*({"id": "wp-1"}, "Prepared workpiece"))
         service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
         service._path_executor.execute_paint_process.return_value = (True, "Paint completed")
 
@@ -547,7 +568,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             contours=[_square(2.0)],
             source="paint_process",
         )
-        service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared workpiece")
+        service._workpiece_preparation.prepare_result.return_value = _prepared_result(*({"id": "wp-1"}, "Prepared workpiece"))
         service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
         service._path_executor.execute_paint_process.return_value = (True, "Paint completed")
 
@@ -579,7 +600,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         self.assertEqual(msg, "No usable contour detected")
         vision.lock_auto_brightness_adjustment.assert_called_once_with()
         vision.unlock_auto_brightness_adjustment.assert_called_once_with()
-        service._workpiece_preparation.prepare_workpiece.assert_not_called()
+        service._workpiece_preparation.prepare_result.assert_not_called()
 
     def test_run_once_restores_brightness_after_execution_failure(self):
         vision = MagicMock()
@@ -591,7 +612,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             contours=[_square(2.0)],
             source="paint_process",
         )
-        service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared workpiece")
+        service._workpiece_preparation.prepare_result.return_value = _prepared_result(*({"id": "wp-1"}, "Prepared workpiece"))
         service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
         service._path_executor.execute_paint_process.return_value = (False, "pump fault")
 
@@ -610,7 +631,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             contours=[_square(2.0)],
             source="paint_process",
         )
-        service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared workpiece")
+        service._workpiece_preparation.prepare_result.return_value = _prepared_result(*({"id": "wp-1"}, "Prepared workpiece"))
         service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
         service._path_executor.execute_paint_process.return_value = (True, "Paint completed")
 
@@ -629,7 +650,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             contours=[_square(2.0)],
             source="paint_process",
         )
-        service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared workpiece")
+        service._workpiece_preparation.prepare_result.return_value = _prepared_result(*({"id": "wp-1"}, "Prepared workpiece"))
         service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
         service._path_executor.execute_paint_process.return_value = (True, "Paint completed")
 
@@ -668,7 +689,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             contours=[contour],
             source="paint_process",
         )
-        service._workpiece_preparation.prepare_workpiece.return_value = (raw_workpiece, "Prepared workpiece")
+        service._workpiece_preparation.prepare_result.return_value = _prepared_result(*(raw_workpiece, "Prepared workpiece"))
         service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
         service._path_executor.execute_paint_process.return_value = (True, "Paint completed")
 
@@ -692,7 +713,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
 
         self.assertFalse(ok)
         self.assertEqual(msg, "No usable contour detected")
-        service._workpiece_preparation.prepare_workpiece.assert_not_called()
+        service._workpiece_preparation.prepare_result.assert_not_called()
         service._path_preparation_service.build_execution_plan.assert_not_called()
 
     def test_run_once_returns_plan_generation_failure(self):
@@ -703,7 +724,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             contours=[contour],
             source="paint_process",
         )
-        service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared workpiece")
+        service._workpiece_preparation.prepare_result.return_value = _prepared_result(*({"id": "wp-1"}, "Prepared workpiece"))
         service._path_preparation_service.build_execution_plan.side_effect = RuntimeError("bad plan")
 
         ok, msg = service.run_once()
@@ -720,7 +741,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             contours=[contour],
             source="paint_process",
         )
-        service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared workpiece")
+        service._workpiece_preparation.prepare_result.return_value = _prepared_result(*({"id": "wp-1"}, "Prepared workpiece"))
         service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
         service._path_executor.execute_paint_process.return_value = (False, "pump fault")
 
@@ -760,7 +781,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
                 source="paint_process",
             )
         )
-        service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared workpiece")
+        service._workpiece_preparation.prepare_result.return_value = _prepared_result(*({"id": "wp-1"}, "Prepared workpiece"))
         service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
         service._path_executor.execute_paint_process.return_value = (True, "Paint completed")
 
@@ -820,7 +841,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             contours=[contour],
             source="paint_process",
         )
-        service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared workpiece")
+        service._workpiece_preparation.prepare_result.return_value = _prepared_result(*({"id": "wp-1"}, "Prepared workpiece"))
         service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
         service._path_executor.execute_paint_process.return_value = (True, "Paint completed")
 
@@ -860,7 +881,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             contours=[contour],
             source="paint_process",
         )
-        service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared workpiece")
+        service._workpiece_preparation.prepare_result.return_value = _prepared_result(*({"id": "wp-1"}, "Prepared workpiece"))
         service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
         service._path_executor.execute_paint_process.return_value = (True, "Paint completed")
 
@@ -894,9 +915,9 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             VisionCaptureSnapshot(frame="frame-2", contours=[contour], source="paint_process"),
             VisionCaptureSnapshot(frame="frame-empty", contours=[], source="paint_process"),
         ]
-        service._workpiece_preparation.prepare_workpiece.side_effect = [
-            ({"id": "wp-1"}, "Prepared first workpiece"),
-            ({"id": "wp-2"}, "Prepared second workpiece"),
+        service._workpiece_preparation.prepare_result.side_effect = [
+            _prepared_result(*({"id": "wp-1"}, "Prepared first workpiece")),
+            _prepared_result(*({"id": "wp-2"}, "Prepared second workpiece")),
         ]
         service._path_preparation_service.build_execution_plan.side_effect = [{"plan": 1}, {"plan": 2}]
         service._path_executor.execute_paint_process.return_value = (True, "Paint completed")
@@ -942,7 +963,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         service._capture_snapshot_service.capture_snapshot.side_effect = (
             lambda **_kwargs: events.append("capture") or next(snapshots)
         )
-        service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared")
+        service._workpiece_preparation.prepare_result.return_value = _prepared_result(*({"id": "wp-1"}, "Prepared"))
         service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
         service._path_executor.execute_paint_process.side_effect = (
             lambda *_args, **_kwargs: events.append("execute") or (True, "Paint completed")
@@ -1037,7 +1058,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             contours=[contour],
             source="paint_process",
         )
-        service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared workpiece")
+        service._workpiece_preparation.prepare_result.return_value = _prepared_result(*({"id": "wp-1"}, "Prepared workpiece"))
         service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
         service._path_executor.execute_paint_process.return_value = (True, "Paint completed")
 
@@ -1079,14 +1100,14 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             fixed_pickup_group_ids=["Center", "Magazine 1", "Magazine 2"],
         )
         service = self._make_service()
-        service._run_single_cycle = MagicMock(side_effect=[
-            (True, "Painted from center"),
-            (False, NO_WORKPIECE_AT_MAGAZINE),
-            (False, NO_WORKPIECE_AT_MAGAZINE),
-            (True, "Painted from magazine 2"),
-            (False, NO_WORKPIECE_AT_MAGAZINE),
-            (False, NO_WORKPIECE_AT_MAGAZINE),
-            (False, NO_WORKPIECE_AT_MAGAZINE),
+        service.run_cycle_result = MagicMock(side_effect=[
+            _cycle_result(*(True, "Painted from center")),
+            _cycle_result(*(False, NO_WORKPIECE_AT_MAGAZINE)),
+            _cycle_result(*(False, NO_WORKPIECE_AT_MAGAZINE)),
+            _cycle_result(*(True, "Painted from magazine 2")),
+            _cycle_result(*(False, NO_WORKPIECE_AT_MAGAZINE)),
+            _cycle_result(*(False, NO_WORKPIECE_AT_MAGAZINE)),
+            _cycle_result(*(False, NO_WORKPIECE_AT_MAGAZINE)),
         ])
 
         ok, msg = service._run_magazine_loop(
@@ -1109,14 +1130,14 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             ],
             [
                 call.kwargs["magazine_group"]
-                for call in service._run_single_cycle.call_args_list
+                for call in service.run_cycle_result.call_args_list
             ],
         )
         self.assertEqual(
             [0, 0, 1, 2, 2, 0, 1],
             [
                 call.kwargs["magazine_index"]
-                for call in service._run_single_cycle.call_args_list
+                for call in service.run_cycle_result.call_args_list
             ],
         )
 
@@ -1151,7 +1172,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             )
             return False, NO_WORKPIECE_AT_MAGAZINE
 
-        service._run_single_cycle = MagicMock(side_effect=run_cycle)
+        service.run_cycle_result = MagicMock(side_effect=lambda *args, **kwargs: _cycle_result(*run_cycle(*args, **kwargs)))
 
         ok, msg = service._run_magazine_loop(
             config,
@@ -1163,10 +1184,10 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         self.assertEqual("Magazine is empty", msg)
         self.assertEqual(
             "Magazine",
-            service._run_single_cycle.call_args.kwargs["magazine_group"],
+            service.run_cycle_result.call_args.kwargs["magazine_group"],
         )
         self.assertIsNone(
-            service._run_single_cycle.call_args.kwargs["magazine_source"]
+            service.run_cycle_result.call_args.kwargs["magazine_source"]
         )
 
     def test_auto_discovery_repeats_each_pile_until_sensor_reports_empty(self):
@@ -1201,7 +1222,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             service._last_execution_context = next(contexts)
             return next(outcomes)
 
-        service._run_single_cycle = MagicMock(side_effect=run_cycle)
+        service.run_cycle_result = MagicMock(side_effect=lambda *args, **kwargs: _cycle_result(*run_cycle(*args, **kwargs)))
 
         ok, msg = service._run_magazine_loop(
             config,
@@ -1211,7 +1232,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
 
         self.assertTrue(ok)
         self.assertEqual("Magazine is empty", msg)
-        calls = service._run_single_cycle.call_args_list
+        calls = service.run_cycle_result.call_args_list
         self.assertEqual(5, len(calls))
         self.assertIs(calls[1].kwargs["magazine_discovery_active_contour"], pile_one)
         self.assertIsNone(calls[2].kwargs["magazine_discovery_active_contour"])
@@ -1267,7 +1288,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             service._last_execution_context = next(contexts)
             return next(outcomes)
 
-        service._run_single_cycle = MagicMock(side_effect=run_cycle)
+        service.run_cycle_result = MagicMock(side_effect=lambda *args, **kwargs: _cycle_result(*run_cycle(*args, **kwargs)))
 
         ok, msg = service._run_magazine_loop(
             config,
@@ -1277,7 +1298,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
 
         self.assertTrue(ok)
         self.assertEqual("Magazine is empty", msg)
-        recapture_call = service._run_single_cycle.call_args_list[2]
+        recapture_call = service.run_cycle_result.call_args_list[2]
         self.assertEqual([], recapture_call.kwargs["magazine_discovery_contours"])
         self.assertIsNone(
             recapture_call.kwargs["magazine_discovery_active_contour"]
@@ -1324,7 +1345,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             service._last_execution_context = next(contexts)
             return next(outcomes)
 
-        service._run_single_cycle = MagicMock(side_effect=run_cycle)
+        service.run_cycle_result = MagicMock(side_effect=lambda *args, **kwargs: _cycle_result(*run_cycle(*args, **kwargs)))
 
         ok, msg = service._run_magazine_loop(
             config,
@@ -1334,7 +1355,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
 
         self.assertTrue(ok)
         self.assertEqual("Magazine is empty", msg)
-        recapture_call = service._run_single_cycle.call_args_list[1]
+        recapture_call = service.run_cycle_result.call_args_list[1]
         self.assertEqual([], recapture_call.kwargs["magazine_discovery_contours"])
         self.assertIsNone(
             recapture_call.kwargs["magazine_discovery_active_contour"]
@@ -1727,7 +1748,7 @@ class TestPaintProcessIntegration(unittest.TestCase):
 
     def _make_process(self, production_result):
         production_service = MagicMock()
-        production_service.run_once.return_value = production_result
+        production_service.run_once_result.return_value = _cycle_result(*production_result)
         messaging = MagicMock()
         process = PaintProcess(production_service=production_service, messaging=messaging)
         return process, production_service, messaging
@@ -1741,7 +1762,7 @@ class TestPaintProcessIntegration(unittest.TestCase):
         process._thread.join(timeout=1.0)
 
         self.assertFalse(process._thread.is_alive())
-        self.assertTrue(production_service.run_once.call_args.kwargs["retry_unmatched_workpiece"])
+        self.assertTrue(production_service.run_once_result.call_args.kwargs["retry_unmatched_workpiece"])
         self.assertFalse(process._manual_single_cycle_requested)
 
     def test_retry_unmatched_workpiece_rejects_other_process_errors(self):
@@ -1750,7 +1771,7 @@ class TestPaintProcessIntegration(unittest.TestCase):
         process.set_error("Robot disconnected")
 
         self.assertFalse(process.retry_unmatched_workpiece())
-        production_service.run_once.assert_not_called()
+        production_service.run_once_result.assert_not_called()
 
     def test_manual_single_cycle_starts_through_process_and_rejects_duplicate_start(self):
         process, production_service, _messaging = self._make_process((True, "Paint completed"))
@@ -1762,14 +1783,14 @@ class TestPaintProcessIntegration(unittest.TestCase):
             release.wait(timeout=1.0)
             return True, "Paint completed"
 
-        production_service.run_once.side_effect = run_once
+        production_service.run_once_result.side_effect = lambda *args, **kwargs: _cycle_result(*run_once(*args, **kwargs))
         self.assertTrue(process.start_manual_single_cycle())
         self.assertTrue(entered.wait(timeout=1.0))
         self.assertFalse(process.start_manual_single_cycle())
         release.set()
         process._thread.join(timeout=1.0)
         self.assertEqual(process.state, ProcessState.STOPPED)
-        self.assertTrue(production_service.run_once.call_args.kwargs["manual_single_cycle"])
+        self.assertTrue(production_service.run_once_result.call_args.kwargs["manual_single_cycle"])
 
     def test_successful_run_transitions_process_to_stopped(self):
         process, production_service, messaging = self._make_process((True, "Paint completed"))
@@ -1789,7 +1810,7 @@ class TestPaintProcessIntegration(unittest.TestCase):
 
         self.assertEqual(process.state, ProcessState.STOPPED)
         self.assertTrue(process._stopping)
-        production_service.run_once.assert_called_once()
+        production_service.run_once_result.assert_called_once()
         self.assertTrue(
             any(
                 topic == ProcessTopics.state(ProcessID.MAIN_PROCESS) and event.state == ProcessState.RUNNING
@@ -1868,11 +1889,11 @@ class TestPaintProcessIntegration(unittest.TestCase):
         process._thread.join(timeout=1.0)
 
         self.assertEqual(process.state, ProcessState.ERROR)
-        production_service.run_once.assert_called_once()
+        production_service.run_once_result.assert_called_once()
 
     def test_exception_and_reset_paths_update_internal_stop_flag(self):
         production_service = MagicMock()
-        production_service.run_once.side_effect = RuntimeError("boom")
+        production_service.run_once_result.side_effect = RuntimeError("boom")
         process = PaintProcess(production_service=production_service, messaging=MagicMock())
         process.start()
         process._thread.join(timeout=1.0)

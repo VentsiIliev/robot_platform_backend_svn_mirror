@@ -40,7 +40,7 @@ def handle_calibration_wait_camera_settle(ctx: PaintExecutionContext) -> PaintEx
 
 Source: [src/robot_systems/paint/processes/paint/execution_machine/handlers/magazine_load/magazine_capture_handler.py](../../../../../../../../src/robot_systems/paint/processes/paint/execution_machine/handlers/magazine_load/magazine_capture_handler.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `cv2`, `logging`, `numpy`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.magazine_load_result`, `src.robot_systems.paint.processes.paint.plan`, `time`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `cv2`, `logging`, `numpy`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.magazine_load_result`, `src.robot_systems.paint.processes.paint.plan`, `src.robot_systems.paint.processes.paint.results`, `time`.
 
 ### `handle_magazine_capture`
 
@@ -80,7 +80,7 @@ def interrupted_or_error(ctx: PaintExecutionContext, state: PaintExecutionState,
 
 Source: [src/robot_systems/paint/processes/paint/execution_machine/handlers/magazine_load/magazine_execute_pickup_release_handler.py](../../../../../../../../src/robot_systems/paint/processes/paint/execution_machine/handlers/magazine_load/magazine_execute_pickup_release_handler.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `concurrent.futures`, `logging`, `math`, `src.engine.geometry.planar`, `src.engine.robot.enums.axis`, `src.engine.robot.motion_sequence`, `src.engine.robot.procedures`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execute.pickup_executor`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_control`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.magazine_load_result`, `src.robot_systems.paint.processes.paint.motion.pose_sampling`, `src.robot_systems.paint.timing`, `time`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `concurrent.futures`, `logging`, `math`, `src.engine.geometry.planar`, `src.engine.robot.enums.axis`, `src.engine.robot.motion_sequence`, `src.engine.robot.procedures`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execute.pickup_executor`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_control`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.magazine_load_result`, `src.robot_systems.paint.processes.paint.motion.pose_sampling`, `src.robot_systems.paint.processes.paint.results`, `src.robot_systems.paint.timing`, `time`.
 
 ### `_configured_motion_type`
 
@@ -196,7 +196,7 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
 
 Source: [src/robot_systems/paint/processes/paint/execution_machine/handlers/magazine_load/magazine_prepare_pickup_release_handler.py](../../../../../../../../src/robot_systems/paint/processes/paint/execution_machine/handlers/magazine_load/magazine_prepare_pickup_release_handler.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `logging`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `time`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `logging`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.results`, `time`.
 
 ### `handle_magazine_prepare_pickup_release`
 

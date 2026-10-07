@@ -6,6 +6,8 @@ from typing import Callable
 
 import numpy as np
 
+from src.robot_systems.paint.processes.paint.results import PaintOperationResult, PaintOutcome, PaintFailureCode
+
 from src.engine.geometry.planar import axis_equivalent_shift_degrees
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 from src.robot_systems.paint.processes.paint.config import DropoffStrategy, PaintSimulationConfig
@@ -170,7 +172,6 @@ class PaintContactExecutor:
     def __init__(self, owner) -> None:
         self._owner = owner
 
-    @timed_step(_logger, "execute_paint_contact_paths")
     def execute(
         self,
         execution_plan: WorkpieceExecutionPlan,
@@ -185,6 +186,31 @@ class PaintContactExecutor:
         control=None,
         pivot_offset_override_mm: float | None = None,
     ) -> tuple[bool, str, int]:
+        """Compatibility adapter for editor and existing executor integrations."""
+        result = self.execute_result(
+            execution_plan, vel_override=vel_override, acc_override=acc_override,
+            append_retreat=append_retreat, retreat_fn=retreat_fn, execute_robot=execute_robot,
+            collected_command_paths=collected_command_paths,
+            collected_command_jobs=collected_command_jobs, control=control,
+            pivot_offset_override_mm=pivot_offset_override_mm,
+        )
+        return result.completed, result.message, result.planned_waypoints
+
+    @timed_step(_logger, "execute_paint_contact_paths")
+    def execute_result(
+        self,
+        execution_plan: WorkpieceExecutionPlan,
+        *,
+        vel_override: float | None = None,
+        acc_override: float | None = None,
+        append_retreat: bool = True,
+        retreat_fn: Callable[[list[list[float]]], list[list[float]]] | None = None,
+        execute_robot: bool = True,
+        collected_command_paths: list[list[list[float]]] | None = None,
+        collected_command_jobs: list[PaintContactCommandJob] | None = None,
+        control=None,
+        pivot_offset_override_mm: float | None = None,
+    ) -> PaintOperationResult:
         """Execute all projected paint-contact paths in the prepared execution plan."""
         owner = self._owner
         started = perf_counter()
@@ -268,7 +294,7 @@ class PaintContactExecutor:
                     pattern_type,
                     elapsed_s(job_started),
                 )
-                return False, "Pickup succeeded, but paint-contact geometry could not be built", total_waypoints
+                return PaintOperationResult.failed(PaintFailureCode.PLANNING, "paint_contact_planning", "Pickup succeeded, but paint-contact geometry could not be built", planned_waypoints=total_waypoints)
             pivot_path, snapshots, diagnostics, pivot_pose = projected
             if not pivot_path:
                 _logger.debug(
@@ -277,7 +303,7 @@ class PaintContactExecutor:
                     pattern_type,
                     elapsed_s(job_started),
                 )
-                return False, "Pickup succeeded, but paint-contact geometry could not be built", total_waypoints
+                return PaintOperationResult.failed(PaintFailureCode.PLANNING, "paint_contact_planning", "Pickup succeeded, but paint-contact geometry could not be built", planned_waypoints=total_waypoints)
             pivot_path = _apply_non_paint_clearance(
                 pivot_path,
                 diagnostics,
@@ -491,7 +517,9 @@ class PaintContactExecutor:
                     elapsed_s(execute_started),
                     elapsed_s(job_started),
                 )
-                return False, f"Pickup succeeded, but {pattern_type} paint contact failed with code {result}", total_waypoints
+                return PaintOperationResult.failed(PaintFailureCode.MOTION, "paint_contact_motion", f"Pickup succeeded, but {pattern_type} paint contact failed with code {result}",
+                                                   planned_waypoints=total_waypoints,
+                                                   backend_code=result if type(result) is int else None)
             total_waypoints += len(command_pivot_path)
             owner._last_process_end_pose = list(command_pivot_path[-1])
             _logger.debug(
@@ -504,14 +532,14 @@ class PaintContactExecutor:
                 elapsed_s(job_started),
             )
             if control is not None and not control.wait_if_paused():
-                return False, "Paint process stopped", total_waypoints
+                return PaintOperationResult(PaintOutcome.CANCELLED, "Paint process stopped", planned_waypoints=total_waypoints)
         _logger.debug(
             "[TIMING] paint_contact_paths success=true jobs=%d total_waypoints=%d elapsed_s=%.3f",
             len(execution_plan.execution_jobs),
             total_waypoints,
             elapsed_s(started),
         )
-        return True, "", total_waypoints
+        return PaintOperationResult(PaintOutcome.COMPLETED, "", planned_waypoints=total_waypoints)
 
     def _plate_entry_detach_pose(
         self,

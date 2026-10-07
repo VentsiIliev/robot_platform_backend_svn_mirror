@@ -12,6 +12,8 @@ Changed layout geometry/spacing cannot discard existing occupancy or a pending r
 
 Review bounds, margins, release offsets, pending reservation and commit/cancel behavior in the module reference before changing tray planning.
 
+`reserve_result()` distinguishes `Ready[PlateDropoffReservation]`, a `TRAY_FULL` outcome and a categorized invalid-configuration failure. The tuple-returning `reserve()` remains an adapter. Production decides full-tray termination from the outcome rather than the text. The complete plate exit route is constructed before entry motion or release, so a missing exit profile cannot be discovered after placing a workpiece. Release verification remains intentionally skipped.
+
 <!-- source-navigation:start -->
 ## Source navigation
 

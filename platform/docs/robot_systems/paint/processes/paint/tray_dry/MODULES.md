@@ -7,8 +7,8 @@ Generated from Python ASTs. Signatures, declared defaults, imports and docstring
 ## Files
 
 - [__init__.py](#__init__py)
+- [errors.py](#errorspy)
 - [plate_layout.py](#plate_layoutpy)
-- [errors.py](../../../../../../src/robot_systems/paint/processes/paint/tray_dry/errors.py) — typed tray failure codes, records and actionable exceptions.
 
 ## `__init__.py`
 
@@ -16,11 +16,151 @@ Source: [src/robot_systems/paint/processes/paint/tray_dry/__init__.py](../../../
 
 No top-level functions, classes or public value declarations; inspect the source for imports or entry-point statements.
 
+## `errors.py`
+
+Source: [src/robot_systems/paint/processes/paint/tray_dry/errors.py](../../../../../../src/robot_systems/paint/processes/paint/tray_dry/errors.py).
+
+Actionable tray failures shared by production and dashboard boundaries.
+
+Imports (including optional/function-local imports; not a startup dependency list): `dataclasses`, `enum`.
+
+### `TrayErrorCode`
+
+```python
+class TrayErrorCode(StrEnum):
+```
+
+Declared fields/defaults:
+
+```python
+CONFIRMATION_REQUIRED = 'tray_confirmation_required'
+BUSY = 'tray_busy'
+LAYOUT_CHANGED = 'tray_layout_changed'
+UNAVAILABLE = 'tray_unavailable'
+```
+
+### `TrayFailure`
+
+```python
+@dataclass(frozen=True)
+class TrayFailure:
+```
+
+Declared fields/defaults:
+
+```python
+code: TrayErrorCode
+message: str
+```
+
+### `TrayError`
+
+```python
+class TrayError(RuntimeError):
+```
+
+Declared fields/defaults:
+
+```python
+code: TrayErrorCode
+```
+
+Directly declared public methods and constructor (inherited methods are documented on their base class):
+
+```python
+def as_failure(self) -> TrayFailure
+```
+
+### `TrayConfirmationRequiredError`
+
+```python
+class TrayConfirmationRequiredError(TrayError):
+```
+
+Declared fields/defaults:
+
+```python
+code = TrayErrorCode.CONFIRMATION_REQUIRED
+```
+
+Directly declared public methods and constructor (inherited methods are documented on their base class):
+
+```python
+def __init__(self) -> None
+```
+
+### `TrayBusyError`
+
+```python
+class TrayBusyError(TrayError):
+```
+
+Declared fields/defaults:
+
+```python
+code = TrayErrorCode.BUSY
+```
+
+Directly declared public methods and constructor (inherited methods are documented on their base class):
+
+```python
+def __init__(self) -> None
+```
+
+### `TrayLayoutChangedError`
+
+```python
+class TrayLayoutChangedError(TrayError):
+```
+
+Declared fields/defaults:
+
+```python
+code = TrayErrorCode.LAYOUT_CHANGED
+```
+
+Directly declared public methods and constructor (inherited methods are documented on their base class):
+
+```python
+def __init__(self) -> None
+```
+
+### `TrayUnavailableError`
+
+```python
+class TrayUnavailableError(TrayError):
+```
+
+Declared fields/defaults:
+
+```python
+code = TrayErrorCode.UNAVAILABLE
+```
+
+Directly declared public methods and constructor (inherited methods are documented on their base class):
+
+```python
+def __init__(self) -> None
+```
+
 ## `plate_layout.py`
 
 Source: [src/robot_systems/paint/processes/paint/tray_dry/plate_layout.py](../../../../../../src/robot_systems/paint/processes/paint/tray_dry/plate_layout.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `dataclasses`, `datetime`, `math`, `threading`, `typing`.
+Imports (including optional/function-local imports; not a startup dependency list): `.errors`, `__future__`, `dataclasses`, `datetime`, `enum`, `math`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.results`, `threading`, `typing`.
+
+### `TrayReadiness`
+
+```python
+class TrayReadiness(StrEnum):
+```
+
+Declared fields/defaults:
+
+```python
+UNKNOWN = 'unknown'
+READY = 'ready'
+```
 
 ### `PlateDropoffReservation`
 
@@ -81,6 +221,17 @@ def __init__(self, clock: Callable[[], datetime] | None=None) -> None
 
 ```python
 @property
+def readiness(self) -> TrayReadiness
+```
+
+```python
+def ensure_ready(self, config: PaintDropoffConfig | None=None) -> None
+```
+
+Reject unknown occupancy or changed geometry without discarding it.
+
+```python
+@property
 def pending(self) -> PlateDropoffReservation | None
 ```
 
@@ -94,12 +245,18 @@ Return an immutable dashboard-friendly view of the physical plate.
 def clear(self) -> None
 ```
 
+Confirm a physically empty tray; callers must obtain operator approval.
+
 ```python
 def remove(self, placement_id: int) -> bool
 ```
 
 ```python
 def reserve(self, config, *, width_mm: float, height_mm: float, calibration_pose: list[float], workpiece_rz_at_calibration_deg: float, pose_calculator, outlines_mm=(), paint_passes=()) -> tuple[PlateDropoffReservation | None, str]
+```
+
+```python
+def reserve_result(self, config, *, width_mm: float, height_mm: float, calibration_pose: list[float], workpiece_rz_at_calibration_deg: float, pose_calculator, outlines_mm=(), paint_passes=()) -> Ready[PlateDropoffReservation] | PaintOperationResult
 ```
 
 ```python
@@ -145,5 +302,3 @@ def _layout_signature(config, corners) -> tuple
 ```python
 def _rectangles_overlap(candidate: tuple[float, float, float, float], item: PlatePlacement, *, spacing_x: float=0.0, spacing_y: float=0.0) -> bool
 ```
-
-Readiness additions: `TrayReadiness.UNKNOWN` / `READY`, `PlateLayoutService.readiness`, and `ensure_ready(config=None)`. `clear()` records an explicit empty-tray confirmation and rejects pending reservations. See the package guide for the confirmation workflow.

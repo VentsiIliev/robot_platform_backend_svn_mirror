@@ -16,6 +16,7 @@ Generated from Python ASTs. Signatures, declared defaults, imports and docstring
 - [paint_motion_executor.py](#paint_motion_executorpy)
 - [pickup_executor.py](#pickup_executorpy)
 - [projection_preview.py](#projection_previewpy)
+- [trajectory_export_result.py](#trajectory_export_resultpy)
 - [workpiece_path_executor.py](#workpiece_path_executorpy)
 
 ## `__init__.py`
@@ -39,7 +40,7 @@ No top-level functions, classes or public value declarations; inspect the source
 
 Source: [src/robot_systems/paint/processes/paint/execute/diagnostics.py](../../../../../../src/robot_systems/paint/processes/paint/execute/diagnostics.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `concurrent.futures`, `csv`, `datetime`, `logging`, `matplotlib`, `matplotlib.pyplot`, `numpy`, `pathlib`, `re`, `src.engine.robot.path_interpolation.new_interpolation.debug_plotting`, `src.engine.robot.path_preparation`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts`, `src.robot_systems.paint.timing`, `time`.
+Imports (including optional/function-local imports; not a startup dependency list): `.trajectory_export_result`, `__future__`, `concurrent.futures`, `csv`, `datetime`, `logging`, `matplotlib`, `matplotlib.pyplot`, `numpy`, `pathlib`, `re`, `src.engine.robot.path_interpolation.new_interpolation.debug_plotting`, `src.engine.robot.path_preparation`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts`, `src.robot_systems.paint.timing`, `time`.
 
 ### `elapsed_s`
 
@@ -53,18 +54,30 @@ def elapsed_s(start: float) -> float
 def path_length_mm(path: list[list[float]]) -> float
 ```
 
+### `_completed_export`
+
+```python
+def _completed_export(result: ExportResult) -> Future[ExportResult]
+```
+
+### `_export_failure`
+
+```python
+def _export_failure(exc: Exception, *, phase: str, stage: str, artifacts: tuple[Path, ...]=(), code: ExportFailureCode | None=None) -> ExportFailed
+```
+
 ### `write_platform_command_path_csv`
 
 ```python
-def write_platform_command_path_csv(*, command_path: list[list[float]], vel: float, acc: float, pattern_type: str, stage: str, pipeline_stages: dict[str, list[list[float]]] | None=None)
+def write_platform_command_path_csv(*, command_path: list[list[float]], vel: float, acc: float, pattern_type: str, stage: str, pipeline_stages: dict[str, list[list[float]]] | None=None) -> Future[ExportResult]
 ```
 
-Queue CSV and PNG export of the exact ROS-bound Cartesian path.
+Queue optional diagnostics; the future reports completion without blocking motion.
 
 ### `_write_platform_command_path_artifacts`
 
 ```python
-def _write_platform_command_path_artifacts(command_path: tuple[tuple[float, ...], ...], vel: float, acc: float, pattern_type: str, stage: str, pipeline_stages) -> None
+def _write_platform_command_path_artifacts(command_path: tuple[tuple[float, ...], ...], vel: float, acc: float, pattern_type: str, stage: str, pipeline_stages: dict[str, tuple[tuple[float, ...], ...]]) -> ExportResult
 ```
 
 ### `_write_contour_pipeline_csv`
@@ -395,12 +408,20 @@ Source: [src/robot_systems/paint/processes/paint/execute/incremental_paint_execu
 
 Paint a measured command-path prefix, then move to an inspection pose.
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `math`, `src.engine.robot.motion_sequence`, `src.robot_systems.paint.processes.paint.execute.workpiece_path_executor`, `src.robot_systems.paint.processes.paint.incremental_adjustment`, `time`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `math`, `src.engine.robot.motion_sequence`, `src.robot_systems.paint.processes.paint.execute.workpiece_path_executor`, `src.robot_systems.paint.processes.paint.incremental_adjustment`, `src.robot_systems.paint.processes.paint.results`, `time`.
 
 ### `run_incremental_paint_contact`
 
 ```python
 def run_incremental_paint_contact(ctx) -> tuple[bool, str]
+```
+
+Compatibility adapter for operator-paced contact execution.
+
+### `run_incremental_paint_contact_result`
+
+```python
+def run_incremental_paint_contact_result(ctx) -> PaintOperationResult
 ```
 
 Hold after every section; only an explicit Finish proceeds to dropoff.
@@ -409,7 +430,7 @@ Hold after every section; only an explicit Finish proceeds to dropoff.
 
 Source: [src/robot_systems/paint/processes/paint/execute/paint_contact_executor.py](../../../../../../src/robot_systems/paint/processes/paint/execute/paint_contact_executor.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `cv2`, `logging`, `numpy`, `src.engine.geometry.planar`, `src.engine.robot.path_preparation`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execute.diagnostics`, `src.robot_systems.paint.processes.paint.execute.projection_preview`, `src.robot_systems.paint.processes.paint.motion.path_geometry`, `src.robot_systems.paint.processes.paint.paint_contact_job`, `src.robot_systems.paint.timing`, `time`, `typing`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `cv2`, `logging`, `numpy`, `src.engine.geometry.planar`, `src.engine.robot.path_preparation`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execute.diagnostics`, `src.robot_systems.paint.processes.paint.execute.projection_preview`, `src.robot_systems.paint.processes.paint.motion.path_geometry`, `src.robot_systems.paint.processes.paint.paint_contact_job`, `src.robot_systems.paint.processes.paint.results`, `src.robot_systems.paint.timing`, `time`, `typing`.
 
 ### `_apply_non_paint_clearance`
 
@@ -466,8 +487,14 @@ def __init__(self, owner) -> None
 ```
 
 ```python
-@timed_step(_logger, 'execute_paint_contact_paths')
 def execute(self, execution_plan: WorkpieceExecutionPlan, *, vel_override: float | None=None, acc_override: float | None=None, append_retreat: bool=True, retreat_fn: Callable[[list[list[float]]], list[list[float]]] | None=None, execute_robot: bool=True, collected_command_paths: list[list[list[float]]] | None=None, collected_command_jobs: list[PaintContactCommandJob] | None=None, control=None, pivot_offset_override_mm: float | None=None) -> tuple[bool, str, int]
+```
+
+Compatibility adapter for editor and existing executor integrations.
+
+```python
+@timed_step(_logger, 'execute_paint_contact_paths')
+def execute_result(self, execution_plan: WorkpieceExecutionPlan, *, vel_override: float | None=None, acc_override: float | None=None, append_retreat: bool=True, retreat_fn: Callable[[list[list[float]]], list[list[float]]] | None=None, execute_robot: bool=True, collected_command_paths: list[list[list[float]]] | None=None, collected_command_jobs: list[PaintContactCommandJob] | None=None, control=None, pivot_offset_override_mm: float | None=None) -> PaintOperationResult
 ```
 
 Execute all projected paint-contact paths in the prepared execution plan.
@@ -662,7 +689,7 @@ Disable the vacuum pump after staging if one is configured.
 
 Source: [src/robot_systems/paint/processes/paint/execute/pickup_executor.py](../../../../../../src/robot_systems/paint/processes/paint/execute/pickup_executor.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `dataclasses`, `logging`, `math`, `src.engine.robot.enums.axis`, `src.engine.robot.motion_sequence`, `src.engine.robot.path_preparation`, `src.engine.robot.procedures`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.configured_motion_waypoint`, `src.robot_systems.paint.processes.paint.execute.diagnostics`, `src.robot_systems.paint.processes.paint.magazine_load_result`, `src.robot_systems.paint.processes.paint.motion.pose_sampling`, `src.robot_systems.paint.processes.paint.paint_contact_job`, `src.robot_systems.paint.timing`, `time`, `typing`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `dataclasses`, `logging`, `math`, `src.engine.robot.enums.axis`, `src.engine.robot.motion_sequence`, `src.engine.robot.path_preparation`, `src.engine.robot.procedures`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.configured_motion_waypoint`, `src.robot_systems.paint.processes.paint.execute.diagnostics`, `src.robot_systems.paint.processes.paint.magazine_load_result`, `src.robot_systems.paint.processes.paint.motion.pose_sampling`, `src.robot_systems.paint.processes.paint.paint_contact_job`, `src.robot_systems.paint.processes.paint.plan.pickup_transfer_planner`, `src.robot_systems.paint.processes.paint.results`, `src.robot_systems.paint.timing`, `time`, `typing`.
 
 ### `pickup_pose_is_close`
 
@@ -733,11 +760,11 @@ Declared fields/defaults:
 
 ```python
 strategy_name: str
-motion_plan: object
+motion_plan: PickupTransferPlan
 waypoints: tuple[PickupWaypoint, ...]
 vacuum_on_before_moves: bool = True
 change_plane_combined_with_first_contact: bool = False
-contact_mode: str = PICKUP_CONTACT_MODE_PLANNED
+contact_mode: PickupContactMode = PICKUP_CONTACT_MODE_PLANNED
 contact_waypoint_index: int | None = None
 retract_reference_pose: list[float] | None = None
 ```
@@ -745,7 +772,7 @@ retract_reference_pose: list[float] | None = None
 ### `normalize_pickup_contact_mode`
 
 ```python
-def normalize_pickup_contact_mode(value: object) -> str
+def normalize_pickup_contact_mode(value: object) -> PickupContactMode
 ```
 
 ### `PaintPickupStrategy`
@@ -805,15 +832,27 @@ def __init__(self, owner, strategy: PaintPickupStrategy | None=None) -> None
 ```
 
 ```python
-def build_plan(self, prepared_workpiece: WorkpieceExecutionPlan) -> PickupPlan | None
+def build_plan_result(self, prepared_workpiece: WorkpieceExecutionPlan) -> Ready[PickupPlan] | Failed
 ```
 
 ```python
-@timed_step(_logger, 'pickup_to_pivot')
+def build_plan(self, prepared_workpiece: WorkpieceExecutionPlan) -> PickupPlan | None
+```
+
+Legacy preview adapter; execution consumes build_plan_result.
+
+```python
 def execute(self, prepared_workpiece: WorkpieceExecutionPlan, *, pickup_plan: PickupPlan | None=None, prepared_continuation_segments: list[OrderedMotionCommand] | None=None, stop_after_retract: bool=False) -> tuple[bool, str]
 ```
 
-Run pickup, align, and staging according to the configured strategy.
+Compatibility adapter for existing path-executor consumers.
+
+```python
+@timed_step(_logger, 'pickup_to_pivot')
+def execute_result(self, prepared_workpiece: WorkpieceExecutionPlan, *, pickup_plan: PickupPlan | None=None, prepared_continuation_segments: list[OrderedMotionCommand] | None=None, stop_after_retract: bool=False) -> PaintOperationResult
+```
+
+Execute pickup with explicit completion, absence, cancellation or failure.
 
 ### `build_ordered_pickup_segments`
 
@@ -891,13 +930,87 @@ def project_pivot_motion_snapshots_for_editor(*, execution_plan: WorkpieceExecut
 
 Return per-step projected shape snapshots for pivot motion plotting.
 
+## `trajectory_export_result.py`
+
+Source: [src/robot_systems/paint/processes/paint/execute/trajectory_export_result.py](../../../../../../src/robot_systems/paint/processes/paint/execute/trajectory_export_result.py).
+
+Outcomes for optional trajectory diagnostics, independent of motion success.
+
+Imports (including optional/function-local imports; not a startup dependency list): `dataclasses`, `enum`, `pathlib`, `typing`.
+
+Module declarations (expressions are shown without evaluating them):
+
+```python
+ExportResult: TypeAlias = ExportWritten | ExportSkipped | ExportFailed
+```
+
+### `ExportFailureCode`
+
+```python
+class ExportFailureCode(StrEnum):
+```
+
+Declared fields/defaults:
+
+```python
+INVALID_INPUT = 'invalid_input'
+FILESYSTEM = 'filesystem'
+UNAVAILABLE = 'unavailable'
+INTERNAL = 'internal'
+```
+
+### `ExportWritten`
+
+```python
+@dataclass(frozen=True)
+class ExportWritten:
+```
+
+Declared fields/defaults:
+
+```python
+stage: str
+artifacts: tuple[Path, ...]
+```
+
+### `ExportSkipped`
+
+```python
+@dataclass(frozen=True)
+class ExportSkipped:
+```
+
+Declared fields/defaults:
+
+```python
+stage: str
+reason: str
+```
+
+### `ExportFailed`
+
+```python
+@dataclass(frozen=True)
+class ExportFailed:
+```
+
+Declared fields/defaults:
+
+```python
+code: ExportFailureCode
+stage: str
+phase: str
+message: str
+completed_artifacts: tuple[Path, ...] = ()
+```
+
 ## `workpiece_path_executor.py`
 
 Source: [src/robot_systems/paint/processes/paint/execute/workpiece_path_executor.py](../../../../../../src/robot_systems/paint/processes/paint/execute/workpiece_path_executor.py).
 
 Paint workpiece process executor. This module is intentionally organized as a phase map while the executor is still being split into smaller collaborators: 1. Runtime configuration and editor-facing API. 2. Magazine pickup/release helpers. 3. Shared pose/configuration resolvers. 4. Preview and paint-contact path projection helpers. 5. Pickup, ordered-motion, pause/resume, and vacuum helpers. 6. Dropoff preparation/unwind helpers. 7. Top-level paint process orchestration.
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `dataclasses`, `logging`, `numpy`, `src.applications.workpiece_editor.service.i_workpiece_path_executor`, `src.engine.geometry.planar`, `src.engine.robot.motion_sequence`, `src.engine.robot.path_preparation`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.configured_motion_waypoint`, `src.robot_systems.paint.processes.paint.execute.dropoff_executor`, `src.robot_systems.paint.processes.paint.execute.edge_cleanup_executor`, `src.robot_systems.paint.processes.paint.execute.execution_plane`, `src.robot_systems.paint.processes.paint.execute.paint_contact_executor`, `src.robot_systems.paint.processes.paint.execute.paint_motion_executor`, `src.robot_systems.paint.processes.paint.execute.pickup_executor`, `src.robot_systems.paint.processes.paint.execute.projection_preview`, `src.robot_systems.paint.processes.paint.execution_control`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.machine_factory`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.motion.path_geometry`, `src.robot_systems.paint.processes.paint.plan`, `src.robot_systems.paint.processes.paint.plan.paint_contact_motion`, `src.robot_systems.paint.processes.paint.tray_dry.plate_layout`, `src.robot_systems.paint.timing`, `typing`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `dataclasses`, `logging`, `math`, `numpy`, `src.applications.workpiece_editor.service.i_workpiece_path_executor`, `src.engine.geometry.planar`, `src.engine.robot.motion_sequence`, `src.engine.robot.path_preparation`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.configured_motion_waypoint`, `src.robot_systems.paint.processes.paint.execute.dropoff_executor`, `src.robot_systems.paint.processes.paint.execute.edge_cleanup_executor`, `src.robot_systems.paint.processes.paint.execute.execution_plane`, `src.robot_systems.paint.processes.paint.execute.paint_contact_executor`, `src.robot_systems.paint.processes.paint.execute.paint_motion_executor`, `src.robot_systems.paint.processes.paint.execute.pickup_executor`, `src.robot_systems.paint.processes.paint.execute.projection_preview`, `src.robot_systems.paint.processes.paint.execution_control`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.machine_factory`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.motion.path_geometry`, `src.robot_systems.paint.processes.paint.plan`, `src.robot_systems.paint.processes.paint.plan.paint_contact_motion`, `src.robot_systems.paint.processes.paint.tray_dry.plate_layout`, `src.robot_systems.paint.timing`, `typing`.
 
 ### `_camera_to_tcp_delta`
 

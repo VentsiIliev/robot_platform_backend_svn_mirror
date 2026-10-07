@@ -13,6 +13,13 @@ from src.robot_systems.paint.processes.paint.plan.contour_utils import (
     extract_points_for_log,
 )
 
+from src.robot_systems.paint.processes.paint.match.results import (
+    MatchResult, NoMatch, PreparationResult, PreparedWorkpiece,
+)
+from src.robot_systems.paint.processes.paint.results import (
+    Failed, Ready, PaintFailure, PaintFailureCode,
+)
+
 _logger = logging.getLogger(__name__)
 
 class PaintWorkpiecePreparationService:
@@ -22,6 +29,7 @@ class PaintWorkpiecePreparationService:
         *,
         can_match_fn: Callable[[], bool],
         match_workpiece_fn: Callable,
+        typed_match_workpiece_fn: Callable[[object], MatchResult] | None = None,
         default_settings: Optional[dict] = None,
         default_settings_getter: Optional[Callable[[], dict]] = None,
         transformer=None,
@@ -30,6 +38,7 @@ class PaintWorkpiecePreparationService:
         """Store matching hooks and the transformer needed for contour preparation."""
         self._can_match_fn = can_match_fn
         self._match_workpiece_fn = match_workpiece_fn
+        self._typed_match_workpiece_fn = typed_match_workpiece_fn
         self._default_settings = dict(default_settings or {})
         self._default_settings_getter = default_settings_getter
         self._transformer = transformer
@@ -41,63 +50,58 @@ class PaintWorkpiecePreparationService:
         return self._transformer
 
     def prepare_workpiece(
-        self,
-        captured_contour,
-        frame,
-        *,
-        enable_matching: bool = True,
+        self, captured_contour, frame, *, enable_matching: bool = True,
         default_settings_override: Optional[dict] = None,
     ) -> tuple[dict | None, str]:
-        """Choose between a matched saved workpiece and a raw captured-contour fallback."""
-        can_match = bool(enable_matching and self._can_match_fn())
-        _logger.info(
-            "[PREP] start captured=%s matching_enabled=%s can_match=%s",
-            describe_contour(_normalize_contour_points(captured_contour)),
-            bool(enable_matching),
-            can_match,
-        )
-        if can_match:
-            ok, payload, match_message = self._match_workpiece_fn(captured_contour)
-            if ok and payload:
-                _logger.info(
-                    "[PREP] matched workpiece id=%s name=%s",
-                    str(payload.get("workpieceId") or ""),
-                    str(payload.get("name") or ""),
-                )
+        """Legacy adapter; production consumes prepare_result."""
+        result = self.prepare_result(captured_contour, frame, enable_matching=enable_matching,
+                                     default_settings_override=default_settings_override)
+        if isinstance(result, Ready):
+            return result.value.raw, result.value.description
+        if isinstance(result, Failed):
+            return None, result.failure.message
+        return None, "Unknown workpiece"
+
+    def prepare_result(
+        self, captured_contour, frame, *, enable_matching: bool = True,
+        default_settings_override: Optional[dict] = None,
+    ) -> PreparationResult:
+        """Preserve matching failure categories; absence is a separate result."""
+        try:
+            if enable_matching and self._can_match_fn():
+                if self._typed_match_workpiece_fn is not None:
+                    matched = self._typed_match_workpiece_fn(captured_contour)
+                    if isinstance(matched, (Failed, NoMatch)):
+                        return matched
+                    payload = matched.value.as_editor_payload()
+                else:
+                    # Existing integrations may still inject the shared editor tuple contract.
+                    ok, payload, message = self._match_workpiece_fn(captured_contour)
+                    if not ok or not payload:
+                        return NoMatch(message or "No match found")
                 raw = self._build_matched_workpiece_raw(payload, captured_contour, frame)
-                if raw is not None:
-                    label = payload.get("workpieceId") or payload.get("name") or "matched workpiece"
-                    return raw, f"Executed {label}"
-            _logger.warning(
-                "[PREP] Unknown workpiece; matching did not return saved data: %s",
-                str(match_message or "No match found"),
-            )
-            return None, "Unknown workpiece"
-        if not can_match:
-            _logger.info("[PREP] Paint workpiece matching is disabled or not available; using captured contour")
-        default_settings = (
-            dict(default_settings_override)
-            if default_settings_override is not None
-            else self._current_default_settings()
-        )
-        return (
-            contour_to_workpiece_raw(
-                captured_contour,
-                workpiece_id="captured",
-                name="Captured contour",
-                default_settings=default_settings,
-            ),
-            "Executed captured contour",
-        )
+                if raw is None:
+                    return Failed(PaintFailure(PaintFailureCode.MATCHING, "prepare_matched_workpiece",
+                                               "Matched workpiece has no executable contour"))
+                label = payload.get("workpieceId") or payload.get("name") or "matched workpiece"
+                return Ready(PreparedWorkpiece(raw, f"Executed {label}"))
+            # Preserve the existing disabled/unavailable matching fallback policy.
+            settings = (dict(default_settings_override) if default_settings_override is not None
+                        else self._current_default_settings())
+            raw = contour_to_workpiece_raw(captured_contour, workpiece_id="captured",
+                                          name="Captured contour", default_settings=settings)
+            return Ready(PreparedWorkpiece(raw, "Executed captured contour"))
+        except OSError as exc:
+            _logger.exception("[PREP] Failed to prepare workpiece")
+            return Failed(PaintFailure(PaintFailureCode.STORAGE, "workpiece_preparation", str(exc)))
+        except Exception as exc:
+            _logger.exception("[PREP] Unexpected workpiece preparation failure")
+            return Failed(PaintFailure(PaintFailureCode.INTERNAL, "workpiece_preparation", str(exc)))
 
     def _current_default_settings(self) -> dict:
         if self._default_settings_getter is None:
             return dict(self._default_settings)
-        try:
-            return dict(self._default_settings_getter() or {})
-        except Exception:
-            _logger.exception("[PREP] Failed to read live default paint settings")
-            return dict(self._default_settings)
+        return dict(self._default_settings_getter() or {})
 
     def _build_matched_workpiece_raw(self, payload: dict, captured_contour, frame) -> dict | None:
         """Build an executable raw workpiece from matched storage data and the live contour."""

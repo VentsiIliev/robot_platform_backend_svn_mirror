@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from src.robot_systems.paint.processes.paint.results import Ready, PaintOperationResult, PaintFailureCode
+
 import logging
 import math
 from time import monotonic, sleep
@@ -19,6 +22,12 @@ from src.robot_systems.paint.processes.paint.motion.pose_sampling import (
 from src.robot_systems.paint.processes.paint.work_area_nesting import WorkAreaNestingService
 
 _logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class NestedReleasePlan:
+    pose: tuple[float, ...]
+    has_space_for_same_footprint: bool
 
 
 class PaintMagazineLoadService:
@@ -212,6 +221,24 @@ class PaintMagazineLoadService:
         margin_mm: float,
         padding_mm: float,
     ) -> tuple[list[float] | None, bool, str]:
+        result = self.resolve_nested_release_result(
+            base_pose=base_pose, frame=frame, release_z_mm=release_z_mm,
+            robot_contour_xy=robot_contour_xy, margin_mm=margin_mm, padding_mm=padding_mm,
+        )
+        if isinstance(result, Ready):
+            return list(result.value.pose), result.value.has_space_for_same_footprint, ""
+        return None, False, result.message
+
+    def resolve_nested_release_result(
+        self,
+        *,
+        base_pose: list[float],
+        frame,
+        release_z_mm: float,
+        robot_contour_xy,
+        margin_mm: float,
+        padding_mm: float,
+    ) -> Ready[NestedReleasePlan] | PaintOperationResult:
         image_size = self._release_image_size(frame)
         points = (
             self._work_area_service.get_work_area(self._release_work_area_id)
@@ -220,7 +247,7 @@ class PaintMagazineLoadService:
         )
         resolver = self._resolver()
         if image_size is None or points is None or len(points) == 0 or resolver is None or len(base_pose) < 6:
-            return None, False, "Batch nesting could not resolve the paint work area"
+            return PaintOperationResult.failed(PaintFailureCode.INVALID_CONFIGURATION, "nested_release", "Batch nesting could not resolve the paint work area")
         width_px, height_px = image_size
         target_point = resolver.registry.by_name(self._target_point_name)
         boundary_xy = []
@@ -240,20 +267,21 @@ class PaintMagazineLoadService:
             boundary_xy.append((float(result.final_xy[0]), float(result.final_xy[1])))
         contour = np.asarray(robot_contour_xy, dtype=np.float64).reshape(-1, 2)
         if len(contour) < 3:
-            return None, False, "Batch nesting could not determine the workpiece footprint"
+            return PaintOperationResult.failed(PaintFailureCode.PLANNING, "nested_release", "Batch nesting could not determine the workpiece footprint")
         (_center, dimensions, _angle) = cv2.minAreaRect(contour.astype(np.float32))
         # A square based on the longest side is conservative for every release
         # orientation and prevents rotated workpieces from violating padding.
         footprint = max(float(dimensions[0]), float(dimensions[1]))
-        reservation, message = self._work_area_nesting.reserve(
+        reserved = self._work_area_nesting.reserve_result(
             boundary_xy,
             width_mm=footprint,
             height_mm=footprint,
             margin_mm=float(margin_mm),
             padding_mm=float(padding_mm),
         )
-        if reservation is None:
-            return None, False, message
+        if not isinstance(reserved, Ready):
+            return reserved
+        reservation = reserved.value
         release_pose = list(base_pose[:6])
         release_pose[0], release_pose[1] = reservation.center_xy
         release_pose[2] = float(release_z_mm)
@@ -262,7 +290,7 @@ class PaintMagazineLoadService:
             release_pose[0], release_pose[1], footprint,
             reservation.has_space_for_same_footprint,
         )
-        return release_pose, reservation.has_space_for_same_footprint, ""
+        return Ready(NestedReleasePlan(tuple(release_pose), reservation.has_space_for_same_footprint))
 
     def _release_work_area_center_px(self, frame) -> tuple[float, float] | None:
         started = monotonic()

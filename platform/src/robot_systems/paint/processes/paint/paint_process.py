@@ -18,6 +18,9 @@ from src.robot_systems.paint.processes.paint.incremental_adjustment import (
     PaintAdjustmentSession,
 )
 from src.robot_systems.paint.processes.paint.tray_dry.errors import TrayError, TrayFailure
+from src.robot_systems.paint.processes.paint.results import (
+    PaintFailure, PaintFailureCode, PaintOperationError, PaintOperationResult, PaintOutcome,
+)
 
 
 class PaintProcess(BaseProcess):
@@ -45,7 +48,7 @@ class PaintProcess(BaseProcess):
         self._robot_service = robot_service
         self._vacuum_pump = vacuum_pump
         self._paint_process_config_service = paint_process_config_service
-        self._last_failure: TrayFailure | None = None
+        self._last_failure: TrayFailure | PaintFailure | None = None
         self._thread: Optional[threading.Thread] = None
         self._stop_thread: Optional[threading.Thread] = None
         self._stopping = False
@@ -57,8 +60,8 @@ class PaintProcess(BaseProcess):
         self._pending_adjustment_session: PaintAdjustmentSession | None = None
 
     @property
-    def last_failure(self) -> TrayFailure | None:
-        """Machine-readable tray failure from the most recent start or cycle."""
+    def last_failure(self) -> TrayFailure | PaintFailure | None:
+        """Machine-readable operation or tray failure from the most recent start or cycle."""
         return self._last_failure
 
     def _workers_running(self) -> bool:
@@ -250,33 +253,40 @@ class PaintProcess(BaseProcess):
         """Execute one production cycle and translate the result into process state transitions."""
         run_stop_event = stop_event if stop_event is not None else self._run_stop_event
         should_stop = run_stop_event.is_set
-        failure: TrayFailure | None = None
+        failure: TrayFailure | PaintFailure | None = None
         try:
             if retry_unmatched_workpiece:
-                success, msg = self._production_service.run_once(
+                result = self._production_service.run_once_result(
                     should_stop, retry_unmatched_workpiece=True
                 )
             elif adjustment_session is not None:
-                success, msg = self._production_service.run_once(
+                result = self._production_service.run_once_result(
                     should_stop, adjustment_session=adjustment_session
                 )
             elif manual_single_cycle:
-                success, msg = self._production_service.run_once(
+                result = self._production_service.run_once_result(
                     should_stop, manual_single_cycle=True
                 )
             else:
-                success, msg = self._production_service.run_once(should_stop)
+                result = self._production_service.run_once_result(should_stop)
         except TrayError as exc:
             failure = exc.as_failure()
             self._logger.error("Paint tray rejected operation code=%s: %s", exc.code, exc)
-            success, msg = False, str(exc)
+            result = PaintOperationResult.failed(PaintFailureCode.INVALID_CONFIGURATION, "tray", str(exc))
+        except PaintOperationError as exc:
+            failure = exc.failure
+            result = PaintOperationResult(PaintOutcome.FAILED, str(exc), exc.failure)
         except Exception as exc:
             self._logger.exception("Paint process failed")
-            success, msg = False, str(exc)
+            result = PaintOperationResult.failed(PaintFailureCode.INTERNAL, "paint_process", str(exc))
 
         production_failure = self._production_service.last_failure
-        if isinstance(production_failure, TrayFailure):
+        if isinstance(production_failure, (TrayFailure, PaintFailure)):
             failure = production_failure
+        if failure is None:
+            failure = result.failure
+        msg = result.message
+        success = result.completed or result.outcome is PaintOutcome.CANCELLED
 
         # Serialize completion with Stop/reset. A cancelled run cannot publish
         # a late success or error, even if reset has cleared the legacy flag.
@@ -294,18 +304,8 @@ class PaintProcess(BaseProcess):
                 self._transition(
                     ProcessState.STOPPED,
                     self._on_stop,
-                    msg if self._is_no_workpiece_message(msg) else "",
+                    msg if result.stop_reason is not None else "",
                 )
             else:
                 self._logger.error("Paint process failed: %s", msg)
                 self._transition(ProcessState.ERROR, lambda: None, msg)
-
-    @staticmethod
-    def _is_no_workpiece_message(message: str) -> bool:
-        lowered = str(message or "").strip().lower()
-        return (
-            "no workpiece" in lowered
-            or "no usable contour detected" in lowered
-            or "magazine empty" in lowered
-            or "magazines are empty" in lowered
-        )

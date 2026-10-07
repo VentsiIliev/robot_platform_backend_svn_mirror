@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from time import perf_counter
 
+from src.robot_systems.paint.processes.paint.results import Ready, PaintOutcome
+
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards import guard_control
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
@@ -65,8 +67,8 @@ def handle_magazine_prepare_pickup_release(ctx: PaintExecutionContext) -> PaintE
         == MAGAZINE_PROCESSING_STRATEGY_BATCH_NESTING
     )
     if batch_nesting:
-        ctx.magazine_release_pose, ctx.magazine_nesting_has_more, nesting_error = (
-            load_service._resolve_nested_work_area_release_pose(
+        nested = (
+            load_service.resolve_nested_release_result(
                 base_pose=base_release_pose,
                 frame=ctx.magazine_snapshot.frame,
                 release_z_mm=float(ctx.magazine_config.release_z_mm),
@@ -75,9 +77,12 @@ def handle_magazine_prepare_pickup_release(ctx: PaintExecutionContext) -> PaintE
                 padding_mm=float(ctx.magazine_config.nesting_padding_mm),
             )
         )
-        if ctx.magazine_release_pose is None:
-            ctx.set_result(False, nesting_error)
-            return PaintExecutionState.COMPLETED
+        if not isinstance(nested, Ready):
+            ctx.set_outcome(nested)
+            return (PaintExecutionState.COMPLETED if nested.outcome is PaintOutcome.WORK_AREA_FULL
+                    else PaintExecutionState.ERROR)
+        ctx.magazine_release_pose = list(nested.value.pose)
+        ctx.magazine_nesting_has_more = nested.value.has_space_for_same_footprint
     else:
         ctx.magazine_release_pose = load_service._resolve_work_area_center_release_pose(
             base_pose=base_release_pose,

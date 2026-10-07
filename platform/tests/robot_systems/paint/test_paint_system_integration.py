@@ -658,13 +658,14 @@ class TestPaintApplicationWiring(unittest.TestCase):
         self.assertEqual(built_preparation, "built-preparation")
         matching_cls.assert_called_once()
         matching_kwargs = matching_cls.call_args.kwargs
-        self.assertIs(matching_kwargs["list_saved_workpieces_fn"], workpiece_service.list_all)
-        self.assertIs(matching_kwargs["load_saved_workpiece_fn"], workpiece_service.load_raw)
+        self.assertIs(matching_kwargs["list_saved_workpieces_fn"], workpiece_service.list_for_matching)
+        self.assertIs(matching_kwargs["load_saved_workpiece_fn"], workpiece_service.load_for_matching)
         self.assertEqual(matching_kwargs["capture_snapshot_service"], "snapshot")
         self.assertIsNotNone(matching_kwargs["run_matching_fn"])
         prep_cls.assert_called_once_with(
             can_match_fn=matching_service.can_match_saved_workpieces,
             match_workpiece_fn=matching_service.match_saved_workpieces,
+            typed_match_workpiece_fn=matching_service.match_result,
             default_settings={
                 "velocity": "10",
                 "acceleration": "10",

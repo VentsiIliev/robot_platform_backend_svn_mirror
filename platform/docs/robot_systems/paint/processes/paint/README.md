@@ -6,6 +6,7 @@ This is the shared production implementation used by the paint family. System cl
 |---|---|
 | `paint_process.py` | Process state, background run, stop worker, manual/adjustment/retry entry points |
 | `paint_production_service.py` | Capture, magazine/production flow and business execution-machine coordination |
+| `results.py` | Operation outcomes, actionable failure categories and exception boundaries |
 | `config.py`, config service/serializer | Typed defaults, validated persisted configuration and runtime snapshots |
 | [match](match/README.md) | Saved-workpiece candidate selection, matcher adapter and diagnostics |
 | [align](align/README.md) | Raw contour payload IO, normalization and sampling helpers |
@@ -17,7 +18,11 @@ This is the shared production implementation used by the paint family. System cl
 | [tray_dry](tray_dry/README.md) | Plate-layout reservations, occupancy and placement |
 | [auto_dryer](auto_dryer/README.md) | Dryer release coordination |
 
-`PaintWorkpiecePreparationService` returns a matched saved payload when matching is available/enabled and succeeds. Failed matching in that mode returns `Unknown workpiece`; it does not silently fall back to the captured contour. A captured-contour fallback is used when matching is disabled/unavailable. Shared path preparation converts the raw payload into a `WorkpieceExecutionPlan` before pickup/contact planning.
+`PaintWorkpiecePreparationService.prepare_result()` returns a typed prepared payload, `NoMatch`, or `Failed`. Only an actual absent match produces the established `Unknown workpiece` warning and permits operator recapture. Storage, conversion and unexpected matcher failures retain their category and stage and are displayed as preparation errors. A captured-contour fallback is still used when matching is disabled/unavailable. Reading live defaults can fail explicitly; stale defaults are no longer substituted after a read error. Shared path preparation converts the raw payload into a `WorkpieceExecutionPlan` before pickup/contact planning.
+
+`results.py` defines immutable `PaintFailure` records, actionable `PaintOperationError`/`PaintPlanningError`/`PaintConfigurationError` exceptions, `Ready`/`Failed` planning variants, and `PaintOperationResult` with a validated `PaintOutcome`. Outcomes distinguish completion, absence, unmatched workpieces, cancellation, an inapplicable ordered attempt, full tray/work area and failure. A failed outcome must carry a failure; other outcomes cannot carry one. Backend error codes are preserved where the operation exposes them. Secondary cleanup failures retain the primary failure rather than replacing it. Codes describe failure categories; they do not authorize automatic motion retries.
+
+Production uses `run_once_result()` and `run_cycle_result()`. The context stores one result; its legacy `result_ok` and `result_message` are read-only views. Completed cycles may carry a typed `stop_reason` for normal exhaustion or a full tray, so loop decisions and operator messages do not depend on message wording. A single-cycle absence still retains its prior unsuccessful legacy return; exhaustion in a repeating loop remains successful termination. Existing tuple-returning `run_once()`, editor matching, pickup/contact execution and single-cycle APIs remain compatibility adapters. The paint process exposes the latest operation or tray failure through `last_failure`.
 
 Cooperative execution controls coordinate pause, resume and stop across the active context, magazine navigation and path execution. The business machine includes magazine phases, capture/prepare/plan, pickup, paint contact, edge cleanup, prepare/dropoff/post-return and lifecycle states. See [trajectory/execution](TRAJECTORY_AND_EXECUTION.md) for responsibilities and [alignment](ALIGNMENT.md) for the current geometry path.
 
@@ -25,7 +30,7 @@ Cooperative execution controls coordinate pause, resume and stop across the acti
 
 The dashboard disables Start during cleanup and enables it again on a subsequent status refresh after both workers exit. The process exposes `is_stopping` and `stopping_elapsed_seconds` for this feedback. Its Process Status details show a waiting message, or "Stopping is taking longer than expected." after ten seconds. That threshold only changes the message: it does not bypass cleanup or automatically restart. Robot-stop and intentional vacuum-off behavior remain unchanged. Regression coverage lives in `tests/robot_systems/paint/test_paint_process_lifecycle.py`.
 
-Plate layout separates reservations from committed occupied records. Outlines support dashboard placement display; conservative footprints support allocation. Automatic-dryer coordination and tray dropoff are selected/configured at composition/runtime rather than duplicated into separate full process packages.
+Plate layout separates reservations from committed occupied records. Entry and exit command profiles are validated before entry motion or vacuum release; release verification remains intentionally disabled. Outlines support dashboard placement display; conservative footprints support allocation. Automatic-dryer coordination and tray dropoff are selected/configured at composition/runtime rather than duplicated into separate full process packages.
 
 The current tree no longer has `align/alignment/core.py`, `align/dxf_image_placement.py` or `execute/pivot_projection/core.py`. Earlier descriptions are retained in [archive](../../../../archive/robot_systems/paint/processes/paint/README.md), not treated as current APIs.
 

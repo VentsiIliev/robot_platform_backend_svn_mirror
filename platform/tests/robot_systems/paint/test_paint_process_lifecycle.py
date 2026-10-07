@@ -1,3 +1,4 @@
+from src.robot_systems.paint.processes.paint.results import PaintOperationResult, PaintOutcome, PaintFailureCode
 import threading
 import unittest
 from unittest.mock import MagicMock, patch
@@ -26,14 +27,15 @@ class TestPaintProcessLifecycle(unittest.TestCase):
                 raise TimeoutError("Test did not release production worker")
             if isinstance(outcome, Exception):
                 raise outcome
-            return outcome
+            return (PaintOperationResult(PaintOutcome.COMPLETED, outcome[1]) if outcome[0]
+                    else PaintOperationResult.failed(PaintFailureCode.MOTION, "production", outcome[1]))
 
         def stop_motion():
             stop_entered.set()
             if not stop_release.wait(5):
                 raise TimeoutError("Test did not release hardware-stop worker")
 
-        production.run_once.side_effect = run_once
+        production.run_once_result.side_effect = run_once
         robot.stop_motion.side_effect = stop_motion
         process = PaintProcess(production, MagicMock(), robot_service=robot)
 
@@ -69,7 +71,7 @@ class TestPaintProcessLifecycle(unittest.TestCase):
                     self.assertFalse(process.start_manual_single_cycle())
                     self.assertFalse(process.start_adjustment_cycle())
                     self.assertIs(process._thread, first_worker)
-                    self.assertEqual(production.run_once.call_count, 1)
+                    self.assertEqual(production.run_once_result.call_count, 1)
                     self.assertTrue(callbacks[0]())
                     self.assertEqual(process.state, ProcessState.STOPPED)
 
@@ -99,9 +101,9 @@ class TestPaintProcessLifecycle(unittest.TestCase):
                     self.assertFalse(should_stop())
                     entered_again.set()
                     release_again.wait(2)
-                    return True, "Paint completed"
+                    return PaintOperationResult(PaintOutcome.COMPLETED, "Paint completed")
 
-                production.run_once.side_effect = next_run
+                production.run_once_result.side_effect = next_run
                 process.start()
                 self.assertTrue(entered_again.wait(2))
                 self.assertIsNot(process._thread, first_worker)
@@ -109,7 +111,7 @@ class TestPaintProcessLifecycle(unittest.TestCase):
                 release_again.set()
                 process._thread.join(2)
                 process._stop_thread.join(2)
-                self.assertEqual(production.run_once.call_count, 2)
+                self.assertEqual(production.run_once_result.call_count, 2)
 
     def test_reset_cannot_revive_cancelled_run_or_publish_late_result(self):
         for outcome in ((True, "done"), (False, "late failure"), RuntimeError("late error")):
@@ -125,7 +127,7 @@ class TestPaintProcessLifecycle(unittest.TestCase):
                 self.assertTrue(callbacks[0]())
                 self.assertFalse(PaintDashboardService(process).load_state().can_start)
                 process.start()
-                self.assertEqual(production.run_once.call_count, 1)
+                self.assertEqual(production.run_once_result.call_count, 1)
                 process._messaging.publish.reset_mock()
                 run_release.set()
                 stop_release.set()
@@ -144,7 +146,7 @@ class TestPaintProcessLifecycle(unittest.TestCase):
         production.can_retry_unmatched_workpiece.return_value = True
         self.assertFalse(process.retry_unmatched_workpiece())
         self.assertEqual(process.state, ProcessState.ERROR)
-        self.assertEqual(production.run_once.call_count, 1)
+        self.assertEqual(production.run_once_result.call_count, 1)
 
     def test_start_while_paused_resumes_existing_worker(self):
         process, production, _callbacks, _release, _entered, _stop_release = (
@@ -155,7 +157,7 @@ class TestPaintProcessLifecycle(unittest.TestCase):
         process.start()
         self.assertEqual(process.state, ProcessState.RUNNING)
         self.assertIs(process._thread, worker)
-        self.assertEqual(production.run_once.call_count, 1)
+        self.assertEqual(production.run_once_result.call_count, 1)
         production.resume_current_phase.assert_called_once_with()
 
     def test_dashboard_reports_delayed_cleanup_without_changing_process_state(self):

@@ -7,6 +7,9 @@ from src.applications.workpiece_editor.i_workpiece_matcher import IWorkpieceMatc
 from src.engine.vision.i_capture_snapshot_service import VisionCaptureSnapshot
 from src.robot_systems.paint.processes.paint.match.matchable_workpiece import MatchableWorkpiece
 
+from .results import MatchedWorkpiece, MatchResult, NoMatch
+from src.robot_systems.paint.processes.paint.results import Failed, Ready, PaintFailure, PaintFailureCode
+
 _logger = logging.getLogger(__name__)
 
 class PaintWorkpieceMatchingService(IWorkpieceMatcher):
@@ -39,44 +42,58 @@ class PaintWorkpieceMatchingService(IWorkpieceMatcher):
         )
 
     def match_saved_workpieces(self, contour) -> tuple[bool, dict | None, str]:
-        """Match one captured contour against saved paint workpieces and return raw payload metadata."""
-        if not self.can_match_saved_workpieces():
-            return False, None, "Matching is not available in this editor."
+        """Shared editor compatibility adapter; production consumes match_result."""
+        result = self.match_result(contour)
+        if isinstance(result, Ready):
+            return True, result.value.as_editor_payload(), "Matched workpiece."
+        if isinstance(result, Failed):
+            return False, None, result.failure.message
+        return False, None, result.message
 
+    def match_result(self, contour) -> MatchResult:
+        if not self.can_match_saved_workpieces():
+            return Failed(PaintFailure(PaintFailureCode.UNAVAILABLE, "matching",
+                                       "Matching is not available in this editor."))
+        stage = "load_matching_candidates"
         try:
             candidates = self._load_candidates()
             if not candidates:
-                return False, None, "No saved workpieces available."
-
+                return NoMatch("No saved workpieces available.")
+            stage = "match_contour"
             result, no_match_count, _matched_contours, _unmatched_contours = self._run_matching_fn(
-                candidates,
-                [contour],
+                candidates, [contour],
             )
             workpieces = list((result or {}).get("workpieces", []))
             confidences = list((result or {}).get("mlConfidences", []))
             self._save_match_diagnostics(contour, candidates, matched=bool(workpieces))
             if not workpieces:
-                return False, None, f"No match found. Saved workpieces checked: {len(candidates)}"
-
+                return NoMatch(f"No match found. Saved workpieces checked: {len(candidates)}",
+                               len(candidates))
+            stage = "convert_matched_workpiece"
             best = workpieces[0]
             raw = best.to_raw()
-            if raw is None:
-                return False, None, "Matched workpiece could not be converted."
-
-            confidence = float(confidences[0]) if confidences else None
-
-            return True, {
-                "raw": raw,
-                "storage_id": best.storage_id,
-                "workpieceId": best.workpieceId,
-                "name": best.name,
-                "candidate_count": len(candidates),
-                "no_match_count": int(no_match_count),
-                "confidence": confidence,
-            }, "Matched workpiece."
+            if not raw:
+                return Failed(PaintFailure(PaintFailureCode.MATCHING, stage,
+                                           "Matched workpiece could not be converted."))
+            return Ready(MatchedWorkpiece(
+                raw, best.storage_id, best.workpieceId, best.name,
+                len(candidates), int(no_match_count),
+                float(confidences[0]) if confidences else None,
+            ))
+        except (ValueError, UnicodeError) as exc:
+            if stage != "load_matching_candidates":
+                _logger.exception("Unexpected matcher validation failure stage=%s", stage)
+                return Failed(PaintFailure(PaintFailureCode.INTERNAL, stage, str(exc)))
+            _logger.exception("Saved workpiece data could not be read")
+            return Failed(PaintFailure(PaintFailureCode.STORAGE, stage, str(exc)))
+        except OSError as exc:
+            _logger.exception("Paint workpiece matching I/O failed stage=%s", stage)
+            return Failed(PaintFailure(PaintFailureCode.STORAGE if stage == "load_matching_candidates"
+                                       else PaintFailureCode.MATCHING, stage, str(exc)))
         except Exception as exc:
-            _logger.exception("Paint workpiece matching failed")
-            return False, None, str(exc)
+            # Public matching boundary: preserve unexpected errors as INTERNAL, never NoMatch.
+            _logger.exception("Paint workpiece matching failed stage=%s", stage)
+            return Failed(PaintFailure(PaintFailureCode.INTERNAL, stage, str(exc)))
 
     def _save_match_diagnostics(self, contour, candidates: list, *, matched: bool) -> None:
         if not self._debug_dump_dir:

@@ -12,6 +12,7 @@ import numpy as np
 from src.applications.workpiece_library.workpiece_thumbnail import (
     generate_thumbnail_bytes,
 )
+from src.robot_systems.paint.domain.workpieces.errors import WorkpieceReadError
 
 _logger = logging.getLogger(__name__)
 
@@ -101,6 +102,14 @@ class JsonPaintWorkpieceRepository:
                 _logger.exception("Could not remove paint workpiece staging directory %s", folder)
 
     def list_all(self) -> List[dict]:
+        """Library listing tolerates unreadable individual records."""
+        return self._list_all(strict=False)
+
+    def list_for_matching(self) -> List[dict]:
+        """Production must distinguish unreadable records from an empty library."""
+        return self._list_all(strict=True)
+
+    def _list_all(self, *, strict: bool) -> List[dict]:
         with self._lock:
             records: List[dict] = []
             for date_dir in sorted(os.listdir(self._root)):
@@ -124,6 +133,8 @@ class JsonPaintWorkpieceRepository:
                     try:
                         with open(json_path, "r", encoding="utf-8") as handle:
                             raw = json.load(handle)
+                        if not isinstance(raw, dict):
+                            raise ValueError("Saved workpiece JSON must contain an object")
                         thumb_path = os.path.join(storage_path, f"{storage_id}_thumbnail.png")
                         records.append(
                             {
@@ -137,7 +148,15 @@ class JsonPaintWorkpieceRepository:
                                 "thumbnail_path": thumb_path if os.path.exists(thumb_path) else None,
                             }
                         )
+                    except (OSError, ValueError) as exc:
+                        if strict:
+                            raise WorkpieceReadError(
+                                f"Could not read saved workpiece '{storage_id}': {exc}"
+                            ) from exc
+                        _logger.warning("Could not read paint workpiece %s: %s", json_path, exc)
                     except Exception as exc:
+                        if strict:
+                            raise
                         _logger.warning("Could not read paint workpiece %s: %s", json_path, exc)
             return records
 

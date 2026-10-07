@@ -168,7 +168,7 @@ class TestPaintWorkpiecePreparationService(unittest.TestCase):
 
         raw, description = service.prepare_workpiece(_square(4.0), frame=None)
 
-        self.assertEqual(description, "Unknown workpiece")
+        self.assertEqual(description, "Matched workpiece has no executable contour")
         self.assertIsNone(raw)
 
     def test_prepare_workpiece_stops_when_matched_raw_is_empty(self):
@@ -179,7 +179,7 @@ class TestPaintWorkpiecePreparationService(unittest.TestCase):
 
         raw, description = service.prepare_workpiece(_square(2.0), frame=None)
 
-        self.assertEqual(description, "Unknown workpiece")
+        self.assertEqual(description, "Matched workpiece has no executable contour")
         self.assertIsNone(raw)
 
     def test_resolve_frame_size_uses_defaults_for_missing_shape(self):

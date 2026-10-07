@@ -18,6 +18,14 @@ from src.robot_systems.paint.processes.paint.adjustment_settings_serializer impo
 from src.robot_systems.paint.processes.paint.paint_process import PaintProcess
 from src.shared_contracts.events.process_events import ProcessState
 
+from src.robot_systems.paint.processes.paint.results import PaintOperationResult, PaintOutcome, PaintFailureCode
+
+
+def _contact_result(ok, message, waypoints):
+    return (PaintOperationResult(PaintOutcome.COMPLETED, message, planned_waypoints=waypoints)
+            if ok else PaintOperationResult.failed(PaintFailureCode.MOTION, "paint_contact", message,
+                                                    planned_waypoints=waypoints))
+
 
 class IncrementalAdjustmentTests(unittest.TestCase):
     def test_settings_serializer_defaults_require_explicit_inspection_offset(self):
@@ -40,9 +48,9 @@ class IncrementalAdjustmentTests(unittest.TestCase):
             adjustment_session.inspection_ready(10, 10, complete=True)
             entered.set()
             release.wait(timeout=1)
-            return True, "Paint completed"
+            return PaintOperationResult(PaintOutcome.COMPLETED, "Paint completed")
 
-        production.run_once.side_effect = run_once
+        production.run_once_result.side_effect = run_once
         process = PaintProcess(production_service=production, messaging=MagicMock())
         self.assertTrue(process.start_adjustment_cycle())
         self.assertTrue(entered.wait(timeout=1))
@@ -107,7 +115,7 @@ class IncrementalAdjustmentTests(unittest.TestCase):
             )
             return True, "", 2
 
-        owner._paint_contact.execute.side_effect = prepare
+        owner._paint_contact.execute_result.side_effect = lambda *args, **kwargs: _contact_result(*prepare(*args, **kwargs))
         session = PaintAdjustmentSession()
         ctx = SimpleNamespace(
             production_service=SimpleNamespace(_path_executor=owner),
@@ -164,7 +172,7 @@ class IncrementalAdjustmentTests(unittest.TestCase):
             )
             return True, "", 2
 
-        owner._paint_contact.execute.side_effect = prepare
+        owner._paint_contact.execute_result.side_effect = lambda *args, **kwargs: _contact_result(*prepare(*args, **kwargs))
         session = PaintAdjustmentSession()
         allowed = threading.Event()
         allowed.set()

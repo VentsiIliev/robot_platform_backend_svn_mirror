@@ -455,7 +455,7 @@ class PaintEdgeCleanupExecutor:
             return False, msg, 0, []
         collected_paths: list[list[list[float]]] = []
         vel, acc = self._cleanup_speed()
-        ok, msg, total_waypoints = self._owner._paint_contact.execute(
+        contact_result = self._owner._paint_contact.execute_result(
             cleanup_plan,
             vel_override=vel,
             acc_override=acc,
@@ -464,6 +464,7 @@ class PaintEdgeCleanupExecutor:
             execute_robot=execute_robot,
             collected_command_paths=collected_paths,
         )
+        (ok, msg, total_waypoints) = (contact_result.completed, contact_result.message, contact_result.planned_waypoints)
         command_path = [pose for path in collected_paths for pose in path]
         if not ok:
             _logger.debug(
@@ -511,7 +512,7 @@ class PaintEdgeCleanupExecutor:
 
         collected_paths: list[list[list[float]]] = []
         vel, acc = self._cleanup_speed()
-        ok, msg, total_waypoints = self._owner._paint_contact.execute(
+        contact_result = self._owner._paint_contact.execute_result(
             cleanup_plan,
             vel_override=vel,
             acc_override=acc,
@@ -520,6 +521,7 @@ class PaintEdgeCleanupExecutor:
             execute_robot=False,
             collected_command_paths=collected_paths,
         )
+        (ok, msg, total_waypoints) = (contact_result.completed, contact_result.message, contact_result.planned_waypoints)
         command_path = [pose for path in collected_paths for pose in path]
         if not ok:
             _logger.debug(

@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import logging
 from time import perf_counter
 from typing import Callable
 
 from src.robot_systems.paint.processes.paint.tray_dry.errors import TrayError
+from src.robot_systems.paint.processes.paint.results import (
+    PaintOperationError, PaintOperationResult, PaintFailureCode, PaintOutcome,
+)
+
 
 from src.engine.process.executable_state_machine import (
     ExecutableStateMachine,
@@ -88,6 +93,9 @@ from src.robot_systems.paint.processes.paint.execution_machine.state import (
 from src.robot_systems.paint.timing import TimingRecorder
 
 
+_logger = logging.getLogger(__name__)
+
+
 class PaintExecutionMachineFactory:
     """Build the internal state machine for one paint production cycle."""
 
@@ -152,22 +160,41 @@ def _register(
     registry.register_state(
         State(
             state=state,
-            handler=_tray_aware_handler(_timed_handler(context, state, handler)),
+            handler=_failure_aware_handler(_timed_handler(context, state, handler), state),
             on_enter=_record_current_state,
         )
     )
 
 
-def _tray_aware_handler(
+def _failure_aware_handler(
     handler: Callable[[PaintExecutionContext], PaintExecutionState],
+    state: PaintExecutionState,
 ) -> Callable[[PaintExecutionContext], PaintExecutionState]:
     def wrapped(ctx: PaintExecutionContext) -> PaintExecutionState:
+        failure_exception: Exception | None = None
         try:
             return handler(ctx)
         except TrayError as exc:
+            failure_exception = exc
             ctx.tray_failure = exc.as_failure()
-            ctx.set_result(False, str(exc))
-            return PaintExecutionState.ERROR
+            ctx.set_outcome(PaintOperationResult.failed(
+                PaintFailureCode.INVALID_CONFIGURATION, "tray", str(exc),
+            ))
+        except PaintOperationError as exc:
+            failure_exception = exc
+            ctx.set_outcome(PaintOperationResult(PaintOutcome.FAILED, str(exc), exc.failure))
+        except Exception as exc:
+            failure_exception = exc
+            # The state-machine boundary owns unexpected bugs and preserves their traceback.
+            _logger.exception("Paint handler failed state=%s", state.name)
+            ctx.set_outcome(PaintOperationResult.failed(
+                PaintFailureCode.INTERNAL, state.name.lower(), str(exc),
+            ))
+        if state in {PaintExecutionState.ERROR, PaintExecutionState.STOPPED,
+                     PaintExecutionState.COMPLETED, PaintExecutionState.IDLE}:
+            # Cleanup failure must never re-enter the same terminal handler forever.
+            raise PaintOperationError(ctx.result.failure) from failure_exception
+        return PaintExecutionState.ERROR
     return wrapped
 
 

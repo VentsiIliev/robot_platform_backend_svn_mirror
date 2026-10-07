@@ -12,31 +12,43 @@ from src.engine.robot.motion_sequence import (
     OrderedPathCommand,
     OrderedPositionCommand,
 )
-from src.robot_systems.paint.processes.paint.incremental_adjustment import PaintPathCursor
+from src.robot_systems.paint.processes.paint.incremental_adjustment import (
+    PaintPathCursor, FinishAdjustment, CancelAdjustment,
+)
+from src.robot_systems.paint.processes.paint.results import PaintOperationResult, PaintOutcome, PaintFailureCode
 from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor import (
     _paint_axis_staging_offset_pose,
 )
 
 
 def run_incremental_paint_contact(ctx) -> tuple[bool, str]:
+    """Compatibility adapter for operator-paced contact execution."""
+    return run_incremental_paint_contact_result(ctx).as_legacy_pair()
+
+
+def run_incremental_paint_contact_result(ctx) -> PaintOperationResult:
     """Hold after every section; only an explicit Finish proceeds to dropoff."""
     owner = ctx.production_service._path_executor
     session = ctx.adjustment_session
     paths: list[list[list[float]]] = []
     jobs = []
-    ok, message, _ = owner._paint_contact.execute(
+    contact_result = owner._paint_contact.execute_result(
         ctx.execution_plan,
         execute_robot=False,
         append_retreat=False,
         collected_command_paths=paths,
         collected_command_jobs=jobs,
     )
-    if not ok or not paths or len(paths) != len(jobs):
+    (ok, message, _) = (contact_result.completed, contact_result.message, contact_result.planned_waypoints)
+    if not contact_result.completed:
         session.fail()
-        return False, message or "No paint-contact path was generated"
+        return contact_result
+    if not paths or len(paths) != len(jobs):
+        session.fail()
+        return PaintOperationResult.failed(PaintFailureCode.PLANNING, "incremental_paint", message or 'No paint-contact path was generated')
     if len(paths) != 1:
         session.fail()
-        return False, "Incremental paint adjustment currently requires one paint-contact path"
+        return PaintOperationResult.failed(PaintFailureCode.PLANNING, "incremental_paint", 'Incremental paint adjustment currently requires one paint-contact path')
 
     cursors = [PaintPathCursor(path) for path in paths]
     total_mm = sum(cursor.total_mm for cursor in cursors)
@@ -46,31 +58,28 @@ def run_incremental_paint_contact(ctx) -> tuple[bool, str]:
     session.inspection_ready(0.0, total_mm, complete=False)
 
     while not ctx.should_stop():
-        command = session.wait_for_command(ctx.should_stop)
-        if command is None:
-            return False, "Paint adjustment stopped"
-        action, step = command
-        if action == "finish":
-            return True, ""
+        command = session.wait_for_command_result(ctx.should_stop)
+        if isinstance(command, CancelAdjustment):
+            return PaintOperationResult(PaintOutcome.CANCELLED, "Paint adjustment stopped")
+        if isinstance(command, FinishAdjustment):
+            return PaintOperationResult(PaintOutcome.COMPLETED, "")
+        step = command.step
         while not ctx.run_allowed.is_set() or ctx.control.pause_requested():
             if ctx.should_stop():
-                return False, "Paint adjustment stopped"
+                return PaintOperationResult(PaintOutcome.CANCELLED, 'Paint adjustment stopped')
             sleep(0.1)
-        if step is None:
-            session.fail()
-            return False, "Paint adjustment step is missing"
         while path_index < len(cursors) and cursors[path_index].complete:
             path_index += 1
         if path_index >= len(cursors):
             session.fail()
-            return False, "Paint path is already complete"
+            return PaintOperationResult.failed(PaintFailureCode.PLANNING, "incremental_paint", 'Paint path is already complete')
 
         cursor = cursors[path_index]
         before = cursor.travelled_mm
         chunk = cursor.take(step.length_mm)
         if len(chunk) < 2:
             session.fail()
-            return False, "Paint section has no motion"
+            return PaintOperationResult.failed(PaintFailureCode.PLANNING, "incremental_paint", 'Paint section has no motion')
         axis_clear_pose = _paint_axis_staging_offset_pose(
             list(chunk[-1]),
             owner._contact_motion_config,
@@ -83,7 +92,7 @@ def run_incremental_paint_contact(ctx) -> tuple[bool, str]:
         )
         if dist(chunk[-1][:3], axis_clear_pose[:3]) < 1.0 - 1e-6:
             session.fail()
-            return False, "Paint-axis inspection offset does not clear the contact pose"
+            return PaintOperationResult.failed(PaintFailureCode.PLANNING, "incremental_paint", 'Paint-axis inspection offset does not clear the contact pose')
         staging = owner._paint_process_config().contact_staging
         job = jobs[path_index]
         commands = []
@@ -149,13 +158,14 @@ def run_incremental_paint_contact(ctx) -> tuple[bool, str]:
         )
         if not isinstance(result, int) or isinstance(result, bool) or result != 0:
             session.fail()
-            return False, owner._robot_service.get_last_motion_error() or "Paint section motion failed"
+            return PaintOperationResult.failed(PaintFailureCode.MOTION, "incremental_paint", owner._robot_service.get_last_motion_error() or 'Paint section motion failed',
+                                               backend_code=result if type(result) is int else None)
         if ctx.should_stop():
-            return False, "Paint adjustment stopped"
+            return PaintOperationResult(PaintOutcome.CANCELLED, 'Paint adjustment stopped')
         owner._last_process_end_pose = list(inspect_pose)
         owner._last_paint_contact_end_rz = float(chunk[-1][5])
         previous_axis_clear_pose = axis_clear_pose
         travelled_mm += cursor.travelled_mm - before
         complete = all(item.complete for item in cursors)
         session.inspection_ready(travelled_mm, total_mm, complete=complete)
-    return False, "Paint adjustment stopped"
+    return PaintOperationResult(PaintOutcome.CANCELLED, 'Paint adjustment stopped')

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import csv
 import logging
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 import re
@@ -23,6 +23,9 @@ from src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts impor
     write_pivot_debug_plot,
 )
 from src.robot_systems.paint.timing import TimingRecorder
+from .trajectory_export_result import (
+    ExportFailed, ExportFailureCode, ExportResult, ExportSkipped, ExportWritten,
+)
 
 _logger = logging.getLogger(__name__)
 _CART_PATH_DIAG_EXECUTOR = ThreadPoolExecutor(
@@ -46,6 +49,30 @@ def path_length_mm(path: list[list[float]]) -> float:
     return float(np.linalg.norm(np.diff(xyz, axis=0), axis=1).sum())
 
 
+def _completed_export(result: ExportResult) -> Future[ExportResult]:
+    future: Future[ExportResult] = Future()
+    future.set_result(result)
+    return future
+
+
+def _export_failure(
+    exc: Exception, *, phase: str, stage: str, artifacts: tuple[Path, ...] = (),
+    code: ExportFailureCode | None = None,
+) -> ExportFailed:
+    category = code or (
+        ExportFailureCode.FILESYSTEM if isinstance(exc, OSError)
+        else ExportFailureCode.INTERNAL
+    )
+    level = logging.ERROR if category is ExportFailureCode.INTERNAL else logging.WARNING
+    _logger.log(
+        level,
+        "[PLATFORM_TRAJECTORY_EXPORT] failed code=%s stage=%s phase=%s completed=%s",
+        category.value, stage, phase, artifacts,
+        exc_info=True,
+    )
+    return ExportFailed(category, stage, phase, str(exc), artifacts)
+
+
 def write_platform_command_path_csv(
     *,
     command_path: list[list[float]],
@@ -54,25 +81,36 @@ def write_platform_command_path_csv(
     pattern_type: str,
     stage: str,
     pipeline_stages: dict[str, list[list[float]]] | None = None,
-):
-    """Queue CSV and PNG export of the exact ROS-bound Cartesian path."""
+) -> Future[ExportResult]:
+    """Queue optional diagnostics; the future reports completion without blocking motion."""
     if not command_path:
-        return None
-    snapshot = tuple(tuple(float(value) for value in pose[:6]) for pose in command_path)
-    pipeline_snapshot = {
-        str(name): tuple(tuple(float(value) for value in point) for point in points)
-        for name, points in (pipeline_stages or {}).items()
-        if points
-    }
-    return _TRAJECTORY_EXPORT_EXECUTOR.submit(
-        _write_platform_command_path_artifacts,
-        snapshot,
-        float(vel),
-        float(acc),
-        str(pattern_type),
-        str(stage),
-        pipeline_snapshot,
-    )
+        return _completed_export(ExportSkipped(stage, "empty command path"))
+    try:
+        snapshot = tuple(tuple(float(value) for value in pose[:6]) for pose in command_path)
+        pipeline_snapshot = {
+            str(name): tuple(tuple(float(value) for value in point) for point in points)
+            for name, points in (pipeline_stages or {}).items()
+            if points
+        }
+        velocity, acceleration = float(vel), float(acc)
+    except (TypeError, ValueError, OverflowError) as exc:
+        return _completed_export(_export_failure(
+            exc, phase="snapshot", stage=stage, code=ExportFailureCode.INVALID_INPUT,
+        ))
+    except Exception as exc:
+        # This is the optional-diagnostics boundary, not a motion failure handler.
+        return _completed_export(_export_failure(exc, phase="snapshot", stage=stage))
+    try:
+        return _TRAJECTORY_EXPORT_EXECUTOR.submit(
+            _write_platform_command_path_artifacts,
+            snapshot, velocity, acceleration, str(pattern_type), str(stage), pipeline_snapshot,
+        )
+    except RuntimeError as exc:
+        return _completed_export(_export_failure(
+            exc, phase="submit", stage=stage, code=ExportFailureCode.UNAVAILABLE,
+        ))
+    except Exception as exc:
+        return _completed_export(_export_failure(exc, phase="submit", stage=stage))
 
 
 def _write_platform_command_path_artifacts(
@@ -81,8 +119,10 @@ def _write_platform_command_path_artifacts(
     acc: float,
     pattern_type: str,
     stage: str,
-    pipeline_stages,
-) -> None:
+    pipeline_stages: dict[str, tuple[tuple[float, ...], ...]],
+) -> ExportResult:
+    artifacts: list[Path] = []
+    phase = "create_directory"
     try:
         repository_root = Path(__file__).resolve().parents[6]
         output_dir = repository_root / "docs" / "trajectory_logs"
@@ -92,6 +132,7 @@ def _write_platform_command_path_artifacts(
         stem = f"platform_pose_trajectory_{safe_label}_{timestamp}"
         output_path = output_dir / f"{stem}.csv"
         columns = ("x_mm", "y_mm", "z_mm", "rx_deg", "ry_deg", "rz_deg")
+        phase = "command_csv"
         with output_path.open("x", newline="", encoding="utf-8") as csv_file:
             writer = csv.writer(csv_file)
             writer.writerow(("point_index", *columns, "requested_velocity_percent", "requested_acceleration_percent"))
@@ -101,29 +142,37 @@ def _write_platform_command_path_artifacts(
                     for index in range(6)
                 ]
                 writer.writerow((point_index, *values, f"{float(vel):.12g}", f"{float(acc):.12g}"))
+        artifacts.append(output_path)
+        phase = "command_plot"
         plot_path = output_dir / f"{stem}.png"
         _write_platform_pose_plot(plot_path, command_path)
+        artifacts.append(plot_path)
         pipeline_csv_path = output_dir / f"{stem}_pipeline.csv"
         pipeline_plot_path = output_dir / f"{stem}_pipeline.png"
         before_after_plot_path = output_dir / f"{stem}_contour_before_after.png"
+        phase = "pipeline_csv"
         _write_contour_pipeline_csv(pipeline_csv_path, pipeline_stages)
+        artifacts.append(pipeline_csv_path)
+        phase = "pipeline_plot"
         _write_contour_pipeline_plot(pipeline_plot_path, pipeline_stages)
+        artifacts.append(pipeline_plot_path)
+        phase = "before_after_plot"
         _write_contour_before_after_plot(before_after_plot_path, pipeline_stages)
+        if before_after_plot_path.is_file():
+            artifacts.append(before_after_plot_path)
         _logger.info(
-            "[PLATFORM_TRAJECTORY_EXPORT] wrote ROS-bound pose trajectory points=%d "
-            "csv=%s plot=%s pipeline_csv=%s pipeline_plot=%s before_after_plot=%s",
+            "[PLATFORM_TRAJECTORY_EXPORT] wrote ROS-bound pose trajectory "
+            "stage=%s points=%d artifacts=%s",
+            stage,
             len(command_path),
-            output_path,
-            plot_path,
-            pipeline_csv_path,
-            pipeline_plot_path,
-            before_after_plot_path,
+            tuple(artifacts),
         )
-    except Exception:
-        _logger.warning(
-            "[PLATFORM_TRAJECTORY_EXPORT] background export failed without blocking motion",
-            exc_info=True,
-        )
+        return ExportWritten(stage, tuple(artifacts))
+    except OSError as exc:
+        return _export_failure(exc, phase=phase, stage=stage, artifacts=tuple(artifacts))
+    except Exception as exc:
+        # Preserve unexpected bugs as INTERNAL failures with an error-level traceback.
+        return _export_failure(exc, phase=phase, stage=stage, artifacts=tuple(artifacts))
 
 
 def _write_contour_pipeline_csv(output_path: Path, pipeline_stages) -> None:

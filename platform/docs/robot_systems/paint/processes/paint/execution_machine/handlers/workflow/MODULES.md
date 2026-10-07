@@ -27,7 +27,7 @@ No top-level functions, classes or public value declarations; inspect the source
 
 Source: [src/robot_systems/paint/processes/paint/execution_machine/handlers/workflow/capture_handler.py](../../../../../../../../src/robot_systems/paint/processes/paint/execution_machine/handlers/workflow/capture_handler.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `logging`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.plan`, `time`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `logging`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.plan`, `src.robot_systems.paint.processes.paint.results`, `time`.
 
 ### `handle_capture_workpiece`
 
@@ -63,7 +63,7 @@ def handle_execute_paint(ctx: PaintExecutionContext) -> PaintExecutionState
 
 Source: [src/robot_systems/paint/processes/paint/execution_machine/handlers/workflow/paint_contact_handler.py](../../../../../../../../src/robot_systems/paint/processes/paint/execution_machine/handlers/workflow/paint_contact_handler.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `logging`, `src.robot_systems.paint.processes.paint.execute.diagnostics`, `src.robot_systems.paint.processes.paint.execute.incremental_paint_executor`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers`, `src.robot_systems.paint.processes.paint.execution_machine.state`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `logging`, `src.robot_systems.paint.processes.paint.execute.diagnostics`, `src.robot_systems.paint.processes.paint.execute.incremental_paint_executor`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.results`.
 
 ### `handle_paint_contact`
 
@@ -75,7 +75,7 @@ def handle_paint_contact(ctx: PaintExecutionContext) -> PaintExecutionState
 
 Source: [src/robot_systems/paint/processes/paint/execution_machine/handlers/workflow/pickup_handler.py](../../../../../../../../src/robot_systems/paint/processes/paint/execution_machine/handlers/workflow/pickup_handler.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `cv2`, `logging`, `numpy`, `src.engine.robot.motion_sequence`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execute.diagnostics`, `src.robot_systems.paint.processes.paint.execute.pickup_executor`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.magazine_load_result`, `src.robot_systems.paint.processes.paint.paint_contact_job`, `src.robot_systems.paint.timing`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `cv2`, `logging`, `numpy`, `src.engine.robot.motion_sequence`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execute.pickup_executor`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.paint_contact_job`, `src.robot_systems.paint.processes.paint.results`, `src.robot_systems.paint.timing`.
 
 ### `handle_pickup`
 
@@ -92,7 +92,7 @@ def _dropoff_strategy(executor: object) -> DropoffStrategy
 ### `_reserve_plate_dropoff`
 
 ```python
-def _reserve_plate_dropoff(ctx, executor, pickup_plan) -> tuple[bool, str]
+def _reserve_plate_dropoff(ctx, executor, pickup_plan) -> PaintOperationResult
 ```
 
 ### `_workpiece_footprint_mm`
@@ -125,6 +125,14 @@ Return footprint and execution paths projected into its local rectangle.
 def try_execute_ordered_pickup_and_paint_contact(executor: object, prepared_workpiece, *, pickup_plan=None) -> tuple[bool, str, int] | None
 ```
 
+Legacy adapter; production uses the typed ordered-attempt result.
+
+### `execute_ordered_pickup_and_paint_contact_result`
+
+```python
+def execute_ordered_pickup_and_paint_contact_result(executor: object, prepared_workpiece, *, pickup_plan=None) -> PaintOperationResult
+```
+
 Execute pickup/staging and primary paint contact as one preplanned ordered chain.
 
 ### `_should_preplan_dropoff_in_ordered_chain`
@@ -153,7 +161,7 @@ def _unmatched_second_pass_requested(executor: object, execution_plan: object) -
 
 Source: [src/robot_systems/paint/processes/paint/execution_machine/handlers/workflow/plan_handler.py](../../../../../../../../src/robot_systems/paint/processes/paint/execution_machine/handlers/workflow/plan_handler.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `logging`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `time`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `logging`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.results`, `time`.
 
 ### `handle_build_execution_plan`
 
@@ -171,7 +179,7 @@ def _path_executor_supports_motion_states(path_executor: object) -> bool
 
 Source: [src/robot_systems/paint/processes/paint/execution_machine/handlers/workflow/preparation_handler.py](../../../../../../../../src/robot_systems/paint/processes/paint/execution_machine/handlers/workflow/preparation_handler.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.plan`, `time`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.match.results`, `src.robot_systems.paint.processes.paint.plan`, `src.robot_systems.paint.processes.paint.results`, `time`.
 
 ### `handle_prepare_workpiece`
 

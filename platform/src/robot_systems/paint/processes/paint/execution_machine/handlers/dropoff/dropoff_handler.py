@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
+from src.robot_systems.paint.processes.paint.results import PaintOutcome
 
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
 from src.robot_systems.paint.processes.paint.config import DropoffStrategy
@@ -60,6 +62,8 @@ def handle_dropoff(ctx: PaintExecutionContext) -> PaintExecutionState:
                  f"{ctx.paint_total_waypoints} waypoints"
         ),
     )
+    if plate_is_full:
+        ctx.set_outcome(replace(ctx.result, stop_reason=PaintOutcome.TRAY_FULL))
     return PaintExecutionState.POST_RETURN
 
 

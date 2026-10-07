@@ -501,17 +501,17 @@ Every Python file is parsed without executing it, including vendor code, demos a
 | `src/robot_systems/paint/destinations` | [Guide](robot_systems/paint/destinations/README.md) | 3 |
 | `src/robot_systems/paint/domain` | [Guide](robot_systems/paint/domain/README.md) | 4 |
 | `src/robot_systems/paint/domain/users` | [Guide](robot_systems/paint/domain/users/README.md) | 2 |
-| `src/robot_systems/paint/domain/workpieces` | [Guide](robot_systems/paint/domain/workpieces/README.md) | 3 |
+| `src/robot_systems/paint/domain/workpieces` | [Guide](robot_systems/paint/domain/workpieces/README.md) | 4 |
 | `src/robot_systems/paint/domain/workpieces/repository` | [Guide](robot_systems/paint/domain/workpieces/repository/README.md) | 1 |
 | `src/robot_systems/paint/domain/workpieces/service` | [Guide](robot_systems/paint/domain/workpieces/service/README.md) | 1 |
 | `src/robot_systems/paint/hardware` | [Guide](robot_systems/paint/hardware/README.md) | 3 |
 | `src/robot_systems/paint/processes` | [Guide](robot_systems/paint/processes/README.md) | 1 |
-| `src/robot_systems/paint/processes/paint` | [Guide](robot_systems/paint/processes/paint/README.md) | 17 |
+| `src/robot_systems/paint/processes/paint` | [Guide](robot_systems/paint/processes/paint/README.md) | 18 |
 | `src/robot_systems/paint/processes/paint/align` | [Guide](robot_systems/paint/processes/paint/align/README.md) | 1 |
 | `src/robot_systems/paint/processes/paint/align/alignment` | [Guide](robot_systems/paint/processes/paint/align/alignment/README.md) | 3 |
 | `src/robot_systems/paint/processes/paint/auto_dryer` | [Guide](robot_systems/paint/processes/paint/auto_dryer/README.md) | 2 |
 | `src/robot_systems/paint/processes/paint/destination` | [Guide](robot_systems/paint/processes/paint/destination/README.md) | 3 |
-| `src/robot_systems/paint/processes/paint/execute` | [Guide](robot_systems/paint/processes/paint/execute/README.md) | 11 |
+| `src/robot_systems/paint/processes/paint/execute` | [Guide](robot_systems/paint/processes/paint/execute/README.md) | 12 |
 | `src/robot_systems/paint/processes/paint/execute/execution_plane` | [Guide](robot_systems/paint/processes/paint/execute/execution_plane/README.md) | 2 |
 | `src/robot_systems/paint/processes/paint/execution_machine` | [Guide](robot_systems/paint/processes/paint/execution_machine/README.md) | 4 |
 | `src/robot_systems/paint/processes/paint/execution_machine/handlers` | [Guide](robot_systems/paint/processes/paint/execution_machine/handlers/README.md) | 1 |
@@ -520,7 +520,7 @@ Every Python file is parsed without executing it, including vendor code, demos a
 | `src/robot_systems/paint/processes/paint/execution_machine/handlers/lifecycle` | [Guide](robot_systems/paint/processes/paint/execution_machine/handlers/lifecycle/README.md) | 8 |
 | `src/robot_systems/paint/processes/paint/execution_machine/handlers/magazine_load` | [Guide](robot_systems/paint/processes/paint/execution_machine/handlers/magazine_load/README.md) | 9 |
 | `src/robot_systems/paint/processes/paint/execution_machine/handlers/workflow` | [Guide](robot_systems/paint/processes/paint/execution_machine/handlers/workflow/README.md) | 8 |
-| `src/robot_systems/paint/processes/paint/match` | [Guide](robot_systems/paint/processes/paint/match/README.md) | 4 |
+| `src/robot_systems/paint/processes/paint/match` | [Guide](robot_systems/paint/processes/paint/match/README.md) | 5 |
 | `src/robot_systems/paint/processes/paint/motion` | [Guide](robot_systems/paint/processes/paint/motion/README.md) | 4 |
 | `src/robot_systems/paint/processes/paint/plan` | [Guide](robot_systems/paint/processes/paint/plan/README.md) | 6 |
 | `src/robot_systems/paint/processes/paint/plan/paint_contact_motion` | [Guide](robot_systems/paint/processes/paint/plan/paint_contact_motion/README.md) | 3 |
@@ -640,7 +640,7 @@ Every Python file is parsed without executing it, including vendor code, demos a
 | `src/shared_contracts/events` | [Guide](shared_contracts/events/README.md) | 11 |
 | `tests` | [Guide](tests/README.md) | 2 |
 | `tests/applications` | [Guide](tests/applications/README.md) | 6 |
-| `tests/applications/base` | [Guide](tests/applications/base/README.md) | 11 |
+| `tests/applications/base` | [Guide](tests/applications/base/README.md) | 12 |
 | `tests/applications/broker_debug` | [Guide](tests/applications/broker_debug/README.md) | 2 |
 | `tests/applications/calibration` | [Guide](tests/applications/calibration/README.md) | 5 |
 | `tests/applications/calibration_settings` | [Guide](tests/applications/calibration_settings/README.md) | 4 |
@@ -686,7 +686,7 @@ Every Python file is parsed without executing it, including vendor code, demos a
 | `tests/robot_systems` | [Guide](tests/robot_systems/README.md) | 1 |
 | `tests/robot_systems/compact_paint` | [Guide](tests/robot_systems/compact_paint/README.md) | 1 |
 | `tests/robot_systems/glue` | [Guide](tests/robot_systems/glue/README.md) | 41 |
-| `tests/robot_systems/paint` | [Guide](tests/robot_systems/paint/README.md) | 43 |
+| `tests/robot_systems/paint` | [Guide](tests/robot_systems/paint/README.md) | 46 |
 | `tests/robot_systems/paint/processes` | [Guide](tests/robot_systems/paint/processes/README.md) | 0 |
 | `tests/robot_systems/paint/processes/paint` | [Guide](tests/robot_systems/paint/processes/paint/README.md) | 1 |
 | `tests/robot_systems/paint/processes/paint/execute` | [Guide](tests/robot_systems/paint/processes/paint/execute/README.md) | 1 |
@@ -697,4 +697,4 @@ Every Python file is parsed without executing it, including vendor code, demos a
 | `tests/shared_contracts/declarations` | [Guide](tests/shared_contracts/declarations/README.md) | 1 |
 | `tests/shared_contracts/events` | [Guide](tests/shared_contracts/events/README.md) | 1 |
 
-Total: 2019 Python files in 688 source directories.
+Total: 2028 Python files in 688 source directories.

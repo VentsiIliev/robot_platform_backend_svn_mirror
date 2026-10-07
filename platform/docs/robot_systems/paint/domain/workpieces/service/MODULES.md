@@ -12,7 +12,7 @@ Generated from Python ASTs. Signatures, declared defaults, imports and docstring
 
 Source: [src/robot_systems/paint/domain/workpieces/service/paint_workpiece_service.py](../../../../../../src/robot_systems/paint/domain/workpieces/service/paint_workpiece_service.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `logging`, `src.robot_systems.paint.processes.paint.match.matchable_workpiece`, `typing`.
+Imports (including optional/function-local imports; not a startup dependency list): `logging`, `src.robot_systems.paint.domain.workpieces.errors`, `src.robot_systems.paint.processes.paint.match.matchable_workpiece`, `typing`.
 
 ### `PaintWorkpieceService`
 
@@ -35,6 +35,12 @@ def list_all(self) -> List[dict]
 ```
 
 ```python
+def list_for_matching(self) -> List[dict]
+```
+
+Strict production read: failures propagate to the typed matching boundary.
+
+```python
 def delete(self, storage_id: str) -> tuple[bool, str]
 ```
 
@@ -53,6 +59,12 @@ def update(self, storage_id: str, data: dict) -> tuple[bool, str]
 ```python
 def load_raw(self, storage_id: str) -> Optional[dict]
 ```
+
+```python
+def load_for_matching(self, storage_id: str) -> Optional[dict]
+```
+
+None means absent; read/parse failures propagate rather than masquerading as absence.
 
 ```python
 def load(self, storage_id: str)

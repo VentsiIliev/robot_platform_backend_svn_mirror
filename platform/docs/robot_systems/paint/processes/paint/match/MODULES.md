@@ -9,6 +9,7 @@ Generated from Python ASTs. Signatures, declared defaults, imports and docstring
 - [__init__.py](#__init__py)
 - [matchable_workpiece.py](#matchable_workpiecepy)
 - [matching_diagnostics.py](#matching_diagnosticspy)
+- [results.py](#resultspy)
 - [workpiece_matching_service.py](#workpiece_matching_servicepy)
 
 ## `__init__.py`
@@ -103,11 +104,79 @@ def _comparison_image(captured: np.ndarray, candidates: list) -> np.ndarray
 def _contour_panel(points: np.ndarray, color: tuple[int, int, int], label: str) -> np.ndarray
 ```
 
+## `results.py`
+
+Source: [src/robot_systems/paint/processes/paint/match/results.py](../../../../../../src/robot_systems/paint/processes/paint/match/results.py).
+
+Matching/preparation contracts used by production, with legacy editor adapters.
+
+Imports (including optional/function-local imports; not a startup dependency list): `dataclasses`, `src.robot_systems.paint.processes.paint.results`, `typing`.
+
+Module declarations (expressions are shown without evaluating them):
+
+```python
+MatchResult: TypeAlias = Ready[MatchedWorkpiece] | NoMatch | Failed
+PreparationResult: TypeAlias = Ready[PreparedWorkpiece] | NoMatch | Failed
+```
+
+### `MatchedWorkpiece`
+
+```python
+@dataclass(frozen=True)
+class MatchedWorkpiece:
+```
+
+Declared fields/defaults:
+
+```python
+raw: dict
+storage_id: str
+workpiece_id: str
+name: str
+candidate_count: int
+no_match_count: int
+confidence: float | None
+```
+
+Directly declared public methods and constructor (inherited methods are documented on their base class):
+
+```python
+def as_editor_payload(self) -> dict
+```
+
+### `NoMatch`
+
+```python
+@dataclass(frozen=True)
+class NoMatch:
+```
+
+Declared fields/defaults:
+
+```python
+message: str
+candidate_count: int = 0
+```
+
+### `PreparedWorkpiece`
+
+```python
+@dataclass(frozen=True)
+class PreparedWorkpiece:
+```
+
+Declared fields/defaults:
+
+```python
+raw: dict
+description: str
+```
+
 ## `workpiece_matching_service.py`
 
 Source: [src/robot_systems/paint/processes/paint/match/workpiece_matching_service.py](../../../../../../src/robot_systems/paint/processes/paint/match/workpiece_matching_service.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `logging`, `src.applications.workpiece_editor.i_workpiece_matcher`, `src.engine.vision.i_capture_snapshot_service`, `src.robot_systems.paint.processes.paint.match.matchable_workpiece`, `src.robot_systems.paint.processes.paint.match.matching_diagnostics`, `typing`.
+Imports (including optional/function-local imports; not a startup dependency list): `.results`, `__future__`, `logging`, `src.applications.workpiece_editor.i_workpiece_matcher`, `src.engine.vision.i_capture_snapshot_service`, `src.robot_systems.paint.processes.paint.match.matchable_workpiece`, `src.robot_systems.paint.processes.paint.match.matching_diagnostics`, `src.robot_systems.paint.processes.paint.results`, `typing`.
 
 ### `PaintWorkpieceMatchingService`
 
@@ -135,7 +204,11 @@ Report whether all dependencies needed for saved-workpiece matching are availabl
 def match_saved_workpieces(self, contour) -> tuple[bool, dict | None, str]
 ```
 
-Match one captured contour against saved paint workpieces and return raw payload metadata.
+Shared editor compatibility adapter; production consumes match_result.
+
+```python
+def match_result(self, contour) -> MatchResult
+```
 
 ```python
 def run_matching(self)

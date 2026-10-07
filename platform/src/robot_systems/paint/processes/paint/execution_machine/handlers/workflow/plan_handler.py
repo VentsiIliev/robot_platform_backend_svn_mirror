@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from time import perf_counter
 
+from src.robot_systems.paint.processes.paint.results import PaintOperationResult, PaintOutcome, PaintFailureCode
+
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
 
@@ -11,7 +13,7 @@ _logger = logging.getLogger(__name__)
 
 def handle_build_execution_plan(ctx: PaintExecutionContext) -> PaintExecutionState:
     if ctx.should_stop():
-        ctx.set_result(False, "Paint process stopped")
+        ctx.set_outcome(PaintOperationResult(PaintOutcome.CANCELLED, "Paint process stopped"))
         return PaintExecutionState.STOPPED
 
     service = ctx.production_service
@@ -38,12 +40,15 @@ def handle_build_execution_plan(ctx: PaintExecutionContext) -> PaintExecutionSta
             )
     except Exception as exc:
         _logger.exception("Paint production plan generation failed")
-        ctx.set_result(False, f"Plan generation failed: {exc}")
+        ctx.set_outcome(PaintOperationResult.failed(
+            PaintFailureCode.PLANNING if isinstance(exc, (ValueError, TypeError)) else PaintFailureCode.INTERNAL,
+            "path_preparation", f"Plan generation failed: {exc}",
+        ))
         return PaintExecutionState.ERROR
 
     service._log_phase_timing("path_preparation", phase_start, cycle=ctx.cycle_index)
     if ctx.should_stop():
-        ctx.set_result(False, "Paint process stopped")
+        ctx.set_outcome(PaintOperationResult(PaintOutcome.CANCELLED, "Paint process stopped"))
         return PaintExecutionState.STOPPED
     if _path_executor_supports_motion_states(service._path_executor):
         return PaintExecutionState.PICKUP

@@ -6,6 +6,8 @@ from time import perf_counter
 import cv2
 import numpy as np
 
+from src.robot_systems.paint.processes.paint.results import PaintOperationResult, PaintOutcome
+
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards import guard_control
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
@@ -137,7 +139,7 @@ def handle_magazine_capture(ctx: PaintExecutionContext) -> PaintExecutionState:
     )
     if ctx.magazine_contour is None:
         _logger.warning("[MAGAZINE_LOAD] No usable contour detected after moving to '%s'", ctx.magazine_group)
-        ctx.set_result(False, NO_WORKPIECE_AT_MAGAZINE)
+        ctx.set_outcome(PaintOperationResult(PaintOutcome.NO_WORKPIECE, NO_WORKPIECE_AT_MAGAZINE))
         return PaintExecutionState.COMPLETED
     return PaintExecutionState.MAGAZINE_PREPARE_PICKUP_RELEASE
 

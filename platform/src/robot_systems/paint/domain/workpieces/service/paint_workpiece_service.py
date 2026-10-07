@@ -1,6 +1,8 @@
 import logging
 from typing import List, Optional
 
+from src.robot_systems.paint.domain.workpieces.errors import WorkpieceReadError
+
 _logger = logging.getLogger(__name__)
 
 
@@ -21,6 +23,10 @@ class PaintWorkpieceService:
         except Exception:
             _logger.exception("PaintWorkpieceService.list_all failed")
             return []
+
+    def list_for_matching(self) -> List[dict]:
+        """Strict production read: failures propagate to the typed matching boundary."""
+        return self._repo.list_for_matching()
 
     def delete(self, storage_id: str) -> tuple[bool, str]:
         try:
@@ -57,6 +63,18 @@ class PaintWorkpieceService:
         except Exception:
             _logger.exception("PaintWorkpieceService.load_raw failed")
             return None
+
+    def load_for_matching(self, storage_id: str) -> Optional[dict]:
+        """None means absent; read/parse failures propagate rather than masquerading as absence."""
+        try:
+            raw = self._repo.load_raw(storage_id)
+            if raw is not None and not isinstance(raw, dict):
+                raise ValueError("Saved workpiece JSON must contain an object")
+            return raw
+        except (OSError, ValueError) as exc:
+            raise WorkpieceReadError(
+                f"Could not read saved workpiece '{storage_id}': {exc}"
+            ) from exc
 
     def load(self, storage_id: str):
         """Return a saved workpiece in the shared contour-matcher shape."""

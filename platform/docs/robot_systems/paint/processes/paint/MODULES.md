@@ -22,6 +22,7 @@ Generated from Python ASTs. Signatures, declared defaults, imports and docstring
 - [paint_process_config_serializer.py](#paint_process_config_serializerpy)
 - [paint_process_config_service.py](#paint_process_config_servicepy)
 - [paint_production_service.py](#paint_production_servicepy)
+- [results.py](#resultspy)
 - [work_area_nesting.py](#work_area_nestingpy)
 
 ## `__init__.py`
@@ -630,7 +631,7 @@ direction_sign: float = field(init=False)
 
 Source: [src/robot_systems/paint/processes/paint/configured_motion_waypoint.py](../../../../../src/robot_systems/paint/processes/paint/configured_motion_waypoint.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `dataclasses`, `src.engine.robot.motion_sequence`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `dataclasses`, `math`, `src.engine.robot.motion_sequence`.
 
 ### `ConfiguredMotionWaypoint`
 
@@ -825,12 +826,13 @@ Source: [src/robot_systems/paint/processes/paint/incremental_adjustment.py](../.
 
 Operator-paced paint-contact execution; no Qt or application dependencies.
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `dataclasses`, `math`, `threading`, `typing`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `dataclasses`, `enum`, `math`, `threading`, `typing`.
 
 Module declarations (expressions are shown without evaluating them):
 
 ```python
 DEFAULT_ADJUSTMENT_STEP = AdjustmentStep(10.0, 0.0, 0.0)
+AdjustmentCommand: TypeAlias = NextPaintSection | FinishAdjustment | CancelAdjustment
 ```
 
 ### `AdjustmentStep`
@@ -882,6 +884,64 @@ def current_pose(self) -> tuple[float, ...]
 def take(self, length_mm: float) -> list[tuple[float, ...]]
 ```
 
+### `AdjustmentPhase`
+
+```python
+class AdjustmentPhase(StrEnum):
+```
+
+Declared fields/defaults:
+
+```python
+STARTING = 'starting'
+WAITING_FOR_WORKPIECE = 'waiting_for_workpiece'
+INSPECT = 'inspect'
+MOVING = 'moving'
+FINISHING = 'finishing'
+ERROR = 'error'
+```
+
+### `AdjustmentSnapshot`
+
+```python
+class AdjustmentSnapshot(NamedTuple):
+```
+
+Declared fields/defaults:
+
+```python
+phase: AdjustmentPhase
+travelled_mm: float
+total_mm: float
+```
+
+### `NextPaintSection`
+
+```python
+@dataclass(frozen=True)
+class NextPaintSection:
+```
+
+Declared fields/defaults:
+
+```python
+step: AdjustmentStep
+```
+
+### `FinishAdjustment`
+
+```python
+@dataclass(frozen=True)
+class FinishAdjustment:
+```
+
+### `CancelAdjustment`
+
+```python
+@dataclass(frozen=True)
+class CancelAdjustment:
+```
+
 ### `PaintAdjustmentSession`
 
 ```python
@@ -897,7 +957,7 @@ def __init__(self) -> None
 ```
 
 ```python
-def snapshot(self) -> tuple[str, float, float]
+def snapshot(self) -> AdjustmentSnapshot
 ```
 
 ```python
@@ -921,7 +981,13 @@ def request_finish(self) -> bool
 ```
 
 ```python
-def wait_for_command(self, should_stop) -> tuple[str, AdjustmentStep | None] | None
+def wait_for_command(self, should_stop: Callable[[], bool]) -> tuple[str, AdjustmentStep | None] | None
+```
+
+Legacy command adapter; execution consumes wait_for_command_result.
+
+```python
+def wait_for_command_result(self, should_stop: Callable[[], bool]) -> AdjustmentCommand
 ```
 
 ```python
@@ -947,7 +1013,21 @@ NO_WORKPIECE_AT_CALIBRATION = 'No workpiece at calibration'
 
 Source: [src/robot_systems/paint/processes/paint/magazine_load_service.py](../../../../../src/robot_systems/paint/processes/paint/magazine_load_service.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `cv2`, `logging`, `math`, `numpy`, `src.engine.robot.motion_sequence`, `src.engine.robot.path_preparation.geometry`, `src.engine.robot.targeting.vision_pose_request`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.motion.pose_sampling`, `src.robot_systems.paint.processes.paint.work_area_nesting`, `time`, `typing`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `cv2`, `dataclasses`, `logging`, `math`, `numpy`, `src.engine.robot.motion_sequence`, `src.engine.robot.path_preparation.geometry`, `src.engine.robot.targeting.vision_pose_request`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.motion.pose_sampling`, `src.robot_systems.paint.processes.paint.results`, `src.robot_systems.paint.processes.paint.work_area_nesting`, `time`, `typing`.
+
+### `NestedReleasePlan`
+
+```python
+@dataclass(frozen=True)
+class NestedReleasePlan:
+```
+
+Declared fields/defaults:
+
+```python
+pose: tuple[float, ...]
+has_space_for_same_footprint: bool
+```
 
 ### `PaintMagazineLoadService`
 
@@ -973,6 +1053,10 @@ def commit_work_area_nesting(self) -> None
 
 ```python
 def cancel_work_area_nesting(self) -> None
+```
+
+```python
+def resolve_nested_release_result(self, *, base_pose: list[float], frame, release_z_mm: float, robot_contour_xy, margin_mm: float, padding_mm: float) -> Ready[NestedReleasePlan] | PaintOperationResult
 ```
 
 ### `_contour_points_array`
@@ -1040,7 +1124,7 @@ acceleration_percent: float
 
 Source: [src/robot_systems/paint/processes/paint/paint_process.py](../../../../../src/robot_systems/paint/processes/paint/paint_process.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `src.engine.core.i_messaging_service`, `src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller`, `src.engine.process.base_process`, `src.engine.process.process_requirements`, `src.engine.robot.interfaces.i_robot_service`, `src.engine.system.i_system_manager`, `src.robot_systems.paint.component_ids`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.incremental_adjustment`, `src.shared_contracts.events.process_events`, `threading`, `time`, `typing`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `src.engine.core.i_messaging_service`, `src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller`, `src.engine.process.base_process`, `src.engine.process.process_requirements`, `src.engine.robot.interfaces.i_robot_service`, `src.engine.system.i_system_manager`, `src.robot_systems.paint.component_ids`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.incremental_adjustment`, `src.robot_systems.paint.processes.paint.results`, `src.robot_systems.paint.processes.paint.tray_dry.errors`, `src.shared_contracts.events.process_events`, `threading`, `time`, `typing`.
 
 ### `PaintProcess`
 
@@ -1057,6 +1141,13 @@ def __init__(self, production_service, messaging: IMessagingService, robot_servi
 ```
 
 Store the production service and process dependencies for a single-run paint process.
+
+```python
+@property
+def last_failure(self) -> TrayFailure | PaintFailure | None
+```
+
+Machine-readable operation or tray failure from the most recent start or cycle.
 
 ```python
 @property
@@ -1230,7 +1321,7 @@ Notify a runtime consumer immediately after settings are saved in memory.
 
 Source: [src/robot_systems/paint/processes/paint/paint_production_service.py](../../../../../src/robot_systems/paint/processes/paint/paint_production_service.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `logging`, `math`, `src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.dashboard_live_view_events`, `src.robot_systems.paint.processes.paint.execution_control`, `src.robot_systems.paint.processes.paint.execution_machine`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.magazine_load_result`, `src.robot_systems.paint.processes.paint.motion.pose_sampling`, `src.robot_systems.paint.processes.paint.next_cycle_target`, `threading`, `time`, `typing`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `logging`, `math`, `src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.dashboard_live_view_events`, `src.robot_systems.paint.processes.paint.execution_control`, `src.robot_systems.paint.processes.paint.execution_machine`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.magazine_load_result`, `src.robot_systems.paint.processes.paint.motion.pose_sampling`, `src.robot_systems.paint.processes.paint.next_cycle_target`, `src.robot_systems.paint.processes.paint.results`, `src.robot_systems.paint.processes.paint.tray_dry.errors`, `src.robot_systems.paint.processes.paint.tray_dry.plate_layout`, `threading`, `time`, `typing`.
 
 ### `PaintProductionService`
 
@@ -1243,10 +1334,16 @@ Own the end-to-end paint production flow outside the editor UI.
 Directly declared public methods and constructor (inherited methods are documented on their base class):
 
 ```python
-def __init__(self, *, workpiece_preparation_service, capture_snapshot_service, path_preparation_service, path_executor, vacuum_pump: Optional[IVacuumPumpController]=None, paint_process_config_service=None, magazine_load_service=None, navigation_service=None, vision_service=None, messaging_service=None) -> None
+def __init__(self, *, workpiece_preparation_service, capture_snapshot_service, path_preparation_service, path_executor, vacuum_pump: Optional[IVacuumPumpController]=None, paint_process_config_service=None, magazine_load_service=None, navigation_service=None, vision_service=None, messaging_service=None, plate_layout_service: PlateLayoutService | None=None) -> None
 ```
 
 Store the services needed to capture, prepare, plan, and execute one paint cycle.
+
+```python
+def ensure_tray_ready_for_start(self, config: PaintProcessConfig | None=None) -> None
+```
+
+Enforce tray readiness for UI, physical buttons and direct production.
 
 ```python
 def pause_current_phase(self) -> None
@@ -1270,7 +1367,17 @@ Only a failed match at the paint capture position can be recaptured.
 def run_once(self, stop_requested: Optional[Callable[[], bool]]=None, *, manual_single_cycle: bool=False, adjustment_session=None, retry_unmatched_workpiece: bool=False) -> tuple[bool, str]
 ```
 
+Legacy production adapter; normal exhaustion is successful termination.
+
+```python
+def run_once_result(self, stop_requested: Optional[Callable[[], bool]]=None, *, manual_single_cycle: bool=False, adjustment_session=None, retry_unmatched_workpiece: bool=False) -> PaintOperationResult
+```
+
 Run production, optionally forcing one calibration-table cycle without magazine load.
+
+```python
+def run_cycle_result(self, should_stop: Callable[[], bool], *, process_config, magazine_config, magazine_group: str | None=None, magazine_source: dict | None=None, magazine_index: int=0, cycle_index: int, repeats_after_success: bool=False, magazine_discovery_contours: list | None=None, magazine_discovery_active_contour=None, magazine_discovery_snapshot=None, magazine_stage_only: bool=False, cached_snapshot=None, cached_workpiece_contour=None, suppress_magazine_load: bool=False, retry_capture_until_workpiece: bool=False, adjustment_session=None, initial_state: PaintExecutionState=PaintExecutionState.STARTING) -> PaintOperationResult
+```
 
 ```python
 def publish_dashboard_message(self, level: str, title: str, message: str) -> None
@@ -1278,11 +1385,185 @@ def publish_dashboard_message(self, level: str, title: str, message: str) -> Non
 
 Publish a production notice into the paint dashboard message queue.
 
+## `results.py`
+
+Source: [src/robot_systems/paint/processes/paint/results.py](../../../../../src/robot_systems/paint/processes/paint/results.py).
+
+Paint operation outcomes. Messages describe outcomes; codes drive decisions.
+
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `dataclasses`, `enum`, `typing`.
+
+Module declarations (expressions are shown without evaluating them):
+
+```python
+T = TypeVar('T')
+```
+
+### `PaintFailureCode`
+
+```python
+class PaintFailureCode(StrEnum):
+```
+
+Declared fields/defaults:
+
+```python
+UNAVAILABLE = 'unavailable'
+INVALID_CONFIGURATION = 'invalid_configuration'
+PLANNING = 'planning'
+STORAGE = 'storage'
+MATCHING = 'matching'
+VACUUM = 'vacuum'
+MOTION = 'motion'
+INTERNAL = 'internal'
+```
+
+### `PaintFailure`
+
+```python
+@dataclass(frozen=True)
+class PaintFailure:
+```
+
+Declared fields/defaults:
+
+```python
+code: PaintFailureCode
+stage: str
+message: str
+secondary_failures: tuple[PaintFailure, ...] = ()
+backend_code: int | None = None
+```
+
+### `PaintOperationError`
+
+```python
+class PaintOperationError(RuntimeError):
+```
+
+Actionable operation failure raised at a lower-level boundary.
+
+Directly declared public methods and constructor (inherited methods are documented on their base class):
+
+```python
+def __init__(self, failure: PaintFailure) -> None
+```
+
+### `PaintPlanningError`
+
+```python
+class PaintPlanningError(PaintOperationError):
+```
+
+Directly declared public methods and constructor (inherited methods are documented on their base class):
+
+```python
+def __init__(self, message: str, *, stage: str='pickup_planning') -> None
+```
+
+### `PaintConfigurationError`
+
+```python
+class PaintConfigurationError(PaintOperationError, ValueError):
+```
+
+Invalid settings; also compatible with existing ValueError validation callers.
+
+Directly declared public methods and constructor (inherited methods are documented on their base class):
+
+```python
+def __init__(self, message: str, *, stage: str) -> None
+```
+
+### `Ready`
+
+```python
+@dataclass(frozen=True)
+class Ready(Generic[T]):
+```
+
+Declared fields/defaults:
+
+```python
+value: T
+```
+
+### `Failed`
+
+```python
+@dataclass(frozen=True)
+class Failed:
+```
+
+Declared fields/defaults:
+
+```python
+failure: PaintFailure
+```
+
+### `PaintOutcome`
+
+```python
+class PaintOutcome(StrEnum):
+```
+
+Declared fields/defaults:
+
+```python
+COMPLETED = 'completed'
+NO_WORKPIECE = 'no_workpiece'
+UNMATCHED = 'unmatched'
+CANCELLED = 'cancelled'
+NOT_APPLICABLE = 'not_applicable'
+TRAY_FULL = 'tray_full'
+WORK_AREA_FULL = 'work_area_full'
+FAILED = 'failed'
+```
+
+### `PaintOperationResult`
+
+```python
+@dataclass(frozen=True)
+class PaintOperationResult:
+```
+
+Declared fields/defaults:
+
+```python
+outcome: PaintOutcome
+message: str
+failure: PaintFailure | None = None
+planned_waypoints: int = 0
+stop_reason: PaintOutcome | None = None
+```
+
+Directly declared public methods and constructor (inherited methods are documented on their base class):
+
+```python
+@classmethod
+def failed(cls, code: PaintFailureCode, stage: str, message: str, *, planned_waypoints: int=0, backend_code: int | None=None) -> PaintOperationResult
+```
+
+```python
+@property
+def completed(self) -> bool
+```
+
+```python
+def as_legacy_pair(self) -> tuple[bool, str]
+```
+
+Adapter for existing editor/service interfaces; internal callers use outcome.
+
+```python
+def as_legacy_triple(self) -> tuple[bool, str, int] | None
+```
+
 ## `work_area_nesting.py`
 
 Source: [src/robot_systems/paint/processes/paint/work_area_nesting.py](../../../../../src/robot_systems/paint/processes/paint/work_area_nesting.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `dataclasses`, `math`, `threading`, `typing`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `dataclasses`, `math`, `src.robot_systems.paint.processes.paint.results`, `threading`, `typing`.
 
 ### `WorkAreaNestingReservation`
 
@@ -1320,6 +1601,10 @@ def clear(self) -> None
 
 ```python
 def reserve(self, boundary_xy: Sequence[Sequence[float]], *, width_mm: float, height_mm: float, margin_mm: float, padding_mm: float) -> tuple[WorkAreaNestingReservation | None, str]
+```
+
+```python
+def reserve_result(self, boundary_xy: Sequence[Sequence[float]], *, width_mm: float, height_mm: float, margin_mm: float, padding_mm: float) -> Ready[WorkAreaNestingReservation] | PaintOperationResult
 ```
 
 ```python

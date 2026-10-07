@@ -8,7 +8,6 @@ from src.engine.robot.motion_sequence import (
     OrderedMotionCommand,
     OrderedUnwindJoint6Command,
 )
-from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
 from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
     build_ordered_paint_contact_segments,
     build_ordered_pickup_segments,
@@ -34,14 +33,15 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.
     _resolve_dropoff_safe_travel_waypoints,
 )
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
-from src.robot_systems.paint.processes.paint.magazine_load_result import (
-    NO_WORKPIECE_AT_CALIBRATION,
-)
 from src.robot_systems.paint.processes.paint.paint_contact_job import PaintContactCommandJob
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler import (
     calculate_workpiece_dropoff_pose,
 )
 from src.robot_systems.paint.timing import timed_block, timed_step
+
+from src.robot_systems.paint.processes.paint.results import (
+    Failed, Ready, PaintFailureCode, PaintOperationResult, PaintOutcome,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -59,38 +59,47 @@ def handle_pickup(ctx: PaintExecutionContext) -> PaintExecutionState:
         fail_paint_motion(ctx, "Cycle-start Joint 6 unwind failed before pickup")
         return PaintExecutionState.ERROR
 
-    pickup_plan = executor._pickup.build_plan(ctx.execution_plan)
-    if pickup_plan is None:
-        fail_paint_motion(ctx, "Could not compute pickup-to-pivot poses")
+    planning = executor._pickup.build_plan_result(ctx.execution_plan)
+    if isinstance(planning, Failed):
+        ctx.operation_failure = planning.failure
+        fail_paint_motion(ctx, planning.failure.message)
         return PaintExecutionState.ERROR
+    pickup_plan = planning.value
 
     if pickup_plan is not None and _dropoff_strategy(executor) is DropoffStrategy.PLATE_LAYOUT:
-        ok, message = _reserve_plate_dropoff(ctx, executor, pickup_plan)
-        if not ok:
+        reserved = _reserve_plate_dropoff(ctx, executor, pickup_plan)
+        if not reserved.completed:
             finish_paint_motion(ctx, success=False)
-            ctx.set_result(False, message)
-            return PaintExecutionState.COMPLETED if message == "Drop-off plate is full" else PaintExecutionState.ERROR
+            ctx.set_outcome(reserved)
+            return (PaintExecutionState.COMPLETED if reserved.outcome is PaintOutcome.TRAY_FULL
+                    else PaintExecutionState.ERROR)
 
     stop_after_pickup = bool(
         ctx.process_config.stop_after_calibration_pickup and ctx.adjustment_session is None
     )
     ctx.paint_ordered_result = (
-        try_execute_ordered_pickup_and_paint_contact(
+        execute_ordered_pickup_and_paint_contact_result(
             executor,
             ctx.execution_plan,
             pickup_plan=pickup_plan,
         )
         if pickup_plan is not None and not stop_after_pickup and ctx.adjustment_session is None
-        else None
+        else PaintOperationResult(PaintOutcome.NOT_APPLICABLE, "Separate pickup requested")
     )
-    if ctx.paint_ordered_result is not None:
-        ok, msg, total_waypoints = ctx.paint_ordered_result
-        ctx.paint_total_waypoints = int(total_waypoints)
-        if not ok:
-            if msg == NO_WORKPIECE_AT_CALIBRATION:
+    if ctx.paint_ordered_result.outcome is not PaintOutcome.NOT_APPLICABLE:
+        result = ctx.paint_ordered_result
+        ctx.paint_total_waypoints = result.planned_waypoints
+        msg = result.message
+        if not result.completed:
+            if result.outcome is PaintOutcome.CANCELLED:
                 finish_paint_motion(ctx, success=False)
-                ctx.set_result(False, msg)
+                ctx.set_outcome(result)
+                return PaintExecutionState.STOPPED
+            if result.outcome is PaintOutcome.NO_WORKPIECE:
+                finish_paint_motion(ctx, success=False)
+                ctx.set_outcome(result)
                 return PaintExecutionState.COMPLETED
+            ctx.operation_failure = result.failure
             fail_paint_motion(ctx, msg)
             return PaintExecutionState.ERROR
         ctx.paint_contact_executed_in_ordered_chain = True
@@ -100,29 +109,17 @@ def handle_pickup(ctx: PaintExecutionContext) -> PaintExecutionState:
         fail_paint_motion(ctx, "Two-pass painting requires ordered motion-chain support")
         return PaintExecutionState.ERROR
 
-    if stop_after_pickup:
-        ok, msg = executor._pickup.execute(
-            ctx.execution_plan,
-            pickup_plan=pickup_plan,
-            stop_after_retract=stop_after_pickup,
-        )
-    elif pickup_plan is None:
-        ok, msg = executor._pickup.execute(ctx.execution_plan)
-    else:
-        ok, msg = executor._pickup.execute(
-            ctx.execution_plan,
-            pickup_plan=pickup_plan,
-        )
-    if not ok:
-        _logger.debug(
-            "[TIMING] paint_process success=false stage=pickup total_elapsed_s=%.3f",
-            elapsed_s(ctx.paint_started_at),
-        )
-        if msg == NO_WORKPIECE_AT_CALIBRATION:
+    result = executor._pickup.execute_result(
+        ctx.execution_plan, pickup_plan=pickup_plan, stop_after_retract=stop_after_pickup,
+    )
+    if not result.completed:
+        if result.outcome in {PaintOutcome.NO_WORKPIECE, PaintOutcome.CANCELLED}:
             finish_paint_motion(ctx, success=False)
-            ctx.set_result(False, msg)
-            return PaintExecutionState.COMPLETED
-        fail_paint_motion(ctx, msg)
+            ctx.set_outcome(result)
+            return (PaintExecutionState.STOPPED if result.outcome is PaintOutcome.CANCELLED
+                    else PaintExecutionState.COMPLETED)
+        ctx.operation_failure = result.failure
+        fail_paint_motion(ctx, result.message)
         return PaintExecutionState.ERROR
     if stop_after_pickup:
         finish_paint_motion(ctx, success=True)
@@ -135,11 +132,11 @@ def _dropoff_strategy(executor: object) -> DropoffStrategy:
     return executor._paint_process_config().dropoff.strategy
 
 
-def _reserve_plate_dropoff(ctx, executor, pickup_plan) -> tuple[bool, str]:
+def _reserve_plate_dropoff(ctx, executor, pickup_plan) -> PaintOperationResult:
     motion_plan = pickup_plan.motion_plan
     align_pose = motion_plan.align_pose
     if align_pose is None or len(align_pose) < 6:
-        return False, "Plate-layout dropoff could not resolve workpiece orientation at calibration"
+        return PaintOperationResult.failed(PaintFailureCode.PLANNING, "tray_reservation", "Plate-layout dropoff could not resolve workpiece orientation at calibration")
     width_mm, height_mm, outlines_mm = _workpiece_layout_geometry(ctx.execution_plan)
     paint_passes = _paint_pass_metadata(
         ctx.execution_plan,
@@ -152,9 +149,9 @@ def _reserve_plate_dropoff(ctx, executor, pickup_plan) -> tuple[bool, str]:
     navigation = ctx.production_service._magazine_load_service._navigation
     calibration_pose = navigation.get_group_position(group_id)
     if calibration_pose is None or len(calibration_pose) < 6:
-        return False, f"Plate-layout dropoff requires calibration movement group '{group_id}'"
+        return PaintOperationResult.failed(PaintFailureCode.INVALID_CONFIGURATION, "tray_reservation", f"Plate-layout dropoff requires calibration movement group '{group_id}'")
 
-    reservation, message = executor._plate_layout_service.reserve(
+    result = executor._plate_layout_service.reserve_result(
         executor._paint_process_config().dropoff,
         width_mm=width_mm,
         height_mm=height_mm,
@@ -164,8 +161,9 @@ def _reserve_plate_dropoff(ctx, executor, pickup_plan) -> tuple[bool, str]:
         outlines_mm=outlines_mm,
         paint_passes=paint_passes,
     )
-    if reservation is None:
-        return False, message
+    if not isinstance(result, Ready):
+        return result
+    reservation = result.value
     _logger.info(
         "[PLATE_LAYOUT] reserved release_pose=%s footprint=(%.3f, %.3f) has_space_for_same_footprint=%s",
         [round(value, 3) for value in reservation.release_pose],
@@ -173,7 +171,7 @@ def _reserve_plate_dropoff(ctx, executor, pickup_plan) -> tuple[bool, str]:
         height_mm,
         reservation.has_space_for_same_footprint,
     )
-    return True, ""
+    return PaintOperationResult(PaintOutcome.COMPLETED, "")
 
 
 def _workpiece_footprint_mm(execution_plan) -> tuple[float, float]:
@@ -264,20 +262,31 @@ def _workpiece_layout_geometry(
     return float(width), float(height), tuple(outlines)
 
 
-@timed_step(_logger, "ordered_pickup_paint_contact_chain")
 def try_execute_ordered_pickup_and_paint_contact(
+    executor: object, prepared_workpiece, *, pickup_plan=None,
+) -> tuple[bool, str, int] | None:
+    """Legacy adapter; production uses the typed ordered-attempt result."""
+    return execute_ordered_pickup_and_paint_contact_result(
+        executor, prepared_workpiece, pickup_plan=pickup_plan,
+    ).as_legacy_triple()
+
+
+@timed_step(_logger, "ordered_pickup_paint_contact_chain")
+def execute_ordered_pickup_and_paint_contact_result(
     executor: object,
     prepared_workpiece,
     *,
     pickup_plan=None,
-) -> tuple[bool, str, int] | None:
+) -> PaintOperationResult:
     """Execute pickup/staging and primary paint contact as one preplanned ordered chain."""
-    execute_chain = executor._robot_service.execute_ordered_motion_chain
+    failure_code = PaintFailureCode.PLANNING
+    stage = "ordered_pickup_paint_planning"
 
     if pickup_plan is None:
-        pickup_plan = executor._pickup.build_plan(prepared_workpiece)
-    if pickup_plan is None:
-        return False, "Could not compute pickup-to-pivot poses", 0
+        planning = executor._pickup.build_plan_result(prepared_workpiece)
+        if isinstance(planning, Failed):
+            return PaintOperationResult(PaintOutcome.FAILED, planning.failure.message, planning.failure)
+        pickup_plan = planning.value
     if pickup_plan.contact_mode not in {
         PICKUP_CONTACT_MODE_PLANNED,
         PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
@@ -286,7 +295,7 @@ def try_execute_ordered_pickup_and_paint_contact(
             "[ORDERED_CHAIN] pickup plus paint contact chain skipped: pickup contact mode=%s",
             pickup_plan.contact_mode,
         )
-        return None
+        return PaintOperationResult(PaintOutcome.NOT_APPLICABLE, "Pickup mode requires separate execution")
     executor._last_pickup_plan = pickup_plan.motion_plan
 
     if pickup_plan.change_plane_combined_with_first_contact:
@@ -297,16 +306,17 @@ def try_execute_ordered_pickup_and_paint_contact(
 
     paint_paths: list[list[list[float]]] = []
     paint_jobs: list[PaintContactCommandJob] = []
-    ok, msg, total_waypoints = executor._paint_contact.execute(
+    contact_result = executor._paint_contact.execute_result(
         prepared_workpiece,
         execute_robot=False,
         collected_command_paths=paint_paths,
         collected_command_jobs=paint_jobs,
     )
-    if not ok:
-        return False, msg, total_waypoints
+    (ok, msg, total_waypoints) = (contact_result.completed, contact_result.message, contact_result.planned_waypoints)
+    if not contact_result.completed:
+        return contact_result
     if not paint_paths:
-        return False, "Pickup succeeded, but no paint contact path was generated", total_waypoints
+        return PaintOperationResult.failed(failure_code, stage, 'Pickup succeeded, but no paint contact path was generated', planned_waypoints=total_waypoints)
 
     paint_segments = build_ordered_paint_contact_segments(
             paint_paths,
@@ -339,7 +349,7 @@ def try_execute_ordered_pickup_and_paint_contact(
             if use_first
             else float(pass_2.offset_mm)
         )
-        ok, msg, second_waypoints = executor._paint_contact.execute(
+        contact_result = executor._paint_contact.execute_result(
             prepared_workpiece,
             vel_override=velocity,
             acc_override=acceleration,
@@ -348,8 +358,11 @@ def try_execute_ordered_pickup_and_paint_contact(
             collected_command_jobs=second_pass_jobs,
             pivot_offset_override_mm=offset,
         )
-        if not ok or not second_pass_paths:
-            return False, msg or "Second paint pass could not be planned", total_waypoints
+        (ok, msg, second_waypoints) = (contact_result.completed, contact_result.message, contact_result.planned_waypoints)
+        if not contact_result.completed:
+            return contact_result
+        if not second_pass_paths:
+            return PaintOperationResult.failed(failure_code, stage, "Second paint pass could not be planned", planned_waypoints=total_waypoints)
         total_waypoints += int(second_waypoints)
         post_pickup_segments.extend(
             build_ordered_second_pass_segments(
@@ -371,33 +384,27 @@ def try_execute_ordered_pickup_and_paint_contact(
             executor
         )
         if error:
-            return False, error, total_waypoints
+            return PaintOperationResult.failed(failure_code, stage, error, planned_waypoints=total_waypoints)
         post_pickup_segments.extend(plate_segments)
         plate_entry_in_chain = bool(plate_segments)
         final_pose = plate_release_pose or final_pose
     if _should_preplan_dropoff_in_ordered_chain(executor):
         config = executor._paint_process_config()
         if bool(config.dropoff_safe_travel.enabled) and not _resolve_dropoff_safe_travel_waypoints(executor):
-            return (
-                False,
-                "Pivot paint finished, but paint-to-dropoff safe travel waypoints are not configured",
-                total_waypoints,
-            )
+            return PaintOperationResult.failed(failure_code, stage, 'Pivot paint finished, but paint-to-dropoff safe travel waypoints are not configured', planned_waypoints=total_waypoints)
         dropoff_commands, dropoff_final_pose = build_ordered_dropoff_preparation_segments(executor)
         if not dropoff_commands:
-            return (
-                False,
-                "Pivot paint finished, but no dropoff pose is available for safe pre-dropoff unwind alignment",
-                total_waypoints,
-            )
+            return PaintOperationResult.failed(failure_code, stage, 'Pivot paint finished, but no dropoff pose is available for safe pre-dropoff unwind alignment', planned_waypoints=total_waypoints)
         post_pickup_segments.extend(dropoff_commands)
         dropoff_prepared_in_chain = True
         final_pose = dropoff_final_pose or final_pose
 
     if dropoff_prepared_in_chain:
+        failure_code = PaintFailureCode.MOTION
+        stage = "dropoff_passage"
         opened, message = open_dropoff_passage_for_preparation(executor)
         if not opened:
-            return False, message, total_waypoints
+            return PaintOperationResult.failed(failure_code, stage, message, planned_waypoints=total_waypoints)
 
     if pickup_plan.contact_mode == PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN:
         _logger.info(
@@ -407,35 +414,38 @@ def try_execute_ordered_pickup_and_paint_contact(
             len(paint_paths),
             dropoff_prepared_in_chain,
         )
-        ok, msg = executor._pickup.execute(
+        pickup_result = executor._pickup.execute_result(
             prepared_workpiece,
             pickup_plan=pickup_plan,
             prepared_continuation_segments=post_pickup_segments,
         )
+        ok = pickup_result.completed
         if ok and dropoff_prepared_in_chain:
             executor._dropoff_unwind_prepared = True
         if ok and final_pose is not None:
             executor._last_process_end_pose = list(final_pose)
         if ok and plate_entry_in_chain:
             executor._plate_entry_completed_in_paint_chain = True
-        return ok, msg, total_waypoints
+        return PaintOperationResult(pickup_result.outcome, pickup_result.message,
+                                    pickup_result.failure, total_waypoints)
 
     segments: list[OrderedMotionCommand] = build_ordered_pickup_segments(pickup_plan)
     segments.extend(post_pickup_segments)
 
     if pickup_plan.vacuum_on_before_moves:
+        failure_code = PaintFailureCode.VACUUM
+        stage = "pickup_vacuum"
         ok, msg = executor._motion.turn_vacuum_on()
         if not ok:
-            return False, msg, total_waypoints
+            return PaintOperationResult.failed(failure_code, stage, msg, planned_waypoints=total_waypoints)
 
+    failure_code = PaintFailureCode.MOTION
+    stage = "ordered_pickup_paint_motion"
     if not executor._motion.move_ordered_pickup_sequence(
         "Ordered pickup plus paint contact chain",
         segments,
     ):
-        return False, motion_failure_message(
-            executor._robot_service,
-            "Ordered pickup and paint contact chain failed",
-        ), total_waypoints
+        return PaintOperationResult.failed(failure_code, stage, motion_failure_message(executor._robot_service, 'Ordered pickup and paint contact chain failed'), planned_waypoints=total_waypoints)
 
     if dropoff_prepared_in_chain:
         executor._dropoff_unwind_prepared = True
@@ -443,7 +453,7 @@ def try_execute_ordered_pickup_and_paint_contact(
         executor._last_process_end_pose = list(final_pose)
     if plate_entry_in_chain:
         executor._plate_entry_completed_in_paint_chain = True
-    return True, "", total_waypoints
+    return PaintOperationResult(PaintOutcome.COMPLETED, '', planned_waypoints=total_waypoints)
 
 
 def _should_preplan_dropoff_in_ordered_chain(executor: object) -> bool:

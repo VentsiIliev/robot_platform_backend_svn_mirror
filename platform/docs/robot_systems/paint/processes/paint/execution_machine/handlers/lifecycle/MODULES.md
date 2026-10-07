@@ -63,7 +63,7 @@ def handle_idle(ctx: PaintExecutionContext) -> PaintExecutionState
 
 Source: [src/robot_systems/paint/processes/paint/execution_machine/handlers/lifecycle/pause_handler.py](../../../../../../../../src/robot_systems/paint/processes/paint/execution_machine/handlers/lifecycle/pause_handler.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `logging`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.state`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `logging`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.results`.
 
 ### `handle_paused`
 
@@ -75,7 +75,7 @@ def handle_paused(ctx: PaintExecutionContext) -> PaintExecutionState
 
 Source: [src/robot_systems/paint/processes/paint/execution_machine/handlers/lifecycle/startup_handler.py](../../../../../../../../src/robot_systems/paint/processes/paint/execution_machine/handlers/lifecycle/startup_handler.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers`, `src.robot_systems.paint.processes.paint.execution_machine.state`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.results`.
 
 ### `handle_starting`
 
@@ -89,7 +89,7 @@ Choose the first production phase for this cycle.
 
 Source: [src/robot_systems/paint/processes/paint/execution_machine/handlers/lifecycle/stopped_handler.py](../../../../../../../../src/robot_systems/paint/processes/paint/execution_machine/handlers/lifecycle/stopped_handler.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.lifecycle.terminal_common`, `src.robot_systems.paint.processes.paint.execution_machine.state`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.lifecycle.terminal_common`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.results`.
 
 ### `handle_stopped`
 
@@ -101,7 +101,7 @@ def handle_stopped(ctx: PaintExecutionContext) -> PaintExecutionState
 
 Source: [src/robot_systems/paint/processes/paint/execution_machine/handlers/lifecycle/terminal_common.py](../../../../../../../../src/robot_systems/paint/processes/paint/execution_machine/handlers/lifecycle/terminal_common.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `src.robot_systems.paint.processes.paint.execution_machine.context`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `dataclasses`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers`, `src.robot_systems.paint.processes.paint.results`.
 
 ### `restore_cycle_resources`
 

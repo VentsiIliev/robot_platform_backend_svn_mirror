@@ -24,7 +24,7 @@ No top-level functions, classes or public value declarations; inspect the source
 
 Source: [src/robot_systems/paint/processes/paint/execution_machine/handlers/dropoff/dropoff_handler.py](../../../../../../../../src/robot_systems/paint/processes/paint/execution_machine/handlers/dropoff/dropoff_handler.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `logging`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execute.diagnostics`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers`, `src.robot_systems.paint.processes.paint.execution_machine.state`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `dataclasses`, `logging`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execute.diagnostics`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.results`.
 
 ### `handle_dropoff`
 
@@ -48,7 +48,7 @@ def log_completion(ctx: PaintExecutionContext) -> None
 
 Source: [src/robot_systems/paint/processes/paint/execution_machine/handlers/dropoff/dropoff_handlers.py](../../../../../../../../src/robot_systems/paint/processes/paint/execution_machine/handlers/dropoff/dropoff_handlers.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `dataclasses`, `logging`, `math`, `numpy`, `src.engine.geometry.planar`, `src.engine.robot.motion_sequence`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execute.diagnostics`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers`, `src.robot_systems.paint.processes.paint.motion.pose_comparison`, `src.robot_systems.paint.processes.paint.motion.pose_sampling`, `src.robot_systems.paint.processes.paint.next_cycle_target`, `src.robot_systems.paint.processes.paint.tray_dry.plate_layout`, `src.robot_systems.paint.timing`, `time`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `dataclasses`, `logging`, `math`, `numpy`, `src.engine.geometry.planar`, `src.engine.robot.motion_sequence`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execute.diagnostics`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers`, `src.robot_systems.paint.processes.paint.motion.pose_comparison`, `src.robot_systems.paint.processes.paint.motion.pose_sampling`, `src.robot_systems.paint.processes.paint.next_cycle_target`, `src.robot_systems.paint.processes.paint.results`, `src.robot_systems.paint.processes.paint.tray_dry.plate_layout`, `src.robot_systems.paint.timing`, `time`.
 
 ### `_completed_rotation_turns`
 

@@ -5,6 +5,8 @@ import math
 from contextlib import nullcontext
 from time import monotonic, perf_counter, sleep
 
+from src.robot_systems.paint.processes.paint.results import PaintOperationResult, PaintOutcome
+
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards import guard_control
@@ -120,7 +122,7 @@ def wait_or_guard(ctx: PaintExecutionContext, state: PaintExecutionState) -> Pai
         return guarded
     executor = ctx.production_service._path_executor
     if not executor._wait_for_paint_resume(ctx.control):
-        ctx.set_result(False, "Paint process stopped")
+        ctx.set_outcome(PaintOperationResult(PaintOutcome.CANCELLED, "Paint process stopped"))
         return PaintExecutionState.STOPPED
     return None
 
@@ -187,18 +189,24 @@ def finish_paint_motion(ctx: PaintExecutionContext, *, success: bool) -> None:
     executor = ctx.production_service._path_executor
     recorder = ctx.paint_timing_recorder
     started = ctx.paint_started_at or perf_counter()
-    if recorder is not None:
-        recorder.record(
-            step="paint_process",
-            label="",
-            success=success,
-            elapsed_s=elapsed_s(started),
-            started_at=started,
-            ended_at=perf_counter(),
-        )
-        csv_path = recorder.write_csv(executor._debug_dump_dir) if executor._diagnostics_artifacts_enabled() else None
-        recorder.log_summary(_logger, csv_path=csv_path)
-    session = ctx.paint_timing_session or nullcontext()
-    session.__exit__(None, None, None)
-    executor._active_execution_control = ctx.paint_previous_control
-    ctx.paint_motion_active = False
+    try:
+        if recorder is not None:
+            try:
+                recorder.record(
+                    step="paint_process", label="", success=success,
+                    elapsed_s=elapsed_s(started), started_at=started, ended_at=perf_counter(),
+                )
+                csv_path = (recorder.write_csv(executor._debug_dump_dir)
+                            if executor._diagnostics_artifacts_enabled() else None)
+                recorder.log_summary(_logger, csv_path=csv_path)
+            except OSError:
+                _logger.warning("[PAINT_TIMING] Optional timing export failed", exc_info=True)
+            except Exception:
+                _logger.exception("[PAINT_TIMING] Unexpected optional timing failure")
+    finally:
+        try:
+            session = ctx.paint_timing_session or nullcontext()
+            session.__exit__(None, None, None)
+        finally:
+            executor._active_execution_control = ctx.paint_previous_control
+            ctx.paint_motion_active = False

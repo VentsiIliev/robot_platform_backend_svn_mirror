@@ -26,6 +26,7 @@ from src.engine.robot.motion_sequence import (
     OrderedPositionCommand,
 )
 from src.robot_systems.paint.processes.paint.config import (
+    PickupContactMode,
     PICKUP_CONTACT_MODE_HEIGHT_MEASURE,
     PICKUP_CONTACT_MODE_PLANNED,
     PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
@@ -43,6 +44,11 @@ from src.robot_systems.paint.processes.paint.motion.pose_sampling import (
 from src.robot_systems.paint.processes.paint.paint_contact_job import PaintContactCommandJob
 from src.robot_systems.paint.processes.paint.configured_motion_waypoint import ConfiguredMotionWaypoint
 from src.robot_systems.paint.timing import timed_block, timed_step
+from src.robot_systems.paint.processes.paint.plan.pickup_transfer_planner import PickupTransferPlan
+from src.robot_systems.paint.processes.paint.results import (
+    Failed, Ready, PaintFailure, PaintFailureCode, PaintOperationError,
+    PaintOperationResult, PaintOutcome,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -149,16 +155,16 @@ class PickupPlan:
     """Resolved pickup sequence for moving the workpiece to the paint start."""
 
     strategy_name: str
-    motion_plan: object
+    motion_plan: PickupTransferPlan
     waypoints: tuple[PickupWaypoint, ...]
     vacuum_on_before_moves: bool = True
     change_plane_combined_with_first_contact: bool = False
-    contact_mode: str = PICKUP_CONTACT_MODE_PLANNED
+    contact_mode: PickupContactMode = PICKUP_CONTACT_MODE_PLANNED
     contact_waypoint_index: int | None = None
     retract_reference_pose: list[float] | None = None
 
 
-def normalize_pickup_contact_mode(value: object) -> str:
+def normalize_pickup_contact_mode(value: object) -> PickupContactMode:
     return normalize_configured_pickup_contact_mode(value)
 
 
@@ -177,7 +183,7 @@ class DefaultPickupStrategy:
     name = "default"
 
     def build_plan(self, owner, prepared_workpiece: WorkpieceExecutionPlan) -> PickupPlan | None:
-        motion_plan = owner._pickup_transfer_planner.build_plan(prepared_workpiece)
+        motion_plan = owner._pickup_transfer_planner.build_required_plan(prepared_workpiece)
         if motion_plan is None:
             return None
 
@@ -315,67 +321,98 @@ class PaintPickupExecutor:
         self._strategy = strategy or DefaultPickupStrategy()
         self._last_failure_message = ""
 
-    def build_plan(self, prepared_workpiece: WorkpieceExecutionPlan) -> PickupPlan | None:
-        return self._strategy.build_plan(self._owner, prepared_workpiece)
+    def build_plan_result(self, prepared_workpiece: WorkpieceExecutionPlan) -> Ready[PickupPlan] | Failed:
+        try:
+            plan = self._strategy.build_plan(self._owner, prepared_workpiece)
+            if plan is None:
+                return Failed(PaintFailure(PaintFailureCode.PLANNING, "pickup_planning",
+                                           "Pickup strategy produced no plan"))
+            return Ready(plan)
+        except PaintOperationError as exc:
+            return Failed(exc.failure)
+        except (TypeError, ValueError) as exc:
+            return Failed(PaintFailure(PaintFailureCode.INVALID_CONFIGURATION,
+                                       "pickup_planning", str(exc)))
 
-    @timed_step(_logger, "pickup_to_pivot")
+    def build_plan(self, prepared_workpiece: WorkpieceExecutionPlan) -> PickupPlan | None:
+        """Legacy preview adapter; execution consumes build_plan_result."""
+        result = self.build_plan_result(prepared_workpiece)
+        if isinstance(result, Failed):
+            self._owner._last_pickup_plan_error = result.failure.message
+            return None
+        return result.value
+
     def execute(
-        self,
-        prepared_workpiece: WorkpieceExecutionPlan,
-        *,
-        pickup_plan: PickupPlan | None = None,
+        self, prepared_workpiece: WorkpieceExecutionPlan, *, pickup_plan: PickupPlan | None = None,
         prepared_continuation_segments: list[OrderedMotionCommand] | None = None,
         stop_after_retract: bool = False,
     ) -> tuple[bool, str]:
-        """Run pickup, align, and staging according to the configured strategy."""
-        started = perf_counter()
+        """Compatibility adapter for existing path-executor consumers."""
+        return self.execute_result(
+            prepared_workpiece, pickup_plan=pickup_plan,
+            prepared_continuation_segments=prepared_continuation_segments,
+            stop_after_retract=stop_after_retract,
+        ).as_legacy_pair()
+
+    @timed_step(_logger, "pickup_to_pivot")
+    def execute_result(
+        self, prepared_workpiece: WorkpieceExecutionPlan, *, pickup_plan: PickupPlan | None = None,
+        prepared_continuation_segments: list[OrderedMotionCommand] | None = None,
+        stop_after_retract: bool = False,
+    ) -> PaintOperationResult:
+        """Execute pickup with explicit completion, absence, cancellation or failure."""
         self._last_failure_message = ""
-        _logger.debug("[TIMING] pickup_to_pivot entered")
+        self._last_failure_code = PaintFailureCode.MOTION
+        self._last_outcome = PaintOutcome.FAILED
         if self._owner._robot_service is None:
-            return False, "Robot service is not available"
-
-        plan_started = perf_counter()
+            return PaintOperationResult.failed(PaintFailureCode.UNAVAILABLE, "pickup",
+                                               "Robot service is not available")
         if pickup_plan is None:
-            with timed_block(_logger, "pickup_to_pivot_prepare", label="build_paint_pickup_plan"):
-                pickup_plan = self.build_plan(prepared_workpiece)
-
-        if pickup_plan is None:
-            _logger.debug("[TIMING] pickup_to_pivot success=false stage=build_poses total_elapsed_s=%.3f", elapsed_s(started))
-            return False, (
-                self._owner._last_pickup_plan_error
-                or self._owner._last_safe_travel_error
-                or "Could not compute pickup-to-pivot poses"
-            )
+            planned = self.build_plan_result(prepared_workpiece)
+            if isinstance(planned, Failed):
+                return PaintOperationResult(PaintOutcome.FAILED, planned.failure.message, planned.failure)
+            pickup_plan = planned.value
+        try:
+            mode = normalize_pickup_contact_mode(pickup_plan.contact_mode)
+        except (TypeError, ValueError) as exc:
+            return PaintOperationResult.failed(PaintFailureCode.INVALID_CONFIGURATION, "pickup",
+                                               f"Invalid pickup contact mode: {pickup_plan.contact_mode}")
+        if mode is PickupContactMode.HEIGHT_MEASURE:
+            return PaintOperationResult.failed(PaintFailureCode.UNAVAILABLE, "pickup",
+                                               "Height-measured pickup Z mode is not wired yet")
+        if len(pickup_plan.waypoints) < 2:
+            return PaintOperationResult.failed(PaintFailureCode.PLANNING, "pickup",
+                                               "Pickup requires approach and contact waypoints")
+        index = 1 if pickup_plan.contact_waypoint_index is None else pickup_plan.contact_waypoint_index
+        if index <= 0 or index >= len(pickup_plan.waypoints):
+            return PaintOperationResult.failed(PaintFailureCode.INVALID_CONFIGURATION, "pickup",
+                                               "Pickup contact waypoint index is invalid")
+        if mode is PickupContactMode.SENSOR_CONTROLLED_FAST_LIN and self._owner._pickup_condition is None:
+            return PaintOperationResult.failed(PaintFailureCode.UNAVAILABLE, "pickup",
+                                               "Servo contact pickup requires a pickup condition")
+        control = self._owner._active_execution_control
+        if control is not None and control.should_stop():
+            return PaintOperationResult(PaintOutcome.CANCELLED, "Paint process stopped")
         self._owner._last_pickup_plan = pickup_plan.motion_plan
-        self._owner._last_pickup_contact_mode = pickup_plan.contact_mode
-        _logger.debug("[TIMING] pickup_to_pivot stage=build_poses elapsed_s=%.3f", elapsed_s(plan_started))
-
-        if pickup_plan.contact_mode == PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN:
+        self._owner._last_pickup_contact_mode = mode
+        if mode is PickupContactMode.SENSOR_CONTROLLED_FAST_LIN:
             ok = self._execute_servo_contact_pickup_sequence(
-                pickup_plan,
-                prepared_continuation_segments=prepared_continuation_segments,
+                pickup_plan, prepared_continuation_segments=prepared_continuation_segments,
                 stop_after_retract=stop_after_retract,
             )
-        elif pickup_plan.contact_mode == PICKUP_CONTACT_MODE_HEIGHT_MEASURE:
-            _logger.error("[PICKUP] Height-measured pickup Z mode is selected, but height service wiring is not implemented yet")
-            return False, "Height-measured pickup Z mode is not wired yet"
-        elif pickup_plan.contact_mode != PICKUP_CONTACT_MODE_PLANNED:
-            _logger.error("[PICKUP] Invalid pickup contact mode: %s", pickup_plan.contact_mode)
-            return False, f"Invalid pickup contact mode: {pickup_plan.contact_mode}"
         else:
-            ok = self._execute_custom_pickup_sequence(
-                pickup_plan,
-                stop_after_retract=stop_after_retract,
-            )
+            ok = self._execute_custom_pickup_sequence(pickup_plan, stop_after_retract=stop_after_retract)
         if ok:
-            return True, "Pickup completed and robot is positioned before the first pivot contact pose"
-        _logger.debug("[TIMING] pickup_to_pivot success=false stage=ordered_pickup total_elapsed_s=%.3f", elapsed_s(started))
+            return PaintOperationResult(PaintOutcome.COMPLETED,
+                "Pickup completed and robot is positioned before the first pivot contact pose")
+        if control is not None and control.should_stop():
+            return PaintOperationResult(PaintOutcome.CANCELLED, "Paint process stopped")
+        if self._last_outcome is PaintOutcome.NO_WORKPIECE:
+            return PaintOperationResult(PaintOutcome.NO_WORKPIECE, self._last_failure_message)
         detail = self._owner._motion.last_motion_error
-        if self._last_failure_message:
-            return False, self._last_failure_message
-        if detail:
-            return False, f"Ordered pickup sequence failed: {detail}"
-        return False, "Ordered pickup sequence failed"
+        message = self._last_failure_message or (
+            f"Ordered pickup sequence failed: {detail}" if detail else "Ordered pickup sequence failed")
+        return PaintOperationResult.failed(self._last_failure_code, "pickup", message)
 
     def _execute_custom_pickup_sequence(
         self,
@@ -399,8 +436,10 @@ class PaintPickupExecutor:
                     "[PICKUP] Changing plane skipped as standalone move; orientation will be combined with first pivot contact pose"
                 )
         if pickup_plan.vacuum_on_before_moves:
-            ok, _msg = self._owner._motion.turn_vacuum_on()
+            ok, vacuum_message = self._owner._motion.turn_vacuum_on()
             if not ok:
+                self._last_failure_code = PaintFailureCode.VACUUM
+                self._last_failure_message = vacuum_message
                 return False
 
         if not self._move_waypoint_sequence(
@@ -553,8 +592,10 @@ class PaintPickupExecutor:
                 _logger.exception("[PICKUP] Failed to discard prepared continuation plan_id=%s", prepared_plan_id)
 
         if pickup_plan.vacuum_on_before_moves:
-            ok, _msg = self._owner._motion.turn_vacuum_on(required=True)
+            ok, vacuum_message = self._owner._motion.turn_vacuum_on(required=True)
             if not ok:
+                self._last_failure_code = PaintFailureCode.VACUUM
+                self._last_failure_message = vacuum_message
                 discard_prepared()
                 return False
 
@@ -655,6 +696,8 @@ class PaintPickupExecutor:
                     if recovery_failures
                     else NO_WORKPIECE_AT_CALIBRATION
                 )
+                if not recovery_failures:
+                    self._last_outcome = PaintOutcome.NO_WORKPIECE
             return False
         if not pickup_condition_is_active_after_retract(condition):
             discard_prepared()

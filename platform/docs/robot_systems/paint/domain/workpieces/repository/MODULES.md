@@ -12,13 +12,21 @@ Generated from Python ASTs. Signatures, declared defaults, imports and docstring
 
 Source: [src/robot_systems/paint/domain/workpieces/repository/json_paint_workpiece_repository.py](../../../../../../src/robot_systems/paint/domain/workpieces/repository/json_paint_workpiece_repository.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `datetime`, `json`, `logging`, `numpy`, `os`, `shutil`, `src.applications.workpiece_library.workpiece_thumbnail`, `typing`.
+Imports (including optional/function-local imports; not a startup dependency list): `datetime`, `json`, `logging`, `numpy`, `os`, `shutil`, `src.applications.workpiece_library.workpiece_thumbnail`, `src.robot_systems.paint.domain.workpieces.errors`, `tempfile`, `threading`, `typing`.
 
 ### `_numpy_to_python`
 
 ```python
 def _numpy_to_python(obj)
 ```
+
+### `WorkpieceWriteError`
+
+```python
+class WorkpieceWriteError(RuntimeError):
+```
+
+A workpiece and its required thumbnail could not be published safely.
 
 ### `JsonPaintWorkpieceRepository`
 
@@ -39,6 +47,14 @@ def save(self, workpiece: dict) -> str
 ```python
 def list_all(self) -> List[dict]
 ```
+
+Library listing tolerates unreadable individual records.
+
+```python
+def list_for_matching(self) -> List[dict]
+```
+
+Production must distinguish unreadable records from an empty library.
 
 ```python
 def delete(self, storage_id: str) -> bool

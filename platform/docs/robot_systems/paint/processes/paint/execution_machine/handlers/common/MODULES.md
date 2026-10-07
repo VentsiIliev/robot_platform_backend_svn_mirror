@@ -22,7 +22,7 @@ No top-level functions, classes or public value declarations; inspect the source
 
 Source: [src/robot_systems/paint/processes/paint/execution_machine/handlers/common/guards.py](../../../../../../../../src/robot_systems/paint/processes/paint/execution_machine/handlers/common/guards.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.state`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.results`.
 
 ### `guard_control`
 
@@ -36,7 +36,7 @@ Return a terminal/paused state when cooperative process control requires it.
 
 Source: [src/robot_systems/paint/processes/paint/execution_machine/handlers/common/motion_handlers.py](../../../../../../../../src/robot_systems/paint/processes/paint/execution_machine/handlers/common/motion_handlers.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `contextlib`, `logging`, `math`, `src.robot_systems.paint.processes.paint.execute.diagnostics`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.timing`, `time`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `contextlib`, `logging`, `math`, `src.robot_systems.paint.processes.paint.execute.diagnostics`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.results`, `src.robot_systems.paint.timing`, `time`.
 
 ### `unwind_joint6_at_cycle_start`
 

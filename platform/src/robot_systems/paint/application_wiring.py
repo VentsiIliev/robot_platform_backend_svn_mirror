@@ -610,9 +610,10 @@ def _build_paint_matching_service(
     from src.robot_systems.paint.processes.paint.match.workpiece_matching_service import PaintWorkpieceMatchingService
 
     vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
+    workpieces = workpiece_service or _build_paint_workpiece_service(robot_system)
     matching_kwargs = dict(
-        list_saved_workpieces_fn=(workpiece_service or _build_paint_workpiece_service(robot_system)).list_all,
-        load_saved_workpiece_fn=(workpiece_service or _build_paint_workpiece_service(robot_system)).load_raw,
+        list_saved_workpieces_fn=workpieces.list_for_matching,
+        load_saved_workpiece_fn=workpieces.load_for_matching,
         run_matching_fn=vision_service.run_matching if vision_service is not None else None,
         capture_snapshot_service=capture_snapshot_service or _build_capture_snapshot_service(robot_system),
     )
@@ -639,9 +640,11 @@ def _build_paint_workpiece_preparation_service(robot_system):
             "offset": float(config.default_paint_offset_mm),
         }
 
+    matching = _build_paint_matching_service(robot_system)
     return PaintWorkpiecePreparationService(
-        can_match_fn=_build_paint_matching_service(robot_system).can_match_saved_workpieces,
-        match_workpiece_fn=_build_paint_matching_service(robot_system).match_saved_workpieces,
+        can_match_fn=matching.can_match_saved_workpieces,
+        match_workpiece_fn=matching.match_saved_workpieces,
+        typed_match_workpiece_fn=matching.match_result,
         default_settings=segment_defaults,
         default_settings_getter=live_segment_defaults,
         transformer=None,

@@ -8,6 +8,10 @@ from typing import Callable
 from enum import StrEnum
 
 from .errors import TrayBusyError, TrayConfirmationRequiredError, TrayLayoutChangedError
+from src.robot_systems.paint.processes.paint.results import (
+    Ready, PaintOperationResult, PaintOutcome, PaintFailureCode,
+)
+
 from src.robot_systems.paint.processes.paint.config import PaintDropoffConfig
 
 
@@ -148,6 +152,27 @@ class PlateLayoutService:
         outlines_mm=(),
         paint_passes=(),
     ) -> tuple[PlateDropoffReservation | None, str]:
+        result = self.reserve_result(
+            config, width_mm=width_mm, height_mm=height_mm, calibration_pose=calibration_pose,
+            workpiece_rz_at_calibration_deg=workpiece_rz_at_calibration_deg,
+            pose_calculator=pose_calculator, outlines_mm=outlines_mm, paint_passes=paint_passes,
+        )
+        if isinstance(result, Ready):
+            return result.value, ""
+        return None, result.message
+
+    def reserve_result(
+        self,
+        config,
+        *,
+        width_mm: float,
+        height_mm: float,
+        calibration_pose: list[float],
+        workpiece_rz_at_calibration_deg: float,
+        pose_calculator,
+        outlines_mm=(),
+        paint_passes=(),
+    ) -> Ready[PlateDropoffReservation] | PaintOperationResult:
         with self._lock:
             return self._reserve_locked(
                 config,
@@ -165,14 +190,14 @@ class PlateLayoutService:
         calibration_pose: list[float], workpiece_rz_at_calibration_deg: float,
         pose_calculator, outlines_mm=(),
         paint_passes=(),
-    ) -> tuple[PlateDropoffReservation | None, str]:
+    ) -> Ready[PlateDropoffReservation] | PaintOperationResult:
         self.ensure_ready(config)
         corners, error = validate_plate_corners(config.plate_corners)
         if error:
-            return None, error
+            return PaintOperationResult.failed(PaintFailureCode.INVALID_CONFIGURATION, "tray_reservation", error)
         gate_pose, error = validate_plate_passage_gate(config.plate_passage_gate_pose)
         if error:
-            return None, error
+            return PaintOperationResult.failed(PaintFailureCode.INVALID_CONFIGURATION, "tray_reservation", error)
         numeric = (
             config.plate_release_z_offset_mm, config.plate_approach_clearance_mm,
             config.plate_margin_left_mm, config.plate_margin_right_mm,
@@ -182,13 +207,13 @@ class PlateLayoutService:
         try:
             numeric = tuple(float(value) for value in numeric)
         except (TypeError, ValueError):
-            return None, "Plate-layout dropoff dimensions must be finite numbers"
+            return PaintOperationResult.failed(PaintFailureCode.INVALID_CONFIGURATION, "tray_reservation", 'Plate-layout dropoff dimensions must be finite numbers')
         if not all(math.isfinite(value) for value in numeric) or any(value < 0.0 for value in numeric[1:]):
-            return None, "Plate-layout dropoff dimensions must be finite and non-negative"
+            return PaintOperationResult.failed(PaintFailureCode.INVALID_CONFIGURATION, "tray_reservation", 'Plate-layout dropoff dimensions must be finite and non-negative')
         width = float(width_mm)
         height = float(height_mm)
         if not math.isfinite(width) or not math.isfinite(height) or width <= 0.0 or height <= 0.0:
-            return None, "Plate-layout dropoff requires a valid workpiece footprint"
+            return PaintOperationResult.failed(PaintFailureCode.INVALID_CONFIGURATION, "tray_reservation", 'Plate-layout dropoff requires a valid workpiece footprint')
 
         signature = _layout_signature(config, corners)
         if signature != self._signature:
@@ -204,7 +229,7 @@ class PlateLayoutService:
             self._spacing_x_mm = float(config.plate_spacing_x_mm)
             self._spacing_y_mm = float(config.plate_spacing_y_mm)
         if self._pending is not None:
-            return None, "Plate-layout dropoff already has an active reservation"
+            return PaintOperationResult.failed(PaintFailureCode.INVALID_CONFIGURATION, "tray_reservation", 'Plate-layout dropoff already has an active reservation')
 
         plate_width = _average_edge_length(corners[0], corners[1], corners[3], corners[2])
         plate_height = _average_edge_length(corners[0], corners[3], corners[1], corners[2])
@@ -212,12 +237,12 @@ class PlateLayoutService:
             plate_width <= float(config.plate_margin_left_mm) + float(config.plate_margin_right_mm)
             or plate_height <= float(config.plate_margin_bottom_mm) + float(config.plate_margin_top_mm)
         ):
-            return None, "Plate-layout margins leave no usable plate area"
+            return PaintOperationResult.failed(PaintFailureCode.INVALID_CONFIGURATION, "tray_reservation", 'Plate-layout margins leave no usable plate area')
         right = plate_width - float(config.plate_margin_right_mm)
         top = plate_height - float(config.plate_margin_top_mm)
         left, bottom, row_height = self._candidate(width, height, right, top)
         if left + width > right or bottom + height > top:
-            return None, "Drop-off plate is full"
+            return PaintOperationResult(PaintOutcome.TRAY_FULL, "Drop-off plate is full")
 
         center_x = left + width / 2.0
         center_y = bottom + height / 2.0
@@ -240,7 +265,7 @@ class PlateLayoutService:
             workpiece_rz_at_calibration_deg,
         )
         if len(release_pose) < 3 or float(release_pose[2]) < 0.0:
-            return None, "Plate-layout dropoff requires a release pose at or above Z=0"
+            return PaintOperationResult.failed(PaintFailureCode.INVALID_CONFIGURATION, "tray_reservation", 'Plate-layout dropoff requires a release pose at or above Z=0')
         approach_pose = list(release_pose)
         approach_pose[2] += float(config.plate_approach_clearance_mm)
         plate_center = _map_plate_point(
@@ -279,7 +304,7 @@ class PlateLayoutService:
             paint_passes=tuple(dict(value) for value in paint_passes),
         )
         self._pending_state = (left, bottom, max(row_height, height))
-        return self._pending, ""
+        return Ready(self._pending)
 
     def commit(self, config) -> None:
         with self._lock:

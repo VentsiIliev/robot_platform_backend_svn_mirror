@@ -11,6 +11,8 @@ from src.robot_systems.paint.processes.paint.plan.paint_contact_motion import (
     project_paint_contact_motion_continuous,
 )
 from src.robot_systems.paint.timing import timed_block
+from src.robot_systems.paint.processes.paint.configured_motion_waypoint import ConfiguredMotionWaypoint
+from src.robot_systems.paint.processes.paint.results import PaintPlanningError
 
 _logger = logging.getLogger(__name__)
 
@@ -47,6 +49,14 @@ class PaintPickupTransferPlanner:
         self._owner = owner
 
     def build_plan(self, prepared_workpiece: WorkpieceExecutionPlan) -> PickupTransferPlan | None:
+        """Compatibility adapter; production planning uses build_required_plan."""
+        try:
+            return self.build_required_plan(prepared_workpiece)
+        except PaintPlanningError as exc:
+            self._owner._last_pickup_plan_error = str(exc)
+            return None
+
+    def build_required_plan(self, prepared_workpiece: WorkpieceExecutionPlan) -> PickupTransferPlan:
         """Build XY/RZ pickup poses and the first staged pose for the active paint process plane."""
         from src.robot_systems.paint.processes.paint.execute.projection_preview import (
             pivot_source_path,
@@ -65,7 +75,7 @@ class PaintPickupTransferPlanner:
             owner._refresh_runtime_config()
 
         if not jobs:
-            return None
+            raise PaintPlanningError("Pickup requires at least one execution job")
 
         with timed_block(_logger, "pickup_plan_build", label="resolve_pickup_base_position"):
             pickup_pivot_pose = owner._resolve_pickup_base_position()
@@ -80,17 +90,17 @@ class PaintPickupTransferPlanner:
                 "Pickup movement-group pose must contain all six values: X, Y, Z, RX, RY, and RZ"
             )
             _logger.error("[PICKUP] %s; pose=%s", owner._last_pickup_plan_error, pickup_pivot_pose)
-            return None
+            raise PaintPlanningError(owner._last_pickup_plan_error)
         if paint_pivot_pose is None or len(paint_pivot_pose) < 3:
-            return None
+            raise PaintPlanningError("Paint pivot pose must contain X, Y and Z")
 
         source_path = pivot_source_path(jobs[0], owner._contact_motion_config)
         if not source_path:
-            return None
+            raise PaintPlanningError("Pickup source path is empty")
 
         pickup_xy = jobs[0].get("pickup_xy")
         if not pickup_xy or len(pickup_xy) < 2:
-            return None
+            raise PaintPlanningError("Pickup job requires X and Y coordinates")
 
         pickup_centroid_x = float(pickup_xy[0])
         pickup_centroid_y = float(pickup_xy[1])
@@ -99,7 +109,7 @@ class PaintPickupTransferPlanner:
         paint_pivot_pose = owner._apply_pivot_offset(paint_pivot_pose, pivot_offset_mm)
 
         if paint_pivot_pose is None or len(paint_pivot_pose) < 3:
-            return None
+            raise PaintPlanningError("Paint pivot pose must contain X, Y and Z")
 
         pickup_rz = float(jobs[0].get("pickup_rz", 0.0))
         pickup_reference_rz = float(
@@ -122,7 +132,7 @@ class PaintPickupTransferPlanner:
             )
 
         if not projected_pivot_path:
-            return None
+            raise PaintPlanningError("Pickup projection produced no pivot path")
 
         first_pivot_pose = list(projected_pivot_path[0])
         _logger.debug("first_pivot_pose -> %s", first_pivot_pose)
@@ -232,7 +242,7 @@ class PaintPickupTransferPlanner:
         safe_travel_poses = [list(item.position) for item in safe_travel_waypoints]
 
         if bool(owner._paint_process_config().safe_travel.enabled) and not safe_travel_waypoints:
-            return None
+            raise PaintPlanningError(owner._last_safe_travel_error)
 
         if safe_travel_waypoints:
             _logger.info(

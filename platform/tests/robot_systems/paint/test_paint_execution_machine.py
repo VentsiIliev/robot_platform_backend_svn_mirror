@@ -41,14 +41,32 @@ from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
 )
 from src.robot_systems.paint.processes.paint.magazine_load_service import PaintMagazineLoadService
 
+from src.robot_systems.paint.processes.paint.results import Ready, PaintOperationResult, PaintOutcome, PaintFailureCode
+from src.robot_systems.paint.processes.paint.match.results import NoMatch, PreparedWorkpiece
+
+
+def _prepared_result(raw, message):
+    return NoMatch(message) if raw is None else Ready(PreparedWorkpiece(raw, message))
+
+
+def _pickup_result(ok, message):
+    return (PaintOperationResult(PaintOutcome.COMPLETED, message) if ok else
+            PaintOperationResult.failed(PaintFailureCode.MOTION, "pickup", message))
+
+
+def _contact_result(ok, message, waypoints):
+    return (PaintOperationResult(PaintOutcome.COMPLETED, message, planned_waypoints=waypoints)
+            if ok else PaintOperationResult.failed(PaintFailureCode.MOTION, "paint_contact", message,
+                                                    planned_waypoints=waypoints))
+
 
 class TestWorkpiecePreparationHandler(unittest.TestCase):
     def test_unknown_match_publishes_established_dashboard_warning(self):
         service = MagicMock()
-        service._workpiece_preparation.prepare_workpiece.return_value = (
+        service._workpiece_preparation.prepare_result.return_value = _prepared_result(*(
             None,
             "Unknown workpiece",
-        )
+        ))
         ctx = PaintExecutionContext(
             production_service=service,
             stop_requested=lambda: False,
@@ -276,8 +294,8 @@ class TestCycleStartUnwind(unittest.TestCase):
 class TestCalibrationPickupTestMode(unittest.TestCase):
     def test_completes_after_pickup_without_building_ordered_paint_chain(self):
         pickup = MagicMock()
-        pickup.build_plan.return_value = SimpleNamespace()
-        pickup.execute.return_value = (True, "")
+        pickup.build_plan_result.return_value = Ready(SimpleNamespace())
+        pickup.execute_result.return_value = PaintOperationResult(PaintOutcome.COMPLETED, "")
         executor = SimpleNamespace(
             _pickup=pickup,
             _paint_process_config=lambda: PaintProcessConfig(),
@@ -300,7 +318,7 @@ class TestCalibrationPickupTestMode(unittest.TestCase):
                 return_value=True,
             ),
             patch(
-                "src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler.try_execute_ordered_pickup_and_paint_contact"
+                "src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler.execute_ordered_pickup_and_paint_contact_result"
             ) as ordered_chain,
             patch(
                 "src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler.finish_paint_motion"
@@ -312,9 +330,9 @@ class TestCalibrationPickupTestMode(unittest.TestCase):
         self.assertTrue(ctx.result_ok)
         self.assertEqual("Calibration pickup test completed", ctx.result_message)
         ordered_chain.assert_not_called()
-        pickup.execute.assert_called_once_with(
+        pickup.execute_result.assert_called_once_with(
             ctx.execution_plan,
-            pickup_plan=pickup.build_plan.return_value,
+            pickup_plan=pickup.build_plan_result.return_value.value,
             stop_after_retract=True,
         )
         finish_motion.assert_called_once_with(ctx, success=True)
@@ -450,10 +468,10 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
             ],
             source="paint_process",
         )
-        service._workpiece_preparation.prepare_workpiece.return_value = (
+        service._workpiece_preparation.prepare_result.return_value = _prepared_result(*(
             {"id": "wp-1"},
             "Prepared workpiece",
-        )
+        ))
         service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
         service._path_executor.execute_paint_process.return_value = (True, "Paint completed")
         service._pause_dashboard_live_view_after_capture.return_value = False
@@ -528,7 +546,7 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
         self.assertFalse(ctx.result_ok)
         self.assertEqual("No usable contour detected", ctx.result_message)
         self.assertEqual(PaintExecutionState.IDLE, machine.current_state)
-        service._workpiece_preparation.prepare_workpiece.assert_not_called()
+        service._workpiece_preparation.prepare_result.assert_not_called()
 
     def test_machine_uses_phased_motion_states_for_real_executor_shape(self):
         events = []
@@ -541,10 +559,10 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
             ],
             source="paint_process",
         )
-        service._workpiece_preparation.prepare_workpiece.return_value = (
+        service._workpiece_preparation.prepare_result.return_value = _prepared_result(*(
             {"id": "wp-1"},
             "Prepared workpiece",
-        )
+        ))
         service._path_preparation_service.build_execution_plan.return_value = SimpleNamespace(
             execution_jobs=[{"job": 1}],
             workpiece={"workpieceId": "saved"},
@@ -643,10 +661,10 @@ class _FakePhasedPathExecutor:
             turn_vacuum_off=self._turn_vacuum_off,
         )
         self._pickup = SimpleNamespace(
-            build_plan=self._build_pickup_plan,
-            execute=self._pickup_execute,
+            build_plan_result=lambda plan: Ready(self._build_pickup_plan(plan)),
+            execute_result=lambda *args, **kwargs: _pickup_result(*self._pickup_execute(*args, **kwargs)),
         )
-        self._paint_contact = SimpleNamespace(execute=self._paint_contact_execute)
+        self._paint_contact = SimpleNamespace(execute_result=lambda *args, **kwargs: _contact_result(*self._paint_contact_execute(*args, **kwargs)))
         self._edge_cleanup = SimpleNamespace(
             cancel_early_preplanning=lambda: events.append("cancel_cleanup"),
             should_run_after_xz_ry=lambda: False,

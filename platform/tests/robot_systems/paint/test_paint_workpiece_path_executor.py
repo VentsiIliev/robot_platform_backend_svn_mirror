@@ -49,6 +49,8 @@ from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor imp
     _paint_axis_staging_offset_pose,
 )
 
+from src.robot_systems.paint.processes.paint.results import Ready, PaintOperationResult, PaintOutcome, PaintFailureCode
+
 
 def _make_executor(robot_service=None, **options):
     """Build the executor through its explicit production-facing configuration API."""
@@ -111,6 +113,17 @@ def _execution_plan(*jobs, workpiece=None):
         execution_jobs=list(jobs),
         total_spline_pts=0,
     )
+
+
+def _pickup_result(ok, message):
+    return (PaintOperationResult(PaintOutcome.COMPLETED, message) if ok else
+            PaintOperationResult.failed(PaintFailureCode.MOTION, "pickup", message))
+
+
+def _contact_result(ok, message, waypoints):
+    return (PaintOperationResult(PaintOutcome.COMPLETED, message, planned_waypoints=waypoints)
+            if ok else PaintOperationResult.failed(PaintFailureCode.MOTION, "paint_contact", message,
+                                                    planned_waypoints=waypoints))
 
 
 class TestPaintStagingOffsetPose(unittest.TestCase):
@@ -353,9 +366,9 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         )
         robot = MagicMock()
         executor = _make_executor(robot_service=robot, paint_process_config_service=settings)
-        executor._pickup.build_plan = MagicMock(return_value=SimpleNamespace(contact_mode="height_measure"))
-        executor._pickup.execute = MagicMock(return_value=(True, ""))
-        executor._paint_contact.execute = MagicMock(return_value=(True, "", 3))
+        executor._pickup.build_plan_result = MagicMock(return_value=Ready(SimpleNamespace(contact_mode="height_measure")))
+        executor._pickup.execute_result = MagicMock(return_value=_pickup_result(*(True, "")))
+        executor._paint_contact.execute_result = MagicMock(return_value=_contact_result(*(True, "", 3)))
         executor._edge_cleanup.should_run_after_xy_rz = MagicMock(return_value=False)
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
         with (
@@ -400,7 +413,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             post_execute_callback=MagicMock(return_value=True),
         )
         executor._pickup = MagicMock()
-        executor._pickup.build_plan.return_value = PickupPlan(
+        executor._pickup.build_plan_result.return_value = Ready(PickupPlan(
             strategy_name="test",
             motion_plan=SimpleNamespace(),
             vacuum_on_before_moves=False,
@@ -409,9 +422,9 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
                 PickupWaypoint(label="Moving to pickup approach pose", pose=[1, 2, 3, 4, 5, 6], vel_percent=11, acc_percent=21),
                 PickupWaypoint(label="Moving to staging offset before first pivot contact pose", pose=[7, 8, 9, 10, 11, 12], vel_percent=12, acc_percent=22),
             ],
-        )
-        executor._paint_contact.execute = MagicMock(
-            return_value=(True, "", 2),
+        ))
+        executor._paint_contact.execute_result = MagicMock(
+            return_value=_contact_result(*(True, "", 2)),
         )
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
         executor._edge_cleanup.should_run_after_xy_rz = MagicMock(return_value=False)
@@ -436,13 +449,13 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             kwargs["collected_command_jobs"].append(PaintContactCommandJob(1, "Path", 33, 44))
             return True, "", len(command_path)
 
-        executor._paint_contact.execute.side_effect = _collect_contact
+        executor._paint_contact.execute_result.side_effect = lambda *args, **kwargs: _contact_result(*_collect_contact(*args, **kwargs))
 
         ok, msg = executor.execute_paint_process(plan, control=control)
 
         self.assertTrue(ok, msg)
-        executor._paint_contact.execute.assert_called_once()
-        self.assertFalse(executor._paint_contact.execute.call_args.kwargs["execute_robot"])
+        executor._paint_contact.execute_result.assert_called_once()
+        self.assertFalse(executor._paint_contact.execute_result.call_args.kwargs["execute_robot"])
         robot_service.execute_ordered_motion_chain.assert_called_once()
         segments = serialize_ordered_motion_commands(robot_service.execute_ordered_motion_chain.call_args.kwargs["segments"])
         self.assertEqual(["ptp", "ptp", "linear", "path", "unwind_joint6"], [segment["type"] for segment in segments])
@@ -467,7 +480,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             post_execute_callback=MagicMock(return_value=True),
         )
         executor._pickup = MagicMock()
-        executor._pickup.build_plan.return_value = PickupPlan(
+        executor._pickup.build_plan_result.return_value = Ready(PickupPlan(
             strategy_name="test",
             motion_plan=SimpleNamespace(),
             vacuum_on_before_moves=False,
@@ -476,7 +489,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
                 PickupWaypoint(label="Moving to pickup approach pose", pose=[1, 2, 3, 4, 5, 6], vel_percent=11, acc_percent=21),
                 PickupWaypoint(label="Moving to staging offset before first pivot contact pose", pose=[7, 8, 9, 10, 11, 12], vel_percent=12, acc_percent=22),
             ],
-        )
+        ))
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
         executor._edge_cleanup.should_run_after_xy_rz = MagicMock(return_value=False)
         preparation_patch = patch(
@@ -508,7 +521,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
                 return -1
             return 0
 
-        executor._paint_contact.execute = MagicMock(side_effect=_collect_contact)
+        executor._paint_contact.execute_result = MagicMock(side_effect=lambda *args, **kwargs: _contact_result(*_collect_contact(*args, **kwargs)))
         robot_service.execute_ordered_motion_chain.side_effect = _execute_chain
 
         ok, msg = executor.execute_paint_process(plan, control=control)
@@ -1745,9 +1758,9 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         )
         executor._robot_service.execute_ordered_motion_chain = None
         # Use the existing non-combined branch to isolate process control from planning.
-        executor._pickup.build_plan = MagicMock(return_value=SimpleNamespace(contact_mode="height_measure"))
-        executor._pickup.execute = MagicMock(return_value=(True, "pickup ok"))
-        executor._paint_contact.execute = MagicMock(return_value=(True, "", 3))
+        executor._pickup.build_plan_result = MagicMock(return_value=Ready(SimpleNamespace(contact_mode="height_measure")))
+        executor._pickup.execute_result = MagicMock(return_value=_pickup_result(*(True, "pickup ok")))
+        executor._paint_contact.execute_result = MagicMock(return_value=_contact_result(*(True, "", 3)))
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
         preparation_patch = patch(
             "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler.execute_dropoff_preparation_for_executor",
@@ -1777,8 +1790,8 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         )
         executor._robot_service.execute_ordered_motion_chain = None
         # Use the existing non-combined branch to isolate process control from planning.
-        executor._pickup.build_plan = MagicMock(return_value=SimpleNamespace(contact_mode="height_measure"))
-        executor._pickup.execute = MagicMock(return_value=(True, "pickup ok"))
+        executor._pickup.build_plan_result = MagicMock(return_value=Ready(SimpleNamespace(contact_mode="height_measure")))
+        executor._pickup.execute_result = MagicMock(return_value=_pickup_result(*(True, "pickup ok")))
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
         executor._edge_cleanup.should_run_after_xy_rz = MagicMock(return_value=False)
         preparation_patch = patch(
@@ -1800,14 +1813,14 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             control.request_pause()
             return True, "", 3
 
-        executor._paint_contact.execute = MagicMock(side_effect=_contact)
+        executor._paint_contact.execute_result = MagicMock(side_effect=lambda *args, **kwargs: _contact_result(*_contact(*args, **kwargs)))
         thread = threading.Thread(
             target=lambda: result.update(value=executor.execute_paint_process(plan, control=control))
         )
 
         thread.start()
         for _ in range(100):
-            if executor._paint_contact.execute.called and not release_mock.called:
+            if executor._paint_contact.execute_result.called and not release_mock.called:
                 break
             time.sleep(0.01)
 
@@ -1832,9 +1845,9 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         )
         executor._robot_service.execute_ordered_motion_chain = None
         # Use the existing non-combined branch to isolate process control from planning.
-        executor._pickup.build_plan = MagicMock(return_value=SimpleNamespace(contact_mode="height_measure"))
-        executor._pickup.execute = MagicMock(return_value=(True, "pickup ok"))
-        executor._paint_contact.execute = MagicMock(return_value=(True, "", 3))
+        executor._pickup.build_plan_result = MagicMock(return_value=Ready(SimpleNamespace(contact_mode="height_measure")))
+        executor._pickup.execute_result = MagicMock(return_value=_pickup_result(*(True, "pickup ok")))
+        executor._paint_contact.execute_result = MagicMock(return_value=_contact_result(*(True, "", 3)))
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
         executor._edge_cleanup.should_run_after_xy_rz = MagicMock(return_value=False)
         preparation_patch = patch(
@@ -1877,9 +1890,9 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         )
         executor._robot_service.execute_ordered_motion_chain = None
         # Use the existing non-combined branch to isolate process control from planning.
-        executor._pickup.build_plan = MagicMock(return_value=SimpleNamespace(contact_mode="height_measure"))
-        executor._pickup.execute = MagicMock(return_value=(True, "pickup ok"))
-        executor._paint_contact.execute = MagicMock(return_value=(True, "", 3))
+        executor._pickup.build_plan_result = MagicMock(return_value=Ready(SimpleNamespace(contact_mode="height_measure")))
+        executor._pickup.execute_result = MagicMock(return_value=_pickup_result(*(True, "pickup ok")))
+        executor._paint_contact.execute_result = MagicMock(return_value=_contact_result(*(True, "", 3)))
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
         executor._edge_cleanup.should_run_after_xy_rz = MagicMock(return_value=False)
         preparation_patch = patch(
@@ -1933,9 +1946,9 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             paint_process_config_service=config_service,
         )
         # Use the existing non-combined branch to isolate process control from planning.
-        executor._pickup.build_plan = MagicMock(return_value=SimpleNamespace(contact_mode="height_measure"))
-        executor._pickup.execute = MagicMock(return_value=(True, "pickup ok"))
-        executor._paint_contact.execute = MagicMock(return_value=(True, "", 3))
+        executor._pickup.build_plan_result = MagicMock(return_value=Ready(SimpleNamespace(contact_mode="height_measure")))
+        executor._pickup.execute_result = MagicMock(return_value=_pickup_result(*(True, "pickup ok")))
+        executor._paint_contact.execute_result = MagicMock(return_value=_contact_result(*(True, "", 3)))
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
         executor._edge_cleanup.should_run_after_xy_rz = MagicMock(return_value=True)
         executor._edge_cleanup.execute_after_xy_rz_paint = MagicMock(side_effect=_cleanup)
@@ -1965,9 +1978,9 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         )
         executor._robot_service.execute_ordered_motion_chain = None
         # Use the existing non-combined branch to isolate process control from planning.
-        executor._pickup.build_plan = MagicMock(return_value=SimpleNamespace(contact_mode="height_measure"))
-        executor._pickup.execute = MagicMock(return_value=(True, "pickup ok"))
-        executor._paint_contact.execute = MagicMock(return_value=(True, "", 3))
+        executor._pickup.build_plan_result = MagicMock(return_value=Ready(SimpleNamespace(contact_mode="height_measure")))
+        executor._pickup.execute_result = MagicMock(return_value=_pickup_result(*(True, "pickup ok")))
+        executor._paint_contact.execute_result = MagicMock(return_value=_contact_result(*(True, "", 3)))
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
         preparation_patch = patch(
             "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler.execute_dropoff_preparation_for_executor",
@@ -1996,9 +2009,9 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         )
         executor._robot_service.execute_ordered_motion_chain = None
         # Use the existing non-combined branch to isolate process control from planning.
-        executor._pickup.build_plan = MagicMock(return_value=SimpleNamespace(contact_mode="height_measure"))
-        executor._pickup.execute = MagicMock(return_value=(True, "pickup ok"))
-        executor._paint_contact.execute = MagicMock(return_value=(False, "pivot failed", 0))
+        executor._pickup.build_plan_result = MagicMock(return_value=Ready(SimpleNamespace(contact_mode="height_measure")))
+        executor._pickup.execute_result = MagicMock(return_value=_pickup_result(*(True, "pickup ok")))
+        executor._paint_contact.execute_result = MagicMock(return_value=_contact_result(*(False, "pivot failed", 0)))
         plan = _execution_plan({"execution_path": [[0, 0, 0, 0, 0, 0]]})
 
         ok, msg = executor.execute_paint_process(plan)
@@ -2014,9 +2027,9 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         )
         executor._robot_service.execute_ordered_motion_chain = None
         # Use the existing non-combined branch to isolate process control from planning.
-        executor._pickup.build_plan = MagicMock(return_value=SimpleNamespace(contact_mode="height_measure"))
-        executor._pickup.execute = MagicMock(return_value=(True, "pickup ok"))
-        executor._paint_contact.execute = MagicMock(return_value=(True, "", 3))
+        executor._pickup.build_plan_result = MagicMock(return_value=Ready(SimpleNamespace(contact_mode="height_measure")))
+        executor._pickup.execute_result = MagicMock(return_value=_pickup_result(*(True, "pickup ok")))
+        executor._paint_contact.execute_result = MagicMock(return_value=_contact_result(*(True, "", 3)))
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
         preparation_patch = patch(
             "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler.execute_dropoff_preparation_for_executor",

@@ -7,6 +7,8 @@ from time import monotonic, perf_counter, sleep
 
 import numpy as np
 
+from src.robot_systems.paint.processes.paint.results import PaintConfigurationError
+
 from src.engine.geometry.planar import unwrap_degrees
 from src.engine.robot.motion_sequence import (
     OrderedMotionMetadata,
@@ -917,19 +919,27 @@ def _plate_motion_profile(dropoff: object, key: str) -> _PlateMotionProfile:
         required = {"key", "vel_percent", "acc_percent", "blendR", "motion_type"}
         missing = required.difference(raw)
         if missing:
-            raise ValueError(
-                f"dropoff.plate_motion_profiles[{key}] is missing {sorted(missing)}"
+            raise PaintConfigurationError(
+                f"dropoff.plate_motion_profiles[{key}] is missing {sorted(missing)}",
+                stage="plate_motion_profile",
             )
-        return _PlateMotionProfile(
-            velocity_percent=float(raw["vel_percent"]),
-            acceleration_percent=float(raw["acc_percent"]),
-            blend_radius=max(0.0, float(raw["blendR"])),
-            motion_type=_parse_motion_type(
-                raw["motion_type"],
-                field_name=f"dropoff.plate_motion_profiles[{key}]",
-            ),
-        )
-    raise ValueError(f"dropoff.plate_motion_profiles has no profile for '{key}'")
+        try:
+            return _PlateMotionProfile(
+                velocity_percent=float(raw["vel_percent"]),
+                acceleration_percent=float(raw["acc_percent"]),
+                blend_radius=max(0.0, float(raw["blendR"])),
+                motion_type=_parse_motion_type(
+                    raw["motion_type"],
+                    field_name=f"dropoff.plate_motion_profiles[{key}]",
+                ),
+            )
+        except (TypeError, ValueError) as exc:
+            raise PaintConfigurationError(
+                f"dropoff.plate_motion_profiles[{key}]: {exc}", stage="plate_motion_profile",
+            ) from exc
+    raise PaintConfigurationError(
+        f"dropoff.plate_motion_profiles has no profile for '{key}'", stage="plate_motion_profile",
+    )
 
 
 def _plate_ordered_segment(
@@ -1397,6 +1407,42 @@ def _execute_plate_layout_ordered_release(
                 float(waypoint.position[rotation_index]),
             )
             previous_rotation = float(waypoint.position[rotation_index])
+    # Validate the complete exit route before entry motion or physical release.
+    exit_segments = []
+    if use_center_waypoint:
+        exit_segments.append(_plate_ordered_segment(
+            "Plate exit: dropoff to plate center",
+            route_poses["exit_center"],
+            _plate_motion_profile(dropoff, "exit_center"),
+        ))
+    exit_segments.append(_plate_ordered_segment(
+        (
+            "Plate exit: plate center to passage gate"
+            if use_center_waypoint
+            else "Plate exit: dropoff to passage gate"
+        ),
+        route_poses["exit_gate"],
+        _plate_motion_profile(dropoff, "exit_gate"),
+        stop=next_cycle_start is None,
+    ))
+    if next_cycle_start is not None:
+        for index, waypoint in enumerate(next_waypoints):
+            exit_segments.append(_plate_ordered_segment(
+                f"Plate exit: next-cycle waypoint {index + 1}/{len(next_waypoints)}",
+                waypoint.position,
+                waypoint.profile,
+            ))
+        exit_segments.append(_plate_ordered_segment(
+            (
+                f"Plate exit: last waypoint to next-cycle start '{next_cycle_start.group_id}'"
+                if next_waypoints
+                else f"Plate exit: passage gate to next-cycle start '{next_cycle_start.group_id}'"
+            ),
+            route_poses["next_start"],
+            _plate_motion_profile(dropoff, "gate_to_next_start"),
+            stop=True,
+        ))
+
     entry_segments = []
     if entry_completed_in_paint_chain:
         _logger.info("[PLATE_LAYOUT] Plate release pose already reached in paint chain")
@@ -1444,40 +1490,6 @@ def _execute_plate_layout_ordered_release(
     if not ok:
         return False, message
 
-    exit_segments = []
-    if use_center_waypoint:
-        exit_segments.append(_plate_ordered_segment(
-            "Plate exit: dropoff to plate center",
-            route_poses["exit_center"],
-            _plate_motion_profile(dropoff, "exit_center"),
-        ))
-    exit_segments.append(_plate_ordered_segment(
-        (
-            "Plate exit: plate center to passage gate"
-            if use_center_waypoint
-            else "Plate exit: dropoff to passage gate"
-        ),
-        route_poses["exit_gate"],
-        _plate_motion_profile(dropoff, "exit_gate"),
-        stop=next_cycle_start is None,
-    ))
-    if next_cycle_start is not None:
-        for index, waypoint in enumerate(next_waypoints):
-            exit_segments.append(_plate_ordered_segment(
-                f"Plate exit: next-cycle waypoint {index + 1}/{len(next_waypoints)}",
-                waypoint.position,
-                waypoint.profile,
-            ))
-        exit_segments.append(_plate_ordered_segment(
-            (
-                f"Plate exit: last waypoint to next-cycle start '{next_cycle_start.group_id}'"
-                if next_waypoints
-                else f"Plate exit: passage gate to next-cycle start '{next_cycle_start.group_id}'"
-            ),
-            route_poses["next_start"],
-            _plate_motion_profile(dropoff, "gate_to_next_start"),
-            stop=True,
-        ))
     if not executor._motion.move_ordered_pickup_sequence(
         "Plate-layout ordered exit chain", exit_segments
     ):

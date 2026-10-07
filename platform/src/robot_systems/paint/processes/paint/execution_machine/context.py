@@ -6,6 +6,9 @@ from time import perf_counter
 from typing import Callable
 
 from src.robot_systems.paint.processes.paint.tray_dry.errors import TrayFailure
+from src.robot_systems.paint.processes.paint.results import (
+    PaintFailure, PaintFailureCode, PaintOperationResult, PaintOutcome,
+)
 
 from src.robot_systems.paint.processes.paint.config import PaintMagazineLoadConfig, PaintProcessConfig
 from src.robot_systems.paint.processes.paint.execution_control import PaintExecutionControl
@@ -34,8 +37,8 @@ class PaintExecutionContext:
     resume_state: PaintExecutionState | None = None
     is_resuming: bool = False
     tray_failure: TrayFailure | None = None
-    result_ok: bool = False
-    result_message: str = "Paint process stopped"
+    result: PaintOperationResult = field(default_factory=lambda: PaintOperationResult(
+        PaintOutcome.CANCELLED, "Paint process stopped"))
     total_started_at: float = field(default_factory=perf_counter)
     snapshot: object | None = None
     contour: object | None = None
@@ -48,7 +51,7 @@ class PaintExecutionContext:
     paint_timing_recorder: object | None = None
     state_timing_recorder: object | None = None
     paint_total_waypoints: int = 0
-    paint_ordered_result: tuple[bool, str, int] | None = None
+    paint_ordered_result: PaintOperationResult | None = None
     paint_contact_executed_in_ordered_chain: bool = False
     paint_motion_active: bool = False
     cycle_start_unwind_completed: bool = False
@@ -96,9 +99,36 @@ class PaintExecutionContext:
         self.resume_retry_available = False
         return True
 
+    @property
+    def result_ok(self) -> bool:
+        return self.result.completed
+
+    @property
+    def result_message(self) -> str:
+        return self.result.message
+
+    @property
+    def operation_failure(self) -> PaintFailure | None:
+        return self.result.failure
+
+    @operation_failure.setter
+    def operation_failure(self, failure: PaintFailure) -> None:
+        self.set_outcome(PaintOperationResult(PaintOutcome.FAILED, failure.message, failure))
+
+    def set_outcome(self, result: PaintOperationResult) -> None:
+        self.result = result
+
     def set_result(self, ok: bool, message: str) -> None:
-        self.result_ok = bool(ok)
-        self.result_message = str(message or "")
+        """Adapter for handlers with simple completion/failure contracts."""
+        text = str(message or "")
+        if ok:
+            self.set_outcome(PaintOperationResult(PaintOutcome.COMPLETED, text, stop_reason=self.result.stop_reason))
+        else:
+            failure = self.operation_failure or PaintFailure(
+                PaintFailureCode.MOTION,
+                self.current_state.name.lower() if self.current_state else "paint_cycle", text,
+            )
+            self.set_outcome(PaintOperationResult(PaintOutcome.FAILED, text, failure))
 
     def snapshot_dict(self) -> dict:
         return {
@@ -107,6 +137,11 @@ class PaintExecutionContext:
             "resume_state": None if self.resume_state is None else self.resume_state.name,
             "stop_requested": self.should_stop(),
             "run_allowed": self.run_allowed.is_set(),
+            "outcome": self.result.outcome.value,
+            "failure_code": None if self.result.failure is None else self.result.failure.code.value,
+            "failure_stage": None if self.result.failure is None else self.result.failure.stage,
+            "backend_code": None if self.result.failure is None else self.result.failure.backend_code,
+            "stop_reason": None if self.result.stop_reason is None else self.result.stop_reason.value,
             "result_ok": self.result_ok,
             "result_message": self.result_message,
             "cycle_index": self.cycle_index,

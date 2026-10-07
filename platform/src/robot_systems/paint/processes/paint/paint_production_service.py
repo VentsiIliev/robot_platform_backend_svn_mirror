@@ -6,6 +6,10 @@ import threading
 from time import monotonic, perf_counter, sleep
 from typing import Callable, Optional
 
+from src.robot_systems.paint.processes.paint.results import (
+    PaintFailure, PaintFailureCode, PaintOperationResult, PaintOutcome,
+)
+
 from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
 from src.robot_systems.paint.processes.paint.execution_control import PaintExecutionControl
 from src.robot_systems.paint.processes.paint.dashboard_live_view_events import (
@@ -68,7 +72,7 @@ class PaintProductionService:
         self._path_preparation_service = path_preparation_service
         self._path_executor = path_executor
         self._plate_layout_service = plate_layout_service
-        self.last_failure: TrayFailure | None = None
+        self.last_failure: TrayFailure | PaintFailure | None = None
         self._vacuum_pump = vacuum_pump
         self._paint_process_config_service = paint_process_config_service
         self._magazine_load_service = magazine_load_service
@@ -130,19 +134,32 @@ class PaintProductionService:
                 self._active_execution_context is None
                 and context is not None
                 and context.raw_workpiece is None
-                and str(context.workpiece_description).startswith("Unknown workpiece")
+                and context.result.outcome is PaintOutcome.UNMATCHED
                 and not context.magazine_stage_only
                 and context.cached_workpiece_contour is None
             )
 
     def run_once(
+        self, stop_requested: Optional[Callable[[], bool]] = None, *,
+        manual_single_cycle: bool = False, adjustment_session=None,
+        retry_unmatched_workpiece: bool = False,
+    ) -> tuple[bool, str]:
+        """Legacy production adapter; normal exhaustion is successful termination."""
+        result = self.run_once_result(
+            stop_requested, manual_single_cycle=manual_single_cycle,
+            adjustment_session=adjustment_session,
+            retry_unmatched_workpiece=retry_unmatched_workpiece,
+        )
+        return result.as_legacy_pair()
+
+    def run_once_result(
         self,
         stop_requested: Optional[Callable[[], bool]] = None,
         *,
         manual_single_cycle: bool = False,
         adjustment_session=None,
         retry_unmatched_workpiece: bool = False,
-    ) -> tuple[bool, str]:
+    ) -> PaintOperationResult:
         """Run production, optionally forcing one calibration-table cycle without magazine load."""
         self.last_failure = None
         self.ensure_tray_ready_for_start()
@@ -152,14 +169,14 @@ class PaintProductionService:
         process_config_result = self._get_process_config()
 
         if not process_config_result[0]:
-            return False, process_config_result[1]
+            return PaintOperationResult.failed(PaintFailureCode.INVALID_CONFIGURATION, 'process_settings', process_config_result[1])
 
         process_config = process_config_result[2]
         magazine_config = process_config.magazine_load if process_config is not None else None
         if retry_unmatched_workpiece:
             if not self.can_retry_unmatched_workpiece():
-                return False, "No unmatched workpiece is ready for recapture"
-            return self._run_single_cycle(
+                return PaintOperationResult.failed(PaintFailureCode.UNAVAILABLE, 'workpiece_recapture', 'No unmatched workpiece is ready for recapture')
+            return self.run_cycle_result(
                 should_stop,
                 process_config=process_config,
                 magazine_config=None,
@@ -169,11 +186,11 @@ class PaintProductionService:
             )
         if manual_single_cycle or adjustment_session is not None:
             if magazine_config is None:
-                return False, "Paint magazine calibration settings are unavailable"
+                return PaintOperationResult.failed(PaintFailureCode.UNAVAILABLE, "calibration_navigation", "Paint magazine calibration settings are unavailable")
             ok, msg = self._move_to_calibration_before_manual_cycle(magazine_config, should_stop)
             if not ok:
-                return False, msg
-            ok, msg = self._run_single_cycle(
+                return PaintOperationResult.failed(PaintFailureCode.MOTION, 'run_once_result', msg)
+            result = self.run_cycle_result(
                 should_stop,
                 process_config=process_config,
                 magazine_config=None,
@@ -182,7 +199,7 @@ class PaintProductionService:
                 retry_capture_until_workpiece=True,
                 adjustment_session=adjustment_session,
             )
-            return ok, msg
+            return result
         run_while_found = bool(
             (process_config or PAINT_PROCESS_CONFIG).run_while_workpiece_found
         )
@@ -195,31 +212,28 @@ class PaintProductionService:
                 magazine_config.processing_strategy == MAGAZINE_PROCESSING_STRATEGY_BATCH_NESTING
             ):
                 if pickup_mode != MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN:
-                    return False, (
-                        "Batch nesting currently requires the auto-discovery "
-                        "sensor-controlled magazine pickup mode"
-                    )
-                return self._run_magazine_batch_loop(
+                    return PaintOperationResult.failed(PaintFailureCode.INVALID_CONFIGURATION, 'magazine_settings', 'Batch nesting currently requires the auto-discovery sensor-controlled magazine pickup mode')
+                return self._run_magazine_batch_loop_result(
                     magazine_config,
                     process_config,
                     should_stop,
                     fixed_sources=fixed_sources,
                 )
             if pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN and not fixed_sources:
-                return False, "No fixed magazines are enabled"
+                return PaintOperationResult.failed(PaintFailureCode.INVALID_CONFIGURATION, 'magazine_settings', 'No fixed magazines are enabled')
             if (
                 run_while_found
                 or pickup_mode
                 == MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN
             ):
-                return self._run_magazine_loop(
+                return self._run_magazine_loop_result(
                     magazine_config,
                     process_config,
                     should_stop,
                     fixed_sources=fixed_sources,
                 )
 
-            ok, msg = self._run_single_cycle(
+            result = self.run_cycle_result(
                 should_stop,
                 process_config=process_config,
                 magazine_config=magazine_config,
@@ -227,26 +241,32 @@ class PaintProductionService:
                 magazine_source=fixed_sources[0] if fixed_sources else None,
                 cycle_index=1,
             )
+            ok, msg = result.completed, result.message
 
-            if not ok and msg == NO_WORKPIECE_AT_MAGAZINE:
-                return True, NO_WORKPIECE_AT_MAGAZINE
-            return ok, msg
+            if result.outcome is PaintOutcome.NO_WORKPIECE:
+                return PaintOperationResult(PaintOutcome.COMPLETED, NO_WORKPIECE_AT_MAGAZINE, stop_reason=PaintOutcome.NO_WORKPIECE)
+            return result
 
         if run_while_found and magazine_config is not None:
-            return self._run_manual_loop(magazine_config, process_config, should_stop)
+            return self._run_manual_loop_result(magazine_config, process_config, should_stop)
 
         if magazine_config is not None:
             ok, msg = self._move_to_calibration_before_manual_cycle(magazine_config, should_stop)
             if not ok:
-                return False, msg
-        return self._run_single_cycle(
+                return PaintOperationResult.failed(PaintFailureCode.MOTION, 'run_once_result', msg)
+        return self.run_cycle_result(
             should_stop,
             process_config=process_config,
             magazine_config=None,
             cycle_index=1,
         )
 
-    def _run_manual_loop(self, magazine_config, process_config, should_stop: Callable[[], bool]) -> tuple[bool, str]:
+    def _run_manual_loop(self, *args, **kwargs) -> tuple[bool, str]:
+        """Compatibility adapter for normal production-loop termination."""
+        result = self._run_manual_loop_result(*args, **kwargs)
+        return result.as_legacy_pair()
+
+    def _run_manual_loop_result(self, magazine_config, process_config, should_stop: Callable[[], bool]) -> PaintOperationResult:
         total_start = perf_counter()
         completed_cycles = 0
         while not should_stop():
@@ -258,15 +278,16 @@ class PaintProductionService:
                     success=False,
                     completed_cycles=completed_cycles,
                 )
-                return False, msg
-            ok, msg = self._run_single_cycle(
+                return PaintOperationResult.failed(PaintFailureCode.MOTION, '_run_manual_loop', msg)
+            result = self.run_cycle_result(
                 should_stop,
                 process_config=process_config,
                 magazine_config=None,
                 cycle_index=completed_cycles + 1,
                 repeats_after_success=True,
             )
-            if not ok and msg == "No usable contour detected":
+            ok, msg = result.completed, result.message
+            if result.outcome is PaintOutcome.NO_WORKPIECE:
                 self._log_phase_timing(
                     "manual_loop_total",
                     total_start,
@@ -274,10 +295,10 @@ class PaintProductionService:
                     completed_cycles=completed_cycles,
                 )
                 if completed_cycles == 0:
-                    return True, "No usable contour detected"
-                return True, f"No workpiece detected after {completed_cycles} paint cycle(s)"
-            if not ok and msg == "Drop-off plate is full":
-                return True, msg
+                    return PaintOperationResult(PaintOutcome.COMPLETED, 'No usable contour detected', stop_reason=PaintOutcome.NO_WORKPIECE)
+                return PaintOperationResult(PaintOutcome.COMPLETED, f'No workpiece detected after {completed_cycles} paint cycle(s)', stop_reason=PaintOutcome.NO_WORKPIECE)
+            if result.outcome is PaintOutcome.TRAY_FULL:
+                return PaintOperationResult(PaintOutcome.COMPLETED, msg, stop_reason=PaintOutcome.TRAY_FULL)
             if not ok:
                 self._log_phase_timing(
                     "manual_loop_total",
@@ -285,12 +306,12 @@ class PaintProductionService:
                     success=False,
                     completed_cycles=completed_cycles,
                 )
-                return False, msg
+                return result
             completed_cycles += 1
             if process_config.stop_after_calibration_pickup:
-                return True, msg
-            if msg == "Drop-off plate has no space for another workpiece of the same footprint":
-                return True, msg
+                return result
+            if result.stop_reason is PaintOutcome.TRAY_FULL:
+                return result
         self._log_phase_timing(
             "manual_loop_total",
             total_start,
@@ -298,16 +319,21 @@ class PaintProductionService:
             stopped=True,
             completed_cycles=completed_cycles,
         )
-        return False, "Paint process stopped"
+        return PaintOperationResult(PaintOutcome.CANCELLED, 'Paint process stopped')
 
-    def _run_magazine_loop(
+    def _run_magazine_loop(self, *args, **kwargs) -> tuple[bool, str]:
+        """Compatibility adapter for normal production-loop termination."""
+        result = self._run_magazine_loop_result(*args, **kwargs)
+        return result.as_legacy_pair()
+
+    def _run_magazine_loop_result(
         self,
         magazine_config,
         process_config,
         should_stop: Callable[[], bool],
         *,
         fixed_sources: tuple[dict, ...] | None = None,
-    ) -> tuple[bool, str]:
+    ) -> PaintOperationResult:
         total_start = perf_counter()
         completed_cycles = 0
         sources = fixed_sources if fixed_sources is not None else self._fixed_magazine_sources(magazine_config)
@@ -328,7 +354,7 @@ class PaintProductionService:
                 else self._magazine_source_group(active_source, magazine_config)
             )
             self._last_execution_context = None
-            ok, msg = self._run_single_cycle(
+            result = self.run_cycle_result(
                 should_stop,
                 process_config=process_config,
                 magazine_config=magazine_config,
@@ -341,6 +367,7 @@ class PaintProductionService:
                 magazine_discovery_active_contour=discovery_active_contour,
                 magazine_discovery_snapshot=discovery_snapshot,
             )
+            ok, msg = result.completed, result.message
 
             context = self._last_execution_context
             if auto_discovery and context is not None:
@@ -348,7 +375,7 @@ class PaintProductionService:
                 discovery_active_contour = context.magazine_discovery_active_contour
                 discovery_snapshot = context.magazine_snapshot
 
-            if not ok and msg == NO_WORKPIECE_AT_MAGAZINE:
+            if result.outcome is PaintOutcome.NO_WORKPIECE:
                 if auto_discovery:
                     if context is not None and context.magazine_discovery_empty_capture:
                         self._log_phase_timing(
@@ -357,7 +384,7 @@ class PaintProductionService:
                             success=True,
                             completed_cycles=completed_cycles,
                         )
-                        return True, MAGAZINE_EMPTY
+                        return PaintOperationResult(PaintOutcome.COMPLETED, MAGAZINE_EMPTY, stop_reason=PaintOutcome.NO_WORKPIECE)
                     discovery_active_contour = None
                     active_magazine_config = (
                         context.magazine_config
@@ -395,9 +422,9 @@ class PaintProductionService:
                     "[MAGAZINE_LOAD] All %d configured magazine(s) are empty",
                     len(sources) or 1,
                 )
-                return True, ALL_MAGAZINES_EMPTY
-            if not ok and msg == "Drop-off plate is full":
-                return True, msg
+                return PaintOperationResult(PaintOutcome.COMPLETED, ALL_MAGAZINES_EMPTY, stop_reason=PaintOutcome.NO_WORKPIECE)
+            if result.outcome is PaintOutcome.TRAY_FULL:
+                return PaintOperationResult(PaintOutcome.COMPLETED, msg, stop_reason=PaintOutcome.TRAY_FULL)
             if not ok:
                 self._log_phase_timing(
                     "magazine_loop_total",
@@ -405,7 +432,7 @@ class PaintProductionService:
                     success=False,
                     completed_cycles=completed_cycles,
                 )
-                return False, msg
+                return result
             completed_cycles += 1
             active_magazine_config = (
                 context.magazine_config
@@ -421,10 +448,10 @@ class PaintProductionService:
                     "so the magazine is recaptured before the next pickup"
                 )
             if process_config.stop_after_calibration_pickup:
-                return True, msg
+                return result
             consecutive_empty_groups = 0
-            if msg == "Drop-off plate has no space for another workpiece of the same footprint":
-                return True, msg
+            if result.stop_reason is PaintOutcome.TRAY_FULL:
+                return result
         self._log_phase_timing(
             "magazine_loop_total",
             total_start,
@@ -432,16 +459,21 @@ class PaintProductionService:
             stopped=True,
             completed_cycles=completed_cycles,
         )
-        return False, "Paint process stopped"
+        return PaintOperationResult(PaintOutcome.CANCELLED, 'Paint process stopped')
 
-    def _run_magazine_batch_loop(
+    def _run_magazine_batch_loop(self, *args, **kwargs) -> tuple[bool, str]:
+        """Compatibility adapter for normal production-loop termination."""
+        result = self._run_magazine_batch_loop_result(*args, **kwargs)
+        return result.as_legacy_pair()
+
+    def _run_magazine_batch_loop_result(
         self,
         magazine_config,
         process_config,
         should_stop: Callable[[], bool],
         *,
         fixed_sources: tuple[dict, ...] | None = None,
-    ) -> tuple[bool, str]:
+    ) -> PaintOperationResult:
         """Fill the paint work area, then process one cached capture as a batch."""
         completed = 0
         discovery_contours: list = []
@@ -461,7 +493,7 @@ class PaintProductionService:
                     else self._magazine_source_group(source, magazine_config)
                 )
                 self._last_execution_context = None
-                ok, message = self._run_single_cycle(
+                result = self.run_cycle_result(
                     should_stop,
                     process_config=process_config,
                     magazine_config=magazine_config,
@@ -474,13 +506,14 @@ class PaintProductionService:
                     magazine_discovery_snapshot=discovery_snapshot,
                     magazine_stage_only=True,
                 )
+                ok, message = result.completed, result.message
                 context = self._last_execution_context
                 if context is not None:
                     discovery_contours = list(context.magazine_discovery_contours)
                     discovery_active = context.magazine_discovery_active_contour
                     discovery_snapshot = context.magazine_snapshot
                 if not ok:
-                    if message == NO_WORKPIECE_AT_MAGAZINE:
+                    if result.outcome is PaintOutcome.NO_WORKPIECE:
                         discovery_active = None
                         active_magazine_config = (
                             context.magazine_config
@@ -496,9 +529,9 @@ class PaintProductionService:
                                 "is recaptured"
                             )
                         break
-                    if "no space for another staged workpiece" in message.lower():
+                    if result.outcome is PaintOutcome.WORK_AREA_FULL:
                         break
-                    return False, message
+                    return result
                 staged += 1
                 active_magazine_config = (
                     context.magazine_config
@@ -517,25 +550,25 @@ class PaintProductionService:
                     break
 
             if should_stop():
-                return False, "Paint process stopped"
+                return PaintOperationResult(PaintOutcome.CANCELLED, 'Paint process stopped')
             if staged == 0:
                 if context is not None and context.magazine_discovery_empty_capture:
-                    return True, MAGAZINE_EMPTY
+                    return PaintOperationResult(PaintOutcome.COMPLETED, MAGAZINE_EMPTY, stop_reason=PaintOutcome.NO_WORKPIECE)
                 continue
 
             ok, message = self._move_to_calibration_before_manual_cycle(
                 magazine_config, should_stop
             )
             if not ok:
-                return False, message
+                return PaintOperationResult.failed(PaintFailureCode.MOTION, '_run_magazine_batch_loop', message)
             snapshot = self._capture_snapshot_service.capture_snapshot(source="paint_batch_staging")
             contours = list(snapshot.contours or ())
             if not contours:
-                return False, "Batch nesting staged workpieces but calibration capture found none"
+                return PaintOperationResult.failed(PaintFailureCode.MOTION, '_run_magazine_batch_loop', 'Batch nesting staged workpieces but calibration capture found none')
             _logger.info("[BATCH_NESTING] captured staged batch workpieces=%d", len(contours))
             for index, contour in enumerate(contours):
                 remaining = index + 1 < len(contours)
-                ok, message = self._run_single_cycle(
+                result = self.run_cycle_result(
                     should_stop,
                     process_config=process_config,
                     magazine_config=None,
@@ -545,11 +578,12 @@ class PaintProductionService:
                     cached_workpiece_contour=contour,
                     suppress_magazine_load=True,
                 )
+                ok, message = result.completed, result.message
                 if not ok:
-                    return False, message
+                    return result
                 completed += 1
             self._magazine_load_service.clear_work_area_nesting()
-        return False, "Paint process stopped"
+        return PaintOperationResult(PaintOutcome.CANCELLED, 'Paint process stopped')
 
     @staticmethod
     def _fixed_magazine_groups(magazine_config) -> tuple[str, ...]:
@@ -574,7 +608,11 @@ class PaintProductionService:
             raise ValueError("Fixed magazine source movement_group_id cannot be empty")
         return group_id
 
-    def _run_single_cycle(
+    def _run_single_cycle(self, should_stop: Callable[[], bool], **kwargs) -> tuple[bool, str]:
+        """Legacy single-cycle adapter; internal orchestration uses run_cycle_result."""
+        return self.run_cycle_result(should_stop, **kwargs).as_legacy_pair()
+
+    def run_cycle_result(
         self,
         should_stop: Callable[[], bool],
         *,
@@ -595,7 +633,7 @@ class PaintProductionService:
         retry_capture_until_workpiece: bool = False,
         adjustment_session=None,
         initial_state: PaintExecutionState = PaintExecutionState.STARTING,
-    ) -> tuple[bool, str]:
+    ) -> PaintOperationResult:
         raw_process_config = process_config or PAINT_PROCESS_CONFIG
         process_config = scale_paint_process_accelerations(raw_process_config)
         if self._paint_process_config_service is not None:
@@ -604,7 +642,7 @@ class PaintProductionService:
                 process_config = scale_paint_process_accelerations(raw_process_config)
             except Exception:
                 _logger.exception("Failed to capture settings for paint cycle %d", cycle_index)
-                return False, "Failed to read paint process settings"
+                return PaintOperationResult.failed(PaintFailureCode.INVALID_CONFIGURATION, 'process_settings', 'Failed to read paint process settings')
         latest_magazine_config = process_config.magazine_load
         if latest_magazine_config is not None and not suppress_magazine_load:
             magazine_config = latest_magazine_config
@@ -662,15 +700,16 @@ class PaintProductionService:
                     self._active_execution_context = None
             self._path_executor.set_cycle_dropoff_strategy(None)
 
-        self.last_failure = context.tray_failure
+        self.last_failure = context.tray_failure or context.operation_failure
         snapshot = machine.get_snapshot()
         if snapshot.last_error is not None:
             self._clear_prepositioned_start_group()
             self._restore_brightness()
             self._set_dashboard_live_view_paused(False, reason="paint cycle finished")
-            return False, snapshot.last_error
+            return context.result if context.result.failure else PaintOperationResult.failed(
+                PaintFailureCode.INTERNAL, 'paint_cycle', snapshot.last_error)
 
-        return context.result_ok, context.result_message
+        return context.result
 
     @staticmethod
     def _effective_dropoff_strategy(process_config, cycle_index: int) -> str | None:
