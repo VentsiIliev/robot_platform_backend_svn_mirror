@@ -12,8 +12,8 @@ class PeripheralBinding:
 
     slave_id: int
     enabled: bool = True
-    inputs: dict[str, str] = field(default_factory=dict)
-    outputs: dict[str, str] = field(default_factory=dict)
+    inputs: dict[str, int | str] = field(default_factory=dict)
+    outputs: dict[str, int | str] = field(default_factory=dict)
     commands: dict[str, int] = field(default_factory=dict)
     statuses: dict[str, int] = field(default_factory=dict)
 

@@ -284,3 +284,5 @@ device's own `read_state()` when callable.
 
 [Complete source index](../../../SOURCE_INDEX.md).
 <!-- source-navigation:end -->
+
+Sensor binding inputs/outputs support directly constructed integer addresses and string addresses/labels. Sensor selection gives input precedence and falls back to output only when input is absent (`None`); integer zero is preserved. Saved bindings retain existing deserialization into strings, so persisted numeric zero continues to become `"0"`. Paint sensor construction and the sensor runner use the same precedence.

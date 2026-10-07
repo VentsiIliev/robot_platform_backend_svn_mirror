@@ -185,7 +185,9 @@ def build_vacuum_sensor_service(ctx):
         binding = peripheral_config.peripherals.get("vacuum_sensor")
         if binding is None:
             return None
-        sensor_register = binding.inputs.get("sensor") or binding.outputs.get("sensor")
+        sensor_register = binding.inputs.get("sensor")
+        if sensor_register is None:
+            sensor_register = binding.outputs.get("sensor")
         if sensor_register is None:
             return None
         slave_name = modbus_config.find_slave_name(binding.slave_id)

@@ -29,7 +29,7 @@ READ_COUNT = 100000
 READ_DELAY_S = 0.1
 
 
-def _build_sensor() -> tuple[VacuumSensorService, object, str, int, object]:
+def _build_sensor() -> tuple[VacuumSensorService, object, int | str, int, object]:
     modbus_config = _load_modbus_config(MODBUS_CONFIG_PATH)
     peripherals = _load_peripherals(PERIPHERALS_CONFIG_PATH)
     sensor = peripherals.get("vacuum_sensor")
@@ -38,7 +38,9 @@ def _build_sensor() -> tuple[VacuumSensorService, object, str, int, object]:
             f"vacuum_sensor is missing or disabled in {PERIPHERALS_CONFIG_PATH}"
         )
 
-    sensor_point = sensor.inputs.get("sensor") or sensor.outputs.get("sensor")
+    sensor_point = sensor.inputs.get("sensor")
+    if sensor_point is None:
+        sensor_point = sensor.outputs.get("sensor")
     if sensor_point is None:
         raise RuntimeError(
             f"vacuum_sensor has no inputs.sensor/output.sensor in {PERIPHERALS_CONFIG_PATH}"
@@ -48,7 +50,7 @@ def _build_sensor() -> tuple[VacuumSensorService, object, str, int, object]:
     connection = modbus_config.get_connection(slave_name)
     address = (
         XinjeMA8X8YR.resolve_input(sensor_point)
-        if sensor_point.upper().startswith("X")
+        if isinstance(sensor_point, str) and sensor_point.strip().upper().startswith("X")
         else XinjeMA8X8YR.resolve_output(sensor_point)
     )
     print(
