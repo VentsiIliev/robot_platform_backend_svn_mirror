@@ -8,6 +8,7 @@ Generated from Python ASTs. Signatures, declared defaults, imports and docstring
 
 - [__init__.py](#__init__py)
 - [plate_layout.py](#plate_layoutpy)
+- [errors.py](../../../../../../src/robot_systems/paint/processes/paint/tray_dry/errors.py) — typed tray failure codes, records and actionable exceptions.
 
 ## `__init__.py`
 
@@ -144,3 +145,5 @@ def _layout_signature(config, corners) -> tuple
 ```python
 def _rectangles_overlap(candidate: tuple[float, float, float, float], item: PlatePlacement, *, spacing_x: float=0.0, spacing_y: float=0.0) -> bool
 ```
+
+Readiness additions: `TrayReadiness.UNKNOWN` / `READY`, `PlateLayoutService.readiness`, and `ensure_ready(config=None)`. `clear()` records an explicit empty-tray confirmation and rejects pending reservations. See the package guide for the confirmation workflow.

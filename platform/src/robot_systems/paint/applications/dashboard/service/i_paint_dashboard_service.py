@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from src.robot_systems.paint.applications.dashboard.dashboard_state import DashboardState
+from src.robot_systems.paint.processes.paint.tray_dry.errors import TrayFailure
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,11 @@ class DashboardCommandResult:
     message: str
     device_id: str | None = None
     enabled: bool | None = None
+    failure: TrayFailure | None = None
+
+    def __post_init__(self) -> None:
+        if self.success and self.failure is not None:
+            raise ValueError("A successful dashboard command cannot contain a failure")
 
 
 class IPaintDashboardService(ABC):
@@ -96,6 +102,9 @@ class IPaintDashboardService(ABC):
 
     @abstractmethod
     def get_plate_layout_state(self) -> dict[str, object]: ...
+
+    @abstractmethod
+    def confirm_empty_tray(self) -> DashboardCommandResult: ...
 
     @abstractmethod
     def clear_plate_layout(self) -> DashboardCommandResult: ...

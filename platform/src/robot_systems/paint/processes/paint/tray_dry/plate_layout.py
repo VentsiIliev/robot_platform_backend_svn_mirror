@@ -5,6 +5,15 @@ from datetime import datetime
 import math
 from threading import RLock
 from typing import Callable
+from enum import StrEnum
+
+from .errors import TrayBusyError, TrayConfirmationRequiredError, TrayLayoutChangedError
+from src.robot_systems.paint.processes.paint.config import PaintDropoffConfig
+
+
+class TrayReadiness(StrEnum):
+    UNKNOWN = "unknown"
+    READY = "ready"
 
 
 @dataclass(frozen=True)
@@ -41,6 +50,7 @@ class PlateLayoutService:
         self._lock = RLock()
         self._clock = clock or (lambda: datetime.now().astimezone())
         self._signature: tuple | None = None
+        self._readiness = TrayReadiness.UNKNOWN
         self._next_left_mm = 0.0
         self._row_bottom_mm = 0.0
         self._row_height_mm = 0.0
@@ -52,6 +62,22 @@ class PlateLayoutService:
         self._spacing_y_mm = 0.0
         self._placements: list[PlatePlacement] = []
         self._next_placement_id = 1
+
+    @property
+    def readiness(self) -> TrayReadiness:
+        with self._lock:
+            return self._readiness
+
+    def ensure_ready(self, config: PaintDropoffConfig | None = None) -> None:
+        """Reject unknown occupancy or changed geometry without discarding it."""
+        with self._lock:
+            if self._readiness is TrayReadiness.UNKNOWN:
+                raise TrayConfirmationRequiredError()
+            if config is not None and self._signature is not None:
+                corners, error = validate_plate_corners(config.plate_corners)
+                if not error and _layout_signature(config, corners) != self._signature:
+                    if self._placements or self._pending is not None:
+                        raise TrayLayoutChangedError()
 
     @property
     def pending(self) -> PlateDropoffReservation | None:
@@ -66,6 +92,7 @@ class PlateLayoutService:
             height = _average_edge_length(corners[0], corners[3], corners[1], corners[2]) if corners else 0.0
             pending = self._pending
             return {
+                "readiness": self._readiness.value,
                 "width_mm": width,
                 "height_mm": height,
                 "placements": [
@@ -87,7 +114,12 @@ class PlateLayoutService:
             }
 
     def clear(self) -> None:
+        """Confirm a physically empty tray; callers must obtain operator approval."""
         with self._lock:
+            if self._pending is not None:
+                raise TrayBusyError()
+            self._readiness = TrayReadiness.READY
+            self._signature = None
             self._placements.clear()
             self._pending = None
             self._next_left_mm = self._margin_left_mm
@@ -134,6 +166,7 @@ class PlateLayoutService:
         pose_calculator, outlines_mm=(),
         paint_passes=(),
     ) -> tuple[PlateDropoffReservation | None, str]:
+        self.ensure_ready(config)
         corners, error = validate_plate_corners(config.plate_corners)
         if error:
             return None, error

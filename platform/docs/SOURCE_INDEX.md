@@ -524,7 +524,7 @@ Every Python file is parsed without executing it, including vendor code, demos a
 | `src/robot_systems/paint/processes/paint/motion` | [Guide](robot_systems/paint/processes/paint/motion/README.md) | 4 |
 | `src/robot_systems/paint/processes/paint/plan` | [Guide](robot_systems/paint/processes/paint/plan/README.md) | 6 |
 | `src/robot_systems/paint/processes/paint/plan/paint_contact_motion` | [Guide](robot_systems/paint/processes/paint/plan/paint_contact_motion/README.md) | 3 |
-| `src/robot_systems/paint/processes/paint/tray_dry` | [Guide](robot_systems/paint/processes/paint/tray_dry/README.md) | 2 |
+| `src/robot_systems/paint/processes/paint/tray_dry` | [Guide](robot_systems/paint/processes/paint/tray_dry/README.md) | 3 |
 | `src/robot_systems/paint/storage` | [Guide](robot_systems/paint/storage/README.md) | 0 |
 | `src/robot_systems/paint/storage/settings` | [Guide](robot_systems/paint/storage/settings/README.md) | 0 |
 | `src/robot_systems/paint/storage/settings/dryer` | [Guide](robot_systems/paint/storage/settings/dryer/README.md) | 0 |

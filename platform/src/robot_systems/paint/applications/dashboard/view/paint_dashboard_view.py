@@ -1340,6 +1340,19 @@ class PaintDashboardView(IApplicationView):
         if self._quick_access is not None:
             self._quick_access.set_drying_mode_busy(busy)
 
+    def ask_empty_tray_confirmation(self) -> bool:
+        action = show_styled_warning(
+            self,
+            self._translate_text("Tray Readiness"),
+            self._translate_text("Confirm that the tray is physically empty before starting."),
+            heading=self._translate_text("Tray occupancy is unknown"),
+            actions=(
+                DialogAction("cancel", self._translate_text("Cancel")),
+                DialogAction("confirm_empty", self._translate_text("Tray is empty — Start"), primary=True),
+            ),
+        )
+        return action == "confirm_empty"
+
     def ask_production_start_confirmation(self, title: str, message: str) -> bool:
         return ask_yes_no(self, title, message, default_no=True)
 
@@ -1533,7 +1546,10 @@ class PaintDashboardView(IApplicationView):
         self.set_unmatched_paint_settings_editable(settings_editable)
         self.set_acceleration_scale_editable(settings_editable)
         if self._plate_layout is not None:
-            tray_editable = state.process_state in ("idle", "stopped", "error")
+            tray_editable = (
+                state.process_state in ("idle", "stopped", "error")
+                and not state.is_stopping
+            )
             self._plate_layout.set_editable(
                 tray_editable,
                 removal_editable=True,

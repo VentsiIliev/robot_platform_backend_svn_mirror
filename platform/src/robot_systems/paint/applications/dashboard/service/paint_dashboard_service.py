@@ -24,6 +24,10 @@ from src.robot_systems.paint.applications.dashboard.service.i_paint_dashboard_se
     IPaintDashboardService,
 )
 
+from src.robot_systems.paint.processes.paint.tray_dry.errors import (
+    TrayError, TrayBusyError, TrayUnavailableError,
+)
+
 
 class PaintDashboardService(IPaintDashboardService):
 
@@ -100,6 +104,7 @@ class PaintDashboardService(IPaintDashboardService):
             process_card = replace(process_card, note=status_lines[0])
         return DashboardState(
             process_state=process_state,
+            is_stopping=is_stopping,
             mode_label="Paint Mode",
             active_job_label=self._active_job_label(process_state),
             status_lines=status_lines,
@@ -118,6 +123,11 @@ class PaintDashboardService(IPaintDashboardService):
         )
 
     def start(self) -> None:
+        if self.get_drying_mode() in {"manual", "demo"}:
+            if self._plate_layout_service is None:
+                raise TrayUnavailableError()
+            config = self._paint_process_config_service.get_snapshot().dropoff
+            self._plate_layout_service.ensure_ready(config)
         self._process.start()
 
     def stop(self) -> None:
@@ -430,14 +440,20 @@ class PaintDashboardService(IPaintDashboardService):
         config = self._paint_process_config_service.get_snapshot().dropoff
         return self._plate_layout_service.snapshot(config)
 
-    def clear_plate_layout(self) -> DashboardCommandResult:
-        blocked = self._plate_edit_blocked_result()
-        if blocked is not None:
-            return blocked
-        if self._plate_layout_service is None:
-            return DashboardCommandResult(False, "Tray layout is not available.")
-        self._plate_layout_service.clear()
+    def confirm_empty_tray(self) -> DashboardCommandResult:
+        """Record an explicit operator confirmation; never infer an empty tray."""
+        try:
+            if self.is_process_active():
+                raise TrayBusyError()
+            if self._plate_layout_service is None:
+                raise TrayUnavailableError()
+            self._plate_layout_service.clear()
+        except TrayError as exc:
+            return DashboardCommandResult(False, str(exc), failure=exc.as_failure())
         return DashboardCommandResult(True, "A new tray is ready.")
+
+    def clear_plate_layout(self) -> DashboardCommandResult:
+        return self.confirm_empty_tray()
 
     def remove_plate_placement(self, placement_id: int) -> DashboardCommandResult:
         if self._plate_layout_service is None:
@@ -445,12 +461,6 @@ class PaintDashboardService(IPaintDashboardService):
         if not self._plate_layout_service.remove(placement_id):
             return DashboardCommandResult(False, "The selected workpiece is no longer on the tray.")
         return DashboardCommandResult(True, "Workpiece removed from the tray.")
-
-    def _plate_edit_blocked_result(self) -> DashboardCommandResult | None:
-        state = str(getattr(getattr(self._process, "state", None), "value", ""))
-        if state in {ProcessState.RUNNING.value, ProcessState.PAUSED.value}:
-            return DashboardCommandResult(False, "Stop the paint process before editing the tray.")
-        return None
 
     def get_production_start_guard_state(self, mode: str) -> dict[str, object]:
         guard = self._production_start_guard

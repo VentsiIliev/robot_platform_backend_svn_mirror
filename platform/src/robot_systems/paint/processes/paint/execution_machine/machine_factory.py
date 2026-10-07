@@ -3,6 +3,8 @@ from __future__ import annotations
 from time import perf_counter
 from typing import Callable
 
+from src.robot_systems.paint.processes.paint.tray_dry.errors import TrayError
+
 from src.engine.process.executable_state_machine import (
     ExecutableStateMachine,
     ExecutableStateMachineBuilder,
@@ -150,10 +152,23 @@ def _register(
     registry.register_state(
         State(
             state=state,
-            handler=_timed_handler(context, state, handler),
+            handler=_tray_aware_handler(_timed_handler(context, state, handler)),
             on_enter=_record_current_state,
         )
     )
+
+
+def _tray_aware_handler(
+    handler: Callable[[PaintExecutionContext], PaintExecutionState],
+) -> Callable[[PaintExecutionContext], PaintExecutionState]:
+    def wrapped(ctx: PaintExecutionContext) -> PaintExecutionState:
+        try:
+            return handler(ctx)
+        except TrayError as exc:
+            ctx.tray_failure = exc.as_failure()
+            ctx.set_result(False, str(exc))
+            return PaintExecutionState.ERROR
+    return wrapped
 
 
 def _timed_handler(

@@ -699,6 +699,7 @@ class PaintRobotSystem(BaseRobotSystem):
             capture_snapshot_service=self._paint_capture_snapshot_service,
             path_preparation_service=self._paint_path_preparation_service,
             path_executor=self._paint_path_executor,
+            plate_layout_service=self._paint_path_executor._plate_layout_service,
             vacuum_pump=self._vacuum_pump,
             paint_process_config_service=self._paint_process_config_service,
             magazine_load_service=self._paint_magazine_load_service,

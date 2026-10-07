@@ -21,3 +21,4 @@ class DashboardState:
     can_stop: bool = False
     can_pause: bool = False
     pause_label: str = "Pause"
+    is_stopping: bool = False

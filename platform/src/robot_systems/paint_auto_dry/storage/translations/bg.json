@@ -140,6 +140,13 @@
     "Demo Alternate": "Демо редуване"
   },
   "PaintDashboard": {
+    "Tray Readiness": "Готовност на тавата",
+    "Tray occupancy is unknown": "Заетостта на тавата е неизвестна",
+    "Confirm that the tray is physically empty before starting.": "Потвърдете, че тавата е физически празна, преди да стартирате.",
+    "Tray is empty — Start": "Тавата е празна — Старт",
+    "Cancel": "Отказ",
+    "Wait for the paint process to stop before confirming an empty tray.": "Изчакайте процесът на боядисване да спре, преди да потвърдите празна тава.",
+    "Tray layout settings changed. Empty the physical tray and confirm a new tray before starting.": "Настройките за подреждане в тавата са променени. Изпразнете физическата тава и потвърдете нова тава, преди да стартирате.",
     "PAINTING STOPPED": "БОЯДИСВАНЕТО Е СПРЯНО",
     "Workpiece not recognized": "Детайлът не е разпознат",
     "No stored workpiece matches the part in front of the camera.": "Нито един записан детайл не съвпада с детайла пред камерата.",
@@ -436,6 +443,14 @@
     "Return near the reference position if needed, rotate around the desired paint rotation axis, then capture.": "Върнете се близо до референтната позиция при нужда, завъртете около желаната paint ос на въртене, след това заснемете."
   },
   "PaintDashboardController": {
+    "Tray Readiness": "Готовност на тавата",
+    "Tray occupancy is unknown": "Заетостта на тавата е неизвестна",
+    "Confirm that the tray is physically empty before starting.": "Потвърдете, че тавата е физически празна, преди да стартирате.",
+    "Tray is empty — Start": "Тавата е празна — Старт",
+    "Cancel": "Отказ",
+    "Wait for the paint process to stop before confirming an empty tray.": "Изчакайте процесът на боядисване да спре, преди да потвърдите празна тава.",
+    "Tray layout settings changed. Empty the physical tray and confirm a new tray before starting.": "Настройките за подреждане в тавата са променени. Изпразнете физическата тава и потвърдете нова тава, преди да стартирате.",
+    "Tray layout is not available.": "Подреждането в тавата не е налично.",
     "Scan again unavailable": "Повторното сканиране не е налично",
     "The workpiece is no longer ready for recapture.": "Детайлът вече не е готов за повторно сканиране.",
     "All Magazines Empty": "Всички магазини са празни",

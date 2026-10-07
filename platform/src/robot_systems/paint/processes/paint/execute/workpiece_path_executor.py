@@ -33,6 +33,7 @@ from src.engine.robot.path_preparation import IWorkpiecePathPreparationService
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 from src.engine.robot.motion_sequence import OrderedMotionType
 from src.robot_systems.paint.processes.paint.config import (
+    DropoffStrategy,
     PAINT_PROCESS_CONFIG,
     PaintProcessConfig,
     scale_paint_process_accelerations,
@@ -994,6 +995,8 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
 
         raw_config = self._refresh_paint_process_config_snapshot()
+        if raw_config.dropoff.strategy is DropoffStrategy.PLATE_LAYOUT or raw_config.dropoff.alternate_drying_demo:
+            self._plate_layout_service.ensure_ready(raw_config.dropoff)
         self._refresh_runtime_config()
         control = control or PaintExecutionControl()
         context = PaintExecutionContext(

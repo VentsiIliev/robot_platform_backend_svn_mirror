@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from time import perf_counter
 from typing import Callable
 
+from src.robot_systems.paint.processes.paint.tray_dry.errors import TrayFailure
+
 from src.robot_systems.paint.processes.paint.config import PaintMagazineLoadConfig, PaintProcessConfig
 from src.robot_systems.paint.processes.paint.execution_control import PaintExecutionControl
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
@@ -31,6 +33,7 @@ class PaintExecutionContext:
     paused_from_state: PaintExecutionState | None = None
     resume_state: PaintExecutionState | None = None
     is_resuming: bool = False
+    tray_failure: TrayFailure | None = None
     result_ok: bool = False
     result_message: str = "Paint process stopped"
     total_started_at: float = field(default_factory=perf_counter)

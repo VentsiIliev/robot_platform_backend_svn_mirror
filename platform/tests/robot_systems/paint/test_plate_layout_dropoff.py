@@ -78,6 +78,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
     def test_committed_placement_keeps_painted_timestamp_metadata(self) -> None:
         painted_at = datetime(2026, 9, 4, 11, 30, 15, tzinfo=timezone.utc)
         service = PlateLayoutService(clock=lambda: painted_at)
+        service.clear()
         config = PaintDropoffConfig(
             strategy="plate_layout",
             plate_corners=_corners(),
@@ -316,6 +317,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
 
     def test_reserves_pose_rotated_from_calibration_into_plate_frame(self) -> None:
         service = PlateLayoutService()
+        service.clear()
         config = PaintDropoffConfig(
             strategy="plate_layout",
             plate_corners=_corners(),
@@ -350,6 +352,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
 
     def test_ordered_release_uses_configured_entry_and_exit_chains(self) -> None:
         service = PlateLayoutService()
+        service.clear()
         config = PaintProcessConfig(dropoff=PaintDropoffConfig(
             strategy="plate_layout",
             plate_corners=_corners(),
@@ -465,6 +468,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
 
     def test_preparation_unwinds_at_detach_without_moving(self) -> None:
         service = PlateLayoutService()
+        service.clear()
         config = PaintProcessConfig(dropoff=PaintDropoffConfig(
             strategy="plate_layout",
             plate_corners=_corners(),
@@ -602,6 +606,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
 
     def test_combined_paint_chain_builds_plate_entry_through_release(self) -> None:
         service = PlateLayoutService()
+        service.clear()
         config = PaintProcessConfig(dropoff=PaintDropoffConfig(
             strategy="plate_layout",
             plate_corners=_corners(),
@@ -635,6 +640,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
 
     def test_combined_paint_chain_carries_first_half_of_distributed_unwind(self) -> None:
         service = PlateLayoutService()
+        service.clear()
         config = PaintProcessConfig(dropoff=PaintDropoffConfig(
             strategy="plate_layout",
             plate_corners=_corners(),
@@ -671,6 +677,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
 
     def test_combined_paint_chain_does_not_schedule_unwind_for_partial_turn(self) -> None:
         service = PlateLayoutService()
+        service.clear()
         config = PaintProcessConfig(dropoff=PaintDropoffConfig(
             strategy="plate_layout",
             plate_corners=_corners(),
@@ -752,6 +759,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
 
     def test_failed_reservation_does_not_consume_position(self) -> None:
         service = PlateLayoutService()
+        service.clear()
         config = PaintDropoffConfig(
             strategy="plate_layout",
             plate_corners=_corners(),
@@ -777,6 +785,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
 
     def test_removed_workpiece_space_is_reused(self) -> None:
         service = PlateLayoutService()
+        service.clear()
         config = PaintDropoffConfig(
             strategy="plate_layout",
             plate_corners=_corners(),
@@ -809,8 +818,9 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         self.assertEqual(first.left_mm, replacement.left_mm)
         self.assertEqual(first.bottom_mm, replacement.bottom_mm)
 
-    def test_new_tray_clears_committed_and_pending_workpieces(self) -> None:
+    def test_new_tray_clears_committed_workpieces_after_pending_is_cancelled(self) -> None:
         service = PlateLayoutService()
+        service.clear()
         config = PaintDropoffConfig(
             strategy="plate_layout",
             plate_corners=_corners(),
@@ -828,6 +838,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         service.commit(config)
         service.reserve(**kwargs)
 
+        service.cancel()
         service.clear()
         state = service.snapshot(config)
 

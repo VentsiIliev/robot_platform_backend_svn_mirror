@@ -17,6 +17,9 @@ from src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view im
     PaintDashboardView,
 )
 from src.robot_systems.paint.applications.dashboard.dashboard_state import DashboardCardState
+from src.robot_systems.paint.processes.paint.tray_dry.errors import (
+    TrayError, TrayConfirmationRequiredError,
+)
 from src.robot_systems.paint.processes.paint.dashboard_live_view_events import (
     PaintDashboardLiveViewTopics,
     PaintDashboardMessageTopics,
@@ -78,6 +81,7 @@ class PaintDashboardController(
         self._paint_head_pending = False
         self._paint_head_held_direction: str | None = None
         self._paint_head_held_units = 0
+        self._tray_confirmation_pending = False
         self._production_start_pending = False
         timer_parent = self._view if isinstance(self._view, QObject) else None
         self._paint_head_hold_timer = QTimer(timer_parent)
@@ -168,16 +172,44 @@ class PaintDashboardController(
                 thread.wait()
         self._workers.clear()
 
+    def _start_process(self) -> None:
+        if getattr(self, "_tray_confirmation_pending", False):
+            return
+        try:
+            state = self._model.start()
+        except TrayConfirmationRequiredError:
+            self._tray_confirmation_pending = True
+            try:
+                confirmed = self._view.ask_empty_tray_confirmation()
+            finally:
+                self._tray_confirmation_pending = False
+            if not confirmed:
+                return
+            result = self._model.confirm_empty_tray()
+            if not result.success:
+                self._view.show_warning(self._t("Tray Readiness"), self._t(result.message))
+                return
+            self._refresh_plate_layout()
+            try:
+                state = self._model.start()
+            except TrayError as exc:
+                self._view.show_warning(self._t("Tray Readiness"), self._t(str(exc)))
+                return
+        except TrayError as exc:
+            self._view.show_warning(self._t("Tray Readiness"), self._t(str(exc)))
+            return
+        self._view.apply_dashboard_state(state)
+
     def _on_start(self) -> None:
         drying_mode = self._model.get_drying_mode()
         if drying_mode in {"auto", "demo"}:
             state = self._model.get_production_start_guard_state(drying_mode)
             if not bool(state.get("required", False)):
-                self._view.apply_dashboard_state(self._model.start())
+                self._start_process()
                 return
             if not bool(state.get("available", False)):
                 if self._confirm_start_guard_bypass(state):
-                    self._view.apply_dashboard_state(self._model.start())
+                    self._start_process()
                     return
                 self._view.show_warning(
                     str(state.get("title") or self._t("Production Start")),
@@ -195,7 +227,7 @@ class PaintDashboardController(
                 )
                 if not confirmed:
                     if self._confirm_start_guard_bypass(state):
-                        self._view.apply_dashboard_state(self._model.start())
+                        self._start_process()
                     return
                 if self._production_start_pending:
                     return
@@ -206,14 +238,14 @@ class PaintDashboardController(
                     self._on_production_start_prepared,
                 )
                 return
-        self._view.apply_dashboard_state(self._model.start())
+        self._start_process()
 
     def _on_production_start_prepared(self, result: object) -> None:
         self._production_start_pending = False
         if not self._view_ok():
             return
         if bool(getattr(result, "success", False)):
-            self._view.apply_dashboard_state(self._model.start())
+            self._start_process()
             return
         self._view.apply_dashboard_state(self._model.load())
         self._show_command_result(self._t("Drying Mode"), result)

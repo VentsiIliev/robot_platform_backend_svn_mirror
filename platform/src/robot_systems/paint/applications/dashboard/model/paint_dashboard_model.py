@@ -5,6 +5,7 @@ from src.robot_systems.paint.applications.dashboard.dashboard_state import Dashb
 from src.robot_systems.paint.applications.dashboard.service.i_paint_dashboard_service import (
     ContourTransformDebugResult,
     IPaintDashboardService,
+    DashboardCommandResult,
 )
 
 
@@ -100,6 +101,9 @@ class PaintDashboardModel(IApplicationModel):
 
     def get_plate_layout_state(self) -> dict[str, object]:
         return self._service.get_plate_layout_state()
+
+    def confirm_empty_tray(self) -> DashboardCommandResult:
+        return self._service.confirm_empty_tray()
 
     def clear_plate_layout(self):
         return self._service.clear_plate_layout()

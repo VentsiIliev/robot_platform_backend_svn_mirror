@@ -34,9 +34,13 @@ from src.robot_systems.paint.processes.paint.config import (
     MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN,
     MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
     DropoffStrategy,
+    PaintProcessConfig,
     PAINT_PROCESS_CONFIG,
     scale_paint_process_accelerations,
 )
+
+from src.robot_systems.paint.processes.paint.tray_dry.plate_layout import PlateLayoutService
+from src.robot_systems.paint.processes.paint.tray_dry.errors import TrayFailure, TrayUnavailableError
 
 _logger = logging.getLogger(__name__)
 
@@ -56,12 +60,15 @@ class PaintProductionService:
         navigation_service=None,
         vision_service=None,
         messaging_service=None,
+        plate_layout_service: PlateLayoutService | None = None,
     ) -> None:
         """Store the services needed to capture, prepare, plan, and execute one paint cycle."""
         self._workpiece_preparation = workpiece_preparation_service
         self._capture_snapshot_service = capture_snapshot_service
         self._path_preparation_service = path_preparation_service
         self._path_executor = path_executor
+        self._plate_layout_service = plate_layout_service
+        self.last_failure: TrayFailure | None = None
         self._vacuum_pump = vacuum_pump
         self._paint_process_config_service = paint_process_config_service
         self._magazine_load_service = magazine_load_service
@@ -74,6 +81,20 @@ class PaintProductionService:
         self._active_execution_context: PaintExecutionContext | None = None
         self._last_execution_context: PaintExecutionContext | None = None
         self._prepositioned_start_group: str | None = None
+
+    def ensure_tray_ready_for_start(self, config: PaintProcessConfig | None = None) -> None:
+        """Enforce tray readiness for UI, physical buttons and direct production."""
+        if config is None:
+            config = (
+                self._paint_process_config_service.get_snapshot()
+                if self._paint_process_config_service is not None
+                else PAINT_PROCESS_CONFIG
+            )
+        dropoff = config.dropoff
+        if dropoff.strategy is DropoffStrategy.PLATE_LAYOUT or dropoff.alternate_drying_demo:
+            if self._plate_layout_service is None:
+                raise TrayUnavailableError()
+            self._plate_layout_service.ensure_ready(dropoff)
 
     def pause_current_phase(self) -> None:
         with self._active_context_lock:
@@ -123,6 +144,8 @@ class PaintProductionService:
         retry_unmatched_workpiece: bool = False,
     ) -> tuple[bool, str]:
         """Run production, optionally forcing one calibration-table cycle without magazine load."""
+        self.last_failure = None
+        self.ensure_tray_ready_for_start()
         self._clear_prepositioned_start_group()
         should_stop = stop_requested or (lambda: False)
         self._paint_control.reset()
@@ -592,6 +615,7 @@ class PaintProductionService:
                 # snapshot leak into this cycle.
                 magazine_group = str(magazine_config.magazine_group_id).strip()
                 magazine_source = None
+        self.ensure_tray_ready_for_start(raw_process_config)
         cycle_strategy = self._effective_dropoff_strategy(process_config, cycle_index)
         self._path_executor.set_cycle_dropoff_strategy(cycle_strategy)
         _logger.info(
@@ -638,6 +662,7 @@ class PaintProductionService:
                     self._active_execution_context = None
             self._path_executor.set_cycle_dropoff_strategy(None)
 
+        self.last_failure = context.tray_failure
         snapshot = machine.get_snapshot()
         if snapshot.last_error is not None:
             self._clear_prepositioned_start_group()

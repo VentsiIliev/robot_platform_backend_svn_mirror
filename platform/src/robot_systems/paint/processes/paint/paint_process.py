@@ -17,6 +17,7 @@ from src.robot_systems.paint.processes.paint.incremental_adjustment import (
     AdjustmentStep,
     PaintAdjustmentSession,
 )
+from src.robot_systems.paint.processes.paint.tray_dry.errors import TrayError, TrayFailure
 
 
 class PaintProcess(BaseProcess):
@@ -44,6 +45,7 @@ class PaintProcess(BaseProcess):
         self._robot_service = robot_service
         self._vacuum_pump = vacuum_pump
         self._paint_process_config_service = paint_process_config_service
+        self._last_failure: TrayFailure | None = None
         self._thread: Optional[threading.Thread] = None
         self._stop_thread: Optional[threading.Thread] = None
         self._stopping = False
@@ -53,6 +55,11 @@ class PaintProcess(BaseProcess):
         self._retry_unmatched_workpiece_requested = False
         self._adjustment_session: PaintAdjustmentSession | None = None
         self._pending_adjustment_session: PaintAdjustmentSession | None = None
+
+    @property
+    def last_failure(self) -> TrayFailure | None:
+        """Machine-readable tray failure from the most recent start or cycle."""
+        return self._last_failure
 
     def _workers_running(self) -> bool:
         return any(
@@ -87,6 +94,13 @@ class PaintProcess(BaseProcess):
         ):
             self._logger.info("Paint start ignored while previous workers are active")
             return
+        if target == ProcessState.RUNNING and self._state != ProcessState.PAUSED:
+            try:
+                self._production_service.ensure_tray_ready_for_start()
+            except TrayError as exc:
+                self._last_failure = exc.as_failure()
+                raise
+            self._last_failure = None
         super()._transition(target, action, message)
 
     def start_adjustment_cycle(self) -> bool:
@@ -236,6 +250,7 @@ class PaintProcess(BaseProcess):
         """Execute one production cycle and translate the result into process state transitions."""
         run_stop_event = stop_event if stop_event is not None else self._run_stop_event
         should_stop = run_stop_event.is_set
+        failure: TrayFailure | None = None
         try:
             if retry_unmatched_workpiece:
                 success, msg = self._production_service.run_once(
@@ -251,9 +266,17 @@ class PaintProcess(BaseProcess):
                 )
             else:
                 success, msg = self._production_service.run_once(should_stop)
+        except TrayError as exc:
+            failure = exc.as_failure()
+            self._logger.error("Paint tray rejected operation code=%s: %s", exc.code, exc)
+            success, msg = False, str(exc)
         except Exception as exc:
             self._logger.exception("Paint process failed")
             success, msg = False, str(exc)
+
+        production_failure = self._production_service.last_failure
+        if isinstance(production_failure, TrayFailure):
+            failure = production_failure
 
         # Serialize completion with Stop/reset. A cancelled run cannot publish
         # a late success or error, even if reset has cleared the legacy flag.
@@ -265,6 +288,7 @@ class PaintProcess(BaseProcess):
                 or self._state not in (ProcessState.RUNNING, ProcessState.PAUSED)
             ):
                 return
+            self._last_failure = failure
             if success:
                 self._logger.info("Paint process completed: %s", msg)
                 self._transition(

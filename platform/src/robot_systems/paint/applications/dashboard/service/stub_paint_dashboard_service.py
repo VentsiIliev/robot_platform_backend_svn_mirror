@@ -11,6 +11,9 @@ from src.robot_systems.paint.applications.dashboard.service.i_paint_dashboard_se
 )
 
 
+from src.robot_systems.paint.processes.paint.tray_dry.errors import TrayBusyError, TrayConfirmationRequiredError
+
+
 class StubPaintDashboardService(IPaintDashboardService):
     """In-memory fake dashboard service for the standalone runner and tests.
 
@@ -34,6 +37,7 @@ class StubPaintDashboardService(IPaintDashboardService):
         self._acceleration_scale = 100.0
         self._drying_mode = "auto"
         self._plate_layout = {"width_mm": 200.0, "height_mm": 200.0, "placements": [], "pending": None}
+        self._tray_confirmed = False
         self._paint_head_position = 10
 
     def is_process_active(self) -> bool:
@@ -62,6 +66,8 @@ class StubPaintDashboardService(IPaintDashboardService):
         )
 
     def start(self) -> None:
+        if self._drying_mode in {"manual", "demo"} and not self._tray_confirmed:
+            raise TrayConfirmationRequiredError()
         if self._state in ("idle", "stopped", "error"):
             self._state = "running"
 
@@ -155,7 +161,14 @@ class StubPaintDashboardService(IPaintDashboardService):
     def get_plate_layout_state(self) -> dict[str, object]:
         return dict(self._plate_layout)
 
+    def confirm_empty_tray(self) -> DashboardCommandResult:
+        return self.clear_plate_layout()
+
     def clear_plate_layout(self) -> DashboardCommandResult:
+        if self.is_process_active():
+            error = TrayBusyError()
+            return DashboardCommandResult(False, str(error), failure=error.as_failure())
+        self._tray_confirmed = True
         self._plate_layout["placements"] = []
         self._plate_layout["pending"] = None
         return DashboardCommandResult(True, "A new tray is ready.")
