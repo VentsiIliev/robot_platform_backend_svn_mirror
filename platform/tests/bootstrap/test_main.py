@@ -120,7 +120,8 @@ class TestStartupSequenceOrder(unittest.TestCase):
         with (
             patch("src.bootstrap.run_main.EngineContext.build",
                   side_effect=lambda: (call_order.append("engine"), fake_ctx)[1]),
-            patch("src.bootstrap.run_main.load_startup_config"),
+            patch("src.bootstrap.run_main.load_startup_config",
+                  return_value=MagicMock(ui=MagicMock(kiosk_mode=False))),
             patch("src.bootstrap.run_main.load_bootstrap_provider",
                   return_value=fake_provider),
             patch("src.bootstrap.run_main.build_ros_backend_launcher_from_env",
@@ -186,7 +187,8 @@ class TestStartupAbortOnFailure(unittest.TestCase):
         qt_called = []
 
         with (
-            patch("src.bootstrap.run_main.load_startup_config"),
+            patch("src.bootstrap.run_main.load_startup_config",
+                  return_value=MagicMock(ui=MagicMock(kiosk_mode=False))),
             patch(
                 "src.bootstrap.run_main.load_bootstrap_provider",
                 return_value=MagicMock(),
@@ -203,6 +205,20 @@ class TestStartupAbortOnFailure(unittest.TestCase):
 
         self.assertEqual(qt_called, [], "QApplication must not be called after engine failure")
         backend_launcher.assert_not_called()
+
+
+class TestKioskStartup(unittest.TestCase):
+    def test_missing_password_aborts_before_hardware(self):
+        import src.bootstrap.run_main as m
+        config = MagicMock(ui=MagicMock(kiosk_mode=True, kiosk_password_file='/missing/kiosk-password.json'))
+        with (patch.object(m, 'load_startup_config', return_value=config),
+              patch.object(m, 'load_bootstrap_provider'),
+              patch.object(m, 'EngineContext') as engine,
+              patch.object(m, 'build_ros_backend_launcher_from_env') as backend):
+            with self.assertRaises(FileNotFoundError):
+                m.main()
+            engine.build.assert_not_called()
+            backend.assert_not_called()
 
 
 if __name__ == "__main__":

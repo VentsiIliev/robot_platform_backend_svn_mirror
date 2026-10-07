@@ -110,5 +110,12 @@
   "ApplicationNavigation": {
     "Operation Running": "Operation Running",
     "An operation is running or stopping. Please stop it or wait for it to finish before leaving.": "An operation is running or stopping. Please stop it or wait for it to finish before leaving."
+  },
+  "KioskExitDialog": {
+    "Exit kiosk mode": "Exit kiosk mode",
+    "Password": "Password",
+    "Cancel": "Cancel",
+    "Enter the kiosk exit password to close the application.": "Enter the kiosk exit password to close the application.",
+    "Incorrect password or temporarily locked. Try again later.": "Incorrect password or temporarily locked. Try again later."
   }
 }

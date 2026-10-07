@@ -9,6 +9,10 @@ from src.engine.updates.files import lock
 
 
 def main():
+    if "--set-kiosk-password" in sys.argv:
+        from src.bootstrap.kiosk_password import main as set_kiosk_password
+        set_kiosk_password(sys.argv[sys.argv.index("--set-kiosk-password") + 1:])
+        return
     resource_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
     target = json.loads((resource_root / "config/release-target.json").read_text())
     os.environ["ROBOT_PLATFORM_PRODUCT"] = target["product"]

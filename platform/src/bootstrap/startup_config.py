@@ -35,6 +35,8 @@ class UiStartupConfig:
     show_account_button_when_dev_skip_login: bool = False
     show_power_off_button: bool = False
     custom_virtual_keyboard_enabled: bool = True
+    kiosk_mode: bool = False
+    kiosk_password_file: str = "/etc/robot-platform/kiosk-password.json"
     fullscreen: bool = True
     window_width: int = 1280
     window_height: int = 1024
@@ -156,6 +158,8 @@ def _load_ui_startup_config(raw_config: object) -> UiStartupConfig:
             default=True,
             prefix="ui",
         ),
+        kiosk_password_file=_read_password_path(raw_config),
+        kiosk_mode=_read_bool(raw_config, "kiosk_mode", default=False, prefix="ui"),
         fullscreen=_read_bool(raw_config, "fullscreen", default=True, prefix="ui"),
         window_width=_read_positive_int(raw_config, "window_width", default=1280, prefix="ui"),
         window_height=_read_positive_int(raw_config, "window_height", default=1024, prefix="ui"),
@@ -263,3 +267,10 @@ def build_configured_robot(config: StartupConfig):
     load_robot_system_config({"robot_systems": {config.robot_system: config.system_config}}, config.robot_system)
     from src.engine.robot.drivers.ros2_robot import Ros2Robot
     return Ros2Robot(server_url="http://localhost:5000")
+
+
+def _read_password_path(payload: dict) -> str:
+    value = payload.get("kiosk_password_file", "/etc/robot-platform/kiosk-password.json")
+    if not isinstance(value, str) or not Path(value).is_absolute():
+        raise RuntimeError("ui.kiosk_password_file must be an absolute path")
+    return value

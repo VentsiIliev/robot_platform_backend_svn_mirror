@@ -110,5 +110,12 @@
   "ApplicationNavigation": {
     "Operation Running": "Операцията се изпълнява",
     "An operation is running or stopping. Please stop it or wait for it to finish before leaving.": "Операцията се изпълнява или спира. Спрете я или изчакайте да приключи, преди да напуснете екрана."
+  },
+  "KioskExitDialog": {
+    "Exit kiosk mode": "Изход от киоск режим",
+    "Password": "Парола",
+    "Cancel": "Отказ",
+    "Enter the kiosk exit password to close the application.": "Въведете паролата за изход от киоск режима, за да затворите приложението.",
+    "Incorrect password or temporarily locked. Try again later.": "Грешна парола или временно блокиране. Опитайте отново по-късно."
   }
 }

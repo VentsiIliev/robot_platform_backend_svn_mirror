@@ -111,9 +111,10 @@ def main() -> None:
     setup_logging()
     # _pin_process_to_non_rt_cores()
     startup_config = load_startup_config()
-    dev_skip_login = startup_config.ui.dev_skip_login
+    dev_skip_login = startup_config.ui.dev_skip_login and not startup_config.ui.kiosk_mode
     skip_splash = startup_config.ui.skip_splash
-    fullscreen = startup_config.ui.fullscreen
+    kiosk_mode = startup_config.ui.kiosk_mode
+    fullscreen = startup_config.ui.fullscreen or kiosk_mode
     window_width = startup_config.ui.window_width
     window_height = startup_config.ui.window_height
     show_account_button_when_dev_skip_login = (
@@ -130,6 +131,11 @@ def main() -> None:
     logging.getLogger("HttpCellTransport[cell=1]").setLevel(logging.WARNING)
     logging.getLogger("HttpCellTransport[cell=2]").setLevel(logging.WARNING)
     logging.getLogger("WeightCellService").setLevel(logging.WARNING)
+
+    kiosk_password = None
+    if kiosk_mode:
+        from src.bootstrap.kiosk_password import KioskPassword
+        kiosk_password = KioskPassword(Path(startup_config.ui.kiosk_password_file))
 
     # 1 — engine singletons
     ctx = EngineContext.build()
@@ -159,19 +165,29 @@ def main() -> None:
     localization_svc = _build_localization_service(robot_app, ctx.messaging_service)
     localization_svc.set_language(localization_svc.get_language())
 
+    kiosk_exit_guard = None
+    if kiosk_mode:
+        from src.bootstrap.kiosk_exit_guard import KioskExitGuard
+        kiosk_exit_guard = KioskExitGuard(
+            kiosk_password,
+        )
+
     # 4b — Create shell BEFORE login (empty content area, header + language selector visible)
     shell = AppShell(
         app_descriptors=[],
         widget_factory=lambda _: QWidget(),   # placeholder, never invoked during login
         languages=localization_svc.available_languages(),
+        close_guard=kiosk_exit_guard,
     )
+    if kiosk_exit_guard is not None:
+        kiosk_exit_guard.parent = shell
     shell.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
     if not fullscreen:
         shell.setFixedSize(window_width, window_height)
     shell._header_drag = _FramelessHeaderDrag(shell, shell.header)
     localization_svc.sync_selector(shell.header.language_selector)
     shell.header.language_selector.languageChanged.connect(localization_svc.set_language)
-    shell.header.power_toggle_button.setVisible(show_power_off_button)
+    shell.header.power_toggle_button.setVisible(show_power_off_button or kiosk_mode)
 
     remote_support_monitor = None
     if sys.platform == "linux" and bootstrap_provider.system_class.__module__.startswith("src.robot_systems.paint."):

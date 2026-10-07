@@ -20,7 +20,8 @@ class AppShell(QWidget):
         app_descriptors: List[AppDescriptor],
         widget_factory: Callable[[str], QWidget],
         ui_factory=None,
-        languages: list = None
+        languages: list = None,
+        close_guard: Callable[[], bool] | None = None
     ):
         """
         Args:
@@ -33,6 +34,8 @@ class AppShell(QWidget):
         super().__init__()
 
         # Store injected dependencies
+        self._close_guard = close_guard
+        self._close_in_progress = False
         self._app_descriptors = app_descriptors
         self._widget_factory = widget_factory
 
@@ -381,5 +384,15 @@ class AppShell(QWidget):
             if app_widget and hasattr(app_widget, "can_close") and not app_widget.can_close():
                 event.ignore()
                 return
-        self.cleanup()
-        super().closeEvent(event)
+        if self._close_in_progress:
+            event.ignore()
+            return
+        self._close_in_progress = True
+        try:
+            if self._close_guard is not None and not self._close_guard():
+                event.ignore()
+                return
+            self.cleanup()
+            super().closeEvent(event)
+        finally:
+            self._close_in_progress = False
