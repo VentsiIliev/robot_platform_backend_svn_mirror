@@ -989,9 +989,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         """Run a prepared workpiece plan through the paint execution state machine."""
         from src.robot_systems.paint.processes.paint.execution_control import PaintExecutionControl
         from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
-        from src.robot_systems.paint.processes.paint.execution_machine.machine_factory import (
-            PaintExecutionMachineFactory,
-        )
+        from src.robot_systems.paint.processes.paint.production.cycle_runner import run_paint_cycle
         from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
 
         raw_config = self._refresh_paint_process_config_snapshot()
@@ -1009,15 +1007,13 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         )
         context.execution_plan = prepared_workpiece
 
-        machine = PaintExecutionMachineFactory().build(
+        execution = run_paint_cycle(
             context,
             initial_state=PaintExecutionState.PICKUP,
         )
-        machine.start_execution()
-        snapshot = machine.get_snapshot()
-        if snapshot.last_error is not None:
-            return False, snapshot.last_error
-        return context.result_ok, context.result_message
+        if execution.machine_error is not None:
+            return False, execution.machine_error
+        return execution.result.as_legacy_pair()
 
     # -------------------------------------------------------------------------
     # Process Control And Diagnostics

@@ -2,6 +2,8 @@
 
 `PaintExecutionContext` carries runtime collaborators, per-run inputs/results, cooperative stop/run events and progress/error context. `PaintExecutionMachineFactory` assembles the state registry and `ExecutableStateMachine`. `PaintExecutionState` and `PaintExecutionTransitions` define the business graph, independently of the outer `BaseProcess` lifecycle state.
 
+[The shared cycle runner](../production/README.md) invokes the factory, executes the machine synchronously, and exposes its recorded error alongside the typed context outcome. Production and prepared-editor entry points retain their configuration and recovery responsibilities. Handler sequencing and terminal cleanup remain in this package.
+
 The graph contains optional magazine pickup/release/camera-settle phases, workpiece capture/preparation/plan construction, either combined execution or split pickup/contact/cleanup/dropoff/post-return phases, and pause/completed/stopped/error/idle states. Paused execution resumes to a remembered active phase rather than treating every resume as a brand-new process.
 
 The current business state describes where execution is; the typed context result describes its outcome. Expected absence, cancellation and capacity limits are declared at their sources, rather than inferred from messages. Pickup planning consumes `Ready[PickupPlan]`/`Failed`; ordered attempts distinguish `NOT_APPLICABLE` from failed execution, and waypoint counts describe planned paths rather than verified physical progress.

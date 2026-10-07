@@ -8,6 +8,8 @@ panels supplied through `set_device_panel()` appear on the matching page, while
 for paint-head settings and camera assignments/live preview. Numeric paint-head
 settings use the shared `KeyboardNumberField` touch control.
 
+The navigation/shutdown guard checks device actions, state reads, pending enable changes and the activity reported by the dryer and extra-panel controllers. Extra panels must expose the `IApplicationController.has_active_operations()` contract. Paint-head settings report their background save workers as active until worker cleanup completes, preventing navigation or shell closure during a save. Continuous previews are excluded from the shared active-operation contract.
+
 The older glue service still uses the legacy on/off rows when it has no dynamic
 `IDeviceControlDevice` entries; the controller and hardware command paths are
 unchanged by this presentation layer.

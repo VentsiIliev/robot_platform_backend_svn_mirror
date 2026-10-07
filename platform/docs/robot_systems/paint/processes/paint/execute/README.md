@@ -2,6 +2,8 @@
 
 `PaintWorkpiecePathExecutor` is the facade implementing the shared editor path-execution contract. It resolves live config, targeting/poses and preview data, and delegates pickup, contact painting, robot motion, edge cleanup and dropoff to separate executors. This layer can issue robot/peripheral operations; it is not data-only geometry.
 
+Prepared-workpiece execution prepares its context and delegates machine construction/execution to [the shared cycle runner](../production/README.md), starting at `PICKUP`. The editor's `(bool, str)` contract is preserved, including the framework error message when machine execution records an error. Production uses the same runner with its own preparation and recovery rules.
+
 `execution_plane/` supplies plane strategies; `projection_preview.py` produces editor overlays/snapshots. `paint_debug_artifacts.py` and `diagnostics.py` support diagnostics. Planning data arrives from `plan/` and shared engine path preparation; business phase sequencing is owned by the production execution machine.
 
 Pickup `build_plan_result()` returns `Ready[PickupPlan]` or `Failed`; `execute_result()` distinguishes completed pickup, no workpiece, cancellation and failure. Plans reference `PickupTransferPlan` and `PickupContactMode`. Unsupported height measurement is an unavailable capability; invalid modes/indexes are rejected before vacuum or motion. Vacuum failure messages are retained. `PaintContactExecutor.execute_result()` returns a typed outcome and planned waypoint count, preserving numeric backend errors when available. Existing `build_plan()`/`execute()` methods adapt results for legacy consumers.

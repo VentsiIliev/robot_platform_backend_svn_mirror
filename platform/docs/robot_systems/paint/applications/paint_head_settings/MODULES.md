@@ -72,12 +72,12 @@ def save(self, sign: int, spacing: int, count: int) -> PaintHeadSettings
 
 Source: [src/robot_systems/paint/applications/paint_head_settings/paint_head_settings_controller.py](../../../../../src/robot_systems/paint/applications/paint_head_settings/paint_head_settings_controller.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `.paint_head_settings_model`, `.paint_head_settings_view`, `__future__`, `functools`, `src.applications.base.background_worker`.
+Imports (including optional/function-local imports; not a startup dependency list): `.paint_head_settings_model`, `.paint_head_settings_view`, `__future__`, `functools`, `src.applications.base.background_worker`, `src.applications.base.i_application_controller`.
 
 ### `PaintHeadSettingsController`
 
 ```python
-class PaintHeadSettingsController(BackgroundWorker):
+class PaintHeadSettingsController(IApplicationController, BackgroundWorker):
 ```
 
 Directly declared public methods and constructor (inherited methods are documented on their base class):
@@ -88,6 +88,10 @@ def __init__(self, model: PaintHeadSettingsModel, view: PaintHeadSettingsView) -
 
 ```python
 def load(self) -> None
+```
+
+```python
+def has_active_operations(self) -> bool
 ```
 
 ```python

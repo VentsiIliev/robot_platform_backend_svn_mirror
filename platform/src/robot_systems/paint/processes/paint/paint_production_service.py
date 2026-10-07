@@ -20,8 +20,8 @@ from src.robot_systems.paint.processes.paint.dashboard_live_view_events import (
 )
 from src.robot_systems.paint.processes.paint.execution_machine import (
     PaintExecutionContext,
-    PaintExecutionMachineFactory,
 )
+from src.robot_systems.paint.processes.paint.production.cycle_runner import run_paint_cycle
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
 from src.robot_systems.paint.processes.paint.magazine_load_result import (
     ALL_MAGAZINES_EMPTY,
@@ -690,8 +690,7 @@ class PaintProductionService:
         with self._active_context_lock:
             self._active_execution_context = context
         try:
-            machine = PaintExecutionMachineFactory().build(context, initial_state=initial_state)
-            machine.start_execution()
+            execution = run_paint_cycle(context, initial_state=initial_state)
         finally:
             self._last_execution_context = context
             self._log_execution_state_timing(context)
@@ -701,15 +700,11 @@ class PaintProductionService:
             self._path_executor.set_cycle_dropoff_strategy(None)
 
         self.last_failure = context.tray_failure or context.operation_failure
-        snapshot = machine.get_snapshot()
-        if snapshot.last_error is not None:
+        if execution.machine_error is not None:
             self._clear_prepositioned_start_group()
             self._restore_brightness()
             self._set_dashboard_live_view_paused(False, reason="paint cycle finished")
-            return context.result if context.result.failure else PaintOperationResult.failed(
-                PaintFailureCode.INTERNAL, 'paint_cycle', snapshot.last_error)
-
-        return context.result
+        return execution.result
 
     @staticmethod
     def _effective_dropoff_strategy(process_config, cycle_index: int) -> str | None:

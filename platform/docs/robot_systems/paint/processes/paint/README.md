@@ -6,6 +6,7 @@ This is the shared production implementation used by the paint family. System cl
 |---|---|
 | `paint_process.py` | Process state, background run, stop worker, manual/adjustment/retry entry points |
 | `paint_production_service.py` | Capture, magazine/production flow and business execution-machine coordination |
+| [production](production/README.md) | Shared execution of an already prepared cycle for production and editor entry points |
 | `results.py` | Operation outcomes, actionable failure categories and exception boundaries |
 | `config.py`, config service/serializer | Typed defaults, validated persisted configuration and runtime snapshots |
 | [match](match/README.md) | Saved-workpiece candidate selection, matcher adapter and diagnostics |
@@ -25,6 +26,8 @@ This is the shared production implementation used by the paint family. System cl
 Production uses `run_once_result()` and `run_cycle_result()`. The context stores one result; its legacy `result_ok` and `result_message` are read-only views. Completed cycles may carry a typed `stop_reason` for normal exhaustion or a full tray, so loop decisions and operator messages do not depend on message wording. A single-cycle absence still retains its prior unsuccessful legacy return; exhaustion in a repeating loop remains successful termination. Existing tuple-returning `run_once()`, editor matching, pickup/contact execution and single-cycle APIs remain compatibility adapters. The paint process exposes the latest operation or tray failure through `last_failure`.
 
 Cooperative execution controls coordinate pause, resume and stop across the active context, magazine navigation and path execution. The business machine includes magazine phases, capture/prepare/plan, pickup, paint contact, edge cleanup, prepare/dropoff/post-return and lifecycle states. See [trajectory/execution](TRAJECTORY_AND_EXECUTION.md) for responsibilities and [alignment](ALIGNMENT.md) for the current geometry path.
+
+`production.cycle_runner.run_paint_cycle()` builds and synchronously executes the business machine for an already prepared context. Production starts at `STARTING`; prepared-workpiece editor execution starts at `PICKUP`. Its immutable `PaintCycleExecution` reports the typed operation result and any framework error separately. Existing domain failures retain their category; a framework error without a domain failure becomes `INTERNAL`. Configuration, active-context tracking and caller-specific recovery stay with the entry points. Construction/execution exceptions propagate to their owners, and terminal handlers retain ownership of cycle resource restoration. This extraction does not add backend shutdown behavior.
 
 `PaintProcess` prevents a new run until both the previous production worker and its hardware-stop worker have exited. Stop retains the existing `STOPPED` state while cleanup continues. Each run owns its cancellation event, so resetting the process cannot revive a cancelled run; late results from that run cannot change the current state. Normal starts, manual cycles, adjustment cycles and unmatched-workpiece retries share this restart restriction. Starting from `PAUSED` resumes the existing worker.
 
@@ -51,6 +54,7 @@ The current tree no longer has `align/alignment/core.py`, `align/dxf_image_place
 | `match/` | [match](match/README.md) |
 | `motion/` | [motion](motion/README.md) |
 | `plan/` | [plan](plan/README.md) |
+| `production/` | [production](production/README.md) |
 | `tray_dry/` | [tray_dry](tray_dry/README.md) |
 
 [Complete source index](../../../../SOURCE_INDEX.md).
