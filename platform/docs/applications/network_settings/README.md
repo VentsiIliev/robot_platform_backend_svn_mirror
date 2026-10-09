@@ -18,36 +18,11 @@ connects or disconnects them, and edits their IPv4 settings. Applying IPv4
 settings can briefly interrupt connectivity because the OS backend reactivates
 the connection.
 
-Paint hides the Remote Support page and registers a dedicated screen under
-Administration instead; see [Remote Support](../remote_support/README.md).
-Other systems can retain this optional tab.
-
-The Remote Support page uses the shared switch to show the saved customer
-choice and actual state of `rustdesk.service`. It communicates only with the
-local Unix socket `/run/plproject/remote-support.sock`; the app never invokes
-privileged commands. The socket-activated root helper accepts only `status`,
-`enable`, and `disable` requests for that one unit. If saved choice and actual
-service state differ, the UI reports that action is needed. The helper lives in
-`src/engine/remote_support/` because it is shared platform infrastructure.
-If the controller cannot be reached, the Remote Support card shows the error
-and disables the switch. Opening the tab requests a fresh state and restores
-the switch after a successful response.
-Worker completion is delivered through a Qt relay on the UI thread and native
-thread teardown is joined before releasing worker references, preventing a
-startup freeze when the remote status request finishes immediately.
-
-The installer and systemd units are under `packaging/remote_support/`. Install
-them on each Ubuntu robot with
-`sudo packaging/remote_support/install.sh ROBOT_UI_USER`, where
-`ROBOT_UI_USER` is the account running the HMI. First
-installation defaults to OFF and stops RustDesk; reinstalling preserves only a valid, current-boot timed access window. The root-owned marker at
-`/var/lib/plproject/remote-support/enabled` stores a timed access window. A drop-in condition on
-`rustdesk.service` prevents startup when that marker is absent, expired, or
-from a previous boot. The socket is owned by the HMI account with mode `0600`; ERP and Android
-clients cannot call it directly.
-
-After installation, check OFF across a reboot, then test ON, OFF during an
-active session, and a RustDesk package update on the target Ubuntu image.
+Remote access is managed by the system installation rather than a platform
+screen. Network Settings defaults to Wi-Fi and Wired tabs only. SSH and branded
+RustDesk start at boot; see [installation](../../../packaging/remote_support/README.md).
+The shell retains its active remote-session indicator. Passwords are managed
+outside the platform.
 
 <!-- source-navigation:start -->
 ## Source navigation

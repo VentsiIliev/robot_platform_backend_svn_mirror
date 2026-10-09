@@ -10,17 +10,9 @@ def build_payload(destination: Path, vendor_installer: Path | None = None) -> No
     vendor_installer = vendor_installer or source / "install_pl_remote_support.sh"
     if "--provision-only" not in vendor_installer.read_text():
         raise ValueError("Vendor installer must support --provision-only")
-    project = source.parents[1]
     destination.mkdir(parents=True, exist_ok=True)
-    for name in ("install.sh", "plproject-remote-support.service",
-                 "plproject-remote-support.socket.in", "README.md",
-                 "plproject-remote-support-expiry.service", "plproject-remote-support-expiry.timer"):
+    for name in ("install.sh", "README.md"):
         shutil.copy2(source / name, destination / name)
-    dropins = destination / "rustdesk.service.d"
-    dropins.mkdir(exist_ok=True)
-    shutil.copy2(source / "rustdesk.service.d/plproject-remote-support.conf", dropins)
-    shutil.copy2(project / "src/engine/remote_support/controller.py",
-                 destination / "controller.py")
     shutil.copy2(vendor_installer, destination / "install_pl_remote_support.sh")
 
 

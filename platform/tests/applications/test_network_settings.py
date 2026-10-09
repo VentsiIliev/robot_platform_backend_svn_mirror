@@ -104,7 +104,7 @@ class NetworkSettingsViewTests(unittest.TestCase):
         model.connect_wired.assert_not_called()
 
     def test_remote_switch_waits_for_confirmed_state(self) -> None:
-        view = NetworkSettingsView()
+        view = NetworkSettingsView(show_remote_support=True)
         self.assertFalse(view._remote_switch.isEnabled())
         view.set_remote_support_status({"enabled": False, "active": False})
         self.assertTrue(view._remote_switch.isEnabled())
@@ -121,13 +121,13 @@ class NetworkSettingsViewTests(unittest.TestCase):
         self.assertTrue(view._remote_switch.isChecked())
 
     def test_remote_mismatch_is_visible(self) -> None:
-        view = NetworkSettingsView()
+        view = NetworkSettingsView(show_remote_support=True)
         view.set_remote_support_status({"enabled": False, "active": True})
         self.assertIn("action needed", view._remote_state.text())
         self.assertIn("still active", view._remote_service.text())
 
     def test_remote_error_replaces_checking_and_can_recover(self) -> None:
-        view = NetworkSettingsView()
+        view = NetworkSettingsView(show_remote_support=True)
         controller = NetworkSettingsController(MagicMock(), view)
         controller._on_error("remote", "Remote support controller is not installed")
         self.assertIn("unavailable", view._remote_state.text())
@@ -138,7 +138,7 @@ class NetworkSettingsViewTests(unittest.TestCase):
         self.assertTrue(view._remote_switch.isChecked())
 
     def test_opening_remote_tab_requests_fresh_service_state(self) -> None:
-        view = NetworkSettingsView()
+        view = NetworkSettingsView(show_remote_support=True)
         refreshed = MagicMock()
         view.remote_support_refresh_requested.connect(refreshed)
         view._tabs.setCurrentIndex(2)
@@ -154,7 +154,8 @@ app = QApplication([])
 view = NetworkSettingsFactory().build(StubNetworkSettingsService())
 QTimer.singleShot(500, app.quit)
 app.exec()
-assert view._remote_switch.isEnabled()
+assert not view.has_remote_support
+assert not view._controller._remote_timer.isActive()
 assert not any(view._controller._busy.values())
 view.clean_up()
 '''

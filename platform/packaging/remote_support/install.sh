@@ -28,70 +28,31 @@ if [[ -z "$vendor_installer" && $(systemctl show --property=LoadState --value ru
     exit 1
 fi
 
-source_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-repo_dir=$(cd -- "$source_dir/../.." && pwd)
-state_dir=/var/lib/plproject/remote-support
-controller_source="$source_dir/controller.py"
-if [[ ! -f "$controller_source" ]]; then
-    controller_source="$repo_dir/src/engine/remote_support/controller.py"
-fi
-if [[ ! -f "$controller_source" ]]; then
-    echo "Remote support controller payload is missing" >&2
-    exit 1
-fi
-command -v python3 >/dev/null
-
-install -d -o root -g root -m 0755 /var/lib/plproject
-install -d -o root -g root -m 0700 "$state_dir"
-if [[ -f "$state_dir/enabled" ]]; then
-    chown root:root "$state_dir/enabled"
-    chmod 0600 "$state_dir/enabled"
-fi
-
-install -d -o root -g root -m 0755 /usr/local/libexec
-install -o root -g root -m 0755 \
-    "$controller_source" \
-    /usr/local/libexec/plproject-remote-support
-install -o root -g root -m 0644 \
-    "$source_dir/plproject-remote-support.service" \
-    /etc/systemd/system/plproject-remote-support.service
-install -o root -g root -m 0644 \
-    "$source_dir/plproject-remote-support-expiry.service" \
-    /etc/systemd/system/plproject-remote-support-expiry.service
-install -o root -g root -m 0644 \
-    "$source_dir/plproject-remote-support-expiry.timer" \
-    /etc/systemd/system/plproject-remote-support-expiry.timer
-socket_temp=$(mktemp)
-trap 'rm -f "$socket_temp"' EXIT
-sed "s/@UI_USER@/$ui_user/g" "$source_dir/plproject-remote-support.socket.in" > "$socket_temp"
-install -o root -g root -m 0644 "$socket_temp" \
-    /etc/systemd/system/plproject-remote-support.socket
-install -d -o root -g root -m 0755 /etc/systemd/system/rustdesk.service.d
-install -o root -g root -m 0644 \
-    "$source_dir/rustdesk.service.d/plproject-remote-support.conf" \
-    /etc/systemd/system/rustdesk.service.d/plproject-remote-support.conf
-
+# Retire the old timed-access controller before enabling permanent boot startup.
+# Stop its socket first so it cannot reactivate the controller during migration.
+for unit in plproject-remote-support.socket plproject-remote-support-expiry.timer \
+            plproject-remote-support-expiry.service plproject-remote-support.service; do
+    if [[ $(systemctl show --property=LoadState --value "$unit") == loaded ]]; then
+        systemctl disable --now "$unit"
+    fi
+done
+rm -f /etc/systemd/system/rustdesk.service.d/plproject-remote-support.conf
 systemctl daemon-reload
+
+apt-get update
+apt-get install -y openssh-server
+/usr/sbin/sshd -t
+systemctl enable --now ssh.service
+
 if [[ -n "$vendor_installer" ]]; then
-    # Gate package post-install startup before provisioning the branded build.
-    # The vendor installer must support --provision-only.
     USER="$ui_user" bash "$vendor_installer" --provision-only
     systemctl daemon-reload
-    if [[ $(systemctl show --property=LoadState --value rustdesk.service) != loaded ]]; then
-        echo "Vendor installer did not install rustdesk.service" >&2
-        exit 1
-    fi
 fi
-/usr/bin/python3 /usr/local/libexec/plproject-remote-support --expire
-if [[ ! -f "$state_dir/enabled" ]]; then
-    # First installation defaults to OFF; the condition now blocks restarts.
-    systemctl stop rustdesk.service
-else
-    systemctl enable --now rustdesk.service
+if [[ $(systemctl show --property=LoadState --value rustdesk.service) != loaded ]]; then
+    echo "Vendor installer did not install rustdesk.service" >&2
+    exit 1
 fi
-systemctl stop plproject-remote-support.service 2>/dev/null || true
-systemctl enable plproject-remote-support.socket
-systemctl restart plproject-remote-support.socket
-systemctl enable --now plproject-remote-support-expiry.timer
-echo "Remote support controller installed for $ui_user"
-echo "Current desired state: $(test -f "$state_dir/enabled" && echo ON || echo OFF)"
+systemctl enable --now rustdesk.service
+systemctl is-active --quiet rustdesk.service
+systemctl is-active --quiet ssh.service
+echo "SSH and PL PROJECT remote support installed and enabled at boot."

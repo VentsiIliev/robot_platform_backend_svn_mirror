@@ -1,70 +1,45 @@
-# Ubuntu remote support installation
+# Ubuntu boot-managed remote support
 
-This payload is included in platform release archives for every system/profile under
-`installation/remote-support/`. It runs independently of the application
-bundle and does not need a source checkout or the application's Python
-environment. Ubuntu must provide `/usr/bin/python3`, systemd, and an installed
-`rustdesk.service`.
+The platform installer and source `launch_robot_app.sh --setup-only` install
+OpenSSH server and the bundled PL PROJECT RustDesk build. Both system services
+are enabled at boot and started immediately. The platform has no Remote Support screen or password-management controls.
+Manage RustDesk passwords outside the platform; the shell retains its active
+remote-session indicator.
 
-The platform installer invokes this automatically with the bundled vendor installer,
-using sudo for the system step and passing the desktop user. It preserves a valid access window from the current boot and defaults to OFF
-on first installation. Legacy indefinite ON markers are invalidated during upgrade. To run the step manually:
+Run the provisioning step independently as follows:
 
 ```bash
-sudo bash installation/remote-support/install.sh ROBOT_UI_USER
+sudo bash packaging/remote_support/install.sh ROBOT_UI_USER \
+  --vendor-installer packaging/remote_support/install_pl_remote_support.sh
 ```
 
-To also provision the rebranded PL PROJECT build, pass its trusted installer:
+Release bundles contain the equivalent payload at `installation/remote-support`.
+Downloads require network access and administrator privileges. Existing SSH
+configuration and RustDesk credentials/relay settings remain in place. The
+installer validates SSH configuration and checks both services are active;
+errors stop installation and rerunning retries provisioning.
+
+Migration disables the old controller socket, controller service, expiry timer
+and expiry service, and removes its RustDesk ExecCondition drop-in. Old state
+files are retained but no longer control remote access. This also migrates
+machines previously configured OFF. No GUI or robot process is started by this
+step. The system RustDesk service provides remote access independently of the
+platform application.
+
+Verify on the target machine:
 
 ```bash
-sudo bash installation/remote-support/install.sh ROBOT_UI_USER \
-  --vendor-installer installation/remote-support/install_pl_remote_support.sh
+systemctl is-enabled ssh.service rustdesk.service
+systemctl is-active ssh.service rustdesk.service
+journalctl -u ssh.service -u rustdesk.service --no-pager -n 100
 ```
 
-The vendor script must support `--provision-only`: install and verify the
-package, but leave service startup and GUI launch to the robot platform.
-The boot gate is installed before calling it so package post-install actions
-cannot enable remote support while the saved choice is OFF. The current
-PL PROJECT installer downloads a pinned release and requires network access;
-an offline product installer will need the corresponding verified package.
+Reboot and verify SSH login and a RustDesk connection, including at the X11
+login screen and inside kiosk mode. Existing firewall rules still apply. A saved
+RustDesk `stop-service` option can prevent startup; the installer reports a
+service failure rather than silently rewriting its credentials or configuration.
 
-Stage the vendor installer into a release payload with:
-
-```bash
-python3 packaging/remote_support/build_payload.py /tmp/support-payload \
-  --vendor-installer /home/ilv/src/rustdesk/install_pl_remote_support.sh
-```
-
-The platform owns a packaged copy at
-`packaging/remote_support/install_pl_remote_support.sh`. Paint builds include
-that copy by default. `PL_SUPPORT_VENDOR_INSTALLER` optionally selects an
-alternate installer when building. Update the platform copy deliberately
-when changing the supported branded release; packaging does not read a
-separate RustDesk source checkout.
-
-First installation defaults to OFF and ends any current RustDesk session.
-Upgrades preserve valid timed access windows without renewing their deadlines. The HMI runs without administrator
-privileges; it talks to the socket owned by its configured account.
-
-Provision RustDesk's relay/server settings separately. Its own `stop-service`
-option must be cleared in both the system and HMI user's configuration:
-otherwise RustDesk can stop itself immediately after the customer selects ON.
-The support installer does not overwrite RustDesk connection credentials or
-desktop configuration. The product provisioning workflow must validate those
-settings before enabling remote support.
-
-The payload installs the helper under `/usr/local/libexec`, four systemd units (controller, socket, expiry service, and expiry timer),
-and a RustDesk drop-in. Customer state remains under
-`/var/lib/plproject/remote-support/`, outside the application bundle. Missing, expired, or previous-boot state means OFF. The RustDesk
-ExecCondition validates the window before each startup; the expiry watchdog
-also removes expired permission and stops active sessions. Do not remove the RustDesk gate while
-uninstalling the application: that could restore RustDesk's normal boot start.
-A future package removal action must stop RustDesk before removing the gate.
-
-Verify the target Ubuntu image with OFF across reboot, timed ON followed by
-expiry with the GUI closed, an upgrade in each state, reboot invalidating ON,
-and OFF during an active support session. Watch actions with:
-
-```bash
-journalctl -f -u plproject-remote-support.service -u rustdesk.service
-```
+The packaged vendor installer is pinned to the branded release. Build payloads
+with `python3 packaging/remote_support/build_payload.py DESTINATION`;
+`PL_SUPPORT_VENDOR_INSTALLER` can select an alternative trusted installer during
+platform release builds. Vendor installers must support `--provision-only`.

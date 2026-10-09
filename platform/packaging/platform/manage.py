@@ -20,18 +20,24 @@ from src.engine.updates.updater import PlatformUpdater
 from src.engine.updates.releases import validate_manifest, release_executable
 
 
+def desktop_user():
+    """Identify the desktop account even when invoked through sudo."""
+    user = pwd.getpwuid(os.getuid()).pw_name
+    if os.geteuid() == 0:
+        user = os.environ.get("SUDO_USER", "")
+        if not user or user == "root":
+            raise RuntimeError("Run the platform installer as the desktop user")
+    return user
+
+
 def install_remote_support(root):
-    """Provision system remote support, preserving the controller's ON/OFF state."""
+    """Install SSH and enable branded remote support at boot."""
     payload = root / "current/platform/installation/remote-support"
     installer = payload / "install.sh"
     vendor = payload / "install_pl_remote_support.sh"
     if not installer.is_file() or not vendor.is_file():
         raise RuntimeError("Platform installed, but remote-support payload is missing; rebuild this release")
-    ui_user = pwd.getpwuid(os.getuid()).pw_name
-    if os.geteuid() == 0:
-        ui_user = os.environ.get("SUDO_USER", "")
-        if not ui_user or ui_user == "root":
-            raise RuntimeError("Run the platform installer as the desktop user so remote support can grant that account access")
+    ui_user = desktop_user()
     command = ["bash", str(installer), ui_user, "--vendor-installer", str(vendor)]
     if os.geteuid() != 0:
         command.insert(0, "sudo")
@@ -40,6 +46,53 @@ def install_remote_support(root):
         subprocess.run(command, check=True)
     except (OSError, subprocess.CalledProcessError) as error:
         raise RuntimeError("Platform installed, but remote-support installation failed; rerun the installer to retry: " + str(error)) from error
+
+
+def install_kiosk(root, config_path, mode, launcher=None):
+    """Launch through the stable updater path so kiosk follows future releases."""
+    if mode == "off":
+        return
+    installer = root / "current/platform/installation/kiosk/setup_kiosk.sh"
+    if not installer.is_file():
+        raise RuntimeError("Kiosk payload is missing; rebuild this release")
+    launch_command = ([str(launcher)] if launcher else
+                      ["/usr/bin/python3", str(root / "tools/manage.py"),
+                       "--config", str(config_path), "launch"])
+    command = ["bash", str(installer), "install", "--user", desktop_user(),
+               "--directory", str(root), "--autologin", "yes" if mode == "enabled" else "no",
+               "--", *launch_command]
+    if os.geteuid() != 0:
+        command.insert(0, "sudo")
+    subprocess.run(command, check=True)
+
+
+def prepare_system_setup(root, *, first_install, mode=None, setup_system=False):
+    """Persist pending provisioning before activation, allowing failed setup retries."""
+    path = root / "update-state/system-setup.json"
+    state = json.loads(path.read_text()) if path.exists() else None
+    if setup_system or (first_install and (state is None or state["complete"])):
+        state = {"complete": False, "kiosk": mode or "enabled"}
+        atomic_json(path, state)
+    elif first_install and mode is not None:
+        state = {"complete": False, "kiosk": mode}
+        atomic_json(path, state)
+    elif mode is not None and not (state is not None and not state["complete"] and state["kiosk"] == mode):
+        raise ValueError("Use --setup-system to change kiosk on an existing installation")
+    return state
+
+
+def finish_system_setup(root, config_path, state, launcher=None):
+    if state is None or state["complete"]:
+        print("Software installation only; existing system and kiosk settings preserved.")
+        return
+    try:
+        install_remote_support(root)
+        install_kiosk(root, config_path, state["kiosk"], launcher=launcher)
+    except (OSError, subprocess.SubprocessError, RuntimeError) as error:
+        raise RuntimeError("Platform software installed, but system setup is incomplete; "
+                           "rerun the installer to retry: " + str(error)) from error
+    atomic_json(root / "update-state/system-setup.json", {**state, "complete": True})
+    print("Initial system setup completed. Reboot when ready; no session was stopped.")
 
 
 def install(args):
@@ -81,6 +134,7 @@ def install(args):
     updater = PlatformUpdater(config)
     with updater.offline():
         updater._recover()
+        first_install = updater.installed() is None
         if args.storage_from:
             if updater.installed() or (updater.data.exists() and any(updater.data.iterdir())):
                 raise ValueError("Storage import is allowed only into an empty first installation")
@@ -103,6 +157,9 @@ def install(args):
             if updater.data.exists():
                 updater.data.rmdir()
             os.rename(temporary, updater.data)
+        system_setup = prepare_system_setup(
+            root, first_install=first_install, mode=args.kiosk, setup_system=args.setup_system,
+        )
     # Update the independent helper during a trusted installer maintenance run.
     # Subsequent refreshes atomically replace a symlink to a complete tool tree.
     tools = root / "tools"
@@ -131,7 +188,8 @@ def install(args):
         updater.stage_local(args.archive.resolve())
         updater.queue()
         updater.apply_pending()
-    install_remote_support(root)
+    with updater.offline():
+        finish_system_setup(root, config_path, system_setup)
     print(f"Installed platform at {root}\nUpdate configuration: {config_path}")
     print(f"Launch: /usr/bin/python3 '{tools / 'manage.py'}' --config '{config_path}' launch")
 
@@ -183,6 +241,17 @@ def main():
     installer.add_argument("--config", type=Path, default=argparse.SUPPRESS)
     installer.add_argument("--root", type=Path)
     installer.add_argument("--storage-from", type=Path)
+    installer.add_argument("--kiosk", choices=("enabled", "manual", "off"),
+                           help="First install: enabled (default), manual login, or skip kiosk")
+    installer.add_argument("--setup-system", action="store_true",
+                           help="Explicitly rerun SSH, RustDesk and kiosk setup on an existing install")
+    # Shared provisioning entry point used by the combined robot installer.
+    setup = commands.add_parser("setup-system")
+    setup.add_argument("--root", type=Path, required=True)
+    setup.add_argument("--launcher", type=Path, required=True)
+    setup.add_argument("--first-install", action="store_true")
+    setup.add_argument("--setup-system", action="store_true")
+    setup.add_argument("--kiosk", choices=("enabled", "manual", "off"))
     for name in ("check", "stage", "queue", "apply", "launch", "recover"):
         commands.add_parser(name)
     rollback = commands.add_parser("rollback")
@@ -190,6 +259,13 @@ def main():
                           help="Restore the data snapshot; newer data stays in an additional backup")
     args = parser.parse_args()
     try:
+        if args.command == "setup-system":
+            root = args.root.expanduser().resolve()
+            with lock(root / "runtime.lock"):
+                state = prepare_system_setup(root, first_install=args.first_install,
+                                             mode=args.kiosk, setup_system=args.setup_system)
+                finish_system_setup(root, None, state, launcher=args.launcher.expanduser().absolute())
+            return 0
         if args.command == "install":
             install(args)
             return 0

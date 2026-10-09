@@ -67,6 +67,12 @@ if ! env -u PYTHONPATH "${PYTHON}" -c 'from PyQt6 import QtWidgets; import cv2; 
   exit 1
 fi
 if [[ "${1:-}" == "--setup-only" ]]; then
+  SUPPORT_COMMAND=(bash "${APP_DIR}/packaging/remote_support/install.sh")
+  if [[ ${EUID} -ne 0 ]]; then
+    SUPPORT_COMMAND=(sudo "${SUPPORT_COMMAND[@]}")
+  fi
+  "${SUPPORT_COMMAND[@]}" "${SUDO_USER:-${USER}}" \
+    --vendor-installer "${APP_DIR}/packaging/remote_support/install_pl_remote_support.sh"
   echo "Platform environment is ready."
   exit 0
 fi

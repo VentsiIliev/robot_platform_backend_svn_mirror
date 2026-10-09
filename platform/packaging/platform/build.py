@@ -3,6 +3,7 @@
 import argparse
 import ast
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -44,6 +45,16 @@ def main():
     if os.environ.get("PL_SUPPORT_VENDOR_INSTALLER"):
         support += ["--vendor-installer", os.environ["PL_SUPPORT_VENDOR_INSTALLER"]]
     subprocess.run(support, cwd=ROOT, check=True)
+    # The combined robot release bypasses build_release.py. Include its shared
+    # first-install provisioning entry point directly in the platform bundle.
+    installation = bundle / "installation"
+    (installation / "kiosk").mkdir(exist_ok=True)
+    shutil.copy2(ROOT / "setup_kiosk.sh", installation / "kiosk/setup_kiosk.sh")
+    shutil.copy2(ROOT / "packaging/platform/manage.py", installation / "system-setup.py")
+    shutil.copytree(ROOT / "src/engine/updates", installation / "src/engine/updates",
+                    ignore=shutil.ignore_patterns("__pycache__"), dirs_exist_ok=True)
+    for name in ("src/__init__.py", "src/engine/__init__.py"):
+        shutil.copy2(ROOT / name, installation / name)
     print(f"{args.target} bundle created at: {bundle}")
 
 

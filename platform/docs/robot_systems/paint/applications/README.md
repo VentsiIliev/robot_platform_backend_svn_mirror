@@ -19,7 +19,7 @@ At startup the paint shell receives only app metadata from those declarations. T
 |--------|--------------|
 | Production | `PaintDashboard`, `PaintAdjustment`, `WorkpieceLibrary`, `WorkpieceEditor` |
 | Service | Robot/tool/Modbus/device/work-area/camera/calibration/process settings, calibration and network settings; EtherCAT diagnostics is declared but currently disabled by a switch |
-| Administration | `UserManagement`, `SoftwareUpdate`, `RemoteSupport` |
+| Administration | `UserManagement`, `SoftwareUpdate` |
 | Tests | Broker debug, contour matching, intrinsic capture, hand-eye, target probing, motion-plane setup, motion recipe and shaft alignment (subject to app switches) |
 
 ---

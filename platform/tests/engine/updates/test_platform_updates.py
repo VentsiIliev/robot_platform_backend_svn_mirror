@@ -366,7 +366,7 @@ sys.argv = sys.argv[1:]
 spec = importlib.util.spec_from_file_location('platform_manager', sys.argv[0])
 manager = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(manager)
-with patch.object(manager, 'install_remote_support'):
+with patch.object(manager, 'install_remote_support'), patch.object(manager, 'install_kiosk'):
     sys.exit(manager.main())
 """
         arguments = ["/usr/bin/python3", "-c", bootstrap, str(manager), "--config", str(config), "install", str(archive), "--root", str(self.root)]

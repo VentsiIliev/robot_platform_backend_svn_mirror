@@ -8,6 +8,7 @@ from pathlib import Path
 import platform
 import re
 import shutil
+import subprocess
 import tempfile
 
 
@@ -52,6 +53,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, help='Optional installation directory')
     parser.add_argument('--activate', help='Switch to a previously installed version')
+    parser.add_argument('--kiosk', choices=('enabled', 'manual', 'off'))
+    parser.add_argument('--setup-system', action='store_true')
     args = parser.parse_args()
     bundle = Path(__file__).resolve().parent
     manifest = json.loads((bundle / 'manifest.json').read_text())
@@ -79,9 +82,33 @@ def main():
                     raise ValueError('Installed target mismatch')
                 activate(root, args.activate)
             else:
+                first_install = not (root / 'current').exists()
+                # Persist setup intent before activation so a failed install is retryable.
+                setup_state = root / 'update-state/system-setup.json'
+                if first_install and not setup_state.exists():
+                    setup_state.parent.mkdir(parents=True, exist_ok=True)
+                    temporary_state = setup_state.with_suffix('.tmp')
+                    temporary_state.write_text(json.dumps({'complete': False, 'kiosk': args.kiosk or 'enabled'}))
+                    os.replace(temporary_state, setup_state)
+                pending_setup = json.loads(setup_state.read_text()) if setup_state.exists() else None
+                retrying_choice = (pending_setup is not None and not pending_setup['complete']
+                                   and pending_setup['kiosk'] == args.kiosk)
+                if args.kiosk is not None and not (first_install or args.setup_system or retrying_choice):
+                    raise ValueError('Use --setup-system to change kiosk on an existing installation')
                 install(bundle, root, manifest)
+                helper = root / 'current/platform/installation/system-setup.py'
+                if not helper.is_file():
+                    raise ValueError('System setup payload missing; rebuild the platform release')
+                # Provision under the existing exclusive runtime lock.
+                import importlib.util
+                spec = importlib.util.spec_from_file_location('robot_system_setup', helper)
+                setup = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(setup)
+                state = setup.prepare_system_setup(root, first_install=first_install,
+                                                   mode=args.kiosk, setup_system=args.setup_system)
+                setup.finish_system_setup(root, None, state, launcher=root / 'launch.sh')
         print(f'Installed launcher: {root / "launch.sh"}')
-    except (ValueError, FileNotFoundError) as exc:
+    except (ValueError, RuntimeError, OSError, subprocess.SubprocessError) as exc:
         parser.error(str(exc))
 
 

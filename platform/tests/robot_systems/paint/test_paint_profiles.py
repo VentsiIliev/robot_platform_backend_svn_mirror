@@ -26,6 +26,14 @@ from src.robot_systems.paint_tray_dry.bootstrap_provider import (
 
 
 class TestPaintProfiles(unittest.TestCase):
+    def test_remote_support_screen_is_absent_from_all_paint_profiles(self):
+        for system in (PaintRobotSystem, AutomaticDryerPaintRobotSystem, TrayDryerPaintRobotSystem):
+            with self.subTest(system=system.__name__):
+                names = {spec.name.lower() for spec in system.shell.applications}
+                self.assertNotIn("remotesupport", names)
+                self.assertNotIn("remotesupport", system.role_policy.protected_app_role_values)
+                self.assertIn("softwareupdate", names)
+
     def test_fresh_tray_defaults_are_valid_without_changing_saved_values(self):
         from src.robot_systems.paint.component_ids import SettingsID
         from src.robot_systems.paint.processes.paint.paint_process_config_serializer import PaintProcessConfigSerializer

@@ -191,12 +191,12 @@ def main() -> None:
 
     remote_support_monitor = None
     if sys.platform == "linux" and bootstrap_provider.system_class.__module__.startswith("src.robot_systems.paint."):
-        from src.engine.remote_support.client import RemoteSupportClient
+        from src.engine.remote_support.service_status_client import RustDeskServiceStatusClient
         from src.engine.remote_support.session_client import RustDeskSessionClient
         from src.bootstrap.shell_remote_support_controller import ShellRemoteSupportController
 
         remote_support_monitor = ShellRemoteSupportController(
-            shell.header, RemoteSupportClient(timeout=2), RustDeskSessionClient(),
+            shell.header, RustDeskServiceStatusClient(timeout=2), RustDeskSessionClient(),
         )
         qt_app.aboutToQuit.connect(remote_support_monitor.stop)
         remote_support_monitor.start()

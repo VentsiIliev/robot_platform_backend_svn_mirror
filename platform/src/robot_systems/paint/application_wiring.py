@@ -1582,25 +1582,6 @@ def _build_network_settings_application(robot_system):
     return build_network_settings_application(robot_system, show_remote_support=False)
 
 
-def _build_remote_support_application(robot_system):
-    from src.applications.remote_support import RemoteSupportApplication
-    from src.applications.remote_support.service.remote_support_application_service import RemoteSupportApplicationService
-
-    from src.applications.user_management.domain.auth_user_repository_adapter import AuthUserRepositoryAdapter
-    from src.applications.user_management.domain.csv_user_repository import CsvUserRepository
-    from src.engine.auth.authentication_service import AuthenticationService
-    from src.robot_systems.paint.domain.users import build_paint_user_schema
-
-    role_policy = robot_system.__class__.role_policy
-    user_repo = CsvUserRepository(
-        robot_system.users_storage_path(), build_paint_user_schema(role_policy.role_values),
-    )
-    return RemoteSupportApplication(RemoteSupportApplicationService(
-        authentication_service=AuthenticationService(AuthUserRepositoryAdapter(user_repo)),
-        admin_role_value=role_policy.admin_role_value,
-    ))
-
-
 def _build_software_update_application(robot_system):
     from src.applications.software_update import SoftwareUpdateApplication
     from src.applications.software_update.service.software_update_service import SoftwareUpdateService

@@ -5,7 +5,7 @@ from src.applications.network_settings.view.network_settings_view import Network
 
 
 class NetworkSettingsFactory(ApplicationFactory):
-    def __init__(self, *, show_remote_support: bool = True):
+    def __init__(self, *, show_remote_support: bool = False):
         self._show_remote_support = show_remote_support
 
     def _create_model(self, service): return NetworkSettingsModel(service)

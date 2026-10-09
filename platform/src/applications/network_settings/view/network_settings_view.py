@@ -108,7 +108,7 @@ class NetworkSettingsView(IApplicationView):
     remote_support_requested = pyqtSignal(bool)
     remote_support_refresh_requested = pyqtSignal()
 
-    def __init__(self, parent=None, *, show_remote_support: bool = True) -> None:
+    def __init__(self, parent=None, *, show_remote_support: bool = False) -> None:
         self.has_remote_support = show_remote_support
         super().__init__("NetworkSettings", parent)
 

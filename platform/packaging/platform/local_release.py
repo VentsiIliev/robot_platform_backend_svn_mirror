@@ -33,7 +33,8 @@ def latest_installer(releases: Path, target: dict) -> Path:
     return max(candidates, key=lambda candidate: candidate[0])[1]
 
 
-def install(kit: Path, target: dict, config: Path | None, root: Path | None) -> int:
+def install(kit: Path, target: dict, config: Path | None, root: Path | None,
+            *, kiosk: str | None = None, setup_system: bool = False) -> int:
     print(f"Installing latest local release: {kit}", flush=True)
     prefix = f"{target['product']}-installer"
     with tempfile.TemporaryDirectory(prefix="robot-platform-installer-") as directory:
@@ -50,6 +51,10 @@ def install(kit: Path, target: dict, config: Path | None, root: Path | None) -> 
             command += ["--config", str(config.expanduser().resolve())]
         if root:
             command += ["--root", str(root.expanduser().resolve())]
+        if kiosk is not None:
+            command += ["--kiosk", kiosk]
+        if setup_system:
+            command += ["--setup-system"]
         return subprocess.run(command).returncode
 
 
@@ -80,12 +85,17 @@ def main() -> int:
     parser.add_argument("--releases-dir", type=Path, default=ROOT / "dist/platform-releases")
     parser.add_argument("--config", type=Path)
     parser.add_argument("--root", type=Path)
+    parser.add_argument("--kiosk", choices=("enabled", "manual", "off"))
+    parser.add_argument("--setup-system", action="store_true")
     args = parser.parse_args()
     try:
         name = args.target or json.loads((ROOT / "config/platform.json").read_text())["robot_system"]
         target = load_target(name)
         if args.action == "install":
-            return install(latest_installer(args.releases_dir.expanduser().resolve(), target), target, args.config, args.root)
+            return install(latest_installer(args.releases_dir.expanduser().resolve(), target), target,
+                           args.config, args.root, kiosk=args.kiosk, setup_system=args.setup_system)
+        if args.kiosk is not None or args.setup_system:
+            parser.error("System setup options apply only to install")
         return run(target, args.config, args.root)
     except (OSError, ValueError, KeyError, tarfile.TarError) as error:
         print(f"Platform operation failed: {error}", file=sys.stderr)

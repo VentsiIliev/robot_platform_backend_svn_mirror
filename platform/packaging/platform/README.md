@@ -10,7 +10,9 @@ Target: Ubuntu 24.04, built on the target CPU architecture.
 From `platform/`, run `./launch_robot_app.sh`. It creates `.venv`, installs
 Python requirements when their hash changes, and verifies native/GUI imports.
 Use `./launch_robot_app.sh --setup-only` to prepare the environment without
-starting the application or robot services.
+starting the application or robot services. This explicit setup step also installs
+OpenSSH server and the branded PL PROJECT RustDesk package and enables both
+system services at boot (administrator authentication and network access required).
 
 On Ubuntu/Debian, missing ZBar or XCB cursor libraries trigger `apt-get update`
 and installation of `libzbar0` and/or `libxcb-cursor0`, using `sudo` when needed.
@@ -113,6 +115,46 @@ screen therefore refuses scheduling while a runtime is attached; close the
 platform and use the offline CLI. Twin packaging adds a bootstrap provider, but
 backend/runtime provisioning remains a separate phase.
 
+## First installation versus software updates
+
+A first installation automatically provisions SSH, branded RustDesk, and GNOME
+Kiosk for the desktop account running the installer. Kiosk uses X11 with
+automatic login and launches through the stable installed launcher, so future
+versions are followed without rewriting the kiosk configuration. Installation
+never logs out, starts the robot application, or reboots automatically.
+
+The installer records system setup in `INSTALL_ROOT/update-state/system-setup.json`.
+If provisioning fails after software activation, rerunning the installer retries
+pending setup. After completion, maintenance installs and ordinary software
+updates preserve GDM, automatic login, kiosk scripts, SSH and RustDesk settings.
+An existing installation created by older installers is treated as an update;
+use `--setup-system` deliberately to provision that machine.
+
+The installer kit's `install.sh` accepts:
+
+```bash
+./install.sh                   # First install: kiosk with automatic login
+./install.sh --kiosk manual    # First install: select kiosk manually at login
+./install.sh --kiosk off       # First install: skip kiosk, still install remote services
+./install.sh --setup-system --kiosk enabled  # Existing install: rerun system setup
+```
+
+`--kiosk off` skips configuration; it does not uninstall an existing kiosk.
+Use the kiosk script's `uninstall` command to restore its saved baseline.
+The account's GNOME Kiosk session and GDM settings are global machine
+configuration: install one selected product as the kiosk per machine. Its
+first backup is retained by `setup_kiosk.sh`.
+
+Both the platform-only and combined robot installers support these options.
+The combined installer uses `INSTALL_ROOT/launch.sh`, retaining backend startup;
+the platform-only installer uses `INSTALL_ROOT/tools/manage.py --config ... launch`.
+The platform-only `local_release.py install` also forwards `--kiosk` and
+`--setup-system`. Already-built release kits need rebuilding for this behavior.
+
+After a first installation, reboot when ready and verify kiosk startup, SSH
+login and RustDesk connectivity. Production behavior still requires verification
+on the target machine. See [kiosk setup](../kiosk/README.md).
+
 ## Convenient local install and launch
 
 From the project root, use the scripts for the desired system/profile:
@@ -127,11 +169,12 @@ its own target. The former root-level install/run shortcuts have been removed.
 
 `install_latest.sh` selects the highest semantic version of a trusted local
 installer kit for that target and CPU architecture under
-`dist/platform-releases/TARGET/`. Close the platform before installing. The installer also provisions the bundled
-PL PROJECT remote-support package and system controller automatically, using
+`dist/platform-releases/TARGET/`. Close the platform before installing. On first installation, the installer provisions
+OpenSSH server, the bundled PL PROJECT remote-support package, and GNOME Kiosk, using
 `sudo` only for that step. Run it as the desktop user; it may request that user's
-administrator password. Package downloads require internet access. First installation
-leaves remote access OFF, and subsequent installations preserve its ON/OFF setting.
+administrator password. Package downloads require internet access. SSH and RustDesk
+are enabled at boot. Explicit system setup removes any previous timed-access gate
+and expiry timer. Remote access no longer has an application ON/OFF or duration control.
 A remote-support failure returns an error; rerunning the installer retries it
 without replacing platform data. Older kits must be rebuilt to include this step.
 Existing

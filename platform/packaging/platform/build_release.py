@@ -75,6 +75,9 @@ def main():
                         raise ValueError(f"Bundle contains live machine data: {member.name}")
                 return member
             target.add(bundle, arcname="platform", filter=exclude_storage)
+            if not (bundle / "installation/kiosk/setup_kiosk.sh").is_file():
+                target.add(source / "setup_kiosk.sh",
+                           arcname="platform/installation/kiosk/setup_kiosk.sh")
             updater_prefix = "platform/installation/updater"
             target.add(Path(__file__).with_name("manage.py"), arcname=f"{updater_prefix}/manage.py")
             def exclude_updater_cache(member):

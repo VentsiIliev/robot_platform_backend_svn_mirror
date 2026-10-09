@@ -61,7 +61,6 @@ Live data    →  Broker sub   →  Bridge      →  View setter
 | `intrinsic_calibration_capture/` | Automated chessboard/ChArUco calibration acquisition |
 | `shaft_alignment/` | Camera/marker reference capture and alignment comparison |
 | `network_settings/` | Host network configuration |
-| `remote_support/` | Restricted support-service controls |
 | `software_update/` | Signed product update UI |
 
 Robot-system-specific dashboards may expose process-owned quick settings while retaining the same MVC boundary. The paint dashboard's unmatched controls use a one/two-pass selector and pass tabs. Pass two defaults to an explicit “Use Pass 1 settings” mode; disabling inheritance enables independent velocity, acceleration, and press-offset fields. The service validates/saves the complete configuration; whether pass settings may change during a run depends on `allow_running_paint_settings_updates`. When enabled, the active workpiece retains its snapshot and the next cycle captures the update.
@@ -158,7 +157,6 @@ class YourRobotApp(BaseRobotSystem):
 | `network_settings/` | [network_settings](network_settings/README.md) |
 | `pick_and_place_visualizer/` | [pick_and_place_visualizer](pick_and_place_visualizer/README.md) |
 | `pick_target/` | [pick_target](pick_target/README.md) |
-| `remote_support/` | [remote_support](remote_support/README.md) |
 | `robot_settings/` | [robot_settings](robot_settings/README.md) |
 | `shaft_alignment/` | [shaft_alignment](shaft_alignment/README.md) |
 | `software_update/` | [software_update](software_update/README.md) |

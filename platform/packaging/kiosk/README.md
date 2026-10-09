@@ -6,6 +6,15 @@ deployment. It installs kiosk packages, creates the launcher and log directory,
 selects the account's kiosk session, and optionally enables automatic login.
 It does not create accounts, configure hardware permissions, or install your app.
 
+## Integrated platform installation
+
+New platform and combined robot release installers configure kiosk on first
+installation only, using this script. Automatic login defaults to enabled.
+Use `--kiosk manual` for a manual-login test or `--kiosk off` to skip kiosk.
+Subsequent installs and software updates preserve the kiosk configuration;
+`--setup-system` explicitly reruns setup on an existing machine. Pending first
+setup is retried after failure. See [installation policy](../platform/README.md#first-installation-versus-software-updates).
+
 ## Install and test
 
 From the platform checkout, prepare the robot application **as the kiosk user**:

@@ -10,7 +10,6 @@ Generated from Python ASTs. Signatures, declared defaults, imports and docstring
 - [test_device_control_controller.py](#test_device_control_controllerpy)
 - [test_intrinsic_capture_service.py](#test_intrinsic_capture_servicepy)
 - [test_network_settings.py](#test_network_settingspy)
-- [test_remote_support.py](#test_remote_supportpy)
 - [test_robot_jog_widget_localization.py](#test_robot_jog_widget_localizationpy)
 
 ## `__init__.py`
@@ -209,77 +208,6 @@ def test_opening_remote_tab_requests_fresh_service_state(self) -> None
 
 ```python
 def test_real_workers_finish_without_freezing_startup(self) -> None
-```
-
-## `test_remote_support.py`
-
-Source: [tests/applications/test_remote_support.py](../../../tests/applications/test_remote_support.py).
-
-Imports (including optional/function-local imports; not a startup dependency list): `PyQt6.QtCore`, `PyQt6.QtTest`, `PyQt6.QtWidgets`, `json`, `pathlib`, `src.applications.base.widgets`, `src.applications.remote_support.model.remote_support_model`, `src.applications.remote_support.remote_support_application_factory`, `src.applications.remote_support.service.remote_support_application_service`, `src.applications.remote_support.service.stub_remote_support_service`, `src.applications.remote_support.view.remote_support_view`, `src.engine.localization.dict_translator`, `src.robot_systems.paint`, `src.robot_systems.paint.paint_robot_system`, `time`, `types`, `unittest`, `unittest.mock`.
-
-### `RemoteSupportTests`
-
-```python
-class RemoteSupportTests(unittest.TestCase):
-```
-
-Directly declared public methods and constructor (inherited methods are documented on their base class):
-
-```python
-@classmethod
-def setUpClass(cls)
-```
-
-```python
-def wait_for(self, predicate)
-```
-
-```python
-def test_service_uses_existing_socket_client(self)
-```
-
-```python
-def test_switch_waits_for_confirmed_state_and_reports_mismatch_and_failure(self)
-```
-
-```python
-def test_real_workers_enable_and_disable_without_blocking(self)
-```
-
-```python
-def test_initial_and_runtime_bulgarian_translation(self)
-```
-
-```python
-def test_paint_moves_control_to_administration_and_does_not_poll_it_in_network(self)
-```
-
-```python
-def test_password_reset_requires_platform_admin_and_never_changes_access_window(self)
-```
-
-```python
-def test_invalid_password_and_old_controller_are_rejected_before_mutation(self)
-```
-
-```python
-def test_password_management_while_support_off_never_starts_rustdesk(self)
-```
-
-```python
-def test_reset_form_clears_secrets_and_preserves_expiry(self)
-```
-
-```python
-def test_password_confirmation_failure_does_not_call_service(self)
-```
-
-```python
-def test_status_poll_preserves_password_focus_and_typing(self)
-```
-
-```python
-def test_shared_keyboard_keeps_top_and_bottom_fields_visible_and_password_masked(self)
 ```
 
 ## `test_robot_jog_widget_localization.py`

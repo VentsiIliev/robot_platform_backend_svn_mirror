@@ -145,12 +145,6 @@ Every Python file is parsed without executing it, including vendor code, demos a
 | `src/applications/pick_target/model` | [Guide](applications/pick_target/model/README.md) | 2 |
 | `src/applications/pick_target/service` | [Guide](applications/pick_target/service/README.md) | 4 |
 | `src/applications/pick_target/view` | [Guide](applications/pick_target/view/README.md) | 2 |
-| `src/applications/remote_support` | [Guide](applications/remote_support/README.md) | 4 |
-| `src/applications/remote_support/controller` | [Guide](applications/remote_support/controller/README.md) | 2 |
-| `src/applications/remote_support/localization` | [Guide](applications/remote_support/localization/README.md) | 0 |
-| `src/applications/remote_support/model` | [Guide](applications/remote_support/model/README.md) | 2 |
-| `src/applications/remote_support/service` | [Guide](applications/remote_support/service/README.md) | 4 |
-| `src/applications/remote_support/view` | [Guide](applications/remote_support/view/README.md) | 2 |
 | `src/applications/robot_settings` | [Guide](applications/robot_settings/README.md) | 3 |
 | `src/applications/robot_settings/controller` | [Guide](applications/robot_settings/controller/README.md) | 2 |
 | `src/applications/robot_settings/localization` | [Guide](applications/robot_settings/localization/README.md) | 0 |
