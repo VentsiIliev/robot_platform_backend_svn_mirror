@@ -5,5 +5,18 @@
     "red",
     "green",
     "orange"
-  ]
+  ],
+  "state_mapping": {
+    "idle": [],
+    "running": [
+      "green"
+    ],
+    "paused": [
+      "orange"
+    ],
+    "stopped": [],
+    "error": [
+      "red"
+    ]
+  }
 }

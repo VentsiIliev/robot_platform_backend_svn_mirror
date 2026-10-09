@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from src.engine.repositories.interfaces.settings_serializer import ISettingsSerializer
 
@@ -19,6 +19,10 @@ class OperatorLightsConfig:
     enabled: bool = False
     transport: str = "memory"
     channels: tuple[str, ...] = ("red", "green", "orange")
+    state_mapping: dict[str, tuple[str, ...]] = field(default_factory=lambda: {
+        "idle": (), "running": ("green",), "paused": ("orange",),
+        "stopped": (), "error": ("red",),
+    })
 
     def __post_init__(self) -> None:
         if self.transport not in ("memory", "configured_slave"):
@@ -27,6 +31,9 @@ class OperatorLightsConfig:
             raise ValueError("Light channels require nonempty names")
         if len(set(self.channels)) != len(self.channels):
             raise ValueError("Light channel names must be distinct")
+        for names in self.state_mapping.values():
+            if isinstance(names, str) or any(name not in self.channels for name in names):
+                raise ValueError("State mappings must contain configured channel names")
 
 
 class OperatorLightsConfigSerializer(ISettingsSerializer[OperatorLightsConfig]):
@@ -42,6 +49,7 @@ class OperatorLightsConfigSerializer(ISettingsSerializer[OperatorLightsConfig]):
             "enabled": settings.enabled,
             "transport": settings.transport,
             "channels": list(settings.channels),
+            "state_mapping": {state: list(names) for state, names in settings.state_mapping.items()},
         }
 
     def from_dict(self, data: dict) -> OperatorLightsConfig:
@@ -53,7 +61,15 @@ class OperatorLightsConfigSerializer(ISettingsSerializer[OperatorLightsConfig]):
             not isinstance(name, str) for name in values["channels"]
         ):
             raise ValueError("Operator light channels must be a list of names")
+        mapping = values["state_mapping"]
+        if not isinstance(mapping, dict) or any(
+            not isinstance(state, str) or not isinstance(names, list)
+            or any(not isinstance(name, str) for name in names)
+            for state, names in mapping.items()
+        ):
+            raise ValueError("State mapping must map state names to lists of channel names")
         return OperatorLightsConfig(
             enabled=values["enabled"], transport=values["transport"],
             channels=tuple(values["channels"]),
+            state_mapping={state: tuple(names) for state, names in mapping.items()},
         )

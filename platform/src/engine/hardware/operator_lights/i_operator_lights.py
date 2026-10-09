@@ -1,13 +1,18 @@
 from abc import ABC, abstractmethod
 from typing import Iterable
+from src.engine.hardware.operator_lights.channel import ChannelRef
 
 
 class IOperatorLights(ABC):
     """Synchronous output API; hardware calls belong on a worker when used by Qt."""
 
     @abstractmethod
-    def set_active(self, channels: Iterable[str]) -> None:
+    def set_active(self, channels: Iterable[ChannelRef | str]) -> None:
         """Apply the complete set of active channels; empty means all off."""
+
+    @abstractmethod
+    def get_channel(self, name: str) -> ChannelRef:
+        """Resolve a configured name, raising ValueError for an unknown channel."""
 
     @abstractmethod
     def set_enabled(self, enabled: bool) -> None:

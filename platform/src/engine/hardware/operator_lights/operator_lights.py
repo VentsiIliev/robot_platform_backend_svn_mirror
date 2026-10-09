@@ -4,6 +4,7 @@ from typing import Iterable
 from src.engine.hardware.communication.i_register_transport import IRegisterTransport
 from src.engine.hardware.operator_lights.config import LightChannel, OperatorLightsConfig
 from src.engine.hardware.operator_lights.i_operator_lights import IOperatorLights
+from src.engine.hardware.operator_lights.channel import ChannelRef
 
 
 class OperatorLights(IOperatorLights):
@@ -24,8 +25,13 @@ class OperatorLights(IOperatorLights):
         self._lock = RLock()
         self._closed = False
 
-    def set_active(self, channels: Iterable[str]) -> None:
-        active = set(channels)
+    def get_channel(self, name: str) -> ChannelRef:
+        if name not in self._channels:
+            raise ValueError(f"Unknown light channel: {name}")
+        return ChannelRef(name)
+
+    def set_active(self, channels: Iterable[ChannelRef | str]) -> None:
+        active = {channel.name if isinstance(channel, ChannelRef) else channel for channel in channels}
         with self._lock:
             if self._closed:
                 raise RuntimeError("Operator lights are closed")

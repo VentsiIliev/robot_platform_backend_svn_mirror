@@ -45,6 +45,19 @@ class TrayDryerPaintRobotSystem(PaintRobotSystem):
         self._operator_lights = self.get_optional_service(ServiceID.OPERATOR_LIGHTS)
         if self._operator_lights is not None:
             self.register_managed_resource(self._operator_lights)
+            from src.robot_systems.paint_tray_dry.operator_light_coordinator import OperatorLightCoordinator
+            from src.robot_systems.paint.component_ids import ProcessID
+
+            self._operator_light_coordinator = OperatorLightCoordinator(
+                self._operator_lights, self.get_settings(TraySettingsID.OPERATOR_LIGHTS),
+                self._messaging_service, ProcessID.MAIN_PROCESS,
+                state_getter=self._get_paint_process_state,
+            )
+            self.register_managed_resource(self._operator_light_coordinator)
+            self._operator_light_coordinator.start()
+
+    def _get_paint_process_state(self):
+        return self._main_process.state
 
     metadata = replace(
         PaintRobotSystem.metadata,
