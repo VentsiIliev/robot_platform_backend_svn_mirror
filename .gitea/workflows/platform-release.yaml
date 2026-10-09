@@ -34,7 +34,7 @@ jobs:
             tests.engine.updates.test_gitea_release \
             tests.engine.updates.test_platform_publication -q
 
-      - name: Build with existing wrapper and publish Gitea release
+      - name: Build platform component and publish Gitea release
         shell: bash
         env:
           GITEA_TOKEN: ${{ secrets.ROBOT_RELEASE_TOKEN }}

@@ -2,7 +2,7 @@
 
 The repository workflow [platform-release.yaml](../../../.gitea/workflows/platform-release.yaml)
 is manually dispatched from Gitea and releases the platform for `paint_tray_dry`.
-It calls the existing `src/robot_systems/paint_tray_dry/build_release.sh`, which
+It calls the existing `packaging/platform/build_and_release.py paint_tray_dry`, which
 reads `src/robot_systems/paint_tray_dry/VERSION`, builds the platform, runs its
 frozen self-test, and packages the installer/update archive. It does not package
 or start the ROS backend.

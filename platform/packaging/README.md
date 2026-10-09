@@ -1,85 +1,54 @@
-# Robot platform packaging
+# Build and release entry points
 
-Use [Platform installer and updates](platform/README.md) for independent system/profile installers, dedicated update-source configs, signing and data-preserving updates. The commands below retain the older Paint build/publishing workflow.
-
-# Paint standalone build
-
-The Ubuntu remote support controller is installed separately from the
-application bundle. See [Network Settings](../docs/applications/network_settings/README.md)
-for the installer, boot behavior, and validation path.
-The build stages its complete installation payload inside
-`paint-robot/installation/remote-support/`, so release archives carry the
-installer without requiring the repository on the robot. The final product
-installer can invoke that payload with the configured HMI user.
-The platform's rebranded RustDesk installer is included by default.
-`PL_SUPPORT_VENDOR_INSTALLER` can select an alternate script; it must support
-`--provision-only`. See the [payload guide](remote_support/README.md).
-
-This profile creates a PyInstaller `onedir` distribution for the paint robot
-system. It bundles Python and pip-installed runtime dependencies, so Python is
-not required on the target machine.
-
-The Paint target excludes all other robot systems. Shared
-platform modules and shared applications are included when they are imported
-by the paint application.
-
-The bundled startup configuration lists only `paint` as an installed and
-supported robot system.
-
-The contour-editor dependency currently imports its runtime `RadialMenu` class
-from a module under its own `tests/examples` package. That module is therefore
-runtime code despite its upstream path and cannot safely be excluded here.
-
-## Build
-
-Build on the same Linux distribution and CPU architecture as the target:
+For the complete robot system (platform and backend together), run from `platform/`:
 
 ```bash
-.venv/bin/python -m pip install -r packaging/requirements-build.txt
-./packaging/build_paint.sh
+source .venv/bin/activate
+python3 -B packaging/platform/release_robot.py check paint_tray_dry
+python3 -B packaging/platform/release_robot.py build paint_tray_dry
 ```
 
-The requirements file contains build and release tooling, including PyInstaller
-and the coverage package used by the repository test harness. These tools are
-needed only on the build machine, not on machines running the bundle.
+Set exact versions in `config/platform.json` and commit before building.
+Use `verify` to check an existing archive and `publish` for the official SVN/Gitea
+release workflow. See [complete robot releases](platform/ROBOT_RELEASE_WORKFLOW.md).
 
-The output is `dist/paint-robot/`. Test it with:
+## Directory ownership
+
+| Location | Purpose |
+| --- | --- |
+| `packaging/platform/release_robot.py` | Main complete-system release command |
+| `../deployment/scripts/` | Component packaging, combined assembly and installer implementation |
+| `packaging/platform/` | Platform builder, runtime management and publication helpers |
+| `packaging/kiosk/` and `setup_kiosk.sh` | Desktop kiosk and automatic login setup |
+| `packaging/remote_support/` | Bundled remote support installation payload |
+| `scripts/` | Development and hardware diagnostics, plus source publication helper |
+| `build/` | Disposable build intermediates (ignored by Git) |
+| `dist/` | Bundles, verification reports and local VM test feed (ignored by Git) |
+| `../releases/TARGET/` | Immutable platform/backend/robot version archives (ignored by Git) |
+
+Build outputs stay outside source history. Do not move or modify an existing
+version archive; create a new version when software changes. The VM test feed
+under `dist/install-tests/` contains local copies and is not the official publisher.
+
+## Component-only development
+
+`./packaging/build_platform.sh TARGET` builds a raw platform bundle without the
+backend. [Platform-only tools](platform/README.md) and the
+[platform-only Actions job](platform/GITEA_ACTIONS.md) remain available for that
+specific use. Their installers should not replace a complete robot installation.
+Per-system build/install/run wrappers have been removed.
+
+The raw PyInstaller bundle includes Python dependencies; native OS libraries are
+provisioned by the installer. [Remote support](remote_support/README.md) and
+[kiosk setup](kiosk/README.md) describe the installation payloads.
+
+## Publish source changes only
+
+From `platform/`, after reviewing changes:
 
 ```bash
-./dist/paint-robot/paint-robot
+python3 -B scripts/publish_changes.py --all -m "Describe changes"
 ```
 
-The ROS 2 Fairino bridge is not bundled. With the current configuration, it
-must be reachable at `http://localhost:5000`.
-
-## Release
-
-The release helper uses system-specific tags such as `paint-v1.0.0`, keeping
-paint releases distinct from glue and welding releases in this repository.
-The version must match `PaintRobotSystem.metadata.version`, the current branch
-must be `work`, and the working tree must be clean.
-
-Prepare and test a local release archive without changing Git or GitHub:
-
-```bash
-./packaging/release_paint.sh 1.0.0
-```
-
-After testing the generated bundle, publish the annotated tag, archive,
-SHA-256 checksum, and GitHub release:
-
-```bash
-./packaging/release_paint.sh 1.0.0 --publish
-```
-
-The publish step also checks that local `work` exactly matches `origin/work`.
-Use `--skip-tests` only when the same commit has already passed the test suite.
-
-## Runtime data
-
-Mutable settings, users, calibration artifacts, and workpieces are excluded
-from the bundle. Standalone execution uses external storage; installed operation
-uses the independent launcher and versioned releases. See
-[Platform installer and updates](platform/README.md) for installation, migration
-of existing machine storage, the configurable HTTPS release source, signing,
-and rollback. ROS backend software remains outside this update mechanism.
+This commits, publishes to SVN, then pushes SVN-generated history to Gitea.
+Use `--resume` to publish existing commits. It does not build or publish archives.

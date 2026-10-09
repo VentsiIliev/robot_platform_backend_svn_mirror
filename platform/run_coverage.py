@@ -3,10 +3,10 @@
 Run the test suite with coverage and print a report.
 
 Usage:
-    python run_coverage.y_pixels                  # text report in terminal
-    python run_coverage.y_pixels --html           # also open htmlcov/index.html
-    python run_coverage.y_pixels --missing        # show missing line numbers
-    python run_coverage.y_pixels --fail-under 50  # exit 1 if below 50 %
+    python run_coverage.py                  # text report in terminal
+    python run_coverage.py --html           # also open htmlcov/index.html
+    python run_coverage.py --missing        # show missing line numbers
+    python run_coverage.py --fail-under 50  # exit 1 if below 50 %
 
 Requirements:
     pip install coverage
@@ -54,7 +54,7 @@ def main() -> None:
         # "--omit=*/__pycache__/*,*/test_*",
         "-m", "unittest", "discover",
         "-s", str(ROOT / "tests"),
-        "-p", "test_*.y_pixels",
+        "-p", "test_*.py",
         "--top-level-dir", str(ROOT),
     ]
 
@@ -65,7 +65,7 @@ def main() -> None:
     print("Coverage report")
     print("=" * 60)
 
-    report_cmd = [python, "-m", "coverage", "report", f"--rcfile={ROOT}/.coveragerc"]
+    report_cmd = [python, "-m", "coverage", "report", "--skip-empty", "--omit=*/tests/*"]
     if args.missing:
         report_cmd.append("--show-missing")
     if args.fail_under:

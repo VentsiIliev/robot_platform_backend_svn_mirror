@@ -17,6 +17,9 @@ def version_tuple(value: str) -> tuple[int, int, int]:
 
 
 def validate_manifest(raw: dict, product: str) -> dict:
+    if isinstance(raw, dict) and raw.get('component') == 'robot':
+        from .robot_releases import validate_robot_manifest
+        return validate_robot_manifest(raw, product)
     if not isinstance(raw, dict) or raw.get("format") not in (1, 2) or raw.get("product") != product:
         raise ValueError("Wrong release format or product")
     if raw["format"] == 1 and product != "paint-robot":
@@ -42,6 +45,12 @@ def validate_manifest(raw: dict, product: str) -> dict:
 
 def extract_release(archive: Path, destination: Path, max_bytes: int) -> None:
     """Extract only regular files/directories within the release root."""
+    with tarfile.open(archive, 'r:gz') as bundle:
+        first = next(iter(bundle), None)
+    if first is not None and PurePosixPath(first.name).parts[:1] == ('robot',):
+        from .robot_releases import extract_robot_release
+        extract_robot_release(archive, destination, max_bytes)
+        return
     destination.mkdir(parents=True, exist_ok=False)
     try:
         with tarfile.open(archive, "r:gz") as bundle:
@@ -81,6 +90,11 @@ def extract_release(archive: Path, destination: Path, max_bytes: int) -> None:
 
 
 def release_executable(manifest: dict) -> str:
+    if manifest.get('component') == 'robot':
+        value = manifest.get('components', {}).get('platform', {}).get('executable', '')
+        if not isinstance(value, str) or not re.fullmatch(r'[a-z][a-z0-9_-]*', value):
+            raise ValueError('Invalid robot platform executable')
+        return value
     value = manifest.get("executable", "paint-robot" if manifest.get("format") == 1 else "")
     if not isinstance(value, str) or not re.fullmatch(r"[a-z][a-z0-9_-]*", value):
         raise ValueError("Invalid release executable")
@@ -88,6 +102,10 @@ def release_executable(manifest: dict) -> str:
 
 
 def release_identity(manifest: dict) -> tuple[str, str, str]:
+    if manifest.get('component') == 'robot':
+        selection = manifest['selection']
+        return ('robot:' + manifest['target'], selection['robot_driver'],
+                selection['backend'] + ':' + selection['backend_profile'])
     if manifest.get("format") == 1:
         return manifest["product"], "paint", "default"
     return manifest["product"], manifest["robot_system"], manifest["profile"]

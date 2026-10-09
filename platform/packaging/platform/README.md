@@ -33,7 +33,7 @@ font environment, so OpenCV's bundled Qt 5 paths do not redirect the PyQt6 GUI.
 ## Independent system/profile releases
 
 For Gitea Actions, see [platform release setup](GITEA_ACTIONS.md). The manual
-workflow runs the existing `paint_tray_dry/build_release.sh` and publishes its
+workflow runs `packaging/platform/build_and_release.py paint_tray_dry` and publishes its
 installer/update archives using the system's `VERSION` file.
 
 For the combined platform/backend robot release, use the
@@ -53,44 +53,18 @@ Select a target from `config/release_targets.json`:
 | twin_robot | twin-robot |
 | welding | welding-robot |
 
-Each target folder has executable `build_release.sh`, `install_latest.sh` and
-`run_latest.sh` scripts. These always select that folder's target, regardless of
-`config/platform.json`. For example:
+Platform-only component tools accept an explicit target; there are no per-system
+shell wrappers. These are for component development, not complete robot updates:
 
 ```bash
-./src/robot_systems/paint_tray_dry/build_release.sh
-./src/robot_systems/paint_tray_dry/install_latest.sh
-./src/robot_systems/paint_tray_dry/run_latest.sh
-
-./src/robot_systems/glue/build_release.sh
-./src/robot_systems/glue/install_latest.sh
-./src/robot_systems/glue/run_latest.sh
+.venv/bin/python -B packaging/platform/build_and_release.py paint_tray_dry 1.0.7
+.venv/bin/python -B packaging/platform/local_release.py install paint_tray_dry
+.venv/bin/python -B packaging/platform/local_release.py run paint_tray_dry
 ```
 
-Edit `src/robot_systems/TARGET/VERSION` to choose that target's release version
-(one `major.minor.patch` value, for example `1.0.6`). Each system/profile has its
-own file. Tray Dryer starts at `1.0.6`; the other targets start at `1.0.0`.
-An explicit argument such as `build_release.sh 1.0.7` overrides the file for that
-build without changing it. Missing or invalid version files stop before building.
-Install/latest and run/latest continue selecting the latest available installer
-and the installed application; they do not depend on `VERSION`.
-
-Replace the folder with any target in the table above. `build_release.sh [VERSION]`
-builds a fresh bundle, runs its hardware-free self-test with Qt offscreen, then
-creates the installer and update archive. A failed build or self-test stops the
-release. It accepts the release options `--channel`, `--output`, `--storage-schema`,
-`--migrations`, `--svn-revision` and `--signing-key`. Set `PYTHON_BIN` to override
-the build interpreter (default: project `.venv/bin/python`). Relative paths are
-resolved from the project root, even when scripts are invoked from another directory.
-The install/run scripts accept `--root`, `--config` and `--releases-dir` as described
-below. Each system/profile keeps its own installed product and update source.
-
-The lower-level build and package commands remain available:
-
-```bash
-./packaging/build_platform.sh paint_tray_dry
-.venv/bin/python packaging/platform/build_release.py paint_tray_dry 1.0.6
-```
+An omitted component version reads `src/robot_systems/TARGET/VERSION`. Complete
+robot releases instead use the exact pins in `config/platform.json` through
+`release_robot.py`; use the [combined workflow](ROBOT_RELEASE_WORKFLOW.md).
 
 Every target has its own version sequence, artifact folder, installer, data root
 and update config. Builds embed only the selected system/profile packages and
@@ -108,7 +82,6 @@ the example URLs and provision the public key before enabling remote updates.
 
 Existing Paint installations retain their legacy flat config and installation
 paths when detected. New installations use the product-specific paths below.
-`build_paint.sh` remains a compatibility shortcut for target `paint`.
 
 Twin’s attached runtime currently exposes no idle-state contract. Its Update
 screen therefore refuses scheduling while a runtime is attached; close the
@@ -162,34 +135,18 @@ on the target machine. See [kiosk setup](../kiosk/README.md).
 
 ## Convenient local install and launch
 
-From the project root, use the scripts for the desired system/profile:
+From `platform/`, the component-only local helper selects the highest trusted
+installer kit under `dist/platform-releases/TARGET/`:
 
 ```bash
-./src/robot_systems/paint_tray_dry/install_latest.sh
-./src/robot_systems/paint_tray_dry/run_latest.sh
+.venv/bin/python -B packaging/platform/local_release.py install paint_tray_dry
+.venv/bin/python -B packaging/platform/local_release.py run paint_tray_dry
 ```
 
-Replace `paint_tray_dry` with any target listed above. Each script always selects
-its own target. The former root-level install/run shortcuts have been removed.
-
-`install_latest.sh` selects the highest semantic version of a trusted local
-installer kit for that target and CPU architecture under
-`dist/platform-releases/TARGET/`. Close the platform before installing. On first installation, the installer provisions
-OpenSSH server, the bundled PL PROJECT remote-support package, and GNOME Kiosk, using
-`sudo` only for that step. Run it as the desktop user; it may request that user's
-administrator password. Package downloads require internet access. SSH and RustDesk
-are enabled at boot. Explicit system setup removes any previous timed-access gate
-and expiry timer. Remote access no longer has an application ON/OFF or duration control.
-A remote-support failure returns an error; rerunning the installer retries it
-without replacing platform data. Older kits must be rebuilt to include this step.
-Existing
-settings and update-source configuration are preserved. It installs a completed
-release kit; a raw PyInstaller bundle must first be packaged with `build_release.py`.
-`run_latest.sh` starts the selected installed platform through its independent
-launcher, including normal pending-update handling. It does not install a newer
-local kit automatically. Both scripts work when invoked by absolute path from
-another directory. Use `--root` and/or `--config` for custom installations;
-`--releases-dir` selects another local release-output directory.
+Close the platform before installing. The commands accept `--root`, `--config`
+and `--releases-dir`; installation also accepts `--kiosk` and `--setup-system`.
+For a complete platform/backend installation, extract the combined robot archive
+and run `python3 -B robot/install.py` instead.
 
 ## Build and install
 
@@ -357,15 +314,14 @@ Release versions are immutable; publish a higher `major.minor.patch` version for
 changed contents. During a partially published manifest pair, verification fails
 and the existing installation is unaffected. Unsigned builds are usable for
 trusted local first installation, but remote updates require a valid signature.
-The legacy `release_paint.sh` GitHub publishing workflow is separate and does not
-produce this updater's release format.
 
 ## Apply an update
 
 Administrators have a Software Update application in each system’s Administration
 folder. Check, download, then schedule installation. Stop production before
 scheduling. Close the platform normally; the launcher performs the update after
-all platform processes have exited and reopens it. Backend software is unchanged.
+all platform processes have exited and reopens it. This section describes platform-only releases. Combined robot releases update both
+pinned components through the separate user service; see the combined workflow.
 
 Equivalent commands:
 

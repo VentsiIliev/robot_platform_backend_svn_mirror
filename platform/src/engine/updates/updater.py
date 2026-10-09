@@ -19,9 +19,16 @@ from .releases import extract_release, validate_manifest, version_tuple, release
 
 
 class _HttpsRedirect(urllib.request.HTTPRedirectHandler):
+    def __init__(self, allow_http=False):
+        self.allow_http = allow_http
+
     def redirect_request(self, request, response, code, message, headers, new_url):
-        if urllib.parse.urlparse(new_url).scheme != "https":
+        if urllib.parse.urlparse(new_url).scheme not in (('http', 'https') if self.allow_http else ('https',)):
             raise ValueError("Update redirects must remain HTTPS")
+        if request.has_header('Authorization'):
+            old, new = urllib.parse.urlsplit(request.full_url), urllib.parse.urlsplit(new_url)
+            if (old.scheme, old.netloc) != (new.scheme, new.netloc):
+                raise ValueError('Authenticated update redirects must remain on the configured server')
         return super().redirect_request(request, response, code, message, headers, new_url)
 
 
@@ -39,7 +46,8 @@ class PlatformUpdater:
         pointer = self.root / "current"
         if not pointer.exists():
             return None
-        return json.loads((pointer / "manifest.json").read_text(encoding="utf-8"))
+        raw = json.loads((pointer / "manifest.json").read_text(encoding="utf-8"))
+        return validate_manifest(raw, self.config.product) if raw.get('component') == 'robot' else raw
 
     def _fetch(self, url: str, target: Path, limit: int) -> None:
         if self.config.local_repository is not None:
@@ -50,10 +58,20 @@ class PlatformUpdater:
                 raise ValueError(f"Local release file is missing: {source}")
             stream = source.open("rb")
         else:
-            if urllib.parse.urlparse(url).scheme != "https":
+            if urllib.parse.urlparse(url).scheme not in (('http', 'https') if self.config.allow_insecure_http else ('https',)):
                 raise ValueError("Update downloads require HTTPS")
-            opener = urllib.request.build_opener(_HttpsRedirect())
-            stream = opener.open(url, timeout=self.config.timeout_seconds)
+            opener = urllib.request.build_opener(_HttpsRedirect(self.config.allow_insecure_http))
+            request = urllib.request.Request(url)
+            if self.config.token_file is not None:
+                origin = urllib.parse.urlsplit(self.config.repository_url)
+                target_url = urllib.parse.urlsplit(url)
+                if (origin.scheme, origin.netloc) != (target_url.scheme, target_url.netloc):
+                    raise ValueError('Authenticated downloads must remain on the configured server')
+                token = self.config.token_file.read_text().strip()
+                if not token or any(char.isspace() for char in token):
+                    raise ValueError('Invalid update token file')
+                request.add_header('Authorization', 'token ' + token)
+            stream = opener.open(request, timeout=self.config.timeout_seconds)
         with stream as response, target.open("wb") as output:
             total = 0
             while chunk := response.read(1024 * 1024):
@@ -76,18 +94,37 @@ class PlatformUpdater:
     def check(self) -> dict:
         if not self.config.enabled:
             raise RuntimeError("Updates are disabled in the platform configuration")
+        if self.config.repository_type == 'gitea':
+            from .gitea_source import latest_robot_release
+            manifest = latest_robot_release(self)
+            return self._check_candidate(manifest)
         url = self._release_location("latest.json")
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             manifest_file = directory / "latest.json"
             signature = directory / "latest.json.sig"
             self._fetch(url, manifest_file, 1024 * 1024)
-            if self.config.local_repository is None or self.config.public_key is not None:
+            if self.config.public_key is not None:
                 self._fetch(url + ".sig", signature, 16384)
-                subprocess.run(["openssl", "dgst", "-sha256", "-verify", str(self.config.public_key),
-                            "-signature", str(signature), str(manifest_file)],
-                           check=True, capture_output=True, timeout=15, env=subprocess_environment())
+                self._verify_signature(manifest_file, None, signature)
+            elif self.config.local_repository is None and not self.config.allow_insecure_http:
+                raise ValueError('Remote updates require an installed public_key')
             manifest = validate_manifest(json.loads(manifest_file.read_text()), self.config.product)
+        return self._check_candidate(manifest)
+
+    def _verify_signature(self, manifest_file, url=None, signature=None):
+        if self.config.public_key is None:
+            if not self.config.allow_insecure_http:
+                raise ValueError('Remote updates require an installed public_key')
+            return
+        signature = signature or manifest_file.with_suffix('.sig')
+        if url is not None:
+            self._fetch(url, signature, 16384)
+        subprocess.run(['openssl', 'dgst', '-sha256', '-verify', str(self.config.public_key),
+                        '-signature', str(signature), str(manifest_file)],
+                       check=True, capture_output=True, timeout=15, env=subprocess_environment())
+
+    def _check_candidate(self, manifest):
         if manifest.get("channel") != self.config.channel:
             raise ValueError("Release channel mismatch")
         archive = manifest.get("archive")
@@ -109,7 +146,7 @@ class PlatformUpdater:
                 raise RuntimeError("No newer platform release is available")
             with tempfile.TemporaryDirectory(dir=self.state) as temporary:
                 archive = Path(temporary) / "release.tar.gz"
-                self._fetch(self._release_location(manifest['archive']),
+                self._fetch(manifest.get('_download_url') or self._release_location(manifest['archive']),
                             archive, self.config.max_download_bytes)
                 if self._digest(archive) != manifest["sha256"]:
                     raise ValueError("Release checksum mismatch")
@@ -127,8 +164,11 @@ class PlatformUpdater:
         extract_release(archive, temporary, self.config.max_extracted_bytes)
         try:
             manifest = validate_manifest(json.loads((temporary / "manifest.json").read_text()), self.config.product)
-            if expected and any(manifest.get(k) != expected.get(k) for k in ("version", "product", "architecture", "os", "storage_schema", "robot_system", "profile", "storage_system", "executable")):
+            if expected and any(manifest.get(k) != expected.get(k) for k in ("version", "product", "architecture", "os", "storage_schema", "robot_system", "profile", "storage_system", "executable", "component", "selection", "components")):
                 raise ValueError("Signed manifest does not match release contents")
+            if manifest.get('component') == 'robot':
+                from .robot_releases import validate_robot_payload
+                validate_robot_payload(temporary, manifest)
             if manifest["format"] == 2:
                 marker = temporary / "platform/_internal/config/release-target.json"
                 embedded = json.loads(marker.read_text())
@@ -167,7 +207,8 @@ class PlatformUpdater:
 
     @contextmanager
     def offline(self):
-        with lock(self.state / "runtime.lock"), lock(self.state / "update.lock"):
+        # Combined installers and old combined launchers use the root lock.
+        with lock(self.root / 'runtime.lock'), lock(self.state / "runtime.lock"), lock(self.state / "update.lock"):
             yield
 
     def _pointer(self, version: str) -> None:
@@ -262,8 +303,10 @@ class PlatformUpdater:
         journal.unlink()
         sync_directory(self.state)
 
-    def apply_pending(self) -> bool:
+    def apply_pending(self, before_activation=None) -> bool:
         with self.offline():
+            if before_activation is not None:
+                before_activation()
             self._recover()
             pending = self.state / "pending.json"
             if not pending.exists():
@@ -272,6 +315,9 @@ class PlatformUpdater:
             version_tuple(version)
             release = self.root / "releases" / version
             manifest = validate_manifest(json.loads((release / "manifest.json").read_text()), self.config.product)
+            if manifest.get('component') == 'robot':
+                from .robot_releases import validate_robot_payload
+                validate_robot_payload(release, manifest)
             previous = self.installed()
             if previous and release_identity(previous) != release_identity(manifest):
                 raise ValueError("Release belongs to another robot system/profile")

@@ -33,8 +33,8 @@ class TestPaintPackagingProfile(unittest.TestCase):
         self.assertNotIn("src.robot_systems.paint", excluded)
 
     def test_build_script_checks_collected_module_archive(self):
-        wrapper = (PACKAGING_ROOT / "build_paint.sh").read_text(encoding="utf-8")
-        self.assertIn('packaging/build_platform.sh" paint', wrapper)
+        wrapper = (PACKAGING_ROOT / "build_platform.sh").read_text(encoding="utf-8")
+        self.assertIn('packaging/platform/build.py', wrapper)
         script = (PACKAGING_ROOT / "platform/build.py").read_text(encoding="utf-8")
         self.assertIn("PYZ-00.toc", script)
         self.assertIn('allowed = set(target["packages"])', script)

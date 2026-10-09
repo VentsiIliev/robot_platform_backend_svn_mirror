@@ -17,7 +17,9 @@ sys.path.insert(0, str(HERE if (HERE / "src").is_dir() else HERE.parents[1]))
 from src.engine.updates.config import UpdateConfig, default_config_path, default_install_root
 from src.engine.updates.files import atomic_json, lock, sync_tree, sync_directory
 from src.engine.updates.updater import PlatformUpdater
+from src.engine.updates.service_install import install_service
 from src.engine.updates.releases import validate_manifest, release_executable
+from src.engine.updates.environment import subprocess_environment
 
 
 def desktop_user():
@@ -190,12 +192,26 @@ def install(args):
         updater.apply_pending()
     with updater.offline():
         finish_system_setup(root, config_path, system_setup)
+    install_service(root, config_path)
     print(f"Installed platform at {root}\nUpdate configuration: {config_path}")
     print(f"Launch: /usr/bin/python3 '{tools / 'manage.py'}' --config '{config_path}' launch")
 
 
 def launch(updater, config_path):
     def apply_or_reopen():
+        if (updater.root / 'update-state/service.json').is_file():
+            import time
+            from src.engine.updates.service import request
+            pending = updater.state / 'pending.json'
+            journal = updater.state / 'transaction.json'
+            requested = pending.exists() or journal.exists()
+            deadline = time.monotonic() + 180
+            while pending.exists() or journal.exists():
+                if time.monotonic() >= deadline:
+                    raise RuntimeError('Update service did not finish activation; inspect its journal')
+                request(config_path, 'status', timeout=120)
+                time.sleep(0.5)
+            return requested
         try:
             return updater.apply_pending()
         except Exception as exc:
@@ -204,7 +220,8 @@ def launch(updater, config_path):
             print(f"Update failed; reopening the previous platform: {exc}", file=sys.stderr)
             return True
 
-    updater.recover()
+    if not (updater.root / 'update-state/service.json').is_file():
+        updater.recover()
     apply_or_reopen()
     while True:
         helper = updater.root / "tools/manage.py"
@@ -213,11 +230,13 @@ def launch(updater, config_path):
             # Release the update locks before loading the newly activated helper.
             os.execv("/usr/bin/python3", ["/usr/bin/python3", str(helper),
                                        "--config", str(config_path.resolve()), "launch"])
-        with lock(updater.state / "runtime.lock", shared=True):
+        with lock(updater.root / 'runtime.lock', shared=True), lock(updater.state / "runtime.lock", shared=True):
             current = updater.installed()
             if current is None:
                 raise ValueError("Platform is not installed")
-            executable = updater.root / "current/platform" / release_executable(current)
+            combined = current.get('component') == 'robot'
+            executable = (updater.root / 'current/launch.sh' if combined else
+                          updater.root / "current/platform" / release_executable(current))
             env = dict(os.environ)
             env["ROBOT_PLATFORM_DATA_ROOT"] = str(updater.data)
             env["ROBOT_PLATFORM_PRODUCT"] = current["product"]
@@ -228,7 +247,13 @@ def launch(updater, config_path):
         if result.returncode != 0:
             print("Platform exited with an error; pending update remains unapplied", file=sys.stderr)
             return result.returncode
-        if not apply_or_reopen():
+        if combined and not (updater.root / 'update-state/service.json').is_file() and (updater.state / 'pending.json').exists():
+            # Do not switch the pair while a backend from the old release is running.
+            subprocess.run([str(updater.root / 'current/backend/stop.sh')],
+                           env=subprocess_environment(), check=True, timeout=60)
+        applied = apply_or_reopen()
+        changed = updater.installed()['version'] != current['version']
+        if not applied and not changed:
             return 0
 
 
@@ -252,7 +277,7 @@ def main():
     setup.add_argument("--first-install", action="store_true")
     setup.add_argument("--setup-system", action="store_true")
     setup.add_argument("--kiosk", choices=("enabled", "manual", "off"))
-    for name in ("check", "stage", "queue", "apply", "launch", "recover"):
+    for name in ("check", "stage", "queue", "apply", "launch", "recover", "serve", "install-service"):
         commands.add_parser(name)
     rollback = commands.add_parser("rollback")
     rollback.add_argument("--restore-pre-update-data", action="store_true", required=True,
@@ -273,6 +298,15 @@ def main():
             metadata = HERE / "installation.json"
             args.config = (Path(json.loads(metadata.read_text())["config_path"])
                            if metadata.is_file() else default_config_path())
+        if args.command == 'serve':
+            from src.engine.updates.service import serve
+            serve(args.config)
+            return 0
+        if args.command == 'install-service':
+            from src.engine.updates.service_install import install_service
+            config = UpdateConfig.load(args.config)
+            install_service(config.install_root, args.config)
+            return 0
         updater = PlatformUpdater(UpdateConfig.load(args.config))
         if args.command == "launch":
             return launch(updater, args.config)

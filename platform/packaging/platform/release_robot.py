@@ -24,6 +24,9 @@ TESTS = (
     'tests.engine.updates.test_release_targets',
     'tests.engine.updates.test_robot_release_workflow',
     'tests.engine.updates.test_gitea_release',
+    'tests.engine.updates.test_robot_updates',
+    'tests.engine.updates.test_update_service',
+    'tests.engine.updates.test_installer_remote_support',
 )
 
 
@@ -82,9 +85,13 @@ class Workflow:
             self.run(f'Build {kind}', [sys.executable, '-B', DEPLOYMENT / f'package_{kind}.py', self.target])
         self.run('Assemble exact component pair', [sys.executable, '-B', DEPLOYMENT / 'package_robot.py', self.target])
 
-    def publish(self, remote, token, notes):
+    def publish(self, remote, token, notes, signing_key=None):
         directory = common.ROOT / 'releases' / self.target / 'robot' / self.selected['release_version']
         manifest = json.loads((directory / 'manifest.json').read_text())
+        if signing_key is not None:
+            self.run('Sign complete robot manifest', ['openssl', 'dgst', '-sha256',
+                     '-sign', signing_key, '-out', directory / 'manifest.json.sig',
+                     directory / 'manifest.json'])
         if not manifest.get('source_svn_revision'):
             raise ValueError('Official release must record an SVN revision; rebuild after SVN publication')
         url = subprocess.check_output(['git', 'remote', 'get-url', '--push', remote], cwd=common.ROOT, text=True).strip()
@@ -141,6 +148,7 @@ def main():
     parser.add_argument('target', nargs='?', help='Defaults to robot_system in platform.json')
     parser.add_argument('--remote', default='gitea-test', help='Gitea Git remote for publication')
     parser.add_argument('--notes-file', type=Path, help='Optional release notes; otherwise generated from the manifest')
+    parser.add_argument('--signing-key', type=Path, help='Sign manifest.json for trusted remote robot updates')
     parser.add_argument('--svn-synced', action='store_true', help='Actions mode: require SVN revision metadata instead of running git svn dcommit')
     args = parser.parse_args()
     workflow = None
@@ -186,7 +194,7 @@ def main():
             if args.action in ('build', 'verify', 'publish'):
                 workflow.verify()
             if args.action == 'publish':
-                workflow.publish(args.remote, token, notes)
+                workflow.publish(args.remote, token, notes, args.signing_key)
         workflow.report['status'] = 'passed'
         workflow.save()
         print(f'\n{args.action} passed. Report: {report}')

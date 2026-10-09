@@ -82,7 +82,7 @@ class RemoteSupportInstallTests(unittest.TestCase):
                            capture_output=True)
             calls = log.read_text()
             self.assertFalse(gate.exists())
-            self.assertIn('apt-get install -y openssh-server libzbar0 libxcb-cursor0', calls)
+            self.assertIn('apt-get -o DPkg::Lock::Timeout=600 install -y openssh-server libzbar0 libxcb-cursor0', calls)
             self.assertIn('sshd -t', calls)
             self.assertEqual(ssh_runtime.stat().st_mode & 0o777, 0o755)
             self.assertIn('systemctl enable --now ssh.service', calls)

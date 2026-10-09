@@ -14,10 +14,26 @@ class SoftwareUpdateService(ISoftwareUpdateService):
             raise RuntimeError(f"Update configuration is missing: {path}")
         return PlatformUpdater(UpdateConfig.load(path))
 
+    def _service_request(self, operation):
+        path = default_config_path()
+        if not path.is_file():
+            return False, None
+        config = UpdateConfig.load(path)
+        if not (config.install_root / 'update-state/service.json').exists():
+            return False, None  # Compatibility with installations predating the service.
+        from src.engine.updates.service import request
+        try:
+            return True, request(path, operation)
+        except OSError as error:
+            raise RuntimeError('Update service is unavailable; restart its user service') from error
+
     def get_status(self) -> dict:
         path = default_config_path()
         if not path.exists():
             return {"installed": "", "staged": "", "configuration": str(path), "enabled": False}
+        delegated, result = self._service_request('status')
+        if delegated:
+            return result
         updater = self._updater()
         installed = updater.installed() or {}
         staged_path = updater.state / "staged.json"
@@ -25,15 +41,25 @@ class SoftwareUpdateService(ISoftwareUpdateService):
         result_path = updater.state / "result.json"
         result = json.loads(result_path.read_text()) if result_path.exists() else {}
         return {"installed": installed.get("version", ""), "staged": staged.get("version", ""),
-                "configuration": str(path), "enabled": updater.config.enabled, "result": result}
+                "configuration": str(path), "enabled": updater.config.enabled, "result": result,
+                "release_kind": installed.get('component', 'platform')}
 
     def check(self) -> dict:
+        delegated, result = self._service_request('check')
+        if delegated:
+            return result
         return self._updater().check()
 
     def download(self) -> dict:
+        delegated, result = self._service_request('download')
+        if delegated:
+            return result
         return self._updater().stage_latest()
 
     def schedule_installation(self) -> None:
         if not self._can_schedule():
             raise RuntimeError("Stop the production process before scheduling an update")
+        delegated, _ = self._service_request('queue')
+        if delegated:
+            return
         self._updater().queue()

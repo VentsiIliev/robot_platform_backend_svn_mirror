@@ -62,7 +62,8 @@ if [[ $action == install ]]; then
     runuser -u "$user" -- sh -c 'command -v "$1" >/dev/null' sh "$executable" || die "Command not found for $user: $executable"
   fi
   apt-get update
-  apt-get install -y gnome-kiosk gnome-kiosk-script-session
+  # Fresh desktops may still be installing unattended updates.
+  apt-get -o DPkg::Lock::Timeout=600 install -y gnome-kiosk gnome-kiosk-script-session
   [[ -f /usr/share/xsessions/gnome-kiosk-script-xorg.desktop ]] || die "X11 kiosk session is missing."
   install -d -m 700 "$state"
   # Preserve the original baseline across repeated installs.

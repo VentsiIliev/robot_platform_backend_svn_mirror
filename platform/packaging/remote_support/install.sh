@@ -47,7 +47,7 @@ systemctl daemon-reload
 
 apt-get update
 # The frozen platform still loads these native libraries from the operating system.
-apt-get install -y openssh-server libzbar0 libxcb-cursor0
+apt-get -o DPkg::Lock::Timeout=600 install -y openssh-server libzbar0 libxcb-cursor0
 # /run is temporary; a fresh installation may not have started ssh.service yet.
 install -d -o root -g root -m 0755 /run/sshd
 /usr/sbin/sshd -t

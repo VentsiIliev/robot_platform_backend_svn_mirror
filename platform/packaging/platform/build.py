@@ -55,6 +55,10 @@ def main():
                     ignore=shutil.ignore_patterns("__pycache__"), dirs_exist_ok=True)
     for name in ("src/__init__.py", "src/engine/__init__.py"):
         shutil.copy2(ROOT / name, installation / name)
+    updater = installation / 'updater'
+    updater.mkdir(exist_ok=True)
+    shutil.copy2(ROOT / 'packaging/platform/manage.py', updater / 'manage.py')
+    shutil.copytree(installation / 'src', updater / 'src', dirs_exist_ok=True)
     print(f"{args.target} bundle created at: {bundle}")
 
 

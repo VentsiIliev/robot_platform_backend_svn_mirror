@@ -19,7 +19,7 @@ def main():
         if args.action == 'run':
             launcher = root / 'launch.sh'
             if not launcher.is_file():
-                raise ValueError(f'Combined robot release is not installed. Run install_latest.sh first. Expected: {launcher}')
+                raise ValueError(f'Combined robot release is not installed. Extract a combined robot archive and run python3 robot/install.py first. Expected: {launcher}')
             manifest = json.loads((root / 'current/manifest.json').read_text())
             if manifest.get('target') != args.target or manifest.get('component') != 'robot':
                 raise ValueError('Installed combined release target mismatch')

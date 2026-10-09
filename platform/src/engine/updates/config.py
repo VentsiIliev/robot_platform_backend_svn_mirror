@@ -34,8 +34,11 @@ class UpdateConfig:
     channel: str = "stable"
     enabled: bool = False
     timeout_seconds: int = 30
-    max_download_bytes: int = 4 * 1024**3
-    max_extracted_bytes: int = 8 * 1024**3
+    max_download_bytes: int = 4 * 1024 ** 3
+    max_extracted_bytes: int = 8 * 1024 ** 3
+    repository_type: str = 'feed'
+    allow_insecure_http: bool = False
+    token_file: Path | None = None
 
     @property
     def local_repository(self) -> Path | None:
@@ -58,11 +61,21 @@ class UpdateConfig:
             raise ValueError("repository_url must be a string")
         parsed = urlparse(repository)
         local = Path(repository).is_absolute()
-        if enabled and not local and (parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment):
-            raise ValueError("Enabled updates require an absolute local folder or HTTPS repository_url without credentials/query")
+        repository_type = raw.get('repository_type', 'feed')
+        if repository_type not in ('feed', 'gitea'):
+            raise ValueError('repository_type must be feed or gitea')
+        insecure = raw.get('allow_insecure_http', False)
+        if not isinstance(insecure, bool):
+            raise ValueError('allow_insecure_http must be a boolean')
+        allowed_schemes = ('http', 'https') if insecure else ('https',)
+        if enabled and not local and (
+                parsed.scheme not in allowed_schemes or not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment):
+            raise ValueError(
+                "Enabled updates require an absolute local folder or HTTPS repository_url without credentials/query")
         for name in ("product", "channel"):
             value = raw.get(name, "paint-robot" if name == "product" else "stable")
-            if not isinstance(value, str) or not value or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for c in value):
+            if not isinstance(value, str) or not value or any(
+                    c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for c in value):
                 raise ValueError(f"Invalid {name}")
         key_value = raw.get("public_key")
         if key_value is not None and not isinstance(key_value, str):
@@ -70,13 +83,22 @@ class UpdateConfig:
         key = Path(key_value).expanduser() if key_value else None
         if key is not None and not key.is_absolute():
             raise ValueError("public_key must be absolute")
-        if enabled and ((key is not None and not key.is_file()) or (not local and key is None)):
+        token_value = raw.get('token_file')
+        if token_value is not None and not isinstance(token_value, str):
+            raise ValueError('token_file must be a quoted file path or null')
+        token_file = Path(token_value).expanduser() if token_value else None
+        if token_file is not None and (not token_file.is_absolute() or not token_file.is_file()):
+            raise ValueError('token_file must point to an existing absolute file')
+        if enabled and ((key is not None and not key.is_file()) or (not local and key is None and not insecure)):
             raise ValueError("Enabled updates require an installed public_key")
         limits = {}
-        for name, default in (("timeout_seconds", 30), ("max_download_bytes", 4 * 1024**3), ("max_extracted_bytes", 8 * 1024**3)):
+        for name, default in (("timeout_seconds", 30), ("max_download_bytes", 4 * 1024 ** 3),
+                              ("max_extracted_bytes", 8 * 1024 ** 3)):
             value = raw.get(name, default)
             if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
                 raise ValueError(f"{name} must be a positive integer")
             limits[name] = value
         return cls(root.resolve(), repository.rstrip("/") + "/", key,
-                   raw.get("product", "paint-robot"), raw.get("channel", "stable"), enabled, **limits)
+                   raw.get("product", "paint-robot"), raw.get("channel", "stable"), enabled,
+                   repository_type=repository_type, allow_insecure_http=insecure,
+                   token_file=token_file, **limits)

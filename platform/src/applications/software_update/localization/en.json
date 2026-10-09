@@ -15,6 +15,8 @@
     "Version {version} is ready to install": "Version {version} is ready to install",
     "An interrupted update was recovered.": "An interrupted update was recovered.",
     "Version {version} was restored": "Version {version} was restored",
-    "Version {version} was installed": "Version {version} was installed"
+    "Version {version} was installed": "Version {version} was installed",
+    "Updates install the platform and backend together. Stop production and close the application normally after scheduling installation. The launcher installs the complete system and reopens the platform.": "Updates install the platform and backend together. Stop production and close the application normally after scheduling installation. The launcher installs the complete system and reopens the platform.",
+    "The system is up to date": "The system is up to date"
   }
 }

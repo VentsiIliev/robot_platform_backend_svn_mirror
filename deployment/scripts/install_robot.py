@@ -40,10 +40,35 @@ def install(bundle, root, manifest):
             raise ValueError('Incomplete robot release')
         staging.rename(output)
     product = json.loads((bundle / 'platform/_internal/config/release-target.json').read_text())['product']
-    (root / 'updates.json').write_text(json.dumps(dict(install_root=str(root), product=product, enabled=False)))
+    config = root / 'updates.json'
+    if not config.exists():
+        source = bundle / 'platform/_internal/config/update-source' / (manifest['target'] + '.json')
+        seed = json.loads(source.read_text()) if source.is_file() else {'enabled': False}
+        seed.update(install_root=str(root), product=product)
+        config.write_text(json.dumps(seed, indent=2) + '\n')
+    # Install a release-owned supervisor: it activates pending updates after GUI exit.
+    payload = bundle / 'platform/installation/updater'
+    if payload.is_dir():
+        versions = root / 'updater-tools'
+        versions.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=versions, prefix='.tools-') as temporary:
+            staged = Path(temporary) / 'tools'
+            shutil.copytree(payload, staged)
+            destination = versions / manifest['version']
+            if not destination.exists():
+                staged.rename(destination)
+        tools = root / 'tools'
+        if tools.exists() and not tools.is_symlink():
+            raise ValueError('Unexpected updater tools directory')
+        pointer = root / '.tools-new'
+        pointer.unlink(missing_ok=True)
+        pointer.symlink_to(destination.relative_to(root))
+        os.replace(pointer, tools)
     # Hold a shared lock throughout the GUI lifetime; installation needs exclusive access.
     wrapper = root / 'launch.sh'
     wrapper.write_text('#!/usr/bin/env bash\nset -euo pipefail\nROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\nexec 9>"$ROOT/runtime.lock"\nflock -s 9\nexport ROBOT_PLATFORM_DATA_ROOT="$ROOT/data"\nexport ROBOT_PLATFORM_UPDATE_CONFIG="$ROOT/updates.json"\nexec "$ROOT/current/launch.sh" "$@"\n')
+    if (root / 'tools/manage.py').is_file():
+        wrapper.write_text('#!/usr/bin/env bash\nset -euo pipefail\nROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\nexport ROBOT_PLATFORM_DATA_ROOT="$ROOT/data"\nexport ROBOT_PLATFORM_UPDATE_CONFIG="$ROOT/updates.json"\nif [[ $# -gt 0 ]]; then\n  exec 9>"$ROOT/runtime.lock"\n  flock -s 9\n  exec "$ROOT/current/launch.sh" "$@"\nfi\nexec /usr/bin/python3 "$ROOT/tools/manage.py" --config "$ROOT/updates.json" launch\n')
     wrapper.chmod(0o755)
     (root / 'data').mkdir(exist_ok=True)
     activate(root, manifest['version'])
@@ -113,6 +138,9 @@ def main():
                     state = setup.prepare_system_setup(root, first_install=first_install,
                                                        mode=args.kiosk, setup_system=args.setup_system)
                     setup.finish_system_setup(root, None, state, launcher=root / 'launch.sh')
+        if not args.skip_system_setup and (root / 'tools/src/engine/updates/service_install.py').is_file():
+            subprocess.run(['/usr/bin/python3', str(root / 'tools/manage.py'),
+                            '--config', str(root / 'updates.json'), 'install-service'], check=True)
         print(f'Installed launcher: {root / "launch.sh"}')
     except (ValueError, RuntimeError, OSError, subprocess.SubprocessError) as exc:
         parser.error(str(exc))

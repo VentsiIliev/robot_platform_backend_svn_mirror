@@ -67,7 +67,7 @@ def run(target: dict, config: Path | None, root: Path | None) -> int:
     helper = installed_root / "tools/manage.py"
     marker = installed_root / "current/manifest.json"
     if not helper.is_file() or not marker.is_file():
-        raise ValueError(f"{target['target']} is not installed at {installed_root}. Run install_latest.sh {target['target']} first.")
+        raise ValueError(f"{target['target']} is not installed at {installed_root}. Run packaging/platform/local_release.py install {target['target']} first.")
     if json.loads(marker.read_text())["product"] != target["product"]:
         raise ValueError("Installation belongs to another robot system/profile")
     command = ["/usr/bin/python3", str(helper)]

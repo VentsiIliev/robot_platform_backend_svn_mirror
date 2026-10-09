@@ -91,3 +91,55 @@ bumps versions, stages or commits source, starts hardware, or activates a releas
 on a real machine. No SVN release tags are created. A runner can invoke the same
 command once provisioned with the build prerequisites and repository credentials.
 Broader release usage is in `deployment/README.md` in the combined checkout root.
+
+## Installed system and update service
+
+The combined installer is run as the desktop user after verifying and extracting
+the archive:
+
+```bash
+python3 -B robot/install.py
+```
+
+First installation provisions native dependencies, remote support, GNOME Kiosk
+and the per-user updater. Maintenance installation preserves desktop and machine
+settings. Explicit `--setup-system --kiosk enabled` retries system provisioning.
+Package installation waits for the apt/dpkg lock held by automatic OS updates.
+
+Installed layout:
+
+```text
+~/.local/share/robot-releases/paint_tray_dry/
+    releases/VERSION/{platform,backend,manifest.json}
+    current -> releases/VERSION
+    launch.sh
+    tools -> versioned updater tools
+    data/
+    updates.json
+    update-state/
+```
+
+The separate `robot-update-paint_tray_dry.service` runs in the desktop user's
+systemd manager. The Software Update screen sends it check, download and queue
+requests. It verifies and stages the complete release, waits until the platform
+exits, stops the bundled backend, and switches both components together. The
+stable launcher waits for activation and reopens the platform. This service
+requires a running user manager; no system-wide daemon or user lingering is
+configured by the installer.
+
+```bash
+systemctl --user status robot-update-paint_tray_dry.service
+journalctl --user -u robot-update-paint_tray_dry.service -n 80 --no-pager
+```
+
+`updates.json` is seeded only on first installation and preserved thereafter.
+A `repository_type` of `gitea` selects complete robot release attachments;
+`feed` reads `stable/latest.json` and the referenced archive. Private Gitea
+repositories require a machine-local `token_file`. Never embed credentials in
+archives or source. Plain HTTP needs explicit `allow_insecure_http`; use it only
+for the trusted LAN/test setup. Signed sources use the configured public key.
+
+The VM test feed uses `http://10.0.2.2:8768/`, served on the host from
+`platform/dist/install-tests/complete-updates/`. It is independent of Gitea.
+The VM test successfully updated 1.0.6 to 1.0.7; real robot hardware acceptance
+remains separate. Mutable settings and update-source configuration are preserved.

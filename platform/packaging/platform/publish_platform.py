@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the existing platform build wrapper and publish its verified artifacts."""
+"""Build the selected platform component and publish its verified artifacts."""
 import argparse
 import json
 import os
@@ -61,7 +61,7 @@ def publish(target, output, repository_url, token, notes='', signing_key=None):
         raise ValueError('Release version is already tagged at another commit; increment VERSION')
     cached = output / target / 'stable/release-manifest.json'
     if not cached.exists():
-        command = [str(PLATFORM / 'src/robot_systems' / target / 'build_release.sh'),
+        command = [sys.executable, str(PLATFORM / 'packaging/platform/build_and_release.py'), target, version,
                    '--output', str(output), '--svn-revision', str(identity['source_svn_revision'])]
         if signing_key:
             command += ['--signing-key', str(signing_key)]
@@ -70,7 +70,7 @@ def publish(target, output, repository_url, token, notes='', signing_key=None):
     if not remote_tag:
         publisher.request('POST', '/tags', json=dict(tag_name=tag, target=identity['source_git_commit'], message=f'{tag}; SVN r{identity["source_svn_revision"]}'))
     marker = f'Platform release SHA256: {common.digest(output / target / "stable/release-manifest.json")}'
-    body = f'{notes.strip()}\n\nPlatform-only release built by `{target}/build_release.sh`.\nSVN revision: {identity["source_svn_revision"]}\nSource commit: {identity["source_git_commit"]}\n{marker}\n'
+    body = f'{notes.strip()}\n\nPlatform-only release built by `packaging/platform/build_and_release.py {target}`.\nSVN revision: {identity["source_svn_revision"]}\nSource commit: {identity["source_git_commit"]}\n{marker}\n'
     return publisher.publish_assets(tag, f'{target} platform {version}', body, marker, files, common.digest)
 
 

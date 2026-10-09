@@ -71,7 +71,9 @@ class SoftwareUpdateController(IApplicationController, BackgroundWorker):
             return
         self._busy = False
         self._actions()
-        self._view.set_status("Version {version} is available" if result["available"] else "The platform is up to date", version=result["version"])
+        current_message = ('The system is up to date' if self._details.get('release_kind') == 'robot'
+                           else 'The platform is up to date')
+        self._view.set_status("Version {version} is available" if result["available"] else current_message, version=result["version"])
         self._logger.info("Update check completed: version=%s available=%s", result["version"], result["available"])
         self._view.show_check_result()
 

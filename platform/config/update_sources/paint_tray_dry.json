@@ -1,6 +1,8 @@
 {
-  "enabled": false,
-  "repository_url": "https://release-server.example/paint_tray_dry/",
+  "enabled": true,
+  "repository_type": "gitea",
+  "repository_url": "http://192.168.222.112:3000/plproject/25488_ZeroErr_test",
+  "allow_insecure_http": true,
   "public_key": null,
   "product": "paint-tray-dry-robot",
   "channel": "stable",

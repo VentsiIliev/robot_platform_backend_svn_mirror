@@ -1,7 +1,7 @@
 from PyQt6.QtCore import QEvent, Qt, pyqtSignal
 from PyQt6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QMessageBox
 from src.applications.base.i_application_view import IApplicationView
-from pl_gui.settings.settings_view.styles import BG_COLOR, APP_PAGE_TITLE_STYLE, ACTION_BTN_STYLE, GHOST_BTN_STYLE
+from pl_gui.settings.settings_view.styles import BG_COLOR, TEXT_COLOR, APP_PAGE_TITLE_STYLE, ACTION_BTN_STYLE, GHOST_BTN_STYLE
 
 
 class SoftwareUpdateView(IApplicationView):
@@ -31,6 +31,8 @@ class SoftwareUpdateView(IApplicationView):
         self._status = QLabel()
         self._status.setTextFormat(Qt.TextFormat.PlainText)
         self._status.setWordWrap(True)
+        for label in (self._details, self._description, self._status):
+            label.setStyleSheet(f'color: {TEXT_COLOR};')
         self._check = QPushButton()
         self._download = QPushButton()
         self._install = QPushButton()
@@ -84,6 +86,8 @@ class SoftwareUpdateView(IApplicationView):
         source = "Installed: {installed}\nDownloaded: {staged}\nConfiguration: {configuration}"
         self._details.setText((self.tr(source) or source).format(**self._values))
         source = "Updates change the platform only. Stop production and close the application normally after scheduling installation. The launcher installs the update and reopens the platform."
+        if self._values.get('release_kind') == 'robot':
+            source = "Updates install the platform and backend together. Stop production and close the application normally after scheduling installation. The launcher installs the complete system and reopens the platform."
         self._description.setText(self.tr(source) or source)
         self._status.setText(self._error or (self.tr(self._status_source) or self._status_source).format(**self._status_arguments))
 

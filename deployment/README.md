@@ -24,7 +24,21 @@ ROS/MoveIt, Python backend requirements, and the EtherLab master/kernel driver a
 machine prerequisites. Backend archives include requirement lists; the apt list also
 contains build tooling. Hardware deployment still needs validation on the target machine.
 
-## Publish component archives and assemble a robot release
+## Complete robot workflow
+
+From `platform/`, use the single release entry point:
+
+```bash
+python3 -B packaging/platform/release_robot.py check paint_tray_dry
+python3 -B packaging/platform/release_robot.py build paint_tray_dry
+python3 -B packaging/platform/release_robot.py verify paint_tray_dry
+```
+
+`publish paint_tray_dry` synchronizes committed source to SVN, verifies the
+selected complete release, and publishes source, exact tags and artifacts to
+Gitea. See [workflow details](../platform/packaging/platform/ROBOT_RELEASE_WORKFLOW.md).
+
+## Internal component packaging and assembly
 
 Commit source changes first. Component packagers reject dirty source and refuse to
 replace an existing version. Upload the source to SVN before an official build so
@@ -76,7 +90,9 @@ python3 robot/install.py --activate 1.0.0
 ```
 
 `--root` optionally selects a different installation directory. Rollback switches
-code only; it does not reverse machine settings/schema changes. The existing
-platform-only updater is disabled for combined installations; use the combined
-installer to keep platform/backend versions together. No automatic schema migration
-or combined remote-update service is implemented yet.
+code only; it does not reverse machine settings/schema changes. The combined installation provisions the per-user
+`robot-update-<target>.service`. Its Software Update screen checks and downloads
+complete robot releases, then schedules activation after the platform closes.
+The service switches the exact platform/backend pair together and preserves
+machine data and update-source configuration. Platform-only installers and
+archives are separate tools and must not replace a combined installation.

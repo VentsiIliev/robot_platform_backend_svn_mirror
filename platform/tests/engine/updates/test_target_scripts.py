@@ -1,8 +1,6 @@
 """Verify target dispatch and build failures without starting robot hardware."""
-import importlib.util
 import json
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -15,30 +13,6 @@ import build_and_release
 
 
 class TargetScriptTests(unittest.TestCase):
-    def test_every_wrapper_dispatches_fixed_target_from_another_directory(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            project = Path(temporary) / 'project'
-            helpers = project / 'packaging/platform'
-            helpers.mkdir(parents=True)
-            probe = 'import json, os, sys; print(json.dumps([os.getcwd(), sys.argv[1:]]))\n'
-            (helpers / 'local_release.py').write_text(probe)
-            (helpers / 'build_and_release.py').write_text(probe)
-            for target in json.loads((ROOT / 'config/release_targets.json').read_text()):
-                directory = project / 'src/robot_systems' / target
-                directory.mkdir(parents=True)
-                for action in ('install_latest', 'run_latest', 'build_release'):
-                    source = ROOT / 'src/robot_systems' / target / f'{action}.sh'
-                    script = directory / source.name
-                    shutil.copy2(source, script)
-                    import os
-                    environment = dict(os.environ, PYTHON_BIN=sys.executable)
-                    result = subprocess.run([str(script), '--config', 'custom.json'], cwd=temporary,
-                                            env=environment, check=True, capture_output=True, text=True)
-                    cwd, arguments = json.loads(result.stdout)
-                    expected = [target] if action == 'build_release' else [('install' if action == 'install_latest' else 'run'), target]
-                    self.assertEqual(arguments, [*expected, '--config', 'custom.json'])
-                    self.assertEqual(cwd, str(project))
-
     def test_build_verifies_before_packaging_and_forwards_options(self):
         with patch.object(build_and_release.subprocess, 'run') as run:
             build_and_release.main(['glue', '1.2.3', '--channel', 'testing'])

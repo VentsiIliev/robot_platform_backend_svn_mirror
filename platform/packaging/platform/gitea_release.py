@@ -53,6 +53,9 @@ class GiteaPublisher:
         archive = directory / manifest['archive']
         checksum = archive.with_name(archive.name + '.sha256')
         files = (archive, checksum, directory / 'manifest.json')
+        signature = directory / 'manifest.json.sig'
+        if signature.is_file():
+            files += (signature,)
         if any(not p.is_file() for p in files):
             raise ValueError('Release archive, checksum, and manifest are required')
         if digest(archive) != manifest['sha256'] or checksum.read_text().strip() != f'{manifest["sha256"]}  {archive.name}':

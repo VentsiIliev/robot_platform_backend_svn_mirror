@@ -48,10 +48,11 @@ class PlatformPublicationTests(unittest.TestCase):
             result = pub.publish(self.target, self.output, 'http://gitea/admin/repo', 'private-token')
             return result, build
 
-    def test_uses_existing_wrapper_and_attaches_installer_update_and_checksums(self):
+    def test_uses_component_builder_and_attaches_installer_update_and_checksums(self):
         result, build = self.invoke()
         self.assertEqual('http://gitea/release', result)
-        self.assertEqual('build_release.sh', Path(build.call_args.args[0][0]).name)
+        self.assertEqual('build_and_release.py', Path(build.call_args.args[0][1]).name)
+        self.assertEqual(['paint_tray_dry', '1.0.6'], build.call_args.args[0][2:4])
         self.assertIn('--svn-revision', build.call_args.args[0])
         files = self.publisher.publish_assets.call_args.args[4]
         self.assertEqual(5, len(files))

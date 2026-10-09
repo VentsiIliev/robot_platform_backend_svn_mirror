@@ -96,7 +96,14 @@ class ReleaseTargetTests(unittest.TestCase):
                 self.assertEqual(target["product"], source["product"])
                 self.assertNotIn(source["repository_url"], repositories)
                 repositories.add(source["repository_url"])
-                self.assertFalse(source["enabled"])
+                if name == "paint_tray_dry":
+                    self.assertTrue(source["enabled"])
+                    self.assertEqual(source["repository_type"], "gitea")
+                    self.assertEqual(source["repository_url"],
+                                     "http://192.168.222.112:3000/plproject/25488_ZeroErr_test")
+                    self.assertTrue(source["allow_insecure_http"])
+                else:
+                    self.assertFalse(source["enabled"])
 
     def test_shared_editor_can_load_without_the_paint_package(self):
         script = (
@@ -160,7 +167,7 @@ sys.argv = sys.argv[1:]
 spec = importlib.util.spec_from_file_location('platform_manager', sys.argv[0])
 manager = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(manager)
-with patch.object(manager, 'install_remote_support'), patch.object(manager, 'install_kiosk'):
+with patch.object(manager, 'install_remote_support'), patch.object(manager, 'install_kiosk'), patch.object(manager, 'install_service'):
     sys.exit(manager.main())
 """
         for name in ("paint_tray_dry", "paint_auto_dry", "glue", "twin_robot"):
