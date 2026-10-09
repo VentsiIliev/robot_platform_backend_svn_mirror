@@ -1,5 +1,12 @@
 # Ubuntu 24.04 robot kiosk
 
+The complete platform installation also installs `/usr/local/bin/auto_login.sh`.
+From a local terminal or SSH, run `sudo auto_login.sh off` to disable automatic
+and timed login, or `sudo auto_login.sh on` to enable automatic login for the
+saved GDM account. `sudo auto_login.sh on pl_user` selects an explicit account.
+Changes apply on the next login/reboot; no session is stopped. This does not
+change the selected GNOME session or any packaged application settings.
+
 Run these steps on the target Ubuntu machine with GDM3 and an existing non-root
 account. The installer uses GNOME Kiosk's X11 session, matching the existing
 deployment. It installs kiosk packages, creates the launcher and log directory,

@@ -56,10 +56,13 @@ class RemoteSupportInstallTests(unittest.TestCase):
             commands.mkdir()
             log = root / 'calls'
             gate = root / 'gate.conf'
+            ssh_runtime = root / 'run' / 'sshd'
             gate.write_text('ExecCondition=old-controller\n')
             stub = '#!/bin/bash\necho "$(basename "$0") $*" >> "$CALL_LOG"\n'
             for name in ('id', 'apt-get', 'systemctl', 'sshd'):
                 extra = 'if [[ $1 == show ]]; then echo loaded; fi\n' if name == 'systemctl' else ''
+                if name == 'sshd':
+                    extra = f'test -d "{ssh_runtime}" || exit 255\n'
                 path = commands / name
                 path.write_text(stub + extra)
                 path.chmod(0o755)
@@ -67,15 +70,21 @@ class RemoteSupportInstallTests(unittest.TestCase):
             source = source.replace('[[ ${EUID} -ne 0 ]]', '[[ 0 -ne 0 ]]')
             source = source.replace('/etc/systemd/system/rustdesk.service.d/plproject-remote-support.conf', str(gate))
             source = source.replace('/usr/sbin/sshd', str(commands / 'sshd'))
+            source = source.replace('install -d -o root -g root -m 0755 /run/sshd',
+                                    f'install -d -m 0755 "{ssh_runtime}"')
             installer = root / 'install.sh'
+            (root / 'auto_login.sh').write_text('#!/bin/bash\n')
+            source = source.replace('install -o root -g root -m 0755', 'install -m 0755')
+            source = source.replace('/usr/local/bin/auto_login.sh', str(root / 'installed-auto-login.sh'))
             installer.write_text(source)
             subprocess.run(['bash', str(installer), 'operator'], check=True,
                            env={**os.environ, 'PATH': str(commands) + ':' + os.environ['PATH'], 'CALL_LOG': str(log)},
                            capture_output=True)
             calls = log.read_text()
             self.assertFalse(gate.exists())
-            self.assertIn('apt-get install -y openssh-server', calls)
+            self.assertIn('apt-get install -y openssh-server libzbar0 libxcb-cursor0', calls)
             self.assertIn('sshd -t', calls)
+            self.assertEqual(ssh_runtime.stat().st_mode & 0o777, 0o755)
             self.assertIn('systemctl enable --now ssh.service', calls)
             self.assertIn('systemctl enable --now rustdesk.service', calls)
             self.assertLess(calls.index('disable --now plproject-remote-support-expiry.timer'),
@@ -187,6 +196,11 @@ class FirstInstallSetupTests(unittest.TestCase):
         def read(path, *args, **kwargs):
             return 'VERSION_ID="24.04"' if str(path) == '/etc/os-release' else original_read(path, *args, **kwargs)
         with patch.object(combined, '__file__', str(bundle / 'install.py')), patch.object(Path, 'read_text', read), patch.object(manager, 'install_remote_support') as support, patch.object(manager, 'install_kiosk') as kiosk:
+            with patch.object(sys, 'argv', ['install.py', '--root', str(self.root / 'verification'), '--skip-system-setup']):
+                combined.main()
+            support.assert_not_called()
+            kiosk.assert_not_called()
+            self.assertFalse((self.root / 'verification/update-state/system-setup.json').exists())
             with patch.object(sys, 'argv', ['install.py', '--root', str(installed), '--kiosk', 'manual']):
                 combined.main()
             with patch.object(sys, 'argv', ['install.py', '--root', str(installed)]):

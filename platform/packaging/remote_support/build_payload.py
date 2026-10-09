@@ -13,6 +13,7 @@ def build_payload(destination: Path, vendor_installer: Path | None = None) -> No
     destination.mkdir(parents=True, exist_ok=True)
     for name in ("install.sh", "README.md"):
         shutil.copy2(source / name, destination / name)
+    shutil.copy2(source.parent / "kiosk/auto_login.sh", destination / "auto_login.sh")
     shutil.copy2(vendor_installer, destination / "install_pl_remote_support.sh")
 
 

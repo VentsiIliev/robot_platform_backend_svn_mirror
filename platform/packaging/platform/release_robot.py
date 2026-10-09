@@ -124,7 +124,7 @@ class Workflow:
             expected = {key: value for key, value in manifest.items() if key not in ('archive', 'sha256')}
             if embedded != expected:
                 raise ValueError('Robot archive manifest differs from published manifest')
-            self.run('Install actual archive into temporary root', [sys.executable, '-B', bundle / 'install.py', '--root', root / 'installed'])
+            self.run('Install actual archive into temporary root', [sys.executable, '-B', bundle / 'install.py', '--root', root / 'installed', '--skip-system-setup'])
             executable = manifest['components']['platform']['executable']
             if Path(executable).name != executable:
                 raise ValueError('Invalid platform executable name')

@@ -123,6 +123,11 @@ automatic login and launches through the stable installed launcher, so future
 versions are followed without rewriting the kiosk configuration. Installation
 never logs out, starts the robot application, or reboots automatically.
 
+System provisioning also installs `libzbar0` and `libxcb-cursor0`, native runtime
+libraries required by the packaged platform. Existing releases that lack this
+step need these packages installed manually, or a rebuilt installer run with
+`--setup-system`.
+
 The installer records system setup in `INSTALL_ROOT/update-state/system-setup.json`.
 If provisioning fails after software activation, rerunning the installer retries
 pending setup. After completion, maintenance installs and ordinary software

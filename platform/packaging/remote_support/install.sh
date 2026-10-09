@@ -19,6 +19,12 @@ if [[ ${EUID} -ne 0 ]]; then
 fi
 
 ui_user=$1
+source_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+auto_login="$source_dir/auto_login.sh"
+if [[ ! -f "$auto_login" ]]; then
+    auto_login="$source_dir/../kiosk/auto_login.sh"
+fi
+[[ -f "$auto_login" ]] || { echo "Automatic-login helper is missing" >&2; exit 1; }
 if [[ ! $ui_user =~ ^[a-z_][a-z0-9_-]*$ ]] || [[ $ui_user == root ]] || ! id -u "$ui_user" >/dev/null 2>&1; then
     echo "ROBOT_UI_USER must be an existing local user" >&2
     exit 2
@@ -40,7 +46,10 @@ rm -f /etc/systemd/system/rustdesk.service.d/plproject-remote-support.conf
 systemctl daemon-reload
 
 apt-get update
-apt-get install -y openssh-server
+# The frozen platform still loads these native libraries from the operating system.
+apt-get install -y openssh-server libzbar0 libxcb-cursor0
+# /run is temporary; a fresh installation may not have started ssh.service yet.
+install -d -o root -g root -m 0755 /run/sshd
 /usr/sbin/sshd -t
 systemctl enable --now ssh.service
 
@@ -55,4 +64,5 @@ fi
 systemctl enable --now rustdesk.service
 systemctl is-active --quiet rustdesk.service
 systemctl is-active --quiet ssh.service
+install -o root -g root -m 0755 "$auto_login" /usr/local/bin/auto_login.sh
 echo "SSH and PL PROJECT remote support installed and enabled at boot."

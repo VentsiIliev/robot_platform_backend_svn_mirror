@@ -149,17 +149,25 @@ class ReleaseTargetTests(unittest.TestCase):
 
     def test_installer_creates_each_products_source_file_and_preserves_it(self):
         manager = ROOT / "packaging/platform/manage.py"
-        fake_bin = self.directory / "bin"
-        fake_bin.mkdir()
-        fake_sudo = fake_bin / "sudo"
-        fake_sudo.write_text('#!/bin/sh\nexec "$@"\n')
-        fake_sudo.chmod(0o755)
-        environment = dict(os.environ, PYTHONPATH="", PATH=str(fake_bin) + os.pathsep + os.environ['PATH'], SUDO_USER="ilv")
+        environment = dict(os.environ, PYTHONPATH="")
+        # This test covers product config persistence, not host provisioning.
+        # Keep the actual installer CLI and mock only privileged setup steps.
+        bootstrap = """
+import importlib.util
+import sys
+from unittest.mock import patch
+sys.argv = sys.argv[1:]
+spec = importlib.util.spec_from_file_location('platform_manager', sys.argv[0])
+manager = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(manager)
+with patch.object(manager, 'install_remote_support'), patch.object(manager, 'install_kiosk'):
+    sys.exit(manager.main())
+"""
         for name in ("paint_tray_dry", "paint_auto_dry", "glue", "twin_robot"):
             config = self.directory / name / "updates.json"
             root = self.directory / name / "installed"
             archive = self.archive(name)
-            args = ["/usr/bin/python3", str(manager), "--config", str(config), "install", str(archive), "--root", str(root)]
+            args = ["/usr/bin/python3", "-c", bootstrap, str(manager), "--config", str(config), "install", str(archive), "--root", str(root)]
             subprocess.run(args, check=True, capture_output=True, env=environment, cwd="/tmp")
             raw = json.loads(config.read_text())
             self.assertEqual(f"https://{name}.example/releases/", raw["repository_url"])
