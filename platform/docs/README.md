@@ -1,5 +1,8 @@
 # Robot platform documentation
 
+[Инсталиране и обновяване — ръководство на български](installation/bg/README.md)
+описва подготовката на Ubuntu, мрежата и роботизирания софтуер за оператори.
+
 This documentation follows the checked-out project structure. `src/engine/…` maps to `docs/engine/…`, `src/applications/…` to `docs/applications/…`, and `src/robot_systems/…` to `docs/robot_systems/…`. Other project roots retain their names. The `source/` page covers files directly under `src/`; `utilities/` covers root Python utilities.
 
 Start with the guides for behavior and integration. Each Python directory has a **Module reference** with source links, directly declared signatures, fields/defaults, imports and docstrings. The [complete source index](SOURCE_INDEX.md) enumerates every Python directory, including nested services, models, controllers, views, vendor implementation, examples and tests. Generated references are structural coverage; they do not certify that source docstrings or implementations are correct.
