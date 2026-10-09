@@ -127,6 +127,15 @@ stable launcher waits for activation and reopens the platform. This service
 requires a running user manager; no system-wide daemon or user lingering is
 configured by the installer.
 
+Before an existing installation activates a candidate, the updater compares its
+remote-support package version with the candidate's `release.conf`. A matching
+version skips installation; a required upgrade uses the root-owned restricted
+helper. Failure blocks robot activation. Existing machines need one trusted
+installer maintenance run to provision that helper and refresh the user service.
+See [remote-support configuration and trust](../remote_support/README.md).
+Application rollback does not revert this machine-wide package installation.
+Automatic kiosk updates are deferred; software updates preserve kiosk settings.
+
 ```bash
 systemctl --user status robot-update-paint_tray_dry.service
 journalctl --user -u robot-update-paint_tray_dry.service -n 80 --no-pager

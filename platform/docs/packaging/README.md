@@ -5,7 +5,7 @@ Packaging creates/install product releases and support-service assets. It is sep
 - [Platform packaging](../../packaging/platform/README.md) is the deployment guide for signed artifacts, update compatibility, factory defaults, migration and rollback.
 - [Release workflow](../../packaging/robot/README.md) describes product release preparation.
 - [Gitea Actions](../../packaging/platform/GITEA_ACTIONS.md) describes release automation.
-- [Remote support](../../packaging/remote_support/README.md) describes restricted socket/systemd deployment.
+- [Remote support](../../packaging/remote_support/README.md) describes initial provisioning and version reconciliation through a restricted privileged helper.
 - [Root packaging guide](../../packaging/README.md) covers the packaging layout and entry points.
 
 `config/release_targets.json` provides product/profile/package identity. `src/engine/updates/` provides the runtime updater; `src/applications/software_update/` provides its admin UI. Do not confuse packaging scripts with application factories or machine processes. Source references below cover every packaging Python module; shell scripts, units, manifests and templates remain documented in the deployment guides.
@@ -19,7 +19,10 @@ Packaging creates/install product releases and support-service assets. It is sep
 
 | Source subdirectory | Guide |
 |---|---|
-| `paint_config/` | [paint_config](paint_config/README.md) |
+| `robot/` | [Complete robot releases](../../packaging/robot/README.md) |
+| `runtime/` | [Installed runtime](../../packaging/runtime/README.md) |
+| `shared/` | [Shared packaging helpers](../../packaging/shared/README.md) |
+| `kiosk/` | [Kiosk setup](../../packaging/kiosk/README.md) |
 | `platform/` | [platform](platform/README.md) |
 | `remote_support/` | [remote_support](remote_support/README.md) |
 

@@ -1,19 +1,18 @@
-# `packaging/remote_support`
+# Remote support packaging
 
-This page follows the source directory. The reference below records its modules and contracts; follow child guides for nested implementations.
+The [operational guide](../../../packaging/remote_support/README.md) describes
+initial provisioning, version configuration and automatic upgrades.
 
-[Parent guide](../README.md).
+`build_payload.py` bundles the installer, literal `release.conf`, privileged
+package helper and helper provisioning script. First installation provisions
+SSH/native libraries, installs branded RustDesk and enables boot services.
+A trusted maintenance installation refreshes helper policy and reconciles the
+support version without rerunning kiosk setup.
 
-<!-- source-navigation:start -->
-## Source navigation
+The automatic updater compares the candidate's expected version to the installed
+configured package, then uses the root-owned helper only if they differ.
+The helper permits packages from the administrator-configured HTTPS source and
+verifies Debian metadata before installation. Legacy timed-access services are
+retired by provisioning; they are not the current update-service architecture.
 
-[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
-
-[Resource reference](RESOURCES.md) — non-Python files and their formats; values remain in the owning storage/source files.
-
-| Source subdirectory | Guide |
-|---|---|
-| `rustdesk.service.d/` | [rustdesk.service.d](rustdesk.service.d/README.md) |
-
-[Complete source index](../../SOURCE_INDEX.md).
-<!-- source-navigation:end -->
+[Engine updater](../../engine/updates/README.md) documents activation behavior.

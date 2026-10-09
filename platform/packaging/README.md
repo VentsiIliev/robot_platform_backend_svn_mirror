@@ -55,3 +55,6 @@ python3 -B scripts/publish_changes.py --all -m "Describe changes"
 
 This commits, publishes to SVN, then pushes SVN-generated history to Gitea.
 Use `--resume` to publish existing commits. It does not build or publish archives.
+
+The [release handoff note](../docs/context/robot_release_handoff.md) records the
+2026-10-09 implementation, VM tests, publication status and remaining verification.

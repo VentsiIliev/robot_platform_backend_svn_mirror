@@ -1,13 +1,12 @@
-# Resources: `packaging/remote_support`
+# Remote support resources
 
-[Directory guide](README.md). This inventory records paths and formats; it does not publish stored values or certify their suitability for another machine.
+| File | Purpose |
+| --- | --- |
+| `release.conf` | Literal download base, release tag, package filename and expected package version |
+| `install.sh` | Administrator-run initial machine provisioning |
+| `install_pl_remote_support.sh` | Branded package download and provisioning |
+| `install_update_helper.sh` | Root-owned helper, trusted-source policy and scoped sudoers installation |
+| `update_package.py` | Restricted automatic Debian package upgrade helper |
+| `build_payload.py` | Release payload assembly |
 
-| File | Format |
-|---|---|
-| [README.md](../../../packaging/remote_support/README.md) | `md` |
-| [install.sh](../../../packaging/remote_support/install.sh) | `sh` |
-| [install_pl_remote_support.sh](../../../packaging/remote_support/install_pl_remote_support.sh) | `sh` |
-| [plproject-remote-support-expiry.service](../../../packaging/remote_support/plproject-remote-support-expiry.service) | `service` |
-| [plproject-remote-support-expiry.timer](../../../packaging/remote_support/plproject-remote-support-expiry.timer) | `timer` |
-| [plproject-remote-support.service](../../../packaging/remote_support/plproject-remote-support.service) | `service` |
-| [plproject-remote-support.socket.in](../../../packaging/remote_support/plproject-remote-support.socket.in) | `in` |
+The source directory is [packaging/remote_support](../../../packaging/remote_support/).

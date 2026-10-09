@@ -7,10 +7,13 @@ initial translation and runtime language switching.
 
 Paint, Glue, Welding and Twin wire it into Administration with an administrator permission
 policy and a process-state gate. Installation is queued only when the main process
-is idle/stopped, then applied outside the GUI after normal shutdown by the independent
-launcher. Each target uses its own config and feed. Twin refuses scheduling with an attached runtime until it exposes an idle-state contract; offline CLI installation remains available.
+is idle/stopped. Complete robot updates are applied outside the GUI after normal
+shutdown by the independent per-user update service; the launcher waits and reopens
+the application. Each target uses its own config and source. Twin refuses scheduling
+with an attached runtime until it exposes an idle-state contract; offline CLI installation remains available.
 
-See [installation and operation](../../../packaging/platform/README.md).
+See [complete robot installation and operation](../../../packaging/robot/README.md)
+and [platform-only operation](../../../packaging/platform/README.md).
 
 Check for updates remains available when updates are disabled or configuration
 is missing. Clicking it reports the configuration problem in the screen status.
