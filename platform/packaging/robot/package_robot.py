@@ -8,6 +8,8 @@ import shutil
 import subprocess
 import tempfile
 
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'shared'))
 from release_common import ROOT, selection, component, extract, write_json, digest, archive_bundle, source_identity
 
 

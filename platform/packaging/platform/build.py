@@ -24,7 +24,7 @@ def main():
     Path(environment["MPLCONFIGDIR"]).mkdir(parents=True, exist_ok=True)
     subprocess.run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
                     "--distpath", str(ROOT / "dist"), "--workpath", str(work),
-                    "packaging/platform.spec"], cwd=ROOT, env=environment, check=True)
+                    "packaging/platform/platform.spec"], cwd=ROOT, env=environment, check=True)
     toc = ast.literal_eval((work / "platform/PYZ-00.toc").read_text())
     # PYZ entries are nested; inspect module-name tuples rather than source paths.
     def modules(value):
@@ -49,15 +49,15 @@ def main():
     # first-install provisioning entry point directly in the platform bundle.
     installation = bundle / "installation"
     (installation / "kiosk").mkdir(exist_ok=True)
-    shutil.copy2(ROOT / "setup_kiosk.sh", installation / "kiosk/setup_kiosk.sh")
-    shutil.copy2(ROOT / "packaging/platform/manage.py", installation / "system-setup.py")
+    shutil.copy2(ROOT / "packaging/kiosk/setup_kiosk.sh", installation / "kiosk/setup_kiosk.sh")
+    shutil.copy2(ROOT / "packaging/runtime/manage.py", installation / "system-setup.py")
     shutil.copytree(ROOT / "src/engine/updates", installation / "src/engine/updates",
                     ignore=shutil.ignore_patterns("__pycache__"), dirs_exist_ok=True)
     for name in ("src/__init__.py", "src/engine/__init__.py"):
         shutil.copy2(ROOT / name, installation / name)
     updater = installation / 'updater'
     updater.mkdir(exist_ok=True)
-    shutil.copy2(ROOT / 'packaging/platform/manage.py', updater / 'manage.py')
+    shutil.copy2(ROOT / 'packaging/runtime/manage.py', updater / 'manage.py')
     shutil.copytree(installation / 'src', updater / 'src', dirs_exist_ok=True)
     print(f"{args.target} bundle created at: {bundle}")
 

@@ -10,7 +10,8 @@ Source is maintained in both SVN and Gitea. **SVN is the authoritative publicati
 |---|---|
 | `platform/` | Python/PyQt6 operator application, robot-system definitions, services, tests, and documentation |
 | `backend/ros2_ws/` | ROS 2 workspace and ZeroErr backend launch scripts |
-| `deployment/` | Component packaging, combined robot releases, installation, and release tags |
+| `platform/packaging/` | Platform and complete robot builds, installers and publication |
+| `deployment/` | Deployment reference documentation |
 | `25488_CobotEdgePaintingZeroErr/` | Earlier application sources and supporting project material |
 | `releases/` | Locally generated release artifacts; excluded from version control |
 

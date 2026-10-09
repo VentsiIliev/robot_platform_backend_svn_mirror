@@ -13,7 +13,7 @@ def main():
         from src.bootstrap.kiosk_password import main as set_kiosk_password
         set_kiosk_password(sys.argv[sys.argv.index("--set-kiosk-password") + 1:])
         return
-    resource_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+    resource_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
     target = json.loads((resource_root / "config/release-target.json").read_text())
     os.environ["ROBOT_PLATFORM_PRODUCT"] = target["product"]
     if "--self-test" in sys.argv:
@@ -47,7 +47,7 @@ def self_test():
     config = load_startup_config()
     load_bootstrap_provider(config)
     from src.engine.updates.factory_defaults import load_factory_defaults
-    resource_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+    resource_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
     target = json.loads((resource_root / "config/release-target.json").read_text())
     load_factory_defaults(resource_root, target)
     app = QApplication([])
@@ -58,7 +58,7 @@ def self_test():
             raise RuntimeError(f"Bundled login image could not be loaded: {asset}")
     import tempfile
     temporary = tempfile.TemporaryDirectory()
-    resource_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+    resource_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
     catalog = resource_root / "src/applications/software_update/localization"
     localization = LocalizationService(str(catalog), state_file=str(Path(temporary.name) / "language.json"))
     localization.set_language("bg")

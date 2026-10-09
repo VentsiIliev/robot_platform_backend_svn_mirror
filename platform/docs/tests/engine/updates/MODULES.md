@@ -92,7 +92,7 @@ Imports (including optional/function-local imports; not a startup dependency lis
 Module declarations (expressions are shown without evaluating them):
 
 ```python
-MODULE = Path(__file__).resolve().parents[3] / 'packaging/platform/gitea_release.py'
+MODULE = Path(__file__).resolve().parents[3] / 'packaging/shared/gitea_release.py'
 spec = importlib.util.spec_from_file_location('gitea_release_tests', MODULE)
 gitea = importlib.util.module_from_spec(spec)
 ```
@@ -177,7 +177,7 @@ Module declarations (expressions are shown without evaluating them):
 
 ```python
 ROOT = Path(__file__).resolve().parents[3]
-spec = importlib.util.spec_from_file_location('platform_installer', ROOT / 'packaging/platform/manage.py')
+spec = importlib.util.spec_from_file_location('platform_installer', ROOT / 'packaging/runtime/manage.py')
 manager = importlib.util.module_from_spec(spec)
 ```
 
@@ -543,7 +543,7 @@ Module declarations (expressions are shown without evaluating them):
 
 ```python
 PLATFORM = Path(__file__).resolve().parents[3]
-spec = importlib.util.spec_from_file_location('robot_release_workflow', PLATFORM / 'packaging/platform/release_robot.py')
+spec = importlib.util.spec_from_file_location('robot_release_workflow', PLATFORM / 'packaging/robot/release_robot.py')
 workflow = importlib.util.module_from_spec(spec)
 ```
 

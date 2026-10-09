@@ -740,7 +740,7 @@ then it provides **zero** protection and must be treated as absent.
 Examples of this failure mode in this repo include:
 
 - commented-out suites that look substantial but never run
-- ad hoc `*_test.py` files living under `src/`
+- ad hoc `*_test.py` files living under `../src`
 
 ### 3. For Robot Process Tests, Assert Outcomes, Not Just Calls
 
@@ -876,9 +876,9 @@ Before refactoring a messy module, first lock down:
 
 This is especially important for:
 
-- `src/robot_systems/paint/`
-- `src/engine/core/`
-- `src/engine/vision/`
+- `../src/robot_systems/paint`
+- `../src/engine/core`
+- `../src/engine/vision`
 - shared geometry/process code
 
 The first goal is not beauty. The first goal is preventing accidental behavior drift.

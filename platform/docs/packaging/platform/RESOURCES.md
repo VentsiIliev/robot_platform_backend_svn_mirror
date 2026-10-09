@@ -6,4 +6,4 @@
 |---|---|
 | [GITEA_ACTIONS.md](../../../packaging/platform/GITEA_ACTIONS.md) | `md` |
 | [README.md](../../../packaging/platform/README.md) | `md` |
-| [ROBOT_RELEASE_WORKFLOW.md](../../../packaging/platform/ROBOT_RELEASE_WORKFLOW.md) | `md` |
+| [Complete robot workflow](../../../packaging/robot/README.md) | `md` |

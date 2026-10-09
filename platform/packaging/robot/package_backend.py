@@ -13,7 +13,7 @@ import tarfile
 import tempfile
 import sys
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 WORKSPACE = ROOT / "backend/ros2_ws"
 sys.path.insert(0, str(ROOT / "platform"))
 from src.bootstrap.startup_config import load_robot_system_config

@@ -10,7 +10,7 @@ Runtime snapshots and dated workpieces are data, not importable modules. Their d
 | `config/factory_defaults` | [Resources](config/factory_defaults/RESOURCES.md) | 6 |
 | `config/update_sources` | [Resources](config/update_sources/RESOURCES.md) | 6 |
 | `packaging` | [Resources](packaging/RESOURCES.md) | 7 |
-| `packaging/paint_config` | [Resources](packaging/paint_config/RESOURCES.md) | 1 |
+| `packaging/platform/paint_config` | [Resources](packaging/platform/paint_config/RESOURCES.md) | 1 |
 | `packaging/platform` | [Resources](packaging/platform/RESOURCES.md) | 3 |
 | `packaging/remote_support` | [Resources](packaging/remote_support/RESOURCES.md) | 7 |
 | `packaging/remote_support/rustdesk.service.d` | [Resources](packaging/remote_support/rustdesk.service.d/RESOURCES.md) | 1 |

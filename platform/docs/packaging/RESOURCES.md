@@ -5,7 +5,7 @@
 | File | Format |
 |---|---|
 | [README.md](../../packaging/README.md) | `md` |
-| [build_platform.sh](../../packaging/build_platform.sh) | `sh` |
-| [paint.spec](../../packaging/paint.spec) | `spec` |
-| [platform.spec](../../packaging/platform.spec) | `spec` |
+| [Platform build helper](../../packaging/platform/build.sh) | `sh` |
+| [paint.spec](../../packaging/platform/paint.spec) | `spec` |
+| [platform.spec](../../packaging/platform/platform.spec) | `spec` |
 | [requirements-build.txt](../../packaging/requirements-build.txt) | `txt` |

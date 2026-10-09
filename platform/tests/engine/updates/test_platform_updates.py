@@ -348,7 +348,7 @@ class UpdateTests(unittest.TestCase):
                 self.updater.check()
 
     def test_installer_imports_profiles_and_preserves_configuration_on_reinstall(self):
-        manager = Path("packaging/platform/manage.py").resolve()
+        manager = Path("packaging/runtime/manage.py").resolve()
         source = self.directory / "old-paint"
         atomic_json(source / "storage/settings/custom.json", {"speed": 35})
         atomic_json(source / "profiles/tray_dryer/storage/settings/custom.json", {"speed": 17})

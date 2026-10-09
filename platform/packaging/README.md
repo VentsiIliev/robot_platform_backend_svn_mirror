@@ -4,22 +4,25 @@ For the complete robot system (platform and backend together), run from `platfor
 
 ```bash
 source .venv/bin/activate
-python3 -B packaging/platform/release_robot.py check paint_tray_dry
-python3 -B packaging/platform/release_robot.py build paint_tray_dry
+python3 -B packaging/robot/release_robot.py check paint_tray_dry
+python3 -B packaging/robot/release_robot.py build paint_tray_dry
 ```
 
 Set exact versions in `config/platform.json` and commit before building.
 Use `verify` to check an existing archive and `publish` for the official SVN/Gitea
-release workflow. See [complete robot releases](platform/ROBOT_RELEASE_WORKFLOW.md).
+release workflow. See [complete robot releases](robot/README.md).
 
 ## Directory ownership
 
 | Location | Purpose |
 | --- | --- |
-| `packaging/platform/release_robot.py` | Main complete-system release command |
-| `../deployment/scripts/` | Component packaging, combined assembly and installer implementation |
-| `packaging/platform/` | Platform builder, runtime management and publication helpers |
-| `packaging/kiosk/` and `setup_kiosk.sh` | Desktop kiosk and automatic login setup |
+| `packaging/robot/release_robot.py` | Main complete-system release command |
+| `packaging/robot/` | Complete-system orchestration, component archives, assembly and installer |
+| `packaging/platform/` | Platform-only builder, installer kits and publication |
+| `packaging/runtime/` | Installed launcher and update-service command entry point |
+| `packaging/shared/` | Shared archive validation and Gitea publication helpers |
+| `tests/packaging/` | Hardware-free combined packaging integration tests |
+| `packaging/kiosk/` | Desktop kiosk and automatic login setup |
 | `packaging/remote_support/` | Bundled remote support installation payload |
 | `scripts/` | Development and hardware diagnostics, plus source publication helper |
 | `build/` | Disposable build intermediates (ignored by Git) |
@@ -32,7 +35,7 @@ under `dist/install-tests/` contains local copies and is not the official publis
 
 ## Component-only development
 
-`./packaging/build_platform.sh TARGET` builds a raw platform bundle without the
+`./packaging/platform/build.sh TARGET` builds a raw platform bundle without the
 backend. [Platform-only tools](platform/README.md) and the
 [platform-only Actions job](platform/GITEA_ACTIONS.md) remain available for that
 specific use. Their installers should not replace a complete robot installation.

@@ -155,7 +155,7 @@ class ReleaseTargetTests(unittest.TestCase):
             self.assertEqual(target["product"], updater.installed()["product"])
 
     def test_installer_creates_each_products_source_file_and_preserves_it(self):
-        manager = ROOT / "packaging/platform/manage.py"
+        manager = ROOT / "packaging/runtime/manage.py"
         environment = dict(os.environ, PYTHONPATH="")
         # This test covers product config persistence, not host provisioning.
         # Keep the actual installer CLI and mock only privileged setup steps.

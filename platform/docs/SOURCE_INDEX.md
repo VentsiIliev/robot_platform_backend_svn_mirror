@@ -14,7 +14,7 @@ Every Python file is parsed without executing it, including vendor code, demos a
 | `config/factory_defaults` | [Guide](config/factory_defaults/README.md) | 0 |
 | `config/update_sources` | [Guide](config/update_sources/README.md) | 0 |
 | `packaging` | [Guide](packaging/README.md) | 2 |
-| `packaging/paint_config` | [Guide](packaging/paint_config/README.md) | 0 |
+| `packaging/platform/paint_config` | [Guide](packaging/platform/paint_config/README.md) | 0 |
 | `packaging/platform` | [Guide](packaging/platform/README.md) | 9 |
 | `packaging/remote_support` | [Guide](packaging/remote_support/README.md) | 1 |
 | `packaging/remote_support/rustdesk.service.d` | [Guide](packaging/remote_support/rustdesk.service.d/README.md) | 0 |

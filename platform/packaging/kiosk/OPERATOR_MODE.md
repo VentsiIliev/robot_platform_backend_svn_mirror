@@ -82,6 +82,7 @@ The station deployment must configure and test:
 
 Do not blindly restart every clean exit: that would restart the app after an
 administrator intentionally closes it. The supervisor and session exit need an
-explicit handoff design. No session installer or supervisor is included yet.
+explicit handoff design. The session installer is `packaging/kiosk/setup_kiosk.sh`; see [Ubuntu kiosk setup](README.md).
+Its default policy restarts failed exits and logs out on a clean exit.
 
 Upstream kiosk project: https://gitlab.gnome.org/GNOME/gnome-kiosk

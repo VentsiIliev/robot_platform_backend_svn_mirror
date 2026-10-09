@@ -66,7 +66,7 @@ def main()
 
 ## `gitea_release.py`
 
-Source: [packaging/platform/gitea_release.py](../../../packaging/platform/gitea_release.py).
+Source: [packaging/shared/gitea_release.py](../../../packaging/shared/gitea_release.py).
 
 Publish verified release artifacts through Gitea's release API.
 
@@ -152,7 +152,7 @@ def main() -> int
 
 ## `manage.py`
 
-Source: [packaging/platform/manage.py](../../../packaging/platform/manage.py).
+Source: [packaging/runtime/manage.py](../../../packaging/runtime/manage.py).
 
 Independent installer/updater/launcher. Uses Ubuntu's system Python, not Qt.
 
@@ -224,7 +224,7 @@ def main()
 
 ## `release_robot.py`
 
-Source: [packaging/platform/release_robot.py](../../../packaging/platform/release_robot.py).
+Source: [packaging/robot/release_robot.py](../../../packaging/robot/release_robot.py).
 
 Test, build and verify the configured combined robot release without hardware.
 
@@ -234,7 +234,7 @@ Module declarations (expressions are shown without evaluating them):
 
 ```python
 PLATFORM = Path(__file__).resolve().parents[2]
-DEPLOYMENT = PLATFORM.parent / 'deployment/scripts'
+DEPLOYMENT = PLATFORM / 'packaging/robot'
 TESTS = ('tests.bootstrap.test_startup_config', 'tests.bootstrap.test_ros_backend_launcher', 'tests.robot_systems.paint.test_paint_system_overrides', 'tests.engine.updates.test_release_targets', 'tests.engine.updates.test_robot_release_workflow', 'tests.engine.updates.test_gitea_release')
 ```
 

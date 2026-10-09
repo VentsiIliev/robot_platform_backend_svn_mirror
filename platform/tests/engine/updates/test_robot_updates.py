@@ -166,7 +166,7 @@ if '--self-test' not in sys.argv and os.environ.get('UPDATE_TEST_LOG'):
     def test_supervisor_applies_after_gui_exit_stops_old_backend_and_reopens(self):
         self.install()
         self.updater.stage_local(self.bundle('1.1.0', '2.0.0')[0])
-        spec = importlib.util.spec_from_file_location('robot_update_manager', ROOT/'packaging/platform/manage.py')
+        spec = importlib.util.spec_from_file_location('robot_update_manager', ROOT/'packaging/runtime/manage.py')
         manager = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(manager)
         log = self.directory/'launch.log'

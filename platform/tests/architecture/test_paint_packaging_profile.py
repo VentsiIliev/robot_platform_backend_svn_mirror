@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PACKAGING_ROOT = ROOT / "packaging"
+PACKAGING_ROOT = ROOT / "packaging/platform"
 
 
 class TestPaintPackagingProfile(unittest.TestCase):
@@ -33,9 +33,9 @@ class TestPaintPackagingProfile(unittest.TestCase):
         self.assertNotIn("src.robot_systems.paint", excluded)
 
     def test_build_script_checks_collected_module_archive(self):
-        wrapper = (PACKAGING_ROOT / "build_platform.sh").read_text(encoding="utf-8")
+        wrapper = (PACKAGING_ROOT / "build.sh").read_text(encoding="utf-8")
         self.assertIn('packaging/platform/build.py', wrapper)
-        script = (PACKAGING_ROOT / "platform/build.py").read_text(encoding="utf-8")
+        script = (PACKAGING_ROOT / "build.py").read_text(encoding="utf-8")
         self.assertIn("PYZ-00.toc", script)
         self.assertIn('allowed = set(target["packages"])', script)
         self.assertIn("Other robot system bundled", script)

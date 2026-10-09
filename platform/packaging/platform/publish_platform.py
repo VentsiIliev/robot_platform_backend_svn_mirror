@@ -10,7 +10,7 @@ from urllib.parse import quote
 
 PLATFORM = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.insert(0, str(PLATFORM.parent / 'deployment/scripts'))
+sys.path.insert(0, str(PLATFORM / 'packaging/shared'))
 import release_common as common
 from gitea_release import GiteaPublisher
 from src.engine.updates.releases import version_tuple

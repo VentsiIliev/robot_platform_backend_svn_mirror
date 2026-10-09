@@ -31,7 +31,7 @@ datas += collect_data_files("contour_editor")
 datas += collect_data_files("qtawesome")
 excluded = [f"src.robot_systems.{path.name}" for path in (ROOT / "src/robot_systems").iterdir()
             if path.is_dir() and path.name not in target["packages"] and path.name != "__pycache__"]
-analysis = Analysis([str(ROOT / "packaging/platform_entrypoint.py")], pathex=[str(ROOT)],
+analysis = Analysis([str(ROOT / "packaging/platform/platform_entrypoint.py")], pathex=[str(ROOT)],
                     binaries=[], datas=datas,
                     hiddenimports=[f"src.robot_systems.{target['robot_system']}.bootstrap_provider",
                                    "src.applications.network_settings.build_application"],

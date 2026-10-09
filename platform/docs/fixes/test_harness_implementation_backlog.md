@@ -5,7 +5,7 @@
 Review date: `2026-05-06`
 
 Source inputs:
-- [QA-SKILL.md](../../QA-SKILL.md)
+- [QA-SKILL.md](../../skills/QA-SKILL.md)
 - `TEST_FAKE_TESTS_REVIEW.md` (referenced historical artifact; absent from this checkout)
 - `TEST_HARNESS_FINDINGS.md` (referenced historical artifact; absent from this checkout)
 

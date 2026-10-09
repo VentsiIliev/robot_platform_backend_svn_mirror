@@ -8,12 +8,13 @@ import unittest
 from unittest.mock import patch
 
 PLATFORM = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(PLATFORM.parent / 'deployment/scripts'))
+sys.path.insert(0, str(PLATFORM / 'packaging/robot'))
+sys.path.insert(0, str(PLATFORM / 'packaging/shared'))
 import release_common as common
 import package_robot
-import test_packaging as packaging_tests
+from tests.packaging import test_packaging as packaging_tests
 
-spec = importlib.util.spec_from_file_location('robot_release_workflow', PLATFORM / 'packaging/platform/release_robot.py')
+spec = importlib.util.spec_from_file_location('robot_release_workflow', PLATFORM / 'packaging/robot/release_robot.py')
 workflow = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(workflow)
 

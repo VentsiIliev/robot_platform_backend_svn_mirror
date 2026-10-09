@@ -1,4 +1,8 @@
-# Robot-system releases
+# Deployment reference
+
+Build, release and installer implementations now live in
+`platform/packaging/robot/`. This directory contains deployment documentation;
+use the [packaging guide](../platform/packaging/README.md) for entry points.
 
 Edit `platform/config/platform.json` only. The selected entry under `robot_systems`
 contains `robot_driver`, `backend`, `backend_profile`, `release_version`,
@@ -13,9 +17,9 @@ package inclusion, storage profile), not another runtime configuration to mainta
 From `~/Desktop/25488_ZeroErr_git`, on Ubuntu 24.04 / ROS Jazzy:
 
 ```bash
-python3 deployment/scripts/package_backend.py paint_tray_dry --verify-only
-python3 deployment/scripts/package_platform.py paint_tray_dry --verify-only
-python3 -B deployment/scripts/test_packaging.py
+python3 platform/packaging/robot/package_backend.py paint_tray_dry --verify-only
+python3 platform/packaging/robot/package_platform.py paint_tray_dry --verify-only
+python3 -B platform/tests/packaging/test_packaging.py
 ```
 
 Platform builds use `platform/.venv`; install `platform/packaging/requirements-build.txt`
@@ -29,14 +33,14 @@ contains build tooling. Hardware deployment still needs validation on the target
 From `platform/`, use the single release entry point:
 
 ```bash
-python3 -B packaging/platform/release_robot.py check paint_tray_dry
-python3 -B packaging/platform/release_robot.py build paint_tray_dry
-python3 -B packaging/platform/release_robot.py verify paint_tray_dry
+python3 -B packaging/robot/release_robot.py check paint_tray_dry
+python3 -B packaging/robot/release_robot.py build paint_tray_dry
+python3 -B packaging/robot/release_robot.py verify paint_tray_dry
 ```
 
 `publish paint_tray_dry` synchronizes committed source to SVN, verifies the
 selected complete release, and publishes source, exact tags and artifacts to
-Gitea. See [workflow details](../platform/packaging/platform/ROBOT_RELEASE_WORKFLOW.md).
+Gitea. See [workflow details](../platform/packaging/robot/README.md).
 
 ## Internal component packaging and assembly
 
@@ -45,10 +49,10 @@ replace an existing version. Upload the source to SVN before an official build s
 its manifest contains the SVN revision. These commands do not commit or upload source.
 
 ```bash
-python3 deployment/scripts/package_backend.py paint_tray_dry
-python3 deployment/scripts/package_platform.py paint_tray_dry
-python3 deployment/scripts/package_robot.py paint_tray_dry
-python3 deployment/scripts/tag_robot.py paint_tray_dry
+python3 platform/packaging/robot/package_backend.py paint_tray_dry
+python3 platform/packaging/robot/package_platform.py paint_tray_dry
+python3 platform/packaging/robot/package_robot.py paint_tray_dry
+python3 platform/packaging/robot/tag_robot.py paint_tray_dry
 ```
 
 Build a component only when its selected version does not already exist. For a

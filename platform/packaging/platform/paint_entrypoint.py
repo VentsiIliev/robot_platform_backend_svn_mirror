@@ -37,7 +37,7 @@ def self_test():
     app = QApplication([])
     import tempfile
     temporary = tempfile.TemporaryDirectory()
-    resource_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+    resource_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
     catalog = resource_root / "src/applications/software_update/localization"
     localization = LocalizationService(str(catalog), state_file=str(Path(temporary.name) / "language.json"))
     localization.set_language("bg")

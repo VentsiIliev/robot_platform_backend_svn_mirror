@@ -3,7 +3,7 @@
 Packaging creates/install product releases and support-service assets. It is separate from application runtime startup.
 
 - [Platform packaging](../../packaging/platform/README.md) is the deployment guide for signed artifacts, update compatibility, factory defaults, migration and rollback.
-- [Release workflow](../../packaging/platform/ROBOT_RELEASE_WORKFLOW.md) describes product release preparation.
+- [Release workflow](../../packaging/robot/README.md) describes product release preparation.
 - [Gitea Actions](../../packaging/platform/GITEA_ACTIONS.md) describes release automation.
 - [Remote support](../../packaging/remote_support/README.md) describes restricted socket/systemd deployment.
 - [Root packaging guide](../../packaging/README.md) covers the packaging layout and entry points.

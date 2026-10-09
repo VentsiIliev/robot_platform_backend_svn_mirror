@@ -4,15 +4,15 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  sudo ./setup_kiosk.sh install --user USER --directory DIR [options] -- COMMAND [ARGS...]
-  sudo ./setup_kiosk.sh uninstall --user USER
+  sudo ./packaging/kiosk/setup_kiosk.sh install --user USER --directory DIR [options] -- COMMAND [ARGS...]
+  sudo ./packaging/kiosk/setup_kiosk.sh uninstall --user USER
 Options:
   --autologin yes|no       Default: no (test manual login first)
   --restart failure|always Default: failure (successful exit logs out)
   --delay SECONDS          Default: 5 (minimum 1)
   --help
 Example:
-  sudo ./setup_kiosk.sh install --user pl_user --directory "$PWD" -- ./launch_robot_app.sh
+  sudo ./packaging/kiosk/setup_kiosk.sh install --user pl_user --directory "$PWD" -- ./launch_robot_app.sh
 EOF
 }
 die() { echo "$*" >&2; exit 1; }

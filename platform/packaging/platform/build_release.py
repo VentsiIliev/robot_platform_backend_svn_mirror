@@ -76,10 +76,10 @@ def main():
                 return member
             target.add(bundle, arcname="platform", filter=exclude_storage)
             if not (bundle / "installation/kiosk/setup_kiosk.sh").is_file():
-                target.add(source / "setup_kiosk.sh",
+                target.add(source / "packaging/kiosk/setup_kiosk.sh",
                            arcname="platform/installation/kiosk/setup_kiosk.sh")
             updater_prefix = "platform/installation/updater"
-            target.add(Path(__file__).with_name("manage.py"), arcname=f"{updater_prefix}/manage.py")
+            target.add(source / "packaging/runtime/manage.py", arcname=f"{updater_prefix}/manage.py")
             def exclude_updater_cache(member):
                 return None if "__pycache__" in Path(member.name).parts else member
             target.add(source / "src/engine/updates", arcname=f"{updater_prefix}/src/engine/updates", filter=exclude_updater_cache)
@@ -109,7 +109,7 @@ def main():
         with tarfile.open(kit, "w:gz", dereference=True) as target:
             target.add(installer, arcname=f"{kit_prefix}/install.sh")
             target.add(archive, arcname=f"{kit_prefix}/release.tar.gz")
-            target.add(Path(__file__).with_name("manage.py"), arcname=f"{kit_prefix}/tools/manage.py")
+            target.add(source / "packaging/runtime/manage.py", arcname=f"{kit_prefix}/tools/manage.py")
             def exclude_cache(member):
                 return None if "__pycache__" in Path(member.name).parts else member
             target.add(source / "src/engine/updates", arcname=f"{kit_prefix}/tools/src/engine/updates", filter=exclude_cache)

@@ -37,7 +37,7 @@ workflow runs `packaging/platform/build_and_release.py paint_tray_dry` and publi
 installer/update archives using the system's `VERSION` file.
 
 For the combined platform/backend robot release, use the
-[combined release workflow](ROBOT_RELEASE_WORKFLOW.md#publish-to-svn-and-gitea).
+[combined release workflow](../robot/README.md#publish-to-svn-and-gitea).
 Its `publish` action synchronizes committed source to SVN, builds/verifies the
 selected versions, pushes their exact tags, and uploads a Gitea release. The
 commands below describe the separate platform-only installer workflow.
@@ -64,7 +64,7 @@ shell wrappers. These are for component development, not complete robot updates:
 
 An omitted component version reads `src/robot_systems/TARGET/VERSION`. Complete
 robot releases instead use the exact pins in `config/platform.json` through
-`release_robot.py`; use the [combined workflow](ROBOT_RELEASE_WORKFLOW.md).
+`release_robot.py`; use the [combined workflow](../robot/README.md).
 
 Every target has its own version sequence, artifact folder, installer, data root
 and update config. Builds embed only the selected system/profile packages and
@@ -121,7 +121,7 @@ The installer kit's `install.sh` accepts:
 Use the kiosk script's `uninstall` command to restore its saved baseline.
 The account's GNOME Kiosk session and GDM settings are global machine
 configuration: install one selected product as the kiosk per machine. Its
-first backup is retained by `setup_kiosk.sh`.
+first backup is retained by `packaging/kiosk/setup_kiosk.sh`.
 
 Both the platform-only and combined robot installers support these options.
 The combined installer uses `INSTALL_ROOT/launch.sh`, retaining backend startup;
@@ -153,7 +153,7 @@ and run `python3 -B robot/install.py` instead.
 Build the application using the existing virtual environment:
 
 ```bash
-./packaging/build_platform.sh paint
+./packaging/platform/build.sh paint
 .venv/bin/python packaging/platform/build_release.py paint 1.0.0
 ```
 

@@ -12,7 +12,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+PLATFORM = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PLATFORM / 'packaging/shared'))
+sys.path.insert(0, str(PLATFORM / 'packaging/robot'))
 import release_common as common
 import package_robot
 import install_robot

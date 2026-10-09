@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[3]
-spec = importlib.util.spec_from_file_location('platform_installer', ROOT / 'packaging/platform/manage.py')
+spec = importlib.util.spec_from_file_location('platform_installer', ROOT / 'packaging/runtime/manage.py')
 manager = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(manager)
 
@@ -170,7 +170,7 @@ class FirstInstallSetupTests(unittest.TestCase):
             run.assert_not_called()
 
     def test_combined_installer_provisions_first_install_only(self):
-        source = ROOT.parent / 'deployment/scripts/install_robot.py'
+        source = ROOT / 'packaging/robot/install_robot.py'
         if not source.is_file():
             self.skipTest('Combined deployment installer is not in this checkout')
         spec = importlib.util.spec_from_file_location('combined_robot_installer', source)

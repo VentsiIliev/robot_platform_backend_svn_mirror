@@ -11,7 +11,7 @@ Generated from Python ASTs. Signatures, declared defaults, imports and docstring
 
 ## `paint_entrypoint.py`
 
-Source: [packaging/paint_entrypoint.py](../../packaging/paint_entrypoint.py).
+Source: [packaging/platform/paint_entrypoint.py](../../packaging/platform/paint_entrypoint.py).
 
 Standalone paint entry point with external data and update exclusion.
 
@@ -33,7 +33,7 @@ Verify frozen imports, startup resources and Qt without touching hardware.
 
 ## `platform_entrypoint.py`
 
-Source: [packaging/platform_entrypoint.py](../../packaging/platform_entrypoint.py).
+Source: [packaging/platform/platform_entrypoint.py](../../packaging/platform/platform_entrypoint.py).
 
 Standalone entry point bound to one robot-system/profile release target.
 

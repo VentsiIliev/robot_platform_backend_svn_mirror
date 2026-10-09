@@ -28,7 +28,7 @@ class UpdateServiceTests(unittest.TestCase):
                                      product=self.fixture.config.product, enabled=True))
 
     def test_daemon_downloads_and_applies_only_after_gui_lock_is_released(self):
-        process = subprocess.Popen([sys.executable, '-B', str(ROOT/'packaging/platform/manage.py'),
+        process = subprocess.Popen([sys.executable, '-B', str(ROOT/'packaging/runtime/manage.py'),
                                     '--config', str(self.config), 'serve'],
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         def stop():
@@ -93,7 +93,7 @@ class UpdateServiceTests(unittest.TestCase):
         import importlib.util
         self.fixture.updater.stage_local(self.fixture.directory/'1.1.0.tar.gz')
         atomic_json(self.root/'update-state/service.json', {'unit':'test.service'})
-        spec = importlib.util.spec_from_file_location('service_launcher', ROOT/'packaging/platform/manage.py')
+        spec = importlib.util.spec_from_file_location('service_launcher', ROOT/'packaging/runtime/manage.py')
         manager = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(manager)
         daemon = UpdateService(self.config)

@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch, MagicMock
 
-MODULE = Path(__file__).resolve().parents[3] / 'packaging/platform/gitea_release.py'
+MODULE = Path(__file__).resolve().parents[3] / 'packaging/shared/gitea_release.py'
 spec = importlib.util.spec_from_file_location('gitea_release_tests', MODULE)
 gitea = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gitea)

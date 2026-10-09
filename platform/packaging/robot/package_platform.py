@@ -7,6 +7,8 @@ import platform
 import subprocess
 import tempfile
 
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'shared'))
 from release_common import ROOT, selection, source_identity, write_json, digest, archive_bundle
 
 

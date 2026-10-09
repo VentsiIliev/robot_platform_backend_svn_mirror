@@ -5,13 +5,13 @@ versions default to `config/platform.json`; no second selection file is needed.
 
 ```bash
 # Daily hardware-free release tests; works with uncommitted changes.
-python3 -B packaging/platform/release_robot.py check
+python3 -B packaging/robot/release_robot.py check
 
 # Check the existing configured robot archive, including a temporary install.
-python3 -B packaging/platform/release_robot.py verify
+python3 -B packaging/robot/release_robot.py verify
 
 # Test, build missing components, assemble, and verify the installed archive.
-python3 -B packaging/platform/release_robot.py build
+python3 -B packaging/robot/release_robot.py build
 ```
 
 An optional final target argument selects an explicitly configured entry, e.g.
@@ -52,7 +52,7 @@ After setting the desired versions in `config/platform.json` and committing the
 source changes, run from `platform/`:
 
 ```bash
-.venv/bin/python -B packaging/platform/release_robot.py publish
+.venv/bin/python -B packaging/robot/release_robot.py publish
 ```
 
 The target defaults to `robot_system`. `--remote` defaults to `gitea-test`; its

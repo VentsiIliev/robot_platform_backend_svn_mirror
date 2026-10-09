@@ -3,6 +3,9 @@
 import argparse
 import json
 import subprocess
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'shared'))
 from release_common import ROOT, selection, digest
 
 

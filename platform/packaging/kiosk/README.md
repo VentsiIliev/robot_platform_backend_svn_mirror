@@ -34,7 +34,7 @@ From the platform checkout, prepare the robot application **as the kiosk user**:
 Close the application, then install the kiosk with automatic login disabled:
 
 ```bash
-sudo bash ./setup_kiosk.sh install --user pl_user --directory "$PWD" -- ./launch_robot_app.sh
+sudo bash ./packaging/kiosk/setup_kiosk.sh install --user pl_user --directory "$PWD" -- ./launch_robot_app.sh
 ```
 
 Log out, select the user and choose **Kiosk Script Session (X11 Display Server)**
@@ -45,7 +45,7 @@ must wait for its application and propagate its exit code.
 After the manual test succeeds, enable automatic login:
 
 ```bash
-sudo bash ./setup_kiosk.sh install --user pl_user --directory "$PWD" --autologin yes -- ./launch_robot_app.sh
+sudo bash ./packaging/kiosk/setup_kiosk.sh install --user pl_user --directory "$PWD" --autologin yes -- ./launch_robot_app.sh
 sudo reboot
 ```
 
@@ -59,7 +59,7 @@ Arguments after `--` are passed directly to the launcher, preserving spaces;
 they are not evaluated as shell code. For example:
 
 ```bash
-sudo bash ./setup_kiosk.sh install --user pl_user --directory /home/pl_user --restart always --delay 10 -- /usr/bin/firefox --kiosk https://example.org
+sudo bash ./packaging/kiosk/setup_kiosk.sh install --user pl_user --directory /home/pl_user --restart always --delay 10 -- /usr/bin/firefox --kiosk https://example.org
 ```
 
 `--restart failure` logs out on exit code zero and restarts on failure.
@@ -78,7 +78,7 @@ This script does not block virtual terminals, SSH, or other login sessions.
 ## Restore / redo
 
 ```bash
-sudo bash ./setup_kiosk.sh uninstall --user pl_user
+sudo bash ./packaging/kiosk/setup_kiosk.sh uninstall --user pl_user
 sudo reboot
 ```
 

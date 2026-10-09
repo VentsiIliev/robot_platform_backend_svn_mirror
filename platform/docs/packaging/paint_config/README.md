@@ -1,4 +1,4 @@
-# `packaging/paint_config`
+# `packaging/platform/paint_config`
 
 This page follows the source directory. The reference below records its modules and contracts; follow child guides for nested implementations.
 

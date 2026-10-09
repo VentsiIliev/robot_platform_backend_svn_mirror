@@ -11,8 +11,9 @@ import tempfile
 import time
 
 PLATFORM = Path(__file__).resolve().parents[2]
-DEPLOYMENT = PLATFORM.parent / 'deployment/scripts'
-sys.path.insert(0, str(DEPLOYMENT))
+ROBOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(PLATFORM / 'packaging/shared'))
+sys.path.insert(0, str(ROBOT))
 import release_common as common
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from gitea_release import GiteaPublisher
@@ -66,7 +67,7 @@ class Workflow:
         if not python.is_file():
             raise ValueError(f'Missing platform environment: {python}')
         self.run('Platform release tests', [python, '-B', '-m', 'unittest', *TESTS, '-q'])
-        self.run('Packaging integration tests', [sys.executable, '-B', DEPLOYMENT / 'test_packaging.py'])
+        self.run('Packaging integration tests', [sys.executable, '-B', PLATFORM / 'tests/packaging/test_packaging.py'])
 
     def build(self):
         common.source_identity()  # Preserve the official packagers' clean-source gate.
@@ -82,8 +83,8 @@ class Workflow:
             else:
                 missing.append(kind)
         for kind in missing:
-            self.run(f'Build {kind}', [sys.executable, '-B', DEPLOYMENT / f'package_{kind}.py', self.target])
-        self.run('Assemble exact component pair', [sys.executable, '-B', DEPLOYMENT / 'package_robot.py', self.target])
+            self.run(f'Build {kind}', [sys.executable, '-B', ROBOT / f'package_{kind}.py', self.target])
+        self.run('Assemble exact component pair', [sys.executable, '-B', ROBOT / 'package_robot.py', self.target])
 
     def publish(self, remote, token, notes, signing_key=None):
         directory = common.ROOT / 'releases' / self.target / 'robot' / self.selected['release_version']
@@ -96,7 +97,7 @@ class Workflow:
             raise ValueError('Official release must record an SVN revision; rebuild after SVN publication')
         url = subprocess.check_output(['git', 'remote', 'get-url', '--push', remote], cwd=common.ROOT, text=True).strip()
         publisher = GiteaPublisher(url, token)
-        self.run('Create/verify exact release tags', [sys.executable, '-B', DEPLOYMENT / 'tag_robot.py', self.target], cwd=common.ROOT)
+        self.run('Create/verify exact release tags', [sys.executable, '-B', ROBOT / 'tag_robot.py', self.target], cwd=common.ROOT)
         tags = [f'{self.target}/{kind}/v{identity["version"]}' for kind, identity in {**manifest['components'], 'robot': manifest}.items()]
         with tempfile.TemporaryDirectory(prefix='gitea-auth-') as temporary:
             askpass = Path(temporary) / 'askpass.py'
