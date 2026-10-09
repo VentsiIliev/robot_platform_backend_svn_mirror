@@ -3,6 +3,11 @@ import os
 
 from src.robot_systems.paint.paint_robot_system import PaintRobotSystem
 from src.robot_systems.paint.component_ids import SettingsID
+from src.robot_systems.paint_tray_dry.component_ids import ServiceID, SettingsID as TraySettingsID
+from src.engine.hardware.operator_lights.config import OperatorLightsConfigSerializer
+from src.engine.hardware.operator_lights.i_operator_lights import IOperatorLights
+from src.robot_systems.paint_tray_dry.service_builders import build_operator_lights_service
+from src.shared_contracts.declarations import ServiceSpec, SettingsSpec
 from src.robot_systems.paint.processes.paint.paint_process_config_serializer import PaintProcessConfigSerializer
 
 
@@ -24,7 +29,22 @@ class TrayDryerPaintRobotSystem(PaintRobotSystem):
             )
         )) if spec.name == SettingsID.PAINT_PROCESS_CONFIG else spec
         for spec in PaintRobotSystem.settings_specs
+    ] + [
+        SettingsSpec(TraySettingsID.OPERATOR_LIGHTS, OperatorLightsConfigSerializer(),
+                     "hardware/operator_lights.json"),
     ]
+
+    services = [*PaintRobotSystem.services,
+        ServiceSpec(ServiceID.OPERATOR_LIGHTS, IOperatorLights, required=False,
+                    description="Configurable operator light outputs",
+                    builder=build_operator_lights_service),
+    ]
+
+    def on_start(self) -> None:
+        super().on_start()
+        self._operator_lights = self.get_optional_service(ServiceID.OPERATOR_LIGHTS)
+        if self._operator_lights is not None:
+            self.register_managed_resource(self._operator_lights)
 
     metadata = replace(
         PaintRobotSystem.metadata,

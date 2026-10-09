@@ -1,0 +1,9 @@
+{
+  "enabled": false,
+  "transport": "memory",
+  "channels": [
+    "red",
+    "green",
+    "orange"
+  ]
+}
