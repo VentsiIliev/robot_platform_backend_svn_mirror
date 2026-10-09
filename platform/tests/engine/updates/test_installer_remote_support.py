@@ -15,6 +15,42 @@ spec.loader.exec_module(manager)
 
 
 class RemoteSupportInstallTests(unittest.TestCase):
+    def test_packaged_vendor_loads_config_beside_script_from_another_directory(self):
+        spec = importlib.util.spec_from_file_location(
+            'remote_support_payload', ROOT / 'packaging/remote_support/build_payload.py')
+        builder = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(builder)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            payload = root / 'payload'
+            builder.build_payload(payload)
+            self.assertEqual((payload / 'release.conf').read_bytes(),
+                             (ROOT / 'packaging/remote_support/release.conf').read_bytes())
+            (payload / 'release.conf').write_text(
+                'DOWNLOAD_BASE_URL="https://example.org/support/"\n'
+                'RELEASE="v2.0.0"\nPACKAGE="support.deb"\nEXPECTED_VERSION="2.0.0"\n')
+            commands = root / 'commands'
+            commands.mkdir()
+            # Stop before any provisioning commands; the EXIT trap observes
+            # the actual installer configuration after it has been loaded.
+            (commands / 'mktemp').write_text('#!/bin/bash\nexit 73\n')
+            (commands / 'mktemp').chmod(0o755)
+            probe = '''trap 'printf "%s\\n" "$DOWNLOAD_URL" "$EXPECTED_VERSION"' EXIT
+source "$1" --provision-only
+'''
+            result = subprocess.run(
+                ['bash', '-c', probe, 'probe', str(payload / 'install_pl_remote_support.sh')],
+                cwd=root, env={**os.environ, 'PATH': str(commands) + ':' + os.environ['PATH']},
+                capture_output=True, text=True)
+            self.assertEqual(result.returncode, 73, result.stderr)
+            self.assertEqual(result.stdout.splitlines(),
+                             ['https://example.org/support/v2.0.0/support.deb', '2.0.0'])
+            (payload / 'release.conf').unlink()
+            result = subprocess.run(['bash', str(payload / 'install_pl_remote_support.sh')],
+                                    cwd=root, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('Remote support configuration is missing', result.stderr)
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -74,6 +110,7 @@ class RemoteSupportInstallTests(unittest.TestCase):
                                     f'install -d -m 0755 "{ssh_runtime}"')
             installer = root / 'install.sh'
             (root / 'auto_login.sh').write_text('#!/bin/bash\n')
+            (root / 'install_update_helper.sh').write_text('#!/bin/bash\necho "install-update-helper $*" >> "$CALL_LOG"\n')
             source = source.replace('install -o root -g root -m 0755', 'install -m 0755')
             source = source.replace('/usr/local/bin/auto_login.sh', str(root / 'installed-auto-login.sh'))
             installer.write_text(source)
@@ -87,6 +124,7 @@ class RemoteSupportInstallTests(unittest.TestCase):
             self.assertEqual(ssh_runtime.stat().st_mode & 0o777, 0o755)
             self.assertIn('systemctl enable --now ssh.service', calls)
             self.assertIn('systemctl enable --now rustdesk.service', calls)
+            self.assertIn('install-update-helper operator', calls)
             self.assertLess(calls.index('disable --now plproject-remote-support-expiry.timer'),
                             calls.index('enable --now rustdesk.service'))
 

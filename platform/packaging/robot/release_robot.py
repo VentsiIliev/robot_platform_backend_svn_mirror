@@ -27,6 +27,7 @@ TESTS = (
     'tests.engine.updates.test_gitea_release',
     'tests.engine.updates.test_robot_updates',
     'tests.engine.updates.test_update_service',
+    'tests.engine.updates.test_remote_support_updates',
     'tests.engine.updates.test_installer_remote_support',
 )
 

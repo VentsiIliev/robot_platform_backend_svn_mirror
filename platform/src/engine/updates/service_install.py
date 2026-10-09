@@ -21,7 +21,7 @@ def install_service(root, config_path):
     source = ('[Unit]\nDescription=Robot system update service\n'
               '[Service]\nType=simple\nExecStart=/usr/bin/python3 ' + quote(root/'tools/manage.py') +
               ' --config ' + quote(config_path) + ' serve\nRestart=on-failure\nRestartSec=3\n'
-              'UMask=0077\nNoNewPrivileges=true\n'
+              'UMask=0077\n'
               '[Install]\nWantedBy=default.target\n')
     (directory/unit).write_text(source)
     environment = subprocess_environment()

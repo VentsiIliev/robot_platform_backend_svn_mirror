@@ -75,7 +75,7 @@ class UpdateServiceTests(unittest.TestCase):
         unit = self.fixture.directory/'.config/systemd/user/robot-update-installed.service'
         content = unit.read_text()
         self.assertIn(' serve\n',content)
-        self.assertIn('NoNewPrivileges=true',content)
+        self.assertNotIn('NoNewPrivileges=true',content)  # Narrow sudo helper must elevate.
         self.assertNotIn('sudo',content)
         self.assertEqual([call.args[0][:2] for call in run.call_args_list], [['systemctl','--user']]*3)
         self.assertEqual(self.config.read_bytes(),before)

@@ -39,7 +39,39 @@ login screen and inside kiosk mode. Existing firewall rules still apply. A saved
 RustDesk `stop-service` option can prevent startup; the installer reports a
 service failure rather than silently rewriting its credentials or configuration.
 
-The packaged vendor installer is pinned to the branded release. Build payloads
+The packaged vendor installer reads `release.conf` beside its script. Edit that
+file to set `DOWNLOAD_BASE_URL`, `RELEASE`, `PACKAGE` and `EXPECTED_VERSION`.
+The download URL is `DOWNLOAD_BASE_URL/RELEASE/PACKAGE`; package verification
+checks the configured expected version. The payload bundles this configuration,
+so changes apply to newly built robot releases. Existing archives and installed
+payloads retain their original configuration.
+
+`release.conf` uses literal Bash assignments (no variable expansion or commands)
+and is sourced by the privileged installer;
+keep it with the trusted installer files. Copy it alongside the script when
+running the vendor installer manually. A missing or incomplete config stops
+before provisioning. Alternate vendor scripts with their own adjacent
+`release.conf` bundle that file; otherwise the project config is copied.
+
+The packaged vendor installer is pinned to the configured release. Build payloads
 with `python3 packaging/remote_support/build_payload.py DESTINATION`;
 `PL_SUPPORT_VENDOR_INSTALLER` can select an alternative trusted installer during
 platform release builds. Vendor installers must support `--provision-only`.
+
+Complete-system update activation compares the installed, configured `rustdesk`
+package version with the candidate release's `EXPECTED_VERSION`. Matching versions
+skip installation. A different or missing version invokes a root-owned helper;
+failure keeps the previous robot release active. Kiosk settings are preserved.
+Backend and platform versions continue to activate together from the robot archive.
+
+Initial system setup installs `/usr/local/libexec/robot-remote-support-update`,
+pins its trusted download source in `/etc/robot-remote-support.json`, and grants
+the desktop user only the helper's `upgrade` command through sudoers. The helper
+validates identifiers and Debian package metadata before installing with APT.
+Changing the trusted source requires a trusted installer run with administrator
+authentication. The user update service permits this scoped sudo elevation.
+
+Existing installations need one trusted installer maintenance run to provision
+the helper and refresh their user service before automatic package upgrades work.
+Remote-support package installation is a machine-wide change: application rollback
+restores platform/backend and data, but does not undo an installed support package.

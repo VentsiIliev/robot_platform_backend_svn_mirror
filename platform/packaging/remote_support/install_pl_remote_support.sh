@@ -20,17 +20,18 @@ fi
 #   - Missing package dependencies
 #   - Ubuntu unattended upgrades / APT lock contention
 #
-# Installs:
-#   PL PROJECT Remote Support v1.4.9-plproject.1
-#
-# Based on RustDesk 1.4.9
+# Package source and version are configured in release.conf beside this script.
 # ============================================================
 
-RELEASE="v1.4.9-plproject.1"
-PACKAGE="rustdesk-1.4.9.deb"
-EXPECTED_VERSION="1.4.9"
+CONFIG_FILE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/release.conf"
+[[ -f "$CONFIG_FILE" ]] || { echo "Remote support configuration is missing: $CONFIG_FILE" >&2; exit 1; }
+source "$CONFIG_FILE"
+: "${DOWNLOAD_BASE_URL:?Missing DOWNLOAD_BASE_URL in release.conf}"
+: "${RELEASE:?Missing RELEASE in release.conf}"
+: "${PACKAGE:?Missing PACKAGE in release.conf}"
+: "${EXPECTED_VERSION:?Missing EXPECTED_VERSION in release.conf}"
 
-DOWNLOAD_URL="https://github.com/VentsiIliev/plproject_remote_support/releases/download/${RELEASE}/${PACKAGE}"
+DOWNLOAD_URL="${DOWNLOAD_BASE_URL%/}/${RELEASE}/${PACKAGE}"
 
 # Maximum time to wait for Ubuntu's package manager.
 # 900 seconds = 15 minutes.

@@ -85,6 +85,15 @@ def prepare_system_setup(root, *, first_install, mode=None, setup_system=False):
 
 def finish_system_setup(root, config_path, state, launcher=None):
     if state is None or state["complete"]:
+        from src.engine.updates.remote_support import reconcile, release_settings
+        release = root / 'current'
+        if release_settings(release) is not None:
+            helper = release / 'platform/installation/remote-support/install_update_helper.sh'
+            command = ['bash', str(helper), desktop_user()]
+            if os.geteuid() != 0:
+                command.insert(0, 'sudo')
+            subprocess.run(command, check=True)
+            reconcile(release)
         print("Software installation only; existing system and kiosk settings preserved.")
         return
     try:

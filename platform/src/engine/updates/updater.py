@@ -331,6 +331,9 @@ class PlatformUpdater:
             backup = self.root / "backups" / backup_name
             backup.parent.mkdir(parents=True, exist_ok=True)
             try:
+                if previous:
+                    from .remote_support import reconcile
+                    reconcile(release)
                 shutil.copytree(self.data, staged_data)
                 migrate(staged_data, release, previous["storage_schema"] if previous else 1, manifest["storage_schema"])
                 if manifest.get("format") == 2:

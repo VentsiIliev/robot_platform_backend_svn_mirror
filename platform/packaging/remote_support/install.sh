@@ -65,4 +65,5 @@ systemctl enable --now rustdesk.service
 systemctl is-active --quiet rustdesk.service
 systemctl is-active --quiet ssh.service
 install -o root -g root -m 0755 "$auto_login" /usr/local/bin/auto_login.sh
+bash "$source_dir/install_update_helper.sh" "$ui_user"
 echo "SSH and PL PROJECT remote support installed and enabled at boot."
