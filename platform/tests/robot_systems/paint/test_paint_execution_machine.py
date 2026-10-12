@@ -567,6 +567,10 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
             workpiece={"workpieceId": "saved"},
         )
         service._path_executor = _FakePhasedPathExecutor(events)
+        from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor import PaintWorkpiecePathExecutor
+        service.prepare_dropoff.side_effect = lambda: PaintWorkpiecePathExecutor.prepare_dropoff(service._path_executor)
+        service.release_dropoff.side_effect = lambda ctx: PaintWorkpiecePathExecutor.release_dropoff(service._path_executor)
+
         service._next_cycle_start_target.return_value = None
         service._pause_dashboard_live_view_after_capture.return_value = False
         service._path_debug_plots_enabled.return_value = False

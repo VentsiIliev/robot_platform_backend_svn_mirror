@@ -337,7 +337,7 @@ def _build_dryer_release_coordinator(robot_system):
     return DryerReleaseCoordinator(dryer) if dryer is not None else None
 
 
-def _build_paint_path_executor(robot_system):
+def _build_paint_path_executor(robot_system, *, plate_layout_service=None):
     from copy import deepcopy
 
     from src.robot_systems.paint.processes.paint.execute import (
@@ -372,6 +372,7 @@ def _build_paint_path_executor(robot_system):
         return bool(binding is not None and binding.enabled)
 
     dependencies = PaintExecutorDependencies(
+        plate_layout_service=plate_layout_service,
         robot_service=robot_service,
         path_preparation_service=_build_paint_path_preparation_service(robot_system),
         pickup_base_position_provider=lambda: (

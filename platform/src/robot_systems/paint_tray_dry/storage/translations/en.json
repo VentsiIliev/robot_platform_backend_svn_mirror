@@ -474,5 +474,9 @@
     "Recipe Load Failed": "Recipe Load Failed",
     "Save Failed": "Save Failed",
     "Capture Failed": "Capture Failed"
+  },
+  "Notifications": {
+    "notification.operator_lights.title": "Operator lights unavailable",
+    "notification.operator_lights.failed": "Light indication may be stale. Retrying output writes."
   }
 }

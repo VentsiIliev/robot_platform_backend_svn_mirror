@@ -111,38 +111,56 @@ class SystemBuilder:
 
         services: Dict[str, Any] = {}
 
-        for spec in system_class.services:
-            # A per-spec builder belongs to that named service. Resolving it
-            # through the type registry would make the last declaration win
-            # when multiple services intentionally share one interface.
-            builder = spec.builder or registry.get(spec.service_type)
+        try:
+            for spec in system_class.services:
+                # A per-spec builder belongs to that named service. Resolving it
+                # through the type registry would make the last declaration win
+                # when multiple services intentionally share one interface.
+                builder = spec.builder or registry.get(spec.service_type)
 
-            if builder is None:
-                if spec.required:
-                    raise RuntimeError(
-                        f"No builder registered for required service "
-                        f"'{spec.name}' ({spec.service_type.__name__}). "
-                        f"Use SystemBuilder.register() to add one."
-                    )
-                _LOGGER.debug("No builder for optional '%s' — skipping", spec.name)
-                continue
+                if builder is None:
+                    if spec.required:
+                        raise RuntimeError(
+                            f"No builder registered for required service "
+                            f"'{spec.name}' ({spec.service_type.__name__}). "
+                            f"Use SystemBuilder.register() to add one."
+                        )
+                    _LOGGER.debug("No builder for optional '%s' — skipping", spec.name)
+                    continue
 
-            instance = builder(ctx)
+                instance = builder(ctx)
 
-            if instance is None:
-                if spec.required:
-                    raise RuntimeError(f"Builder for required service '{spec.name}' returned None.")
-                _LOGGER.debug("Builder for optional '%s' returned None — skipping", spec.name)
-                continue
+                if instance is None:
+                    if spec.required:
+                        raise RuntimeError(f"Builder for required service '{spec.name}' returned None.")
+                    _LOGGER.debug("Builder for optional '%s' returned None — skipping", spec.name)
+                    continue
 
-            services[spec.name] = instance
-            ctx.services[spec.name] = instance
-            _LOGGER.debug("Built '%s' → %s", spec.name, type(instance).__name__)
+                services[spec.name] = instance
+                ctx.services[spec.name] = instance
+                _LOGGER.debug("Built '%s' → %s", spec.name, type(instance).__name__)
 
-        system = system_class()
-        system.set_development_mode(self._development_mode)
-        from src.engine.system.system_manager import SystemManager
-        system_manager = SystemManager(self._messaging_service)
+            system = system_class()
+            system.set_development_mode(self._development_mode)
+            from src.engine.system.system_manager import SystemManager
+            system_manager = SystemManager(self._messaging_service)
+        except Exception:
+            # Builders transfer ownership on return. Unwind completed builders.
+            cleaned = set()
+            for instance in reversed(list(services.values())):
+                if id(instance) in cleaned:
+                    continue
+                cleaned.add(id(instance))
+                try:
+                    for name in ("stop", "close", "disconnect"):
+                        cleanup = getattr(instance, name, None)
+                        if callable(cleanup):
+                            cleanup()
+                            break
+                except Exception:
+                    _LOGGER.exception("Could not roll back built service %s", type(instance).__name__)
+            raise
+
         system.start(
             services,
             settings_service  = settings_service,

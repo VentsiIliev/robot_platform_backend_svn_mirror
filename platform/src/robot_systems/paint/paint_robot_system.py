@@ -550,6 +550,7 @@ class PaintRobotSystem(BaseRobotSystem):
         )
         from src.robot_systems.paint.navigation import PaintNavigationService
         from src.robot_systems.paint.processes import PaintProcess
+        from src.engine.process.process_requirements import ProcessRequirements
         from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
         from src.robot_systems.paint.processes.paint.paint_process_config_service import PaintProcessConfigService
         from src.robot_systems.paint.processes.paint.paint_production_service import PaintProductionService
@@ -615,8 +616,8 @@ class PaintRobotSystem(BaseRobotSystem):
         self._pickup_condition = self._build_pickup_condition()
 
         if self._vision is not None:
-            self._vision.start()
             self.register_managed_resource(self._vision)
+            self._vision.start()
 
         self._camera_stream_publishers = {}
         from src.engine.vision.camera_stream_publisher import CameraStreamPublisher
@@ -641,8 +642,8 @@ class PaintRobotSystem(BaseRobotSystem):
                 flip_vertical=camera_spec.flip_vertical,
                 rotate_degrees=camera_spec.rotate_degrees,
             )
-            publisher.start()
             self.register_managed_resource(publisher)
+            publisher.start()
             self._camera_stream_publishers[role] = publisher
 
         self._calibration_provider = PaintRobotSystemCalibrationProvider(self)
@@ -685,7 +686,11 @@ class PaintRobotSystem(BaseRobotSystem):
             )
 
             self._workpiece_destination = PassThroughWorkpieceDestination()
-        self._paint_path_executor = application_wiring._build_paint_path_executor(self)
+        from src.robot_systems.paint.processes.paint.tray_dry.plate_layout import PlateLayoutService
+        self._plate_layout_service = PlateLayoutService()
+        self._paint_path_executor = application_wiring._build_paint_path_executor(
+            self, plate_layout_service=self._plate_layout_service
+        )
         self._paint_matching_service = application_wiring._build_paint_matching_service(
             self,
             workpiece_service=application_wiring._build_paint_workpiece_service(self),
@@ -698,7 +703,7 @@ class PaintRobotSystem(BaseRobotSystem):
             capture_snapshot_service=self._paint_capture_snapshot_service,
             path_preparation_service=self._paint_path_preparation_service,
             path_executor=self._paint_path_executor,
-            plate_layout_service=self._paint_path_executor._plate_layout_service,
+            plate_layout_service=self._plate_layout_service,
             vacuum_pump=self._vacuum_pump,
             paint_process_config_service=self._paint_process_config_service,
             magazine_load_service=self._paint_magazine_load_service,
@@ -707,6 +712,7 @@ class PaintRobotSystem(BaseRobotSystem):
             messaging_service=self._messaging_service,
         )
         self._main_process = PaintProcess(
+            requirements=ProcessRequirements.requires(CommonServiceID.ROBOT),
             production_service=self._paint_production_service,
             robot_service=self._robot,
             vacuum_pump=self._vacuum_pump,
@@ -747,7 +753,7 @@ class PaintRobotSystem(BaseRobotSystem):
             production_start_guard=self._production_start_guard,
             paint_process_config_service=self._paint_process_config_service,
             matching_selection=self._paint_matching_selection,
-            plate_layout_service=self._paint_path_executor._plate_layout_service,
+            plate_layout_service=self._plate_layout_service,
             target_point_name="camera",
             frame_name="calibration",
         )
@@ -797,8 +803,16 @@ class PaintRobotSystem(BaseRobotSystem):
 
     def on_stop(self) -> None:
         observe(_logger, "paint.system.stopping", profile=self.metadata.name)
-        self._robot.stop_motion()
-        self._robot.disable_robot()
+        process = getattr(self, "_main_process", None)
+        if process is not None:
+            process.shutdown()
+            self.unregister_managed_resource(process)
+        robot = getattr(self, "_robot", None)
+        if robot is not None:
+            try:
+                robot.stop_motion()
+            finally:
+                robot.disable_robot()
 
     def apply_camera_orientation(
         self,

@@ -53,7 +53,14 @@ class TrayDryerPaintRobotSystem(PaintRobotSystem):
                 self._messaging_service, ProcessID.MAIN_PROCESS,
                 state_getter=self._get_paint_process_state,
             )
-            self.register_managed_resource(self._operator_light_coordinator)
+            # The coordinator worker owns writes AND close, even after a join timeout.
+            self.unregister_managed_resource(self._operator_lights)
+            self.register_managed_resource(
+                self._operator_lights, cleanup=self._operator_light_coordinator.stop
+            )
+            self.health_registry.register_service(
+                ServiceID.OPERATOR_LIGHTS, self._operator_light_coordinator
+            )
             self._operator_light_coordinator.start()
 
     def _get_paint_process_state(self):

@@ -301,7 +301,7 @@ app   = (
   - initialize it from `default_active_work_area_id`
   - switch it through the shared work-area service
   - do not couple vision logic to area names such as `pickup` / `spray`
-- **`required=False` in `ServiceSpec`**: The app starts successfully even if an optional service fails to build. `on_start()` uses `get_optional_service()` and checks for `None` before using optional services.
+- **`required=False` in `ServiceSpec`**: A missing builder or a builder returning `None` may omit an optional service. A builder exception aborts startup and rolls back completed services. `on_start()` uses `get_optional_service()` and checks for `None` before use.
 - **`describe()`**: Class method that prints a human-readable summary of all specs. Useful for debugging and onboarding.
 
 → Subpackages: [glue/](glue/README.md)
@@ -338,3 +338,23 @@ a dedicated product identity, update config, repository and installation root. S
 
 [Complete source index](../SOURCE_INDEX.md).
 <!-- source-navigation:end -->
+
+
+## Startup rollback and cleanup ownership
+
+`SystemBuilder` closes completed services in reverse build order if a later
+builder or system constructor raises. Builders remain responsible for resources
+allocated before they return. `BaseRobotSystem.start()` unwinds failed injection
+or `on_start()`, including built services not yet registered as managed resources,
+and preserves the original startup exception if rollback also fails.
+
+Register runtime resources before starting them. `register_managed_resource`
+accepts a custom cleanup callback; ownership remains associated with the original
+resource so rollback does not independently close a worker-owned transport.
+`unregister_managed_resource(resource)` also removes its custom cleanup callback.
+
+Shutdown hooks that cannot finish because workers still own dependencies may
+raise `ShutdownPendingError`. This retains resources and the running flag for a
+later `stop()` attempt. Other shutdown-hook errors still trigger managed cleanup.
+The paint system uses this contract to wait for its production and stop workers
+before hardware teardown; see [paint recovery](paint_tray_dry/RECOVERY.md).

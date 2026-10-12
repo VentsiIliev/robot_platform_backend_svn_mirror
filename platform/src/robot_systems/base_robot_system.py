@@ -39,6 +39,10 @@ if TYPE_CHECKING:
 # Base vision_service
 # ---------------------------------------------------------------------------
 
+class ShutdownPendingError(RuntimeError):
+    """Workers still own resources; retain them and retry shutdown later."""
+
+
 class BaseRobotSystem(ABC):
     """
     Subclasses declare:
@@ -72,6 +76,7 @@ class BaseRobotSystem(ABC):
         self._system_manager:    Optional[Any] = None
         self._health_registry:   Optional[Any] = None
         self._managed_resources: List[tuple[str, Any]] = []
+        self._managed_resource_owners: dict[int, Any] = {}
         self._development_mode = False
         self._running = False
 
@@ -701,6 +706,7 @@ class BaseRobotSystem(ABC):
         """
         if resource is None:
             return None
+        self._managed_resource_owners[id(resource)] = cleanup if cleanup is not None else resource
         label = self._managed_resource_label(resource, cleanup)
         entry = (label, cleanup if cleanup is not None else resource)
         if entry not in self._managed_resources:
@@ -708,10 +714,11 @@ class BaseRobotSystem(ABC):
         return resource
 
     def unregister_managed_resource(self, resource: Any) -> None:
+        target = self._managed_resource_owners.pop(id(resource), resource)
         self._managed_resources = [
             entry
             for entry in self._managed_resources
-            if entry[1] is not resource
+            if entry[1] is not target
         ]
 
     def _cleanup_managed_resources(self) -> None:
@@ -725,6 +732,7 @@ class BaseRobotSystem(ABC):
                     self.metadata.name,
                 )
         self._managed_resources.clear()
+        self._managed_resource_owners.clear()
 
     @staticmethod
     def _managed_resource_label(resource: Any, cleanup: Any) -> str:
@@ -758,10 +766,25 @@ class BaseRobotSystem(ABC):
         self._settings_service  = settings_service
         self._messaging_service = messaging_service
         self._system_manager    = system_manager
-        self._validate_and_inject(services)
-        self._health_registry   = self._build_health_registry()
         self._running = True
-        self.on_start()
+        try:
+            self._validate_and_inject(services)
+            self._health_registry = self._build_health_registry()
+            self.on_start()
+        except Exception:
+            # Include built services not yet registered by a partial on_start.
+            registered = set(self._managed_resource_owners)
+            missing = []
+            for service in services.values():
+                if id(service) not in registered:
+                    missing.append((type(service).__name__, service))
+                    registered.add(id(service))
+            self._managed_resources[0:0] = missing
+            try:
+                self.stop()
+            except Exception:
+                self._logger.exception("Startup rollback failed for %s", self.metadata.name)
+            raise
         self._logger.info("%s started", self.metadata.name)
 
     def stop(self) -> None:
@@ -770,12 +793,18 @@ class BaseRobotSystem(ABC):
         self._logger.info("Stopping %s", self.metadata.name)
         try:
             self.on_stop()
-        finally:
-            try:
-                self._cleanup_managed_resources()
-            finally:
-                self._running = False
-                self._logger.info("%s stopped", self.metadata.name)
+        except ShutdownPendingError:
+            # Closing transports while workers use them is unsafe. Keep ownership.
+            self._logger.error("Shutdown pending for %s; resources retained", self.metadata.name)
+            raise
+        except Exception:
+            self._cleanup_managed_resources()
+            self._running = False
+            raise
+        else:
+            self._cleanup_managed_resources()
+            self._running = False
+            self._logger.info("%s stopped", self.metadata.name)
 
     @property
     def is_running(self) -> bool:

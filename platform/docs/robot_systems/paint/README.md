@@ -175,23 +175,31 @@ At startup the paint robot system:
 1. resolves shared robot, navigation, work-area, and optional vision services
 2. builds `PaintNavigationService`
 3. loads robot and targeting settings into runtime fields
-4. starts and registers the optional vision service
+4. registers the optional vision service before starting it
 5. builds height-measuring services
 6. builds calibration services and the paint calibration coordinator
 7. builds workpiece-editor, snapshot, path-preparation, executor, matching, and preparation services
-8. builds `PaintProductionService`
-9. builds and registers `PaintProcess`
+8. creates one shared `PlateLayoutService` and injects it into the executor, production service and dashboard
+9. builds and registers `PaintProcess`, requiring healthy robot service state for RUNNING transitions
 10. builds `PaintDashboardService`
 11. enables the robot
 
 ### `on_stop()`
 
-Shutdown is intentionally minimal:
+Shutdown first prevents new paint runs, cancels the active phase, requests a
+hardware halt and waits for the production and stop workers outside the process
+lock. The default worker deadline is five seconds. A missed deadline raises
+`ShutdownPendingError`, retaining hardware ownership for a subsequent `stop()`
+attempt. Once workers finish, the system stops motion and attempts to disable
+the robot even if the final stop command raises. Shared managed-resource cleanup
+then closes remaining dependencies.
 
-1. stop robot motion
-2. disable the robot
-
-Longer-lived managed resources such as the vision service and background processes are registered with the robot system and are stopped through the shared platform lifecycle.
+Cycle faults and explicit process errors halt motion while preserving the
+current vacuum command; ordinary operator Stop retains its vacuum-off behavior.
+Drop-off handlers use the public `DropoffExecutor` / `DropoffResult` boundary;
+executor bookkeeping stays inside the executor. See
+[recovery and ownership](../paint_tray_dry/RECOVERY.md) for light retries,
+startup rollback, timeout handling and commissioning checks.
 
 ---
 

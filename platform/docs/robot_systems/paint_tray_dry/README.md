@@ -6,6 +6,9 @@ The provider applies only this package's configuration overrides; its override m
 
 Release identity is `paint-tray-dry-robot`, profile `tray_dryer`, with shared `paint` and this variant packaged together. `config/platform.json` currently selects this variant; that selection is a checkout value, not a universal default. See [shared paint](../paint/README.md), [tray allocation](../paint/processes/paint/tray_dry/README.md) and [configuration](../../config/README.md).
 
+See [startup, fault recovery and shutdown](RECOVERY.md) for ownership, deadlines,
+operator-light retries and the intentional release policy.
+
 ## Update source
 
 This system owns [storage/update_source.json](../../../src/robot_systems/paint_tray_dry/storage/update_source.json),

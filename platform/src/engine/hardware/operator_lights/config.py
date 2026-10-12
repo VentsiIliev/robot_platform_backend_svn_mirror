@@ -31,6 +31,9 @@ class OperatorLightsConfig:
             raise ValueError("Light channels require nonempty names")
         if len(set(self.channels)) != len(self.channels):
             raise ValueError("Light channel names must be distinct")
+        from src.shared_contracts.events.process_events import ProcessState
+        if set(self.state_mapping) != {state.value for state in ProcessState}:
+            raise ValueError("Light mapping must contain exactly all process states")
         for names in self.state_mapping.values():
             if isinstance(names, str) or any(name not in self.channels for name in names):
                 raise ValueError("State mappings must contain configured channel names")

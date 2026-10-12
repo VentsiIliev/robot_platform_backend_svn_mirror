@@ -14,6 +14,9 @@ still being split into smaller collaborators:
 
 from __future__ import annotations
 
+from src.robot_systems.paint.processes.paint.tray_dry.plate_layout import PlateLayoutService
+from src.robot_systems.paint.processes.paint.execute.dropoff_contract import DropoffResult
+
 import logging
 import math
 from dataclasses import dataclass, replace
@@ -138,6 +141,7 @@ class PaintExecutorDependencies:
     pickup_condition_provider: Optional[Callable[[], object | None]] = None
     paint_process_config_service: object | None = None
     dropoff_motion_corridor_id: str | None = None
+    plate_layout_service: PlateLayoutService | None = None
 
 @dataclass(frozen=True)
 class PaintExecutorMotionConfig:
@@ -168,6 +172,12 @@ class _PreparedPaintProcessAdapter:
 
     def __init__(self, path_executor: "PaintWorkpiecePathExecutor") -> None:
         self._path_executor = path_executor
+
+    def prepare_dropoff(self) -> tuple[bool, str]:
+        return self._path_executor.prepare_dropoff()
+
+    def release_dropoff(self, context) -> DropoffResult:
+        return self._path_executor.release_dropoff()
 
     @staticmethod
     def _restore_brightness() -> None:
@@ -314,8 +324,10 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         # Per-run state and phase executors.
         self._last_execution_plan: WorkpieceExecutionPlan | None = None
         self._last_pickup_plan: PickupTransferPlan | None = None
-        from src.robot_systems.paint.processes.paint.tray_dry.plate_layout import PlateLayoutService
-        self._plate_layout_service = PlateLayoutService()
+        self._plate_layout_service = (
+            dependencies.plate_layout_service
+            if dependencies.plate_layout_service is not None else PlateLayoutService()
+        )
         self._pending_stage_pose: list[float] | None = None
         self._dropoff = PaintDropoffExecutor(self)
         self._edge_cleanup = PaintEdgeCleanupExecutor(self)
@@ -335,6 +347,26 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._paint_process_config_snapshot: PaintProcessConfig = PAINT_PROCESS_CONFIG
         self._cycle_dropoff_strategy: str | None = None
         self._active_execution_control = None
+
+    def prepare_dropoff(self) -> tuple[bool, str]:
+        """Prepare dropoff and own the executor's unwind bookkeeping."""
+        from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import execute_dropoff_preparation_for_executor
+        ok, message = execute_dropoff_preparation_for_executor(self)
+        if ok:
+            self._dropoff_unwind_prepared = True
+        return ok, message
+
+    def release_dropoff(self, next_cycle_start=None) -> DropoffResult:
+        """Expose release outcome without leaking mutable executor internals."""
+        from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import execute_dropoff_release_for_executor
+        from src.robot_systems.paint.processes.paint.config import DropoffStrategy
+        ok, message = execute_dropoff_release_for_executor(self, next_cycle_start=next_cycle_start)
+        return DropoffResult(
+            success=ok, message=message,
+            prepositioned_group=self._last_prepositioned_start_group if ok else None,
+            tray_full=(ok and self._paint_process_config().dropoff.strategy is DropoffStrategy.PLATE_LAYOUT
+                       and not self._plate_layout_service.has_space_for_same_footprint),
+        )
 
     def _is_vacuum_pump_enabled(self) -> bool:
         """Return whether both process settings and live peripheral settings allow pump use."""

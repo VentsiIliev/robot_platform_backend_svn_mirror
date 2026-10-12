@@ -474,5 +474,9 @@
     "Recipe Load Failed": "Зареждането на рецептата е неуспешно",
     "Save Failed": "Запазването е неуспешно",
     "Capture Failed": "Заснемането е неуспешно"
+  },
+  "Notifications": {
+    "notification.operator_lights.title": "Сигналните лампи не са достъпни",
+    "notification.operator_lights.failed": "Светлинната индикация може да е неактуална. Повторен опит за запис на изходите."
   }
 }

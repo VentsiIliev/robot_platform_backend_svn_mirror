@@ -58,6 +58,8 @@ class PaintProcess(BaseProcess):
         self._thread: Optional[threading.Thread] = None
         self._stop_thread: Optional[threading.Thread] = None
         self._stopping = False
+        self._shutdown_requested = False
+        self._preserve_vacuum = threading.Event()
         self._run_stop_event = threading.Event()
         self._stop_started_at: float | None = None
         self._manual_single_cycle_requested = False
@@ -99,6 +101,8 @@ class PaintProcess(BaseProcess):
     def _transition(
         self, target: ProcessState, action: Callable[[], None], message: str = ""
     ) -> None:
+        if target == ProcessState.RUNNING and self._shutdown_requested:
+            return
         # All callers hold the process lock. Resume uses the existing worker;
         # every other RUNNING transition must wait for both previous workers.
         if (
@@ -186,6 +190,7 @@ class PaintProcess(BaseProcess):
     def _on_start(self) -> None:
         """Start the background worker thread that performs one production cycle."""
         self._stopping = False
+        self._preserve_vacuum.clear()
         self._diagnostic_run_id = uuid4().hex
         self._run_stop_event = threading.Event()
         self._stop_started_at = None
@@ -208,28 +213,74 @@ class PaintProcess(BaseProcess):
         self._stopping = True
         self._run_stop_event.set()
         self._stop_started_at = monotonic()
-        self._production_service.stop_current_phase()
-        self._request_hardware_stop()
+        try:
+            self._production_service.stop_current_phase()
+        finally:
+            self._request_hardware_stop()
 
-    def _request_hardware_stop(self) -> None:
+    def _on_fault(self) -> None:
+        """Halt motion while retaining vacuum: the held-part state may be unknown."""
+        self._preserve_vacuum.set()
+        self._stopping = True
+        self._run_stop_event.set()
+        self._stop_started_at = monotonic()
+        try:
+            self._production_service.stop_current_phase()
+        finally:
+            self._request_hardware_stop(release_vacuum=False)
+
+    def set_error(self, message: str = "") -> None:
+        """External faults use the same hardware-halt policy as cycle failures."""
+        with self._lock:
+            previous = self._state
+            self._state = ProcessState.ERROR
+            try:
+                self._on_fault()
+            finally:
+                self._publish(ProcessState.ERROR, previous, message)
+
+    def shutdown(self, timeout: float = 5.0) -> None:
+        """Cancel and join workers outside the state lock before dependencies close."""
+        from src.robot_systems.base_robot_system import ShutdownPendingError
+
+        deadline = monotonic() + timeout
+        with self._lock:
+            if not self._shutdown_requested:
+                self._shutdown_requested = True
+                # Shutdown must not release a potentially held workpiece on error.
+                try:
+                    self._on_fault()
+                except Exception:
+                    self._logger.exception("Paint shutdown phase cancellation failed")
+            workers = (self._thread, self._stop_thread)
+        for worker in workers:
+            if worker is not None and worker is not threading.current_thread():
+                worker.join(max(0.0, deadline - monotonic()))
+        if self._workers_running():
+            raise ShutdownPendingError("Paint workers have not stopped; hardware retained")
+
+    def _request_hardware_stop(self, *, release_vacuum: bool = True) -> None:
+        if self._stop_thread is not None and self._stop_thread.is_alive():
+            return
         with diagnostic_context(run_id=self._diagnostic_run_id):
             context = copy_context()
         thread = threading.Thread(
             target=context.run,
-            args=(self._stop_hardware,),
+            args=(self._stop_hardware, release_vacuum),
             daemon=True,
             name="PaintProcessStop",
         )
         self._stop_thread = thread
         thread.start()
 
-    def _stop_hardware(self) -> None:
+    def _stop_hardware(self, release_vacuum: bool = True) -> None:
         if self._robot_service is not None:
             try:
                 self._robot_service.stop_motion()
             except Exception:
                 self._logger.exception("Paint stop failed to stop robot motion")
-        if self._vacuum_pump is not None and self._is_vacuum_enabled():
+        if (release_vacuum and not self._preserve_vacuum.is_set()
+                and self._vacuum_pump is not None and self._is_vacuum_enabled()):
             try:
                 self._vacuum_pump.turn_off()
             except Exception:
@@ -356,4 +407,4 @@ class PaintProcess(BaseProcess):
                     self._production_service.publish_dashboard_message("warning", title, message)
             else:
                 self._logger.error("Paint process failed: %s", msg)
-                self._transition(ProcessState.ERROR, lambda: None, msg)
+                self._transition(ProcessState.ERROR, self._on_fault, msg)

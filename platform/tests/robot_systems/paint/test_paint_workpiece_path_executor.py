@@ -372,8 +372,8 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         executor._edge_cleanup.should_run_after_xy_rz = MagicMock(return_value=False)
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
         with (
-            patch("src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler.execute_dropoff_preparation_for_executor", return_value=(True, "")),
-            patch("src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handler.execute_dropoff_release_for_executor", return_value=(True, "")),
+            patch("src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers.execute_dropoff_preparation_for_executor", return_value=(True, "")),
+            patch("src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers.execute_dropoff_release_for_executor", return_value=(True, "")),
         ):
             ok, message = executor.execute_paint_process(_execution_plan({"execution_path": [[0, 0, 0, 0, 0, 0]]}))
         self.assertTrue(ok, message)
@@ -429,13 +429,13 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
         executor._edge_cleanup.should_run_after_xy_rz = MagicMock(return_value=False)
         preparation_patch = patch(
-            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler.execute_dropoff_preparation_for_executor",
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers.execute_dropoff_preparation_for_executor",
             return_value=(True, ""),
         )
         self.addCleanup(preparation_patch.stop)
         prepare_dropoff = preparation_patch.start()
         release_patch = patch(
-            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handler.execute_dropoff_release_for_executor",
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers.execute_dropoff_release_for_executor",
             MagicMock(return_value=(True, '')),
         )
         self.addCleanup(release_patch.stop)
@@ -493,13 +493,13 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
         executor._edge_cleanup.should_run_after_xy_rz = MagicMock(return_value=False)
         preparation_patch = patch(
-            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler.execute_dropoff_preparation_for_executor",
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers.execute_dropoff_preparation_for_executor",
             return_value=(True, ""),
         )
         self.addCleanup(preparation_patch.stop)
         prepare_dropoff = preparation_patch.start()
         release_patch = patch(
-            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handler.execute_dropoff_release_for_executor",
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers.execute_dropoff_release_for_executor",
             MagicMock(return_value=(True, '')),
         )
         self.addCleanup(release_patch.stop)
@@ -1763,13 +1763,13 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         executor._paint_contact.execute_result = MagicMock(return_value=_contact_result(*(True, "", 3)))
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
         preparation_patch = patch(
-            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler.execute_dropoff_preparation_for_executor",
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers.execute_dropoff_preparation_for_executor",
             return_value=(True, ""),
         )
         self.addCleanup(preparation_patch.stop)
         prepare_dropoff = preparation_patch.start()
         release_patch = patch(
-            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handler.execute_dropoff_release_for_executor",
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers.execute_dropoff_release_for_executor",
             MagicMock(return_value=(True, '')),
         )
         self.addCleanup(release_patch.stop)
@@ -1795,13 +1795,13 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
         executor._edge_cleanup.should_run_after_xy_rz = MagicMock(return_value=False)
         preparation_patch = patch(
-            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler.execute_dropoff_preparation_for_executor",
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers.execute_dropoff_preparation_for_executor",
             return_value=(True, ""),
         )
         self.addCleanup(preparation_patch.stop)
         prepare_dropoff = preparation_patch.start()
         release_patch = patch(
-            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handler.execute_dropoff_release_for_executor",
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers.execute_dropoff_release_for_executor",
             MagicMock(return_value=(True, '')),
         )
         self.addCleanup(release_patch.stop)
@@ -1851,13 +1851,13 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
         executor._edge_cleanup.should_run_after_xy_rz = MagicMock(return_value=False)
         preparation_patch = patch(
-            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler.execute_dropoff_preparation_for_executor",
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers.execute_dropoff_preparation_for_executor",
             return_value=(True, ""),
         )
         self.addCleanup(preparation_patch.stop)
         prepare_dropoff = preparation_patch.start()
         release_patch = patch(
-            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handler.execute_dropoff_release_for_executor",
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers.execute_dropoff_release_for_executor",
             MagicMock(return_value=(True, '')),
         )
         self.addCleanup(release_patch.stop)
@@ -1896,13 +1896,13 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
         executor._edge_cleanup.should_run_after_xy_rz = MagicMock(return_value=False)
         preparation_patch = patch(
-            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler.execute_dropoff_preparation_for_executor",
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers.execute_dropoff_preparation_for_executor",
             return_value=(True, ""),
         )
         self.addCleanup(preparation_patch.stop)
         prepare_dropoff = preparation_patch.start()
         release_patch = patch(
-            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handler.execute_dropoff_release_for_executor",
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers.execute_dropoff_release_for_executor",
             MagicMock(return_value=(True, '')),
         )
         self.addCleanup(release_patch.stop)
@@ -1953,13 +1953,13 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         executor._edge_cleanup.should_run_after_xy_rz = MagicMock(return_value=True)
         executor._edge_cleanup.execute_after_xy_rz_paint = MagicMock(side_effect=_cleanup)
         preparation_patch = patch(
-            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler.execute_dropoff_preparation_for_executor",
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers.execute_dropoff_preparation_for_executor",
             return_value=(True, ""),
         )
         self.addCleanup(preparation_patch.stop)
         prepare_dropoff = preparation_patch.start()
         release_patch = patch(
-            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handler.execute_dropoff_release_for_executor",
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers.execute_dropoff_release_for_executor",
             MagicMock(return_value=(True, '')),
         )
         self.addCleanup(release_patch.stop)
@@ -1983,13 +1983,13 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         executor._paint_contact.execute_result = MagicMock(return_value=_contact_result(*(True, "", 3)))
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
         preparation_patch = patch(
-            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler.execute_dropoff_preparation_for_executor",
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers.execute_dropoff_preparation_for_executor",
             return_value=(True, ""),
         )
         self.addCleanup(preparation_patch.stop)
         prepare_dropoff = preparation_patch.start()
         release_patch = patch(
-            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handler.execute_dropoff_release_for_executor",
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers.execute_dropoff_release_for_executor",
             MagicMock(return_value=(True, '')),
         )
         self.addCleanup(release_patch.stop)
@@ -2032,13 +2032,13 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         executor._paint_contact.execute_result = MagicMock(return_value=_contact_result(*(True, "", 3)))
         executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
         preparation_patch = patch(
-            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler.execute_dropoff_preparation_for_executor",
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers.execute_dropoff_preparation_for_executor",
             return_value=(True, ""),
         )
         self.addCleanup(preparation_patch.stop)
         prepare_dropoff = preparation_patch.start()
         release_patch = patch(
-            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handler.execute_dropoff_release_for_executor",
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers.execute_dropoff_release_for_executor",
             MagicMock(return_value=(False, 'restore failed')),
         )
         self.addCleanup(release_patch.stop)

@@ -5,11 +5,7 @@ from dataclasses import replace
 from src.robot_systems.paint.processes.paint.results import PaintOutcome
 
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
-from src.robot_systems.paint.processes.paint.config import DropoffStrategy
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
-    execute_dropoff_release_for_executor,
-)
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers import (
     finish_paint_motion,
     set_paint_result,
@@ -25,13 +21,8 @@ def handle_dropoff(ctx: PaintExecutionContext) -> PaintExecutionState:
         finish_paint_motion(ctx, success=False)
         return guarded
 
-    service = ctx.production_service
-    executor = service._path_executor
-    next_cycle_start = service._next_cycle_start_target(ctx)
-    ok, msg = execute_dropoff_release_for_executor(
-        executor,
-        next_cycle_start=next_cycle_start,
-    )
+    result = ctx.production_service.release_dropoff(ctx)
+    ok, msg = result.success, result.message
     if not ok:
         log_timing(ctx, "pre_release_dropoff")
 
@@ -39,18 +30,8 @@ def handle_dropoff(ctx: PaintExecutionContext) -> PaintExecutionState:
         finish_paint_motion(ctx, success=False)
         return PaintExecutionState.ERROR
 
-    prepositioned_group = executor._last_prepositioned_start_group
-    if prepositioned_group:
-        service._mark_prepositioned_start_group(prepositioned_group)
-
     log_completion(ctx)
-
-    plate_service = executor._plate_layout_service
-    plate_is_full = (
-        executor._paint_process_config().dropoff.strategy is DropoffStrategy.PLATE_LAYOUT
-        and plate_service is not None
-        and not plate_service.has_space_for_same_footprint
-    )
+    plate_is_full = result.tray_full
 
     set_paint_result(
         ctx,

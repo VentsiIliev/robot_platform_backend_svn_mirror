@@ -227,3 +227,94 @@ class TestPaintProcessLifecycle(unittest.TestCase):
         self.assertTrue(view._dashboard.control_buttons.start_btn.isEnabled())
         self.assertEqual(view._cards_by_id[3]._note, "Paint job stopped")
         app.processEvents()
+
+
+class TestPaintShutdownAndFaults(unittest.TestCase):
+    def test_shutdown_times_out_then_can_finish_without_restarting(self):
+        from src.robot_systems.base_robot_system import ShutdownPendingError
+        entered, release = threading.Event(), threading.Event()
+        production, robot = MagicMock(), MagicMock()
+        def run(stop):
+            entered.set()
+            release.wait(2)
+            self.assertTrue(stop())
+            return PaintOperationResult(PaintOutcome.COMPLETED, "done")
+        production.run_once_result.side_effect = run
+        process = PaintProcess(production, MagicMock(), robot_service=robot)
+        process.start()
+        self.assertTrue(entered.wait(2))
+        try:
+            with self.assertRaises(ShutdownPendingError):
+                process.shutdown(timeout=0.01)
+            process.start()
+            self.assertEqual(production.run_once_result.call_count, 1)
+        finally:
+            release.set()
+            process.shutdown(timeout=2)
+        self.assertFalse(process._workers_running())
+        robot.stop_motion.assert_called_once()
+
+    def test_fault_stops_motion_but_preserves_vacuum(self):
+        for outcome in (RuntimeError("transport failed"),
+                        PaintOperationResult.failed(PaintFailureCode.MOTION, "motion", "rejected")):
+            with self.subTest(outcome=outcome):
+                production, robot, vacuum = MagicMock(), MagicMock(), MagicMock()
+                if isinstance(outcome, Exception):
+                    production.run_once_result.side_effect = outcome
+                else:
+                    production.run_once_result.return_value = outcome
+                process = PaintProcess(production, MagicMock(), robot_service=robot, vacuum_pump=vacuum)
+                process.start()
+                process._thread.join(2)
+                process._stop_thread.join(2)
+                self.assertEqual(process.state, ProcessState.ERROR)
+                robot.stop_motion.assert_called_once()
+                vacuum.turn_off.assert_not_called()
+                production.stop_current_phase.assert_called_once()
+
+    def test_phase_cancellation_failure_still_requests_hardware_stop(self):
+        production, robot = MagicMock(), MagicMock()
+        production.stop_current_phase.side_effect = RuntimeError("phase cancellation failed")
+        process = PaintProcess(production, MagicMock(), robot_service=robot)
+        process.shutdown(timeout=2)
+        robot.stop_motion.assert_called_once()
+
+    def test_required_robot_health_gates_start_variants_and_resume(self):
+        from src.engine.process.process_requirements import ProcessRequirements
+        from src.engine.common_service_ids import CommonServiceID
+        from src.shared_contracts.events.process_events import ProcessTopics
+        production, messaging = MagicMock(), MagicMock()
+        process = PaintProcess(production, messaging,
+            requirements=ProcessRequirements.requires(CommonServiceID.ROBOT),
+            service_checker=lambda name: False)
+        process.start()
+        self.assertFalse(process.start_manual_single_cycle())
+        self.assertFalse(process.start_adjustment_cycle())
+        process._state = ProcessState.PAUSED
+        process.resume()
+        self.assertEqual(process.state, ProcessState.PAUSED)
+        production.run_once_result.assert_not_called()
+        production.resume_current_phase.assert_not_called()
+        self.assertEqual(messaging.publish.call_count, 4)
+        for call in messaging.publish.call_args_list:
+            self.assertEqual(call.args[0], ProcessTopics.service_unavailable(process.process_id))
+
+
+    def test_fault_supersedes_pending_normal_stop_vacuum_release(self):
+        entered, release = threading.Event(), threading.Event()
+        robot, pump, production = MagicMock(), MagicMock(), MagicMock()
+        def halt():
+            entered.set()
+            release.wait(2)
+        robot.stop_motion.side_effect = halt
+        process = PaintProcess(production, MagicMock(), robot_service=robot, vacuum_pump=pump)
+        process._state = ProcessState.RUNNING
+        process.stop()
+        self.assertTrue(entered.wait(2))
+        try:
+            process.set_error("hardware fault during stop")
+        finally:
+            release.set()
+            process._stop_thread.join(2)
+        pump.turn_off.assert_not_called()
+        robot.stop_motion.assert_called_once()

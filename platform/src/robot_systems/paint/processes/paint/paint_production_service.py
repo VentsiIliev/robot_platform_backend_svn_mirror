@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from src.robot_systems.paint.processes.paint.execute.dropoff_contract import DropoffExecutor, DropoffResult
+
 import logging
 import math
 import threading
@@ -70,6 +72,7 @@ class PaintProductionService:
         self._workpiece_preparation = workpiece_preparation_service
         self._capture_snapshot_service = capture_snapshot_service
         self._path_preparation_service = path_preparation_service
+        self._dropoff_executor: DropoffExecutor = path_executor
         self._path_executor = path_executor
         self._plate_layout_service = plate_layout_service
         self.last_failure: TrayFailure | PaintFailure | None = None
@@ -138,6 +141,17 @@ class PaintProductionService:
                 and not context.magazine_stage_only
                 and context.cached_workpiece_contour is None
             )
+
+    def prepare_dropoff(self) -> tuple[bool, str]:
+        """Prepare the active workpiece through the public execution contract."""
+        return self._dropoff_executor.prepare_dropoff()
+
+    def release_dropoff(self, context) -> DropoffResult:
+        """Release and remember successful prepositioning for the next cycle."""
+        result = self._dropoff_executor.release_dropoff(self._next_cycle_start_target(context))
+        if result.success and result.prepositioned_group:
+            self._mark_prepositioned_start_group(result.prepositioned_group)
+        return result
 
     def run_once(
         self, stop_requested: Optional[Callable[[], bool]] = None, *,
