@@ -17,6 +17,8 @@ No `pyproject.toml`, `setup.py`, or `requirements.txt` — dependencies are mana
 
 ## Git Workflow Rules
 
+- Current publication destinations are SVN and GitHub (`github-svn-mirror`, `git@github.com:VentsiIliev/robot_platform_backend_svn_mirror.git`). Do not publish to Gitea or GitLab unless the user changes this policy.
+- Publish with `python3 scripts/publish_changes.py`: commit, then `git svn dcommit`, then push the SVN-generated `master` history to GitHub. Use `--resume` for already committed changes or publication retries. A plain Git push does not update SVN; do not push pre-dcommit history or merge duplicated SVN history into the publication branch.
 - When the user asks for a commit, push, or PR, use the current work branch
 - Do **not** commit directly on `run_main.py`
 - Do **not** push directly to `run_main.py`
