@@ -1,0 +1,14 @@
+{
+  "source_repository": "https://github.com/VentsiIliev/plproject_remote_support",
+  "source_branch": "plproject-remote-support",
+  "source_commit": "4bdaee19de96546b762f1a6ee343f1d7e0564d19",
+  "import_date": "2026-10-12",
+  "submodules": [
+    {
+      "path": "libs/hbb_common",
+      "repository": "https://github.com/rustdesk/hbb_common",
+      "commit": "7e1c392c62d39c364127307cd408421dd5f8cfb0",
+      "storage": "ordinary SVN/Git files"
+    }
+  ]
+}

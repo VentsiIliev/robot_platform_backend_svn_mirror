@@ -1,0 +1,118 @@
+name: PL PROJECT Android Release
+
+on:
+  push:
+    tags:
+      - 'v*-plproject.android.*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: plproject_remote_control
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      VCPKG_MAX_CONCURRENCY: '4'
+      CARGO_BUILD_JOBS: '4'
+      KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+      STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+      KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          submodules: false
+      - name: Validate tag and signing configuration
+        run: |
+          python3 - <<'PY'
+          import os, re
+          match = re.fullmatch(r'v(\d+\.\d+\.\d+)-plproject\.android\.(\d+)', os.environ['GITHUB_REF_NAME'])
+          if not match:
+              raise SystemExit('Invalid Android release tag')
+          for name in ['KEYSTORE_BASE64', 'STORE_PASSWORD', 'KEY_PASSWORD', 'KEY_ALIAS']:
+              if not os.environ.get(name):
+                  raise SystemExit('Missing signing secret: ' + name)
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+              f.write('ANDROID_BUILD_NAME=' + match[1] + '\n')
+              f.write('ANDROID_BUILD_NUMBER=' + str(67 + int(match[2])) + '\n')
+          PY
+      - name: Install host tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang libclang-dev cmake curl git \
+            unzip xz-utils pkg-config nasm ninja-build perl openjdk-17-jdk-headless
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: '1.75.0'
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          channel: stable
+          flutter-version: '3.24.5'
+      - uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779
+        id: ndk
+        with:
+          ndk-version: r28c
+      - name: Prepare native toolchain
+        run: |
+          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=${{ steps.ndk.outputs.ndk-path }}" >> "$GITHUB_ENV"
+          echo "VCPKG_ROOT=$RUNNER_TEMP/plproject-vcpkg" >> "$GITHUB_ENV"
+          echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-34' 'build-tools;34.0.0'
+          git clone https://github.com/microsoft/vcpkg.git "$RUNNER_TEMP/plproject-vcpkg"
+          git -C "$RUNNER_TEMP/plproject-vcpkg" checkout 120deac3062162151622ca4860575a33844ba10b
+          "$RUNNER_TEMP/plproject-vcpkg/bootstrap-vcpkg.sh" -disableMetrics
+          cargo install cargo-ndk --version 3.1.2 --locked
+          cargo install cargo-expand --version 1.0.95 --locked
+          cargo install flutter_rust_bridge_codegen --version 1.80.1 --features uuid --locked
+      - name: Configure private signing files
+        run: |
+          python3 - <<'PY'
+          import base64, os
+          from pathlib import Path
+          key = Path(os.environ['RUNNER_TEMP']) / 'plproject-android-release.jks'
+          key.write_bytes(base64.b64decode(os.environ['KEYSTORE_BASE64'], validate=True))
+          key.chmod(0o600)
+          props = Path('flutter/android/key.properties')
+          props.write_text('storeFile=' + str(key) + '\nkeyAlias=' + os.environ['KEY_ALIAS']
+              + '\nstorePassword=' + os.environ['STORE_PASSWORD']
+              + '\nkeyPassword=' + os.environ['KEY_PASSWORD'] + '\n')
+          props.chmod(0o600)
+          PY
+      - name: Build signed ARM64 APK
+        run: ./flutter/build_plproject_android.sh release
+      - name: Verify and package release
+        run: |
+          mkdir -p release-assets
+          apk=flutter/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify "$apk"
+          python3 - <<'PY'
+          from zipfile import ZipFile
+          with ZipFile('flutter/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk') as z:
+              assert z.testzip() is None
+              assert {'lib/arm64-v8a/librustdesk.so', 'lib/arm64-v8a/libc++_shared.so'} <= set(z.namelist())
+          PY
+          cp "$apk" "release-assets/pl-project-remote-support-${GITHUB_REF_NAME#v}-arm64.apk"
+          cd release-assets
+          sha256sum *.apk > SHA256SUMS
+      - name: Publish Android release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release-assets/* --clobber
+            exit 0
+          fi
+          gh release create "$GITHUB_REF_NAME" release-assets/* \
+            --verify-tag --latest=false \
+            --title "PL PROJECT Remote Support Android $ANDROID_BUILD_NAME" \
+            --notes-file docs/ANDROID_RELEASE_NOTES.md

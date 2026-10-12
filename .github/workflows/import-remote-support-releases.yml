@@ -1,0 +1,27 @@
+name: Import historical PL PROJECT releases
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/import-remote-support-releases.yml
+      - plproject_remote_control/release-import.json
+
+permissions:
+  contents: write
+
+concurrency:
+  group: import-remote-support-releases
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Import and verify historical binary releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 plproject_remote_control/res/import_historical_releases.py

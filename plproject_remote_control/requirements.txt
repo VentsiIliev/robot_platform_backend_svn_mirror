@@ -1,0 +1,4 @@
+# Python tooling used for PL PROJECT branding/resource generation.
+# Main build dependencies are documented in BUILD_REQUIREMENTS.md.
+
+Pillow

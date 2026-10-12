@@ -1,0 +1,33 @@
+{
+  "releases": [
+    {
+      "tag": "v1.4.9-plproject.1",
+      "title": "PL PROJECT Remote Support 1.4.9",
+      "original_source_commit": "36e9df851c0e537d025a6fe403146dc747697acf",
+      "assets": [
+        {
+          "name": "rustdesk-1.4.9.deb",
+          "sha256": "e9cf5c528f460324a1f87e3314639e8d1eea6733432950dfbc5a13e01ade94a4",
+          "source_url": "https://github.com/VentsiIliev/plproject_remote_support/releases/download/v1.4.9-plproject.1/rustdesk-1.4.9.deb"
+        }
+      ]
+    },
+    {
+      "tag": "v1.4.9-plproject.android.1",
+      "title": "PL PROJECT Remote Support Android 1.4.9",
+      "original_source_commit": "4bdaee19de96546b762f1a6ee343f1d7e0564d19",
+      "assets": [
+        {
+          "name": "pl-project-remote-support-1.4.9-plproject.android.1-arm64.apk",
+          "sha256": "e87cc54b8fd5b7614dcb485bcc744ea62adae821e613f0f48d799f8dbf427799",
+          "source_url": "https://github.com/VentsiIliev/plproject_remote_support/releases/download/v1.4.9-plproject.android.1/pl-project-remote-support-1.4.9-plproject.android.1-arm64.apk"
+        },
+        {
+          "name": "SHA256SUMS",
+          "sha256": "7d6b37386f065f4aaa7cca4ff51ca36063e4a5f087c083f9ea667cd6adb3425d",
+          "source_url": "https://github.com/VentsiIliev/plproject_remote_support/releases/download/v1.4.9-plproject.android.1/SHA256SUMS"
+        }
+      ]
+    }
+  ]
+}
