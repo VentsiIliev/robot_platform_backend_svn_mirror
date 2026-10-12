@@ -71,7 +71,7 @@ def handle_pickup(ctx: PaintExecutionContext) -> PaintExecutionState:
         if not reserved.completed:
             finish_paint_motion(ctx, success=False)
             ctx.set_outcome(reserved)
-            return (PaintExecutionState.COMPLETED if reserved.outcome is PaintOutcome.TRAY_FULL
+            return (PaintExecutionState.FINISHED if reserved.outcome is PaintOutcome.TRAY_FULL
                     else PaintExecutionState.ERROR)
 
     stop_after_pickup = bool(
@@ -98,7 +98,7 @@ def handle_pickup(ctx: PaintExecutionContext) -> PaintExecutionState:
             if result.outcome is PaintOutcome.NO_WORKPIECE:
                 finish_paint_motion(ctx, success=False)
                 ctx.set_outcome(result)
-                return PaintExecutionState.COMPLETED
+                return PaintExecutionState.FINISHED
             ctx.operation_failure = result.failure
             fail_paint_motion(ctx, msg)
             return PaintExecutionState.ERROR
@@ -117,7 +117,7 @@ def handle_pickup(ctx: PaintExecutionContext) -> PaintExecutionState:
             finish_paint_motion(ctx, success=False)
             ctx.set_outcome(result)
             return (PaintExecutionState.STOPPED if result.outcome is PaintOutcome.CANCELLED
-                    else PaintExecutionState.COMPLETED)
+                    else PaintExecutionState.FINISHED)
         ctx.operation_failure = result.failure
         fail_paint_motion(ctx, result.message)
         return PaintExecutionState.ERROR

@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import logging
+from time import monotonic
+from src.engine.diagnostics.events import observe
+
+_logger = logging.getLogger(__name__)
+
 from src.engine.hardware.communication.i_register_transport import IRegisterTransport
 
 
@@ -124,8 +130,20 @@ class PaintHeadDevice:
         return delta_register
 
     def _write_and_verify(self, target: int) -> int:
-        self._transport.write_register(self._register, target)
-        actual = self._transport.read_register(self._register)
-        if actual != target:
-            raise RuntimeError(f"Paint-head readback mismatch: wrote {target}, read {actual}")
+        started = monotonic()
+        try:
+            self._transport.write_register(self._register, target)
+            actual = self._transport.read_register(self._register)
+            if actual != target:
+                raise RuntimeError(f"Paint-head readback mismatch: wrote {target}, read {actual}")
+        except Exception:
+            observe(_logger, "paint_head.adjustment_failed", level=logging.ERROR,
+                    metrics={"paint_head.adjustment_failures": 1},
+                    target=target, register=self._register)
+            _logger.exception("Paint-head adjustment failed target=%d", target)
+            raise
+        observe(_logger, "paint_head.adjustment_verified",
+                metrics={"paint_head.adjustments": 1,
+                         "paint_head.adjustment.duration_seconds": monotonic() - started},
+                target=target, readback=actual, register=self._register)
         return actual

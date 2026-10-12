@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from src.engine.diagnostics.events import observe
 import threading
 import time
 from typing import Mapping
@@ -325,7 +326,13 @@ class DryerController(IDryerController):
     ) -> bool:
         payload = data or self._default_write_data()
         values = {**payload.__dict__, "command": int(command)}
+        started = time.monotonic()
         ok = self.write_data(DryerWriteData(**values))
+        observe(self._logger, "dryer.command_written",
+                level=logging.INFO if ok else logging.ERROR,
+                metrics={f"dryer.command.{int(command)}.{'accepted' if ok else 'failed'}": 1,
+                         "dryer.command_write.duration_seconds": time.monotonic() - started},
+                command=int(command), accepted=ok)
         if ok:
             time.sleep(self._command_settle_s)
         return ok

@@ -40,10 +40,13 @@ class TransportRegistry:
     def keys(self) -> tuple[str, ...]:
         return tuple(self._descriptors)
 
-    def build_for_slave(self, config: ModbusConfig, slave_name: str) -> IRegisterTransport:
+    def build_for_slave(self, config: ModbusConfig, slave_name: str,
+                        *, transport_type: str | None = None) -> IRegisterTransport:
         slave = config.get_slave(slave_name)
         connection = config.get_connection(slave_name)
-        if slave.transport_type == 'modbus_bitwise_fc16':
+        selected_type = transport_type if transport_type is not None else slave.transport_type
+        self.get(selected_type)  # Validate overrides through the same registry.
+        if selected_type == 'modbus_bitwise_fc16':
             from src.engine.hardware.communication.modbus.modbus_bitwise_fc16_transport import ModbusBitwiseFc16Transport
             return ModbusBitwiseFc16Transport(
                 port=connection.port, slave_address=connection.slave_address,
@@ -51,7 +54,7 @@ class TransportRegistry:
                 stopbits=connection.stopbits, parity=connection.parity,
                 timeout=connection.timeout, holding_register=slave.bitwise_register,
             )
-        return self.get(slave.transport_type).factory(connection)
+        return self.get(selected_type).factory(connection)
 
     def build_for_slave_id(self, config: ModbusConfig, slave_id: int) -> IRegisterTransport:
         return self.build_for_slave(config, config.find_slave_name(slave_id))

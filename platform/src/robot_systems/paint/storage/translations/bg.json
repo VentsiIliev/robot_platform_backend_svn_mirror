@@ -445,6 +445,13 @@
     "Return near the reference position if needed, rotate around the desired paint rotation axis, then capture.": "Върнете се близо до референтната позиция при нужда, завъртете около желаната paint ос на въртене, след това заснемете."
   },
   "PaintDashboardController": {
+    "No Workpiece Found": "Няма намерен детайл",
+    "No workpiece was found in the camera view. Place a workpiece in the active area and start again.": "В изображението на камерата не е намерен детайл. Поставете детайл в активната зона и стартирайте отново.",
+    "Process Blocked": "Процесът е блокиран",
+    "Tray Full": "Тавата е пълна",
+    "The tray is full. Empty the tray and confirm it is empty before starting again.": "Тавата е пълна. Изпразнете тавата и потвърдете, че е празна, преди да стартирате отново.",
+    "Work Area Full": "Работната зона е пълна",
+    "The work area has no space for another workpiece. Clear the area before starting again.": "В работната зона няма място за друг детайл. Освободете зоната, преди да стартирате отново.",
     "Tray Readiness": "Готовност на тавата",
     "Tray occupancy is unknown": "Заетостта на тавата е неизвестна",
     "Confirm that the tray is physically empty before starting.": "Потвърдете, че тавата е физически празна, преди да стартирате.",

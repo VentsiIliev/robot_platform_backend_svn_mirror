@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from uuid import uuid4
 from dataclasses import dataclass, field
 from time import perf_counter
 from typing import Callable
@@ -71,6 +72,8 @@ class PaintExecutionContext:
     adjustment_session: object | None = None
     magazine_nesting_has_more: bool = True
     cached_workpiece_contour: object | None = None
+
+    diagnostic_cycle_id: str = field(default_factory=lambda: uuid4().hex)
 
     def __post_init__(self) -> None:
         self.run_allowed.set()

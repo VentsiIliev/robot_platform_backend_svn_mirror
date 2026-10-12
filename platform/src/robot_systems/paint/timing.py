@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import logging
+from src.engine.diagnostics.events import observe
 import os
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -408,6 +409,10 @@ def _record_or_log(
 ) -> None:
     recorder = _ACTIVE_RECORDER.get()
     elapsed_s = ended - started
+    observe(logger, "paint.step.ended",
+            metrics={f"paint.step.{step}.duration_seconds": elapsed_s},
+            step=step, label=None if label is None else str(label),
+            success=success, exception=exception, duration_s=elapsed_s)
     if recorder is not None:
         recorder.record(
             step=step,

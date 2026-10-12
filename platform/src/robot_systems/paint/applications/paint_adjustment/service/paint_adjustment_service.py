@@ -172,7 +172,13 @@ class PaintAdjustmentService(IPaintAdjustmentService):
             modbus, slave_name, register, minimum, maximum, spacing,
             count, degree_numerator, degree_denominator, more_sign, enabled,
         ) = self._resolve()
-        transport = self._transport_registry.build_for_slave(modbus, slave_name)
+        binding = self._settings.get(SettingsID.PERIPHERALS).peripherals['paint_head']
+        if binding.transport_type is None:
+            transport = self._transport_registry.build_for_slave(modbus, slave_name)
+        else:
+            transport = self._transport_registry.build_for_slave(
+                modbus, slave_name, transport_type=binding.transport_type,
+            )
         device = PaintHeadDevice(
             transport,
             register,
@@ -196,7 +202,7 @@ class PaintAdjustmentService(IPaintAdjustmentService):
 
         slave_name = modbus.find_slave_name(binding.slave_id)
         slave = modbus.get_slave(slave_name)
-        if slave.transport_type != "modbus_register_fc16":
+        if (binding.transport_type or slave.transport_type) != "modbus_register_fc16":
             raise ValueError("Paint head requires the FC16 register transport")
 
         register = int(binding.outputs["position"])

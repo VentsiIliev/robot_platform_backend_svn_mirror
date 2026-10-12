@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import threading
+import logging
+from uuid import uuid4
+from contextvars import copy_context
+from src.engine.diagnostics.events import diagnostic_context, observe
 from time import monotonic
 from typing import Callable, Optional
 
@@ -48,6 +52,8 @@ class PaintProcess(BaseProcess):
         self._robot_service = robot_service
         self._vacuum_pump = vacuum_pump
         self._paint_process_config_service = paint_process_config_service
+        self._diagnostic_run_id: str | None = None
+        self._last_result: PaintOperationResult | None = None
         self._last_failure: TrayFailure | PaintFailure | None = None
         self._thread: Optional[threading.Thread] = None
         self._stop_thread: Optional[threading.Thread] = None
@@ -63,6 +69,11 @@ class PaintProcess(BaseProcess):
     def last_failure(self) -> TrayFailure | PaintFailure | None:
         """Machine-readable operation or tray failure from the most recent start or cycle."""
         return self._last_failure
+
+    @property
+    def last_result(self) -> PaintOperationResult | None:
+        """Typed outcome of the last finished production run."""
+        return self._last_result
 
     def _workers_running(self) -> bool:
         return any(
@@ -155,16 +166,15 @@ class PaintProcess(BaseProcess):
             return self._thread is not previous_thread and self._state == ProcessState.RUNNING
 
     def retry_unmatched_workpiece(self) -> bool:
-        """Restart at paint capture only after an unmatched-workpiece error."""
+        """Restart at paint capture after an expected unmatched-workpiece stop."""
         with self._lock:
             if (
-                self._state != ProcessState.ERROR
+                self._state != ProcessState.STOPPED
+                or self._last_result is None
+                or self._last_result.outcome is not PaintOutcome.UNMATCHED
                 or self._workers_running()
                 or not self._production_service.can_retry_unmatched_workpiece()
             ):
-                return False
-            self._transition(ProcessState.IDLE, self._on_reset_errors)
-            if self._state != ProcessState.IDLE:
                 return False
             self._retry_unmatched_workpiece_requested = True
             try:
@@ -176,6 +186,7 @@ class PaintProcess(BaseProcess):
     def _on_start(self) -> None:
         """Start the background worker thread that performs one production cycle."""
         self._stopping = False
+        self._diagnostic_run_id = uuid4().hex
         self._run_stop_event = threading.Event()
         self._stop_started_at = None
         self._adjustment_session = self._pending_adjustment_session
@@ -201,8 +212,11 @@ class PaintProcess(BaseProcess):
         self._request_hardware_stop()
 
     def _request_hardware_stop(self) -> None:
+        with diagnostic_context(run_id=self._diagnostic_run_id):
+            context = copy_context()
         thread = threading.Thread(
-            target=self._stop_hardware,
+            target=context.run,
+            args=(self._stop_hardware,),
             daemon=True,
             name="PaintProcessStop",
         )
@@ -233,17 +247,26 @@ class PaintProcess(BaseProcess):
 
     def _on_pause(self) -> None:
         """Pause the current cooperative Paint phase."""
+        observe(self._logger, "paint.run.pause_requested", metrics={"paint.runs.pause_requests": 1},
+                run_id=self._diagnostic_run_id)
         self._production_service.pause_current_phase()
 
     def _on_resume(self) -> None:
         """Resume the current cooperative Paint phase."""
+        observe(self._logger, "paint.run.resume_requested", metrics={"paint.runs.resume_requests": 1},
+                run_id=self._diagnostic_run_id)
         self._production_service.resume_current_phase()
 
     def _on_reset_errors(self) -> None:
         """Clear the internal stop flag so a new run can be started after an error reset."""
         self._stopping = False
 
-    def _run_in_background(
+    def _run_in_background(self, *args, **kwargs) -> None:
+        with diagnostic_context(run_id=self._diagnostic_run_id or uuid4().hex):
+            observe(self._logger, "paint.run.started", metrics={"paint.runs.attempts": 1})
+            self._run_in_background_impl(*args, **kwargs)
+
+    def _run_in_background_impl(
         self,
         manual_single_cycle: bool = False,
         adjustment_session: PaintAdjustmentSession | None = None,
@@ -285,8 +308,15 @@ class PaintProcess(BaseProcess):
             failure = production_failure
         if failure is None:
             failure = result.failure
+        effective_outcome = PaintOutcome.CANCELLED if run_stop_event.is_set() else result.outcome
+        observe(self._logger, "paint.run.ended",
+                level=logging.ERROR if result.failure else logging.INFO,
+                metrics={f"paint.runs.outcome.{effective_outcome.value}": 1},
+                outcome=effective_outcome.value, returned_outcome=result.outcome.value,
+                stop_requested=run_stop_event.is_set(), message=result.message,
+                stop_reason=None if result.stop_reason is None else result.stop_reason.value)
         msg = result.message
-        success = result.completed or result.outcome is PaintOutcome.CANCELLED
+        ended_without_failure = result.completed or result.expected_stop or result.outcome is PaintOutcome.CANCELLED
 
         # Serialize completion with Stop/reset. A cancelled run cannot publish
         # a late success or error, even if reset has cleared the legacy flag.
@@ -298,14 +328,32 @@ class PaintProcess(BaseProcess):
                 or self._state not in (ProcessState.RUNNING, ProcessState.PAUSED)
             ):
                 return
+            self._last_result = result
             self._last_failure = failure
-            if success:
-                self._logger.info("Paint process completed: %s", msg)
+            if ended_without_failure:
+                self._logger.info("Paint process ended outcome=%s: %s", result.outcome.value, msg)
                 self._transition(
                     ProcessState.STOPPED,
                     self._on_stop,
-                    msg if result.stop_reason is not None else "",
+                    msg if result.stop_reason is not None or result.expected_stop else "",
                 )
+                # Publish after the terminal transition: the popup must describe
+                # a stopped run, rather than an operation still being prepared.
+                reason = result.stop_reason or result.outcome
+                notices = {
+                    PaintOutcome.UNMATCHED: (
+                        "Unknown Workpiece", "No matching workpiece. Painting stopped.",
+                    ),
+                    PaintOutcome.TRAY_FULL: (
+                        "Tray Full", "The tray is full. Empty the tray and confirm it is empty before starting again.",
+                    ),
+                    PaintOutcome.WORK_AREA_FULL: (
+                        "Work Area Full", "The work area has no space for another workpiece. Clear the area before starting again.",
+                    ),
+                }
+                if reason in notices:
+                    title, message = notices[reason]
+                    self._production_service.publish_dashboard_message("warning", title, message)
             else:
                 self._logger.error("Paint process failed: %s", msg)
                 self._transition(ProcessState.ERROR, lambda: None, msg)

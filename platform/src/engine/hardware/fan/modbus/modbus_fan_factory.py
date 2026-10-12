@@ -21,6 +21,7 @@ def build_modbus_fan_control(
     transport = DEFAULT_TRANSPORT_REGISTRY.build_for_slave(modbus_config, slave_name)
     return ModbusFanControl(
         transport=transport,
+        diagnostic_name=peripheral_key,
         register=binding.outputs.get("fan", "Y0"),
         on_value=binding.commands.get("on", 1),
         off_value=binding.commands.get("off", 0),

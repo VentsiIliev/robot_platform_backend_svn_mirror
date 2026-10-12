@@ -16,6 +16,12 @@ class PeripheralBinding:
     outputs: dict[str, int | str] = field(default_factory=dict)
     commands: dict[str, int] = field(default_factory=dict)
     statuses: dict[str, int] = field(default_factory=dict)
+    transport_type: str | None = None
+
+    def __post_init__(self):
+        if self.transport_type is not None and (
+                not isinstance(self.transport_type, str) or not self.transport_type):
+            raise ValueError('Peripheral transport_type must be a nonempty string')
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "PeripheralBinding":
@@ -26,6 +32,7 @@ class PeripheralBinding:
             outputs={str(key): str(value) for key, value in data.get("outputs", {}).items()},
             commands={str(key): int(value) for key, value in data.get("commands", {}).items()},
             statuses={str(key): int(value) for key, value in data.get("statuses", {}).items()},
+            transport_type=data.get('transport_type'),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -37,6 +44,8 @@ class PeripheralBinding:
             "commands": dict(self.commands),
             "statuses": dict(self.statuses),
         }
+        if self.transport_type is not None:
+            result['transport_type'] = self.transport_type
         return result
 
 

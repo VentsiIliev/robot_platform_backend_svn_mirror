@@ -1,6 +1,8 @@
 import math
 import logging
 import time
+from functools import wraps
+from src.engine.diagnostics.events import observe
 from threading import Event, Thread
 from typing import Callable, List, Optional
 
@@ -11,6 +13,32 @@ from ..enums.axis import RobotAxis, Direction
 from ..motion_sequence import MotionSequenceSegment
 from ..safety.motion_corridor import MotionCorridor, MotionCorridorRegistry
 from src.shared_contracts.events.robot_events import RobotTopics
+
+
+def _observed_motion(fn):
+    """Observe service results without changing the robot motion contract."""
+    @wraps(fn)
+    def wrapped(self, *args, **kwargs):
+        started = time.monotonic()
+        operation = fn.__name__
+        try:
+            result = fn(self, *args, **kwargs)
+        except Exception:
+            observe(self._logger, "robot.motion.exception", level=logging.ERROR,
+                    metrics={f"robot.motion.{operation}.exceptions": 1}, operation=operation)
+            raise
+        metrics = {f"robot.motion.{operation}.calls": 1,
+                   f"robot.motion.{operation}.duration_seconds": time.monotonic() - started}
+        if not result:
+            # False also covers safety rejection and cooperative cancellation.
+            metrics[f"robot.motion.{operation}.unsuccessful_calls"] = 1
+        target = args[0] if args else kwargs.get("position")
+        observe(self._logger, "robot.motion.ended", metrics=metrics,
+                operation=operation, success=bool(result),
+                target_position=target[:6] if operation in {"move_ptp", "move_linear"}
+                and isinstance(target, (list, tuple)) else None)
+        return result
+    return wrapped
 
 
 class MotionService(IMotionService):
@@ -69,6 +97,7 @@ class MotionService(IMotionService):
             )
             return False
 
+    @_observed_motion
     def move_ptp(
             self,
             position,
@@ -129,6 +158,7 @@ class MotionService(IMotionService):
             self._logger.exception("move_ptp failed")
             return False
 
+    @_observed_motion
     def move_linear(
             self,
             position,
@@ -187,6 +217,7 @@ class MotionService(IMotionService):
             self._logger.exception("move_linear failed")
             return False
 
+    @_observed_motion
     def move_sequence(
             self,
             segments: List[MotionSequenceSegment],
@@ -248,6 +279,7 @@ class MotionService(IMotionService):
             self._logger.exception("move_sequence failed")
             return False
 
+    @_observed_motion
     def move_custom_sequence(
             self,
             segments: List[MotionSequenceSegment],

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import logging
+from src.engine.diagnostics.events import observe
 import re
 from dataclasses import dataclass, field
 from importlib import import_module
@@ -82,6 +84,11 @@ def load_startup_config(config_path: Path = DEFAULT_CONFIG_PATH) -> StartupConfi
         )
 
     selected = load_robot_system_config(payload, robot_system)
+    observe(logging.getLogger(__name__), "platform.configuration_loaded",
+            robot_system=robot_system,
+            build_info={key: selected[key] for key in (
+                "release_version", "platform_version", "backend_version",
+                "robot_driver", "backend", "backend_profile")})
 
     return StartupConfig(
         robot_system=robot_system,

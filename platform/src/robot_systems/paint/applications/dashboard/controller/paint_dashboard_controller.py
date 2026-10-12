@@ -52,6 +52,15 @@ class PaintDashboardController(
     DashboardCameraFeedMixin,
     DashboardProcessStateMixin,
 ):
+    def _init_dashboard_process_state(self) -> None:
+        super()._init_dashboard_process_state()
+        # Paint uses the existing modal popup for actionable process notices.
+        self._dashboard_process_bridge.warning_ready.disconnect(self._view.show_warning)
+        self._dashboard_process_bridge.warning_ready.connect(self._show_process_notice)
+
+    def _show_process_notice(self, title: str, message: str) -> None:
+        self._view.show_warning_dialog(self._t(title), self._t(message))
+
     def _dashboard_warning_for_event(
         self,
         event_state: str,

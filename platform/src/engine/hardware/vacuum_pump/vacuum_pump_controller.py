@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from src.engine.diagnostics.events import observe
 import threading
 import time
 
@@ -194,7 +195,15 @@ class VacuumPumpController(IVacuumPumpController, IHealthCheckable):
                 self._pump_register,
                 value,
             )
+            observe(_logger, "vacuum_pump.write_failed", level=logging.ERROR,
+                    metrics={"vacuum_pump.command_failures": 1},
+                    output=("vacuum_pump", None), requested_state=label,
+                    register=self._pump_register)
             return False
+        observe(_logger, "vacuum_pump.output_written",
+                metrics={f"vacuum_pump.commands.{label.lower()}": 1},
+                output=("vacuum_pump", value == self._config.on_value),
+                register=self._pump_register, value=value)
         _logger.info(
             "Vacuum pump %s register=%d value=%d",
             label,

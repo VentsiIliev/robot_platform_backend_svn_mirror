@@ -29,6 +29,15 @@ class PaintCycleRunnerTests(unittest.TestCase):
             factory.return_value.build.assert_called_once_with(self.context, initial_state=initial_state)
         return execution
 
+    def test_expected_stop_is_not_counted_as_completed_paint(self):
+        with patch("src.robot_systems.paint.processes.paint.production.cycle_runner.observe") as observed:
+            self.run_with_machine(PaintOperationResult(PaintOutcome.NO_WORKPIECE, "No workpiece"))
+        final = observed.call_args.kwargs
+        self.assertEqual(final["outcome"], "no_workpiece")
+        self.assertEqual(final["metrics"]["paint.cycle.outcome.no_workpiece"], 1)
+        self.assertNotIn("paint.cycle.outcome.completed", final["metrics"])
+        self.assertIsNone(final["failure"])
+
     def test_preserves_completed_and_cancelled_outcomes(self):
         for outcome in (PaintOutcome.COMPLETED, PaintOutcome.CANCELLED):
             with self.subTest(outcome=outcome):

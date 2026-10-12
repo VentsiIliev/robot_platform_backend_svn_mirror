@@ -852,7 +852,7 @@ def handle_magazine_execute_pickup_release(ctx: PaintExecutionContext) -> PaintE
             return interrupted
         if msg == NO_WORKPIECE_AT_MAGAZINE:
             ctx.set_outcome(PaintOperationResult(PaintOutcome.NO_WORKPIECE, NO_WORKPIECE_AT_MAGAZINE))
-            return PaintExecutionState.COMPLETED
+            return PaintExecutionState.FINISHED
         return interrupted_or_error(
             ctx,
             PaintExecutionState.MAGAZINE_EXECUTE_PICKUP_RELEASE,

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+from time import monotonic
+from src.engine.diagnostics.events import observe
 from typing import Callable, Optional
 
 from src.applications.workpiece_editor.i_workpiece_matcher import IWorkpieceMatcher
@@ -51,6 +53,26 @@ class PaintWorkpieceMatchingService(IWorkpieceMatcher):
         return False, None, result.message
 
     def match_result(self, contour) -> MatchResult:
+        started = monotonic()
+        result = self._match_result(contour)
+        outcome = "matched" if isinstance(result, Ready) else "failed" if isinstance(result, Failed) else "unmatched"
+        fields = {"outcome": outcome, "duration_s": monotonic() - started}
+        if isinstance(result, Ready):
+            fields.update(workpiece_id=result.value.workpiece_id,
+                          storage_id=result.value.storage_id,
+                          candidate_count=result.value.candidate_count,
+                          confidence=result.value.confidence)
+        elif isinstance(result, NoMatch):
+            fields.update(candidate_count=result.candidate_count, message=result.message)
+        else:
+            fields.update(failure_code=result.failure.code.value, failure_stage=result.failure.stage)
+        observe(_logger, "vision.match.ended",
+                level=logging.ERROR if isinstance(result, Failed) else logging.INFO,
+                metrics={f"vision.match.{outcome}": 1,
+                         "vision.match.duration_seconds": monotonic() - started}, **fields)
+        return result
+
+    def _match_result(self, contour) -> MatchResult:
         if not self.can_match_saved_workpieces():
             return Failed(PaintFailure(PaintFailureCode.UNAVAILABLE, "matching",
                                        "Matching is not available in this editor."))

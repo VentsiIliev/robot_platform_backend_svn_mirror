@@ -319,7 +319,7 @@ class TestFixedMagazinePickup(unittest.TestCase):
 
         next_state = handle_magazine_capture(ctx)
 
-        self.assertEqual(PaintExecutionState.COMPLETED, next_state)
+        self.assertEqual(PaintExecutionState.FINISHED, next_state)
         self.assertEqual(2, load_service._verify_current_capture_pose.call_count)
         correction = load_service._move_to_group_with_pause_resume_recovery.call_args
         self.assertEqual("Magazine", correction.args[2])

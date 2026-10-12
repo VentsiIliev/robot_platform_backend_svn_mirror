@@ -46,7 +46,7 @@ class PaintAdjustmentServiceTests(unittest.TestCase):
             [(2, 120), (2, 121), (2, 235)],
         )
 
-    def _service(self, *, sign=None, enabled=True, transport_type="modbus_register_fc16"):
+    def _service(self, *, sign=None, enabled=True, transport_type="modbus_register_fc16", override=None):
         modbus = ModbusConfig.from_dict({
             "port": "/dev/test",
             "slave_address": 10,
@@ -74,6 +74,7 @@ class PaintAdjustmentServiceTests(unittest.TestCase):
                 "slave_id": 10,
                 "outputs": {"position": "2"},
                 "commands": commands,
+                "transport_type": override,
             }
         })
         settings = MagicMock()
@@ -85,6 +86,16 @@ class PaintAdjustmentServiceTests(unittest.TestCase):
         registry = MagicMock()
         transport = registry.build_for_slave.return_value
         return PaintAdjustmentService(settings, registry), transport
+
+    def test_head_override_uses_word_transport_with_bitwise_slave(self):
+        service, transport = self._service(sign=1, transport_type='modbus_bitwise_fc16',
+                                          override='modbus_register_fc16')
+        self.assertTrue(service.is_paint_head_available())
+        transport.read_register.return_value = 120
+        service.go_to_position(120)
+        transport.write_register.assert_called_once_with(2, 120)
+        self.assertEqual(service._transport_registry.build_for_slave.call_args.kwargs,
+                         {'transport_type': 'modbus_register_fc16'})
 
     def test_missing_direction_disables_commands(self):
         service, transport = self._service()

@@ -1,4 +1,5 @@
 import logging
+from src.engine.diagnostics.events import observe
 import os
 from dataclasses import replace
 
@@ -554,6 +555,8 @@ class PaintRobotSystem(BaseRobotSystem):
         from src.robot_systems.paint.processes.paint.paint_production_service import PaintProductionService
         from src.robot_systems.paint.domain.workpieces.matching_selection import PaintMatchingSelection
 
+        observe(_logger, "paint.system.starting", profile=self.metadata.name,
+                version=self.metadata.version)
         self._robot = self.get_service(CommonServiceID.ROBOT)
         self.register_managed_resource(self._robot)
         _nav_engine = self.get_service(CommonServiceID.NAVIGATION)
@@ -750,6 +753,12 @@ class PaintRobotSystem(BaseRobotSystem):
         )
 
         self._robot.enable_robot()
+        observe(_logger, "paint.system.ready", profile=self.metadata.name,
+                version=self.metadata.version,
+                devices={name: getattr(self, attr, None) is not None for name, attr in (
+                    ("vision", "_vision"), ("vacuum_pump", "_vacuum_pump"),
+                    ("vacuum_sensor", "_vacuum_sensor"), ("fan", "_fan"),
+                    ("tray_fan", "_tray_fan"), ("dryer", "_dryer"))})
 
     def _persist_dryer_enabled(self, enabled: bool) -> None:
         from src.engine.hardware.peripherals import PeripheralBinding, PeripheralConfig
@@ -787,6 +796,7 @@ class PaintRobotSystem(BaseRobotSystem):
             self._robot.register_motion_corridor(dropoff_corridor)
 
     def on_stop(self) -> None:
+        observe(_logger, "paint.system.stopping", profile=self.metadata.name)
         self._robot.stop_motion()
         self._robot.disable_robot()
 

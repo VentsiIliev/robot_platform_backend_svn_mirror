@@ -5,6 +5,19 @@ directory, including `pyproject.toml`, into a standalone repository to build it.
 It does not need the engine, robot systems or parent repository to build/run the
 core shell. No application import migration is required.
 
+Run the shell standalone with sample applications in its three default folders:
+
+```bash
+.venv/bin/python pl_gui/example_usage.py
+# Or, with pl_gui importable in your environment:
+python -m pl_gui.example_usage
+```
+
+The demo needs only the core dependencies (PyQt6 and QtAwesome), starts no robot
+services, and uses placeholder application widgets. In an extracted checkout,
+run `python example_usage.py` from the package directory. Select an application
+to open it and use the shell's Back button to return to the folders.
+
 From the platform repository, use your chosen development environment:
 
 ```bash

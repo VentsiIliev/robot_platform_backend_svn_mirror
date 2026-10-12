@@ -24,7 +24,8 @@ class PaintExecutionState(Enum):
     PREPARE_DROPOFF = auto()
     DROPOFF = auto()
     POST_RETURN = auto()
-    COMPLETED = auto()
+    COMPLETED = auto()  # The requested operation succeeded.
+    FINISHED = auto()   # Expected termination; the outcome explains why.
     PAUSED = auto()
     STOPPED = auto()
     ERROR = auto()
@@ -37,7 +38,7 @@ class PaintExecutionTransitions:
     @staticmethod
     def get_rules() -> dict[PaintExecutionState, set[PaintExecutionState]]:
         S = PaintExecutionState
-        active = {S.PAUSED, S.STOPPED, S.ERROR}
+        active = {S.PAUSED, S.STOPPED, S.ERROR, S.FINISHED}
         magazine_states = {
             S.MAGAZINE_MOVE_TO_MAGAZINE,
             S.MAGAZINE_WAIT_CAMERA_SETTLE,
@@ -83,7 +84,7 @@ class PaintExecutionTransitions:
             S.MAGAZINE_MOVE_TO_CALIBRATION: {S.CALIBRATION_WAIT_CAMERA_SETTLE, *active},
             S.CALIBRATION_WAIT_CAMERA_SETTLE: {S.CAPTURE_WORKPIECE, *active},
             S.CAPTURE_WORKPIECE: {S.PREPARE_WORKPIECE, S.COMPLETED, *active},
-            S.PREPARE_WORKPIECE: {S.BUILD_EXECUTION_PLAN, S.STOPPED, S.ERROR},
+            S.PREPARE_WORKPIECE: {S.BUILD_EXECUTION_PLAN, *active},
             S.BUILD_EXECUTION_PLAN: {S.EXECUTE_PAINT, S.PICKUP, S.STOPPED, S.ERROR},
             S.EXECUTE_PAINT: {S.COMPLETED, *active},
             S.PICKUP: {S.PAINT_CONTACT, S.COMPLETED, *active},
@@ -93,6 +94,7 @@ class PaintExecutionTransitions:
             S.DROPOFF: {S.POST_RETURN, *active},
             S.POST_RETURN: {S.COMPLETED, S.ERROR, S.STOPPED},
             S.COMPLETED: {S.IDLE},
+            S.FINISHED: {S.IDLE},
             S.STOPPED: {S.IDLE},
             S.ERROR: {S.IDLE},
             S.PAUSED: {S.STARTING, *magazine_states, *paint_states, S.STOPPED, S.ERROR},

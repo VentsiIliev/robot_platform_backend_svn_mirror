@@ -138,9 +138,9 @@ def handle_magazine_capture(ctx: PaintExecutionContext) -> PaintExecutionState:
         len(ctx.magazine_contour) if ctx.magazine_contour is not None else 0,
     )
     if ctx.magazine_contour is None:
-        _logger.warning("[MAGAZINE_LOAD] No usable contour detected after moving to '%s'", ctx.magazine_group)
+        _logger.info("[MAGAZINE_LOAD] No usable contour detected after moving to '%s'", ctx.magazine_group)
         ctx.set_outcome(PaintOperationResult(PaintOutcome.NO_WORKPIECE, NO_WORKPIECE_AT_MAGAZINE))
-        return PaintExecutionState.COMPLETED
+        return PaintExecutionState.FINISHED
     return PaintExecutionState.MAGAZINE_PREPARE_PICKUP_RELEASE
 
 

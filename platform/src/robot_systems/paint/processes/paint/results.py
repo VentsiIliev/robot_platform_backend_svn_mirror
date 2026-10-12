@@ -99,6 +99,14 @@ class PaintOperationResult:
                    planned_waypoints)
 
     @property
+    def expected_stop(self) -> bool:
+        """An expected business condition ended the operation without a failure."""
+        return self.outcome in {
+            PaintOutcome.NO_WORKPIECE, PaintOutcome.UNMATCHED,
+            PaintOutcome.TRAY_FULL, PaintOutcome.WORK_AREA_FULL,
+        }
+
+    @property
     def completed(self) -> bool:
         return self.outcome is PaintOutcome.COMPLETED
 

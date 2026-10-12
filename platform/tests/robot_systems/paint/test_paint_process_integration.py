@@ -1756,7 +1756,8 @@ class TestPaintProcessIntegration(unittest.TestCase):
     def test_retry_unmatched_workpiece_starts_capture_only_run(self):
         process, production_service, _messaging = self._make_process((True, "Paint completed"))
         production_service.can_retry_unmatched_workpiece.return_value = True
-        process.set_error("Unknown workpiece")
+        process._state = ProcessState.STOPPED
+        process._last_result = PaintOperationResult(PaintOutcome.UNMATCHED, "Unknown workpiece")
 
         self.assertTrue(process.retry_unmatched_workpiece())
         process._thread.join(timeout=1.0)
@@ -1875,7 +1876,7 @@ class TestPaintProcessIntegration(unittest.TestCase):
         self.assertEqual(stopped_events[-1].message, ALL_MAGAZINES_EMPTY)
 
     def test_failed_run_transitions_process_to_error(self):
-        process, production_service, messaging = self._make_process((False, "No usable contour detected"))
+        process, production_service, messaging = self._make_process((False, "Robot motion rejected"))
         error_seen = threading.Event()
 
         def _publish(topic, event):

@@ -32,6 +32,23 @@ that slave entry: numeric addresses now mean bits and writes accept only 0/1.
 Do not switch an existing mixed register-based slave without remapping binary
 outputs and separating consumers requiring ordinary word registers. In particular,
 a paint-head position register must retain the ordinary register transport.
+The paint-head service supports an explicit peripheral override:
+
+```json
+"paint_head": {
+  "enabled": true,
+  "slave_id": 10,
+  "transport_type": "modbus_register_fc16",
+  "outputs": {"position": 2}
+}
+```
+
+Keep the existing paint-head `commands` and calibration fields alongside this
+selection. Its readback and range checks are unchanged. The slave-wide default
+can remain `modbus_bitwise_fc16`. Both transports share the same physical serial
+bus lock and connection settings. The Device Control enable toggle preserves the
+override. This override is currently consumed by the paint-head service; other
+peripheral builders continue to use the slave default.
 Current numeric-slave lookup selects one configured entry; duplicate aliases with
 the same numeric ID do not automatically select different transports per peripheral.
 
@@ -44,3 +61,23 @@ write to the same register can still overwrite previously set bits.
 Tests cover bit preservation, FC16 use, ranges/values, batch operations, configured
 register selection and concurrent transport instances. Real hardware acceptance
 has not been performed.
+
+## Vacuum pump and blow-off
+
+A legacy pump mapping using holding register 1 with ON mask 1 and blow-off mask
+4 maps to pump bit 0 and blow-off bit 2. With `modbus_bitwise_fc16`, configure:
+
+```json
+"outputs": {"pump": "0", "blow_off": "2"},
+"commands": {"on": 1, "off": 0, "blow_off_on": 1, "blow_off_off": 0}
+```
+
+The slave's `bitwise_register` selects physical holding register 1. These output
+addresses select bits inside that word; they are not holding-register addresses.
+The pulse updates only bit 2 and preserves the other output bits. Pump and
+blow-off must use distinct bit indices in 0..15 and binary command values.
+The vacuum-pump factory rejects incompatible bitwise mappings before creating
+its transport. Ordinary word-register transports retain their existing contract.
+Restart the application after changing these startup-built controller settings.
+For external machine data, update the active profile's persisted peripherals
+file as well as any factory defaults intended for future installations.

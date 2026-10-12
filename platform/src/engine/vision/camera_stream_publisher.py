@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from src.engine.diagnostics.events import observe
 import threading
 import time
 
@@ -85,6 +86,9 @@ class CameraStreamPublisher:
                 self._capture = capture
                 if not capture.isOpened():
                     if not connection_lost:
+                        observe(self._logger, "vision.camera.unavailable", level=logging.WARNING,
+                                metrics={f"vision.camera.{self._role}.disconnects": 1},
+                                role=self._role, device=self._device)
                         self._logger.warning("Camera %s is unavailable; retrying", self._device)
                     connection_lost = True
                 else:
@@ -94,6 +98,9 @@ class CameraStreamPublisher:
                     capture.set(cv2.CAP_PROP_FPS, self._fps)
                     capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                     if connection_lost:
+                        observe(self._logger, "vision.camera.reconnected",
+                                metrics={f"vision.camera.{self._role}.reconnects": 1},
+                                role=self._role, device=self._device)
                         self._logger.info("Camera %s reconnected", self._device)
                     connection_lost = False
                     failures = 0

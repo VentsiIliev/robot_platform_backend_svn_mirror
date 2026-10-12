@@ -67,3 +67,19 @@ class BitwiseFc16Tests(unittest.TestCase):
                 for future in futures:
                     future.result()
         self.assertEqual(word[0], 0x0601)
+
+    def test_same_slave_supports_explicit_word_transport_override(self):
+        from src.engine.hardware.communication.modbus.modbus_fc16_register_transport import ModbusFc16RegisterTransport
+        from src.engine.hardware.peripherals import PeripheralConfig
+        config = ModbusConfig.from_dict({'port': '/dev/shared', 'slaves': {'default': {
+            'slave_address': 10, 'transport_type': 'modbus_bitwise_fc16'}}})
+        peripherals = PeripheralConfig.from_dict({'paint_head': {
+            'slave_id': 10, 'transport_type': 'modbus_register_fc16'}})
+        binding = PeripheralConfig.from_dict(peripherals.to_dict()).get('paint_head')
+        bits = DEFAULT_TRANSPORT_REGISTRY.build_for_slave(config, 'default')
+        words = DEFAULT_TRANSPORT_REGISTRY.build_for_slave(config, 'default',
+                                                          transport_type=binding.transport_type)
+        self.assertIsInstance(bits, ModbusBitwiseFc16Transport)
+        self.assertIsInstance(words, ModbusFc16RegisterTransport)
+        self.assertEqual((bits._port, bits._slave_address), (words._port, words._slave_address))
+        self.assertEqual(config.get_slave('default').transport_type, 'modbus_bitwise_fc16')

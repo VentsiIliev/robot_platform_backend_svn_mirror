@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import logging
+from src.engine.diagnostics.events import observe
 from time import perf_counter
 
-from src.robot_systems.paint.processes.paint.results import PaintOperationResult, PaintOutcome
+from src.robot_systems.paint.processes.paint.results import PaintOperationResult, PaintOutcome, PaintFailureCode
 
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards import guard_control
@@ -39,12 +40,25 @@ def handle_capture_workpiece(ctx: PaintExecutionContext) -> PaintExecutionState:
                     guarded = guard_control(ctx, PaintExecutionState.CAPTURE_WORKPIECE)
                     if guarded is not None:
                         return guarded
-                ctx.set_result(False, message)
+                observe(_logger, "vision.capture_not_ready", level=logging.ERROR,
+                        metrics={"vision.paint_capture.readiness_failures": 1}, message=message)
+                ctx.set_outcome(PaintOperationResult.failed(
+                    PaintFailureCode.UNAVAILABLE, "capture_workpiece", message))
                 return PaintExecutionState.ERROR
         phase_start = perf_counter()
-        ctx.snapshot = service._capture_snapshot_service.capture_snapshot(source="paint_process")
+        observe(_logger, "vision.paint_capture.started", metrics={"vision.paint_capture.attempts": 1})
+        try:
+            ctx.snapshot = service._capture_snapshot_service.capture_snapshot(source="paint_process")
+        except Exception:
+            observe(_logger, "vision.paint_capture.failed", level=logging.ERROR,
+                    metrics={"vision.paint_capture.failures": 1},
+                    duration_s=perf_counter() - phase_start)
+            raise
         contour_count = len(ctx.snapshot.contours or [])
         capture_attempt += 1
+        observe(_logger, "vision.paint_capture",
+                metrics={"vision.paint_capture.duration_seconds": perf_counter() - phase_start},
+                contour_count=contour_count, attempt=capture_attempt)
         service._log_phase_timing(
             "paint_capture",
             phase_start,

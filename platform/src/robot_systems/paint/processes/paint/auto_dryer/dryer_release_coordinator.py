@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 import logging
+from contextvars import copy_context
+from src.engine.diagnostics.events import observe
 import threading
 import time
 
@@ -55,7 +57,7 @@ class DryerReleaseCoordinator:
             self._sequence_ever_queued = True
             self._completion.clear()
             try:
-                self._executor.submit(self._run_sequence)
+                self._executor.submit(copy_context().run, self._run_sequence)
             except RuntimeError:
                 self._sequence_active = False
                 self._last_sequence_succeeded = False
@@ -96,6 +98,8 @@ class DryerReleaseCoordinator:
             ejecting = bool(state.ejecting)
             healthy = bool(state.is_healthy)
             if healthy and eject_done and not ejecting:
+                observe(self._logger, "dryer.eject_completion_verified",
+                        metrics={"dryer.eject_completion_checks_passed": 1})
                 self._logger.info("[DRYER_RELEASE] Final EJECT_DONE check passed before dropoff")
                 return True, ""
             reason = "EJECT_DONE was not confirmed before dropoff"
@@ -111,7 +115,11 @@ class DryerReleaseCoordinator:
     def _run_sequence(self) -> None:
         with self._lock:
             self._sequence_ever_queued = True
+        started = time.monotonic()
+        observe(self._logger, "dryer.release_sequence.started",
+                metrics={"dryer.release_sequence.attempts": 1})
         succeeded = False
+        eject_started = False
         error = "Dryer sequence did not complete"
         try:
             if not self._dryer_enabled():
@@ -154,12 +162,19 @@ class DryerReleaseCoordinator:
             if not self._confirm_eject_started(eject_initial_state):
                 error = "EJECT start was not confirmed"
                 return
+            eject_started = True
             succeeded = True
             error = ""
         except Exception:
             error = "Dryer sequence raised an exception"
             self._logger.exception("[DRYER_RELEASE] Dryer sequence raised")
         finally:
+            observe(self._logger, "dryer.release_sequence.ended",
+                    level=logging.INFO if succeeded else logging.ERROR,
+                    metrics={f"dryer.release_sequence.{'eject_started' if eject_started else 'skipped' if succeeded else 'failed'}": 1,
+                             "dryer.release_sequence.duration_seconds": time.monotonic() - started},
+                    # A successful sequence confirms eject START, not completion.
+                    eject_start_confirmed=eject_started, skipped=succeeded and not eject_started, message=error)
             with self._lock:
                 self._sequence_active = False
                 self._last_sequence_succeeded = succeeded
@@ -210,6 +225,8 @@ class DryerReleaseCoordinator:
             elif unhealthy_since is None:
                 unhealthy_since = now
             if healthy and movement_observed and done and not moving:
+                observe(self._logger, "dryer.next_position_completed",
+                        metrics={"dryer.next_position_completions": 1})
                 self._logger.info("[DRYER_RELEASE] NEXT_POSITION completed after fresh movement transition")
                 return True
             if not movement_observed and now >= acknowledgement_deadline:

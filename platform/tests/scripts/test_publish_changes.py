@@ -15,6 +15,7 @@ class SimulatedPublicationGit(Git):
         self.commands = []
         self.fail_svn = False
         self.fail_push = False
+        self.fail_remote = None
         self.rewrite_svn = True
 
     def read(self, *args, **kwargs):
@@ -34,7 +35,7 @@ class SimulatedPublicationGit(Git):
                 self.local("update-ref", "refs/remotes/git-svn", self.read("rev-parse", "HEAD"))
             return
         if args[0] == "push":
-            if self.fail_push:
+            if self.fail_push or args[1] == self.fail_remote:
                 raise PublicationError("simulated push authentication failure")
             return
         self.local(*args)
@@ -56,6 +57,7 @@ class PublishChangesTests(unittest.TestCase):
         self.git.local("config", "core.hooksPath", str(self.root / "unused-hooks"))
         self.git.local("config", "svn-remote.svn.url", "https://example.invalid/svn/trunk")
         self.git.local("remote", "add", "gitea-test", "https://example.invalid/repo.git")
+        self.git.local("remote", "add", "gitlab-test", "https://example.invalid/gitlab.git")
         (self.root / "a.txt").write_text("original\n")
         self.git.local("add", "a.txt")
         self.git.local("commit", "-m", "Initial\n\ngit-svn-id: https://example.invalid/svn/trunk@1 test-uuid")
@@ -69,7 +71,7 @@ class PublishChangesTests(unittest.TestCase):
         (self.root / "a.txt").write_text("edited\n")
         (self.root / "new.txt").write_text("new\n")
         self.execute(["--all", "-m", "Update files"])
-        self.assertEqual(self.git.commands[-2:], [("svn", "dcommit"), ("push", "gitea-test", "master")])
+        self.assertEqual(self.git.commands[-3:], [("svn", "dcommit"), ("push", "gitea-test", "master"), ("push", "gitlab-test", "master")])
         self.assertEqual(self.git.read("status", "--porcelain"), "")
         self.assertEqual(self.git.read("rev-parse", "HEAD"), self.git.read("rev-parse", "refs/remotes/git-svn"))
         self.assertIn("git-svn-id:", self.git.read("log", "-1", "--format=%B"))
@@ -101,7 +103,40 @@ class PublishChangesTests(unittest.TestCase):
         self.git.commands.clear()
         self.execute(["--resume"])
         self.assertEqual(self.git.read("rev-parse", "HEAD"), head)
+        self.assertEqual(self.git.commands, [("svn", "dcommit"), ("push", "gitea-test", "master"), ("push", "gitlab-test", "master")])
+
+    def test_gitlab_failure_can_resume_after_svn_and_gitea_succeed(self):
+        (self.root / "a.txt").write_text("edited\n")
+        self.git.fail_remote = "gitlab-test"
+        with self.assertRaisesRegex(PublicationError, "authentication failure"):
+            self.execute(["--all", "-m", "Publish once"])
+        head = self.git.read("rev-parse", "HEAD")
+        self.assertEqual(head, self.git.read("rev-parse", "refs/remotes/git-svn"))
+        self.git.fail_remote = None
+        self.git.commands.clear()
+        self.execute(["--resume"])
+        self.assertEqual(self.git.read("rev-parse", "HEAD"), head)
+        self.assertEqual(self.git.commands, [("svn", "dcommit"), ("push", "gitea-test", "master"), ("push", "gitlab-test", "master")])
+
+    def test_missing_gitlab_remote_stops_before_commit_or_svn(self):
+        self.git.local("remote", "remove", "gitlab-test")
+        (self.root / "a.txt").write_text("edited\n")
+        with self.assertRaises(PublicationError):
+            self.execute(["--all", "-m", "Missing remote"])
+        self.assertEqual(self.git.commands, [])
+
+    def test_explicit_remote_overrides_defaults(self):
+        self.execute(["--resume", "--remote", "gitea-test"])
         self.assertEqual(self.git.commands, [("svn", "dcommit"), ("push", "gitea-test", "master")])
+
+    def test_dry_run_lists_both_pushes_after_svn(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            publish(self.git, parse_args(["--resume", "--dry-run"]), [])
+        plan = output.getvalue()
+        self.assertLess(plan.index("git svn dcommit"), plan.index("git push gitea-test master"))
+        self.assertLess(plan.index("git push gitea-test master"), plan.index("git push gitlab-test master"))
+        self.assertEqual(self.git.commands, [])
 
     def test_unsynced_head_is_not_pushed_even_if_svn_returns_success(self):
         (self.root / "a.txt").write_text("edited\n")

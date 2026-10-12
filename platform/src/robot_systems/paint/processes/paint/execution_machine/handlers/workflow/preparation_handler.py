@@ -25,7 +25,7 @@ def handle_prepare_workpiece(ctx: PaintExecutionContext) -> PaintExecutionState:
     )
     if ctx.contour is None:
         ctx.set_outcome(PaintOperationResult(PaintOutcome.NO_WORKPIECE, "No usable contour detected"))
-        return PaintExecutionState.ERROR
+        return PaintExecutionState.FINISHED
 
     service = ctx.production_service
     phase_start = perf_counter()
@@ -37,9 +37,6 @@ def handle_prepare_workpiece(ctx: PaintExecutionContext) -> PaintExecutionState:
     if isinstance(prepared, NoMatch):
         ctx.workpiece_description = "Unknown workpiece"
         ctx.set_outcome(PaintOperationResult(PaintOutcome.UNMATCHED, "Unknown workpiece"))
-        service.publish_dashboard_message(
-            "warning", "Unknown Workpiece", "No matching workpiece. Painting stopped.",
-        )
     elif isinstance(prepared, Failed):
         ctx.operation_failure = prepared.failure
         ctx.workpiece_description = prepared.failure.message
@@ -53,6 +50,8 @@ def handle_prepare_workpiece(ctx: PaintExecutionContext) -> PaintExecutionState:
     if ctx.should_stop():
         ctx.set_outcome(PaintOperationResult(PaintOutcome.CANCELLED, "Paint process stopped"))
         return PaintExecutionState.STOPPED
+    if isinstance(prepared, NoMatch):
+        return PaintExecutionState.FINISHED
     if ctx.raw_workpiece is None:
         if not isinstance(prepared, NoMatch):
             ctx.set_result(False, ctx.workpiece_description or "No matched workpiece")

@@ -1404,6 +1404,7 @@ def _build_device_control_application(robot_system):
             outputs=current.outputs,
             commands=current.commands,
             statuses=current.statuses,
+            transport_type=current.transport_type,
         )
         robot_system._settings_service.save(
             SettingsID.PERIPHERALS,

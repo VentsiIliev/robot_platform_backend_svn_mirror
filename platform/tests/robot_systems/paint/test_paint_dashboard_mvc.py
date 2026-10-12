@@ -114,6 +114,17 @@ class TestPaintDashboardModel(unittest.TestCase):
 
 
 class TestPaintDashboardController(unittest.TestCase):
+    def test_process_notice_uses_existing_popup_and_current_translation(self):
+        controller = PaintDashboardController.__new__(PaintDashboardController)
+        controller._view = MagicMock()
+        controller._t = MagicMock(side_effect=lambda text: "translated: " + text)
+        controller._init_dashboard_process_state()
+        controller._dashboard_process_bridge.warning_ready.emit("No Workpiece Found", "Place a workpiece")
+        controller._view.show_warning_dialog.assert_called_once_with(
+            "translated: No Workpiece Found", "translated: Place a workpiece",
+        )
+        controller._view.show_warning.assert_not_called()
+
     def test_select_workpieces_action_opens_library(self) -> None:
         broker = MagicMock()
         controller = PaintDashboardController.__new__(PaintDashboardController)

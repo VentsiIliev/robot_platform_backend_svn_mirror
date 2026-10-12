@@ -61,7 +61,7 @@ def _contact_result(ok, message, waypoints):
 
 
 class TestWorkpiecePreparationHandler(unittest.TestCase):
-    def test_unknown_match_publishes_established_dashboard_warning(self):
+    def test_unknown_match_finishes_without_failure_or_premature_popup(self):
         service = MagicMock()
         service._workpiece_preparation.prepare_result.return_value = _prepared_result(*(
             None,
@@ -82,13 +82,10 @@ class TestWorkpiecePreparationHandler(unittest.TestCase):
 
         next_state = handle_prepare_workpiece(ctx)
 
-        self.assertEqual(PaintExecutionState.ERROR, next_state)
-        self.assertEqual("Unknown workpiece", ctx.result_message)
-        service.publish_dashboard_message.assert_called_once_with(
-            "warning",
-            "Unknown Workpiece",
-            "No matching workpiece. Painting stopped.",
-        )
+        self.assertEqual(PaintExecutionState.FINISHED, next_state)
+        self.assertEqual(PaintOutcome.UNMATCHED, ctx.result.outcome)
+        self.assertIsNone(ctx.result.failure)
+        service.publish_dashboard_message.assert_not_called()
 
     def test_build_plan_uses_paint_executor_so_saved_segment_mask_is_attached(self):
         prepared_plan = object()
@@ -517,6 +514,8 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
 
         self.assertEqual(PaintExecutionState.ERROR, machine.current_state)
         self.assertEqual("camera did not become ready", ctx.result_message)
+        self.assertEqual(PaintFailureCode.UNAVAILABLE, ctx.result.failure.code)
+        self.assertEqual("capture_workpiece", ctx.result.failure.stage)
         service._wait_for_fresh_capture_frame.assert_called_once_with(
             1.0,
             ctx.motion_cancel_requested,

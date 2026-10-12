@@ -79,7 +79,7 @@ def handle_magazine_prepare_pickup_release(ctx: PaintExecutionContext) -> PaintE
         )
         if not isinstance(nested, Ready):
             ctx.set_outcome(nested)
-            return (PaintExecutionState.COMPLETED if nested.outcome is PaintOutcome.WORK_AREA_FULL
+            return (PaintExecutionState.FINISHED if nested.outcome is PaintOutcome.WORK_AREA_FULL
                     else PaintExecutionState.ERROR)
         ctx.magazine_release_pose = list(nested.value.pose)
         ctx.magazine_nesting_has_more = nested.value.has_space_for_same_footprint

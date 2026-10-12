@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from time import perf_counter
+from src.engine.diagnostics.events import observe
 from typing import Callable
 
 from src.robot_systems.paint.processes.paint.tray_dry.errors import TrayError
@@ -90,6 +91,7 @@ from src.robot_systems.paint.processes.paint.execution_machine.state import (
     PaintExecutionState,
     PaintExecutionTransitions,
 )
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.lifecycle.finished_handler import handle_finished
 from src.robot_systems.paint.timing import TimingRecorder
 
 
@@ -130,6 +132,7 @@ class PaintExecutionMachineFactory:
         _register(registry, context, S.DROPOFF, handle_dropoff)
         _register(registry, context, S.POST_RETURN, handle_post_return)
         _register(registry, context, S.COMPLETED, handle_completed)
+        _register(registry, context, S.FINISHED, handle_finished)
         _register(registry, context, S.PAUSED, handle_paused)
         _register(registry, context, S.STOPPED, handle_stopped)
         _register(registry, context, S.ERROR, handle_error)
@@ -191,7 +194,7 @@ def _failure_aware_handler(
                 PaintFailureCode.INTERNAL, state.name.lower(), str(exc),
             ))
         if state in {PaintExecutionState.ERROR, PaintExecutionState.STOPPED,
-                     PaintExecutionState.COMPLETED, PaintExecutionState.IDLE}:
+                     PaintExecutionState.COMPLETED, PaintExecutionState.FINISHED, PaintExecutionState.IDLE}:
             # Cleanup failure must never re-enter the same terminal handler forever.
             raise PaintOperationError(ctx.result.failure) from failure_exception
         return PaintExecutionState.ERROR
@@ -203,15 +206,16 @@ def _timed_handler(
     state: PaintExecutionState,
     handler: Callable[[PaintExecutionContext], PaintExecutionState],
 ) -> Callable[[PaintExecutionContext], PaintExecutionState]:
-    if context.state_timing_recorder is None:
-        return handler
-
     def wrapped(ctx: PaintExecutionContext) -> PaintExecutionState:
         started = perf_counter()
+        observe(_logger, "paint.stage.started", stage=state.name)
         try:
             next_state = handler(ctx)
         except Exception as exc:
             ended = perf_counter()
+            observe(_logger, "paint.stage.exception", level=logging.ERROR,
+                    metrics={f"paint.stage.{state.name.lower()}.exceptions": 1},
+                    stage=state.name, message=str(exc), duration_s=ended - started)
             _record_state_timing(
                 ctx,
                 state=state,
@@ -225,6 +229,16 @@ def _timed_handler(
             raise
 
         ended = perf_counter()
+        observe(_logger, "paint.stage.ended",
+                metrics={f"paint.stage.{state.name.lower()}.duration_seconds": ended - started},
+                stage=state.name, next_state=next_state.name,
+                outcome=ctx.result.outcome.value if state in {
+                    PaintExecutionState.COMPLETED, PaintExecutionState.FINISHED,
+                    PaintExecutionState.STOPPED, PaintExecutionState.ERROR,
+                } or next_state in {
+                    PaintExecutionState.COMPLETED, PaintExecutionState.FINISHED,
+                    PaintExecutionState.STOPPED, PaintExecutionState.ERROR,
+                } else None, duration_s=ended - started)
         _record_state_timing(
             ctx,
             state=state,
@@ -269,7 +283,7 @@ def _record_state_timing(
 def _state_success(context: PaintExecutionContext, next_state: PaintExecutionState) -> bool:
     if next_state in {PaintExecutionState.ERROR, PaintExecutionState.STOPPED}:
         return False
-    if next_state == PaintExecutionState.IDLE and not context.result_ok:
+    if next_state == PaintExecutionState.IDLE and context.result.failure is not None:
         return False
     return True
 
@@ -279,6 +293,7 @@ def _state_message(context: PaintExecutionContext, next_state: PaintExecutionSta
         PaintExecutionState.ERROR,
         PaintExecutionState.STOPPED,
         PaintExecutionState.COMPLETED,
+        PaintExecutionState.FINISHED,
         PaintExecutionState.IDLE,
     }:
         return context.result_message

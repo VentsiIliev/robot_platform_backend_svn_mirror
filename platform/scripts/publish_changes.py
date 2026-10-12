@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Commit selected changes, publish through SVN, then push rewritten history to Git.
+"""Commit selected changes, publish through SVN, then push to Gitea and GitLab.
 
 Run from this checkout (paths are relative to your current directory):
   python3 platform/scripts/publish_changes.py --all -m "Describe the change"
@@ -71,7 +71,8 @@ def publish(git: Git, args: argparse.Namespace, paths: list[str]) -> None:
         )
     git.read("rev-parse", "--verify", "refs/remotes/git-svn")
     git.read("config", "--get", "svn-remote.svn.url")
-    git.read("remote", "get-url", "--push", args.remote)
+    for remote in args.remote:
+        git.read("remote", "get-url", "--push", remote)
     git.read("svn", "--version")
     for state in ("MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply"):
         state_path = Path(git.read("rev-parse", "--git-path", state))
@@ -82,7 +83,7 @@ def publish(git: Git, args: argparse.Namespace, paths: list[str]) -> None:
 
     status = git.read("status", "--short", "--untracked-files=all")
     pending = git.read("log", "--oneline", "refs/remotes/git-svn..HEAD")
-    print(f"Repository: {git.root}\nBranch: {branch}\nGit remote: {args.remote}", flush=True)
+    print(f"Repository: {git.root}\nBranch: {branch}\nGit remotes: {', '.join(args.remote)}", flush=True)
     print("\nCurrent changes:\n" + (status or "(clean)"), flush=True)
     print("\nPending SVN commits (all will be published):\n" + (pending or "(none)"), flush=True)
 
@@ -106,7 +107,8 @@ def publish(git: Git, args: argparse.Namespace, paths: list[str]) -> None:
 
     if args.dry_run:
         print("\nDry run: no files or repositories changed.")
-        for command in (stage_args, commit_args, ["svn", "dcommit"], ["push", args.remote, "master"]):
+        for command in (stage_args, commit_args, ["svn", "dcommit"],
+                        *(["push", remote, "master"] for remote in args.remote)):
             if command:
                 print("git " + shlex.join(command))
         return
@@ -131,8 +133,9 @@ def publish(git: Git, args: argparse.Namespace, paths: list[str]) -> None:
     svn_head = git.read("rev-parse", "refs/remotes/git-svn")
     if head != svn_head or "git-svn-id:" not in git.read("log", "-1", "--format=%B"):
         raise PublicationError("HEAD does not match the SVN-generated commit; Git push was skipped.")
-    git.run("push", args.remote, "master")
-    print(f"\nPublished to SVN and {args.remote}: {head}")
+    for remote in args.remote:
+        git.run("push", remote, "master")
+    print(f"\nPublished to SVN and {', '.join(args.remote)}: {head}")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -140,8 +143,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("-m", "--message", help="Commit message; required unless --resume")
     parser.add_argument("--all", action="store_true", help="Stage all tracked/untracked changes across the repository")
     parser.add_argument("--resume", action="store_true", help="Publish existing commits; do not stage or create a commit")
-    parser.add_argument("--dry-run", action="store_true", help="Display changes/commands without modifying either repository")
-    parser.add_argument("--remote", default="gitea-test", help="Git push remote (default: gitea-test)")
+    parser.add_argument("--dry-run", action="store_true", help="Display changes/commands without modifying any repository")
+    parser.add_argument("--remote", action="append", help="Git push remote; repeat for multiple (default: gitea-test and gitlab-test)")
     parser.add_argument("paths", nargs="*", help="Files/directories to stage, relative to the current directory")
     args = parser.parse_args(argv)
     if args.resume and (args.message or args.all or args.paths):
@@ -150,7 +153,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("provide a nonempty -m message, or use --resume")
     if args.all and args.paths:
         parser.error("choose --all or explicit paths")
-    if not args.remote or args.remote.startswith("-"):
+    if args.remote is None:
+        args.remote = ["gitea-test", "gitlab-test"]
+    if any(not remote or remote.startswith("-") for remote in args.remote):
         parser.error("provide a valid remote name")
     return args
 

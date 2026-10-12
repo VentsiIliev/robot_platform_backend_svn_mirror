@@ -4,13 +4,13 @@
     "slave_id": 10,
     "inputs": {},
     "outputs": {
-      "pump": "1",
-      "blow_off": "1"
+      "pump": "0",
+      "blow_off": "2"
     },
     "commands": {
       "on": 1,
       "off": 0,
-      "blow_off_on": 4
+      "blow_off_on": 1
     },
     "statuses": {}
   },
@@ -43,12 +43,12 @@
     "enabled": true,
     "slave_id": 10,
     "inputs": {
-      "start": 9,
-      "pause": 10
+      "start": "9",
+      "pause": "10"
     },
     "outputs": {
-      "start": 9,
-      "pause": 10
+      "start": "9",
+      "pause": "10"
     },
     "commands": {
       "start_on": 1,
@@ -76,15 +76,16 @@
       "degree_units_denominator": 90,
       "more_paint_sign": -1
     },
-    "statuses": {}
+    "statuses": {},
+    "transport_type": "modbus_register_fc16"
   },
   "operator_lights": {
     "enabled": true,
     "slave_id": 10,
     "inputs": {},
     "outputs": {
-      "light_9": 1,
-      "light_10": 1
+      "light_9": "1",
+      "light_10": "1"
     },
     "commands": {
       "light_9_bit": 9,
