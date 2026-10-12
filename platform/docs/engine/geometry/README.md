@@ -1,7 +1,12 @@
 # `src/engine/geometry/` — Planar Geometry Helpers
 
-Dependency-free 2-D math shared by the robot stack. Stdlib only (`math`) — no
-NumPy, no OpenCV, no Qt.
+Shared geometry helpers independent of robot systems and Qt. `planar.py` and
+reference-scale calibration use stdlib math. Contour-to-DXF export uses NumPy
+and the already-installed `ezdxf` dependency. Camera capture and paint processing
+remain in the standalone script, outside this package.
+
+[Contour-to-DXF and calibration](contour_to_dxf.md) documents the reusable
+export functions and the known-reference capture procedure.
 
 ---
 
@@ -10,6 +15,8 @@ NumPy, no OpenCV, no Qt.
 | File | Contents |
 |------|----------|
 | `planar.py` | Angle and XY helpers (58 lines) |
+| `contour_to_dxf.py` | Closed DXF export of image-space contours |
+| `rectangle_scale_calibration.py` | Uniform correction from a known rectangular reference |
 
 ---
 

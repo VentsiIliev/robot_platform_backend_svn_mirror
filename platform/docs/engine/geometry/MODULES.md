@@ -7,6 +7,31 @@ Generated from Python ASTs. Signatures, declared defaults, imports and docstring
 ## Files
 
 - [planar.py](#planarpy)
+- [contour_to_dxf.py](#contour_to_dxfpy)
+- [rectangle_scale_calibration.py](#rectangle_scale_calibrationpy)
+
+## `contour_to_dxf.py`
+
+Source: [contour_to_dxf.py](../../../src/engine/geometry/contour_to_dxf.py).
+
+```python
+def write_contour_dxf(path, contour, mm_per_pixel=None) -> Path
+```
+
+Exports a validated image-space contour as a closed DXF polyline. See
+[capture and calibration workflow](contour_to_dxf.md).
+
+## `rectangle_scale_calibration.py`
+
+Source: [rectangle_scale_calibration.py](../../../src/engine/geometry/rectangle_scale_calibration.py).
+
+```python
+def calibrate_rectangle_scale(measured_size_mm, reference_size_mm) -> RectangleScaleCalibration
+```
+
+Fits one scale factor to short/long reference sides. The immutable result
+provides measured/reference dimensions, correction, corrected dimensions,
+and residuals in mm and percent.
 
 ## `planar.py`
 

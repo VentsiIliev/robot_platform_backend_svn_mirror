@@ -31,6 +31,7 @@ dist/
 *.iml
 
 # Runtime-generated debug artifacts
+/captures/
 src/bootstrap/robot_calibration_chessboard_detection_debug.png
 src/bootstrap/transformation_to_camera_center.json
 
