@@ -3,6 +3,7 @@ import logging
 from PyQt6.QtWidgets import QVBoxLayout, QLabel
 from PyQt6.QtCore import pyqtSignal
 from contour_editor import BezierSegmentManager
+from pl_gui.settings.settings_view.styles import BG_COLOR
 
 from src.applications.workpiece_editor.editor_core.config import (
     WorkpieceFormSchema, WorkpieceFormFactory, SegmentEditorConfig,
@@ -34,6 +35,8 @@ class WorkpieceEditorView(IApplicationView):
         super().__init__("WorkpieceEditor", parent)
 
     def setup_ui(self) -> None:
+        # The plugin's alternating list rows otherwise inherit the OS dark palette.
+        self.setStyleSheet(f"QListWidget {{ alternate-background-color: {BG_COLOR}; }}")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
