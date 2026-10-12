@@ -287,7 +287,7 @@ class ContourDXFView(IApplicationView):
         return self.tr(source) or source
 
     def retranslateUi(self):
-        self._title.setText(self._t('Contour Studio'))
+        self._title.setText(self._t('Photo to DXF'))
         self._subtitle.setText(self._t('Capture a contour. Verify its scale. Export a precise DXF.'))
         self._live_title.setText(self._t('Live camera'))
         self._capture_title.setText(self._t('Contour preview'))

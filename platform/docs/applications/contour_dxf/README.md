@@ -1,4 +1,4 @@
-# Contour Studio
+# Photo to DXF
 
 Standalone PyQt6 capture, scale verification and DXF export. It uses the shared
 platform palette and touch numeric fields, supports English/Bulgarian on initial

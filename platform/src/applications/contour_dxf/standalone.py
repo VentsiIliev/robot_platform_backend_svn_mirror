@@ -11,7 +11,7 @@ class _StudioWindow(QMainWindow):
         super().__init__()
         self._view = view
         self.setCentralWidget(view)
-        self.setWindowTitle('PL PROJECT · Contour Studio')
+        self.setWindowTitle('PL PROJECT · Photo to DXF')
         self.resize(1440, 960)
         self.setMinimumSize(1100, 850)
 
