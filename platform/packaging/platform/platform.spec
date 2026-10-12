@@ -14,7 +14,7 @@ config_dir = ROOT / "build/platform-config" / target["target"]
 datas = [(str(config_dir / "platform.json"), "config"),
          (str(config_dir / "factory-defaults.json"), "config"),
          (str(config_dir / "release-target.json"), "config"),
-         (str(ROOT / "config/update_sources" / (target["target"] + ".json")), "config/update-source")]
+         (str(config_dir / "update-source" / (target["target"] + ".json")), "config/update-source")]
 # Give the system-specific source file a stable bundled name for the installer.
 # PyInstaller retains its basename; the target marker identifies which file to read.
 for resource in ("src/applications/base/resources", "src/applications/localization",

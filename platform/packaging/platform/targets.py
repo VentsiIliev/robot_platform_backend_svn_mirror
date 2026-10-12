@@ -32,4 +32,27 @@ def prepare_target(name: str, destination: Path) -> dict:
     (destination / "release-target.json").write_text(json.dumps(target, indent=2), encoding="utf-8")
     factory = ROOT / "config/factory_defaults" / f"{name}.json"
     (destination / "factory-defaults.json").write_text(factory.read_text(encoding="utf-8"), encoding="utf-8")
+    update_source = load_update_source(target)
+    source_dir = destination / 'update-source'
+    source_dir.mkdir(exist_ok=True)
+    (source_dir / f'{name}.json').write_text(json.dumps(update_source, indent=2), encoding='utf-8')
     return target
+
+
+def load_update_source(target: dict) -> dict:
+    """Package the selected system's declaration, never a repository built into engine."""
+    source = target.get('update_source')
+    if source is None:
+        return {'enabled': False, 'product': target['product'], 'repository_url': '', 'public_key': None}
+    if not isinstance(source, str) or not source:
+        raise ValueError('update_source must name a system-owned JSON file')
+    path = (ROOT / source).resolve()
+    system_root = (ROOT / 'src/robot_systems' / target['robot_system']).resolve()
+    if not path.is_relative_to(system_root):
+        raise ValueError('update_source must remain inside the selected robot system package')
+    payload = json.loads(path.read_text(encoding='utf-8'))
+    if not isinstance(payload, dict) or payload.get('product') != target['product']:
+        raise ValueError('Update source belongs to another robot system/product')
+    if not isinstance(payload.get('enabled', False), bool):
+        raise ValueError('Update source enabled must be a boolean')
+    return payload

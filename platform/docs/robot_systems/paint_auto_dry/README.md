@@ -6,6 +6,14 @@ The override module is intentionally empty in this checkout. The variant class d
 
 Release identity is `paint-auto-dry-robot`, profile `automatic_dryer`; packaging includes shared `paint` plus `paint_auto_dry`. Source and installed writable storage remain variant-owned. Follow `ROBOT_PLATFORM_DATA_ROOT` path resolution in [updates](../../engine/updates/README.md).
 
+## Update source
+
+This system owns [storage/update_source.json](../../../src/robot_systems/paint_auto_dry/storage/update_source.json),
+selected through its `update_source` entry in `config/release_targets.json`.
+The checked-in seed uses `feed` with remote updates disabled; existing station
+`updates.json` files are preserved. See [per-system source configuration](../update_sources.md)
+for URLs, authentication, trust and migration.
+
 <!-- source-navigation:start -->
 ## Source navigation
 

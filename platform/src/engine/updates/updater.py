@@ -19,17 +19,23 @@ from .releases import extract_release, validate_manifest, version_tuple, release
 
 
 class _HttpsRedirect(urllib.request.HTTPRedirectHandler):
-    def __init__(self, allow_http=False):
+    def __init__(self, allow_http=False, strip_cross_origin_auth=False):
         self.allow_http = allow_http
+        self.strip_cross_origin_auth = strip_cross_origin_auth
 
     def redirect_request(self, request, response, code, message, headers, new_url):
         if urllib.parse.urlparse(new_url).scheme not in (('http', 'https') if self.allow_http else ('https',)):
             raise ValueError("Update redirects must remain HTTPS")
+        cross_origin = False
         if request.has_header('Authorization'):
             old, new = urllib.parse.urlsplit(request.full_url), urllib.parse.urlsplit(new_url)
-            if (old.scheme, old.netloc) != (new.scheme, new.netloc):
+            cross_origin = (old.scheme, old.netloc) != (new.scheme, new.netloc)
+            if cross_origin and not self.strip_cross_origin_auth:
                 raise ValueError('Authenticated update redirects must remain on the configured server')
-        return super().redirect_request(request, response, code, message, headers, new_url)
+        redirected = super().redirect_request(request, response, code, message, headers, new_url)
+        if redirected is not None and cross_origin:
+            redirected.remove_header('Authorization')
+        return redirected
 
 
 class PlatformUpdater:
@@ -50,6 +56,14 @@ class PlatformUpdater:
         return validate_manifest(raw, self.config.product) if raw.get('component') == 'robot' else raw
 
     def _fetch(self, url: str, target: Path, limit: int) -> None:
+        if self.config.repository_type == 'svn' and self.config.local_repository is None:
+            if urllib.parse.urlparse(url).scheme not in (('http', 'https') if self.config.allow_insecure_http else ('https',)):
+                raise ValueError('SVN update downloads require HTTPS')
+            if not url.startswith(self.config.repository_url.rstrip('/') + '/'):
+                raise ValueError('SVN update files must remain in the configured feed')
+            from .svn_source import fetch
+            fetch(self.config, url, target, limit)
+            return
         if self.config.local_repository is not None:
             source = Path(url)
             if source.resolve().parent != self._local_feed().resolve():
@@ -58,19 +72,34 @@ class PlatformUpdater:
                 raise ValueError(f"Local release file is missing: {source}")
             stream = source.open("rb")
         else:
-            if urllib.parse.urlparse(url).scheme not in (('http', 'https') if self.config.allow_insecure_http else ('https',)):
+            github = self.config.repository_type == 'github'
+            gitlab = self.config.repository_type == 'gitlab'
+            allow_http = self.config.allow_insecure_http and not github
+            if urllib.parse.urlparse(url).scheme not in (('http', 'https') if allow_http else ('https',)):
                 raise ValueError("Update downloads require HTTPS")
-            opener = urllib.request.build_opener(_HttpsRedirect(self.config.allow_insecure_http))
+            opener = urllib.request.build_opener(_HttpsRedirect(allow_http, strip_cross_origin_auth=github or gitlab))
             request = urllib.request.Request(url)
+            target_url = urllib.parse.urlsplit(url)
+            if github:
+                from .github_source import repository_api
+                api = repository_api(self.config.repository_url)
+                if target_url.netloc == 'api.github.com' and url.startswith(api + '/'):
+                    accept = ('application/octet-stream' if '/releases/assets/' in target_url.path
+                              else 'application/vnd.github+json')
+                    request.add_header('Accept', accept)
+                    request.add_header('X-GitHub-Api-Version', '2022-11-28')
+                request.add_header('User-Agent', 'robot-platform-updater')
             if self.config.token_file is not None:
                 origin = urllib.parse.urlsplit(self.config.repository_url)
-                target_url = urllib.parse.urlsplit(url)
-                if (origin.scheme, origin.netloc) != (target_url.scheme, target_url.netloc):
+                allowed = (origin.scheme, origin.netloc) == (target_url.scheme, target_url.netloc)
+                if github:
+                    allowed = url.startswith(api + '/')
+                if not allowed:
                     raise ValueError('Authenticated downloads must remain on the configured server')
                 token = self.config.token_file.read_text().strip()
                 if not token or any(char.isspace() for char in token):
                     raise ValueError('Invalid update token file')
-                request.add_header('Authorization', 'token ' + token)
+                request.add_header('Authorization', ('Bearer ' if github or gitlab else 'token ') + token)
             stream = opener.open(request, timeout=self.config.timeout_seconds)
         with stream as response, target.open("wb") as output:
             total = 0
@@ -98,6 +127,12 @@ class PlatformUpdater:
             from .gitea_source import latest_robot_release
             manifest = latest_robot_release(self)
             return self._check_candidate(manifest)
+        if self.config.repository_type == 'github':
+            from .github_source import latest_robot_release
+            return self._check_candidate(latest_robot_release(self))
+        if self.config.repository_type == 'gitlab':
+            from .gitlab_source import latest_robot_release
+            return self._check_candidate(latest_robot_release(self))
         url = self._release_location("latest.json")
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)

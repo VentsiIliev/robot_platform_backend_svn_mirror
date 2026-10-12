@@ -803,6 +803,21 @@ If your robot system declares `work_areas`, expose the shared `WorkAreaSettings`
 
 ---
 
+## Remote update support
+
+When adding a release target, the system can own
+`src/robot_systems/my_system/storage/update_source.json` and reference it through
+`update_source` in `config/release_targets.json`. Specify the provider and URL in
+that JSON: `github`/`gitlab` use release repositories, while `svn`/`feed` use ready
+archive/manifest feeds. The declaration's `product` must match the target.
+Omitting `update_source` disables remote updates. Do not add a system's server
+URL to engine or copy credentials into a bundle.
+
+The selected declaration seeds installed `updates.json` only on first install;
+existing machine-owned source settings and trust keys are preserved. See
+[per-system source configuration](../../../docs/robot_systems/update_sources.md)
+for provider URL examples, private authentication and station migration.
+
 ## Common Mistakes
 
 - Hardcoding package paths inside `application_wiring.py`

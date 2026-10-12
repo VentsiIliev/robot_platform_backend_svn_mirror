@@ -1,5 +1,11 @@
 # Platform releases with Gitea Actions
 
+This is a historical reference. Current publication destinations are SVN and
+`VentsiIliev/robot_platform_backend_svn_mirror` on GitHub. Do not use the Gitea
+workflow for current publication unless the user changes that policy. Use
+[the complete robot release workflow](../robot/README.md#publish-to-svn-and-github)
+for the current SVN-first GitHub path.
+
 The repository workflow [platform-release.yaml](../../../.gitea/workflows/platform-release.yaml)
 is manually dispatched from Gitea and releases the platform for `paint_tray_dry`.
 It calls the existing `packaging/platform/build_and_release.py paint_tray_dry`, which

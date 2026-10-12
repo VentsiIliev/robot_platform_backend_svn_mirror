@@ -9,6 +9,9 @@ For new robot-system development, start from:
 
 Concrete system docs in this tree (selection is controlled by startup configuration):
 
+[Per-system update sources](update_sources.md) describes GitHub, GitLab, SVN and
+feed URLs, packaging declarations and migration of existing station settings.
+
 - [glue/README.md](glue/README.md)
 - [paint/README.md](paint/README.md)
 - [paint_auto_dry/README.md](paint_auto_dry/README.md)

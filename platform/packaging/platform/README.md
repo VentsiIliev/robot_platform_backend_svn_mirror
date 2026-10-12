@@ -32,14 +32,15 @@ font environment, so OpenCV's bundled Qt 5 paths do not redirect the PyQt6 GUI.
 
 ## Independent system/profile releases
 
-For Gitea Actions, see [platform release setup](GITEA_ACTIONS.md). The manual
+Historical Gitea Actions setup is retained in [the legacy reference](GITEA_ACTIONS.md);
+Gitea is not a current publication destination. The manual
 workflow runs `packaging/platform/build_and_release.py paint_tray_dry` and publishes its
 installer/update archives using the system's `VERSION` file.
 
 For the combined platform/backend robot release, use the
-[combined release workflow](../robot/README.md#publish-to-svn-and-gitea).
+[combined release workflow](../robot/README.md#publish-to-svn-and-github).
 Its `publish` action synchronizes committed source to SVN, builds/verifies the
-selected versions, pushes their exact tags, and uploads a Gitea release. The
+selected versions, pushes their exact tags, and uploads a GitHub release. The
 commands below describe the separate platform-only installer workflow.
 
 Select a target from `config/release_targets.json`:
@@ -72,12 +73,11 @@ shared platform code. Profile builds include their base system dependencies.
 Changing a repository URL cannot change the installed product/profile: mismatched
 releases are rejected. Versions may be identical across independent products.
 
-Edit `config/update_sources/TARGET.json` before building to choose that target’s
+Edit `src/robot_systems/TARGET/storage/update_source.json` before building to choose that target’s
 release repository, channel and trusted public-key path. The installer seeds
 `~/.config/robot-platform/PRODUCT/updates.json` from that file on first installation
 only. Reinstallation and updates preserve the machine’s existing configuration.
-For example, tray and automatic dryers use separate `paint_tray_dry.json` and
-`paint_auto_dry.json`, and separate installed product config directories. Replace
+For example, tray and automatic dryers own separate `storage/update_source.json` files, and separate installed product config directories. Replace
 the example URLs and provision the public key before enabling remote updates.
 
 Existing Paint installations retain their legacy flat config and installation
@@ -236,7 +236,7 @@ language is stored with external settings.
 
 ## Configure the update source
 
-The installer creates `~/.config/robot-platform/paint-robot/updates.json` only if absent.
+The platform-only installer creates `~/.config/robot-platform/PRODUCT/updates.json` only if absent.
 Updates never replace it. See `config/updates.example.json` for all options.
 `ROBOT_PLATFORM_UPDATE_CONFIG` selects another file for the application; use
 `--config` with the independent CLI/launcher for the same installation.
@@ -252,12 +252,15 @@ Updates never replace it. See `config/updates.example.json` for all options.
 }
 ```
 
-The repository is an HTTPS release directory, not an SVN working-copy URL.
-Your SVN build job exports a fixed source revision, builds/tests the bundle and
-publishes the resulting files. Machines download prebuilt, authenticated releases.
-Credentials do not belong in the URL. This first implementation expects a release
-endpoint accessible without interactive authentication; private endpoints need
-an authentication mechanism added before deployment.
+This platform-only example uses the default `repository_type: "feed"`, an HTTPS
+directory containing ready archives and update metadata. Complete robot releases
+can instead use GitHub or GitLab repository URLs. An SVN source points to a
+versioned feed directory containing the same ready archive/manifest format; it
+does not build source code on the station. Private GitHub/GitLab sources use a
+machine-local `token_file`; SVN uses the station user's cached SVN credentials.
+Credentials do not belong in the URL or bundle. See
+[per-system update sources](../../docs/robot_systems/update_sources.md) for provider
+fields, optional GitLab API roots, trust settings and existing-station migration.
 
 ## Local-folder update testing
 

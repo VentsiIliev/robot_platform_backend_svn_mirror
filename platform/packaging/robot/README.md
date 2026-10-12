@@ -46,7 +46,7 @@ before adding them to the gate. ROS package unit tests and lazy-screen construct
 checks are not included yet; backend builds retain their existing relocation and
 package-discovery checks. Frozen self-tests do not replace machine acceptance.
 
-## Publish to SVN and Gitea
+## Publish to SVN and GitHub
 
 After setting the desired versions in `config/platform.json` and committing the
 source changes, run from `platform/`:
@@ -55,22 +55,22 @@ source changes, run from `platform/`:
 .venv/bin/python -B packaging/robot/release_robot.py publish
 ```
 
-The target defaults to `robot_system`. `--remote` defaults to `gitea-test`; its
-push URL must identify the Gitea HTTP(S) repository. `--notes-file /path/to/notes.md`
-optionally supplies release notes. Create a Gitea access token with repository
-write and user-read access. The command prompts for it without echoing, or reads
-`GITEA_TOKEN` for unattended runs. The token is used for both API calls and Git
+The target defaults to `robot_system`. `--remote` defaults to `github-svn-mirror`; its
+push URL must identify a GitHub repository through HTTPS or the usual GitHub SSH URL. `--notes-file /path/to/notes.md`
+optionally supplies release notes. Create a GitHub access token with repository
+contents read/write access. The command prompts for it without echoing, or reads
+`GITHUB_TOKEN` for unattended runs. The token is used for both API calls and Git
 push authentication, and is not written to the stage report or command arguments.
 SVN credentials must already be available or entered at its normal prompt.
 
 The publication action:
 
-1. Requires a clean `master` work branch and checks access to the configured Gitea repository.
+1. Requires a clean `master` work branch and checks access to the configured GitHub repository.
 2. Runs `git svn dcommit` for all pending commits before packaging records source identity.
 3. Runs the release tests, builds missing pinned components, and assembles the robot archive, or verifies an existing archive of the selected version.
 4. Verifies the archive through the temporary installation and frozen self-test.
-5. Creates/verifies exact component and robot tags, then atomically pushes `master` and only those tags to Gitea, without force.
-6. Creates a Gitea draft release on the robot tag, uploads the combined archive, SHA256 file, and manifest, and publishes it only after all uploads complete.
+5. Creates/verifies exact component and robot tags, then atomically pushes `master` and only those tags to GitHub, without force.
+6. Creates a GitHub draft release on the robot tag, uploads the combined archive, SHA256 file, and manifest, and publishes it only after all uploads complete.
 
 Notes include the SVN revision and component versions. This publishes one combined
 robot release; component tags are pushed, but separate component release pages
@@ -81,8 +81,7 @@ If an upload fails, rerun `publish` with the same versions. The existing archive
 is verified again; existing remote attachments are downloaded and compared by
 SHA256 before being reused. Different artifacts, conflicting tags, or incomplete
 already-published releases fail without overwriting them. Uploads stream from
-disk rather than loading the entire archive into memory. Gitea's attachment limits
-must accommodate the robot archive. Failed source synchronization, tests, builds,
+disk rather than loading the entire archive into memory. GitHub's per-asset size limit must accommodate the robot archive. Failed source synchronization, tests, builds,
 or pushes stop the workflow; SVN publication cannot be rolled back automatically
 if a later stage fails.
 
@@ -141,14 +140,14 @@ systemctl --user status robot-update-paint_tray_dry.service
 journalctl --user -u robot-update-paint_tray_dry.service -n 80 --no-pager
 ```
 
-`updates.json` is seeded only on first installation and preserved thereafter.
-A `repository_type` of `gitea` selects complete robot release attachments;
-`feed` reads `stable/latest.json` and the referenced archive. Private Gitea
+`updates.json` is seeded from the selected system-owned `storage/update_source.json` only on first installation and preserved thereafter. See [per-system sources](../../docs/robot_systems/update_sources.md).
+A `repository_type` of `github` or `gitlab` selects complete robot release attachments;
+`feed` and `svn` read `stable/latest.json` and the referenced archive. Legacy `gitea` remains supported for existing stations. Private GitHub/GitLab
 repositories require a machine-local `token_file`. Never embed credentials in
 archives or source. Plain HTTP needs explicit `allow_insecure_http`; use it only
 for the trusted LAN/test setup. Signed sources use the configured public key.
 
 The VM test feed uses `http://10.0.2.2:8768/`, served on the host from
-`platform/dist/install-tests/complete-updates/`. It is independent of Gitea.
+`platform/dist/install-tests/complete-updates/`. It is independent of GitHub.
 The VM test successfully updated 1.0.6 to 1.0.7; real robot hardware acceptance
 remains separate. Mutable settings and update-source configuration are preserved.

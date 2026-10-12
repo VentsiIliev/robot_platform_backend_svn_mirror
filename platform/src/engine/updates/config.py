@@ -39,6 +39,7 @@ class UpdateConfig:
     repository_type: str = 'feed'
     allow_insecure_http: bool = False
     token_file: Path | None = None
+    api_url: str | None = None
 
     @property
     def local_repository(self) -> Path | None:
@@ -62,8 +63,17 @@ class UpdateConfig:
         parsed = urlparse(repository)
         local = Path(repository).is_absolute()
         repository_type = raw.get('repository_type', 'feed')
-        if repository_type not in ('feed', 'gitea'):
-            raise ValueError('repository_type must be feed or gitea')
+        if repository_type not in ('feed', 'gitea', 'github', 'gitlab', 'svn'):
+            raise ValueError('repository_type must be feed, gitea, github, gitlab or svn')
+        if repository_type == 'github':
+            from .github_source import repository_api
+            repository_api(repository)
+        api_url = raw.get('api_url')
+        if api_url is not None and (not isinstance(api_url, str) or repository_type != 'gitlab'):
+            raise ValueError('api_url is an optional GitLab API base URL')
+        if repository_type == 'gitlab':
+            from .gitlab_source import repository_api
+            repository_api(repository, api_url)
         insecure = raw.get('allow_insecure_http', False)
         if not isinstance(insecure, bool):
             raise ValueError('allow_insecure_http must be a boolean')
@@ -98,7 +108,7 @@ class UpdateConfig:
             if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
                 raise ValueError(f"{name} must be a positive integer")
             limits[name] = value
-        return cls(root.resolve(), repository.rstrip("/") + "/", key,
+        return cls(root.resolve(), repository.rstrip("/") + "/" if repository else "", key,
                    raw.get("product", "paint-robot"), raw.get("channel", "stable"), enabled,
                    repository_type=repository_type, allow_insecure_http=insecure,
-                   token_file=token_file, **limits)
+                   token_file=token_file, api_url=api_url, **limits)

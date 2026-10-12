@@ -1,8 +1,8 @@
 {
-  "paint": {"product": "paint-robot", "robot_system": "paint", "profile": "default", "storage_system": "paint", "packages": ["paint"]},
-  "paint_tray_dry": {"product": "paint-tray-dry-robot", "robot_system": "paint_tray_dry", "profile": "tray_dryer", "storage_system": "paint_tray_dry", "packages": ["paint", "paint_tray_dry"]},
-  "paint_auto_dry": {"product": "paint-auto-dry-robot", "robot_system": "paint_auto_dry", "profile": "automatic_dryer", "storage_system": "paint_auto_dry", "packages": ["paint", "paint_auto_dry"]},
-  "glue": {"product": "glue-robot", "robot_system": "glue", "profile": "default", "storage_system": "glue", "packages": ["glue"]},
-  "twin_robot": {"product": "twin-robot", "robot_system": "twin_robot", "profile": "default", "storage_system": "twin_robot", "packages": ["twin_robot"]},
-  "welding": {"product": "welding-robot", "robot_system": "welding", "profile": "default", "storage_system": "welding", "packages": ["welding"]}
+  "paint": {"product": "paint-robot", "robot_system": "paint", "profile": "default", "storage_system": "paint", "packages": ["paint"], "update_source": "src/robot_systems/paint/storage/update_source.json"},
+  "paint_tray_dry": {"product": "paint-tray-dry-robot", "robot_system": "paint_tray_dry", "profile": "tray_dryer", "storage_system": "paint_tray_dry", "packages": ["paint", "paint_tray_dry"], "update_source": "src/robot_systems/paint_tray_dry/storage/update_source.json"},
+  "paint_auto_dry": {"product": "paint-auto-dry-robot", "robot_system": "paint_auto_dry", "profile": "automatic_dryer", "storage_system": "paint_auto_dry", "packages": ["paint", "paint_auto_dry"], "update_source": "src/robot_systems/paint_auto_dry/storage/update_source.json"},
+  "glue": {"product": "glue-robot", "robot_system": "glue", "profile": "default", "storage_system": "glue", "packages": ["glue"], "update_source": "src/robot_systems/glue/storage/update_source.json"},
+  "twin_robot": {"product": "twin-robot", "robot_system": "twin_robot", "profile": "default", "storage_system": "twin_robot", "packages": ["twin_robot"], "update_source": "src/robot_systems/twin_robot/storage/update_source.json"},
+  "welding": {"product": "welding-robot", "robot_system": "welding", "profile": "default", "storage_system": "welding", "packages": ["welding"], "update_source": "src/robot_systems/welding/storage/update_source.json"}
 }

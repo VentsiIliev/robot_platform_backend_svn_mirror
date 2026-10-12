@@ -318,6 +318,14 @@ are stored as one paint segment while preserving the matching and pickup referen
 - [../../pivot_painting_reference.md](../../pivot_painting_reference.md)
 - [../paint_process_refactor_review.md](../paint_process_refactor_review.md)
 
+## Update source
+
+This system owns [storage/update_source.json](../../../src/robot_systems/paint/storage/update_source.json),
+selected through its `update_source` entry in `config/release_targets.json`.
+The checked-in seed uses `feed` with remote updates disabled; existing station
+`updates.json` files are preserved. See [per-system source configuration](../update_sources.md)
+for URLs, authentication, trust and migration.
+
 <!-- source-navigation:start -->
 ## Source navigation
 

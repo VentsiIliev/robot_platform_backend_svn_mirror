@@ -20,6 +20,23 @@ spec.loader.exec_module(targets)
 
 
 class ReleaseTargetTests(unittest.TestCase):
+    def test_update_source_can_be_omitted_for_system_without_remote_updates(self):
+        source = targets.load_update_source({'product': 'custom-robot'})
+        self.assertFalse(source['enabled'])
+
+    def test_system_owned_sources_are_independent_and_cannot_cross_packages(self):
+        with tempfile.TemporaryDirectory() as folder, patch.object(targets, 'ROOT', Path(folder)):
+            for name in ('first', 'second'):
+                path = Path(folder) / 'src/robot_systems' / name / 'storage/update_source.json'
+                path.parent.mkdir(parents=True)
+                path.write_text(json.dumps({'product': name, 'repository_url': f'https://github.com/owner/{name}',
+                                            'repository_type': 'github', 'enabled': False}))
+                target = {'product': name, 'robot_system': name, 'update_source': str(path.relative_to(folder))}
+                self.assertEqual(targets.load_update_source(target)['repository_url'], f'https://github.com/owner/{name}')
+                target['robot_system'] = 'other'
+                with self.assertRaisesRegex(ValueError, 'selected robot system'):
+                    targets.load_update_source(target)
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
@@ -75,6 +92,9 @@ class ReleaseTargetTests(unittest.TestCase):
                 self.assertNotIn(target["product"], products)
                 products.add(target["product"])
                 config = load_startup_config(self.directory / name / "platform.json")
+                seed = json.loads((self.directory / name / 'update-source' / f'{name}.json').read_text())
+                self.assertEqual(seed['product'], target['product'])
+                self.assertEqual(seed, json.loads((ROOT / target['update_source']).read_text()))
                 provider = load_bootstrap_provider(config)
                 self.assertEqual((name,), config.supported_robot_systems)
                 self.assertIn(provider.system_class.__module__.split(".")[2], target["packages"])
@@ -89,18 +109,15 @@ class ReleaseTargetTests(unittest.TestCase):
         self.assertTrue(all(path.name == "updates.json" for path in paths))
 
     def test_each_target_has_its_own_matching_source_configuration(self):
-        repositories = set()
         for name, target in json.loads(targets.CATALOG.read_text()).items():
             with self.subTest(target=name):
-                source = json.loads((ROOT / "config/update_sources" / f"{name}.json").read_text())
+                source = targets.load_update_source(targets.load_target(name))
                 self.assertEqual(target["product"], source["product"])
-                self.assertNotIn(source["repository_url"], repositories)
-                repositories.add(source["repository_url"])
                 if name == "paint_tray_dry":
                     self.assertTrue(source["enabled"])
-                    self.assertEqual(source["repository_type"], "gitea")
+                    self.assertEqual(source["repository_type"], "github")
                     self.assertEqual(source["repository_url"],
-                                     "http://192.168.222.112:3000/plproject/25488_ZeroErr_test")
+                                     "https://github.com/VentsiIliev/robot_platform_backend_svn_mirror")
                     self.assertTrue(source["allow_insecure_http"])
                 else:
                     self.assertFalse(source["enabled"])

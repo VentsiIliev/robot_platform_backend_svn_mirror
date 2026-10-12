@@ -306,3 +306,15 @@ def load_target(name: str) -> dict
 ```python
 def prepare_target(name: str, destination: Path) -> dict
 ```
+
+Copies the selected system's startup configuration, target identity, factory
+defaults and update-source declaration into build resources.
+
+### `load_update_source`
+
+```python
+def load_update_source(target: dict) -> dict
+```
+
+Reads the target's system-owned JSON declaration, validates package confinement
+and product identity, or returns a disabled source when no path is declared.

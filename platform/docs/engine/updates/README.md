@@ -55,14 +55,44 @@ user manager; the installer does not enable user lingering.
 
 ## Update sources and trust
 
-`UpdateConfig` selects `feed` or `gitea` via `repository_type`. A feed supplies
-`stable/latest.json` and its referenced archive; Gitea supplies complete robot
-release attachments. Private Gitea sources use a machine-local `token_file`.
+Each RobotSystem owns its source declaration in
+`src/robot_systems/SYSTEM/storage/update_source.json`. Its entry in
+`config/release_targets.json` names that file via `update_source`; omitting the
+entry disables remote updates for that target. Packaging includes only the
+selected system's declaration and validates its product identity. No robot's
+repository URL is built into engine. See the
+[per-system setup guide](../../robot_systems/update_sources.md).
+
+`UpdateConfig` selects `feed`, `github`, `gitlab`, `svn`, or legacy `gitea` via
+`repository_type`. A feed supplies `stable/latest.json` and its referenced
+archive. GitHub and GitLab discover published complete releases tagged
+`SYSTEM/robot/vVERSION`, ignoring other systems and component/support releases.
+GitLab links must name `manifest.json`, its optional signature, and the archive;
+its URL supports nested groups and an optional same-server `api_url` ending in
+`/api/v4` for installations under a subpath. GitHub/GitLab private sources use a
+machine-local `token_file`; API tokens are stripped on cross-origin redirects.
+Legacy Gitea configurations remain readable for existing installations.
+
+SVN is a versioned feed containing the same files as a normal feed, read with
+`svn cat --non-interactive`. It requires the SVN client and the service user's
+existing credential cache/trusted server certificate. Tokens in `token_file`
+are not SVN passwords. SVN reads enforce size limits and an overall download
+timeout; set `timeout_seconds` to suit archive transfer time. The client never
+automatically accepts an untrusted certificate or prompts for credentials.
 Absolute local feed folders support testing. HTTP requires explicit
 `allow_insecure_http`; signed sources use the configured public key. Downloads
 and extracted archives have size limits, identity validation and checksum checks.
 Robot extraction permits only confined archive links required by bundled backend
 libraries; platform-only extraction retains its own stricter format rules.
+
+New tray-dryer bundles point to the SVN-backed GitHub mirror. Existing station
+`updates.json` files are preserved: migrate `repository_type` and `repository_url`
+there explicitly, retain the trusted public-key path, and replace any old Gitea
+token with the appropriate GitHub token. A complete robot archive and manifest
+must be published before GitHub can offer an update. The source mirror and
+RustDesk releases alone are not complete robot releases. The existing tray-dryer
+development seed retains its explicit unsigned-update opt-in; provision a public
+key and disable that opt-in for signed production updates.
 
 Remote support has a separate trust boundary: initial/maintenance provisioning
 installs a root-owned helper and `/etc/robot-remote-support.json`, pinning its

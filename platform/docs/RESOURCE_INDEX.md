@@ -8,7 +8,7 @@ Runtime snapshots and dated workpieces are data, not importable modules. Their d
 |---|---|---:|
 | `config` | [Resources](config/RESOURCES.md) | 3 |
 | `config/factory_defaults` | [Resources](config/factory_defaults/RESOURCES.md) | 6 |
-| `config/update_sources` | [Resources](config/update_sources/RESOURCES.md) | 6 |
+| `src/robot_systems/*/storage/update_source.json` | [Resources](config/update_sources/RESOURCES.md) | 6 |
 | `packaging` | [Resources](packaging/RESOURCES.md) | 7 |
 | `packaging/platform/paint_config` | [Resources](packaging/platform/paint_config/RESOURCES.md) | 1 |
 | `packaging/platform` | [Resources](packaging/platform/RESOURCES.md) | 3 |

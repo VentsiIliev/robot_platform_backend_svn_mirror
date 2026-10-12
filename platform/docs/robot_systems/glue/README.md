@@ -384,6 +384,14 @@ The calibration service now refreshes both `robot/calibration.json` and `robot/c
 
 → Subpackages: [settings/](settings/README.md) · [dashboard/](dashboard/README.md) · [glue_settings/](glue_settings/README.md) · [processes/](processes/README.md) · [targeting/](targeting/README.md) · [navigation/](navigation/README.md) · [domain/](domain/README.md) · [motor/](motor/README.md)
 
+## Update source
+
+This system owns [storage/update_source.json](../../../src/robot_systems/glue/storage/update_source.json),
+selected through its `update_source` entry in `config/release_targets.json`.
+The checked-in seed uses `feed` with remote updates disabled; existing station
+`updates.json` files are preserved. See [per-system source configuration](../update_sources.md)
+for URLs, authentication, trust and migration.
+
 <!-- source-navigation:start -->
 ## Source navigation
 

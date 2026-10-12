@@ -6,6 +6,14 @@ The provider applies only this package's configuration overrides; its override m
 
 Release identity is `paint-tray-dry-robot`, profile `tray_dryer`, with shared `paint` and this variant packaged together. `config/platform.json` currently selects this variant; that selection is a checkout value, not a universal default. See [shared paint](../paint/README.md), [tray allocation](../paint/processes/paint/tray_dry/README.md) and [configuration](../../config/README.md).
 
+## Update source
+
+This system owns [storage/update_source.json](../../../src/robot_systems/paint_tray_dry/storage/update_source.json),
+selected through its `update_source` entry in `config/release_targets.json`.
+The checked-in seed uses `github` with remote updates enabled; existing station
+`updates.json` files are preserved. See [per-system source configuration](../update_sources.md)
+for URLs, authentication, trust and migration.
+
 <!-- source-navigation:start -->
 ## Source navigation
 

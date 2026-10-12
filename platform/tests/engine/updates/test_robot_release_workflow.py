@@ -114,14 +114,14 @@ class RobotReleaseWorkflowTests(unittest.TestCase):
         stages = []
         with (patch.object(workflow, 'Workflow', return_value=self.workflow),
               patch.object(workflow.common, 'source_identity'),
-              patch.object(workflow.subprocess, 'check_output', side_effect=['master\n', 'http://gitea.test/admin/robot.git\n']),
-              patch.object(workflow, 'GiteaPublisher') as publisher,
+              patch.object(workflow.subprocess, 'check_output', side_effect=['master\n', 'git@github.com:owner/robot.git\n']),
+              patch.object(workflow, 'GitHubPublisher') as publisher,
               patch.object(self.workflow, 'run', side_effect=lambda *a, **kw: stages.append('svn')),
               patch.object(self.workflow, 'tests', side_effect=lambda: stages.append('tests')),
               patch.object(self.workflow, 'build', side_effect=lambda: stages.append('build')),
               patch.object(self.workflow, 'verify', side_effect=lambda: stages.append('verify')),
               patch.object(self.workflow, 'publish', side_effect=lambda *a: stages.append('publish')),
-              patch.dict(os.environ, {'GITEA_TOKEN': 'private-token'}),
+              patch.dict(os.environ, {'GITHUB_TOKEN': 'private-token'}),
               patch.object(sys, 'argv', ['release_robot.py', 'publish', self.target])):
             publisher.return_value.request.return_value = {'permissions': {'push': True}}
             workflow.main()
@@ -132,12 +132,12 @@ class RobotReleaseWorkflowTests(unittest.TestCase):
         import subprocess
         with (patch.object(workflow, 'Workflow', return_value=self.workflow),
               patch.object(workflow.common, 'source_identity'),
-              patch.object(workflow.subprocess, 'check_output', side_effect=['master\n', 'http://gitea.test/admin/robot.git\n']),
-              patch.object(workflow, 'GiteaPublisher') as publisher,
+              patch.object(workflow.subprocess, 'check_output', side_effect=['master\n', 'git@github.com:owner/robot.git\n']),
+              patch.object(workflow, 'GitHubPublisher') as publisher,
               patch.object(self.workflow, 'run', side_effect=subprocess.CalledProcessError(1, ['git', 'svn', 'dcommit'])),
               patch.object(self.workflow, 'tests') as tests,
               patch.object(self.workflow, 'publish') as publish,
-              patch.dict(os.environ, {'GITEA_TOKEN': 'private-token'}),
+              patch.dict(os.environ, {'GITHUB_TOKEN': 'private-token'}),
               patch.object(sys, 'argv', ['release_robot.py', 'publish', self.target])):
             publisher.return_value.request.return_value = {'permissions': {'push': True}}
             with self.assertRaises(SystemExit):
@@ -148,9 +148,9 @@ class RobotReleaseWorkflowTests(unittest.TestCase):
     def test_actions_rejects_source_without_svn_revision_before_network(self):
         with (patch.object(workflow, 'Workflow', return_value=self.workflow),
               patch.object(workflow.common, 'source_identity', return_value={'source_svn_revision': None}),
-              patch.object(workflow, 'GiteaPublisher') as publisher,
+              patch.object(workflow, 'GitHubPublisher') as publisher,
               patch.object(self.workflow, 'run') as run,
-              patch.dict(os.environ, {'GITEA_TOKEN': 'private-token'}),
+              patch.dict(os.environ, {'GITHUB_TOKEN': 'private-token'}),
               patch.object(sys, 'argv', ['release_robot.py', 'publish', self.target, '--svn-synced'])):
             with self.assertRaises(SystemExit):
                 workflow.main()

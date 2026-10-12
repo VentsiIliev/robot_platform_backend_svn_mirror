@@ -1,7 +1,7 @@
 {
   "enabled": true,
-  "repository_type": "gitea",
-  "repository_url": "http://192.168.222.112:3000/plproject/25488_ZeroErr_test",
+  "repository_type": "github",
+  "repository_url": "https://github.com/VentsiIliev/robot_platform_backend_svn_mirror",
   "allow_insecure_http": true,
   "public_key": null,
   "product": "paint-tray-dry-robot",

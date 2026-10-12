@@ -16,7 +16,7 @@ sys.path.insert(0, str(PLATFORM / 'packaging/shared'))
 sys.path.insert(0, str(ROBOT))
 import release_common as common
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from gitea_release import GiteaPublisher
+from github_release import GitHubPublisher
 
 TESTS = (
     'tests.bootstrap.test_startup_config',
@@ -25,6 +25,10 @@ TESTS = (
     'tests.engine.updates.test_release_targets',
     'tests.engine.updates.test_robot_release_workflow',
     'tests.engine.updates.test_gitea_release',
+    'tests.engine.updates.test_github_release',
+    'tests.engine.updates.test_github_source',
+    'tests.engine.updates.test_gitlab_source',
+    'tests.engine.updates.test_svn_source',
     'tests.engine.updates.test_robot_updates',
     'tests.engine.updates.test_update_service',
     'tests.engine.updates.test_remote_support_updates',
@@ -97,15 +101,15 @@ class Workflow:
         if not manifest.get('source_svn_revision'):
             raise ValueError('Official release must record an SVN revision; rebuild after SVN publication')
         url = subprocess.check_output(['git', 'remote', 'get-url', '--push', remote], cwd=common.ROOT, text=True).strip()
-        publisher = GiteaPublisher(url, token)
+        publisher = GitHubPublisher(url, token)
         self.run('Create/verify exact release tags', [sys.executable, '-B', ROBOT / 'tag_robot.py', self.target], cwd=common.ROOT)
         tags = [f'{self.target}/{kind}/v{identity["version"]}' for kind, identity in {**manifest['components'], 'robot': manifest}.items()]
-        with tempfile.TemporaryDirectory(prefix='gitea-auth-') as temporary:
+        with tempfile.TemporaryDirectory(prefix='github-auth-') as temporary:
             askpass = Path(temporary) / 'askpass.py'
-            askpass.write_text('#!' + sys.executable + '\nimport os, sys\nprint(os.environ["GITEA_USERNAME"] if "username" in sys.argv[1].lower() else os.environ["GITEA_TOKEN"])\n')
+            askpass.write_text('#!' + sys.executable + '\nimport os, sys\nprint(os.environ["GITHUB_USERNAME"] if "username" in sys.argv[1].lower() else os.environ["GITHUB_TOKEN"])\n')
             askpass.chmod(0o700)
             env = {**self.env, 'GIT_ASKPASS': str(askpass), 'GIT_TERMINAL_PROMPT': '0',
-                   'GITEA_USERNAME': publisher.username(), 'GITEA_TOKEN': token}
+                   'GITHUB_USERNAME': publisher.username(), 'GITHUB_TOKEN': token}
             self.run('Push source and release tags', ['git', '-c', 'credential.helper=', 'push', '--atomic', remote, 'HEAD:refs/heads/master', *['refs/tags/' + tag for tag in tags]], cwd=common.ROOT, env=env)
         release_url = publisher.publish(directory, manifest, notes, common.digest)
         self.report['release_url'] = release_url
@@ -146,9 +150,9 @@ class Workflow:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=('check', 'build', 'verify', 'publish'), help='publish: SVN sync, tests, build/reuse, verify, tags, Gitea release')
+    parser.add_argument('action', choices=('check', 'build', 'verify', 'publish'), help='publish: SVN sync, tests, build/reuse, verify, tags, GitHub release')
     parser.add_argument('target', nargs='?', help='Defaults to robot_system in platform.json')
-    parser.add_argument('--remote', default='gitea-test', help='Gitea Git remote for publication')
+    parser.add_argument('--remote', default='github-svn-mirror', help='GitHub Git remote for publication')
     parser.add_argument('--notes-file', type=Path, help='Optional release notes; otherwise generated from the manifest')
     parser.add_argument('--signing-key', type=Path, help='Sign manifest.json for trusted remote robot updates')
     parser.add_argument('--svn-synced', action='store_true', help='Actions mode: require SVN revision metadata instead of running git svn dcommit')
@@ -164,25 +168,25 @@ def main():
         token = None
         notes = args.notes_file.read_text() if args.notes_file else f'Combined {target} robot release {selected["release_version"]}.'
         if args.action == 'publish':
-            token = os.environ.get('GITEA_TOKEN')
+            token = os.environ.get('GITHUB_TOKEN')
             if not token:
                 import getpass
-                token = getpass.getpass('Gitea access token (repository write access): ')
+                token = getpass.getpass('GitHub access token (repository write access): ')
             if not token:
-                raise ValueError('Gitea access token is required')
+                raise ValueError('GitHub access token is required')
             identity = common.source_identity()
             if args.svn_synced and not identity['source_svn_revision']:
-                raise ValueError('Actions requires source published to SVN first; push the SVN-generated commit to Gitea')
+                raise ValueError('Actions requires source published to SVN first; push the SVN-generated commit to GitHub')
             branch = subprocess.check_output(['git', 'branch', '--show-current'], cwd=common.ROOT, text=True).strip()
             if branch != 'master':
                 raise ValueError('Publish from the shared master SVN work branch')
             url = subprocess.check_output(['git', 'remote', 'get-url', '--push', args.remote], cwd=common.ROOT, text=True).strip()
-            publisher = GiteaPublisher(url, token)
+            publisher = GitHubPublisher(url, token)
             repository = publisher.request('GET', '')
             if repository is None:
-                raise ValueError('Gitea repository does not exist or token cannot access it')
+                raise ValueError('GitHub repository does not exist or token cannot access it')
             if not repository.get('permissions', {}).get('push'):
-                raise ValueError('Gitea token account needs repository write access')
+                raise ValueError('GitHub token account needs repository write access')
             publisher.username()
             if not args.svn_synced:
                 workflow.run('Publish pending commits to SVN', ['git', 'svn', 'dcommit'], cwd=common.ROOT)

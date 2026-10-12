@@ -245,11 +245,11 @@ if '--self-test' not in sys.argv and os.environ.get('UPDATE_TEST_LOG'):
         with self.assertRaisesRegex(ValueError, 'configured server'):
             _HttpsRedirect(True).redirect_request(request, None, 302, 'redirect', {}, 'http://other.test/file')
 
-    def test_packaged_gitea_source_can_seed_new_install(self):
-        raw = json.loads((ROOT / 'config/update_sources/paint_tray_dry.json').read_text())
+    def test_packaged_github_source_can_seed_new_install(self):
+        raw = json.loads((ROOT / 'src/robot_systems/paint_tray_dry/storage/update_source.json').read_text())
         raw['install_root'] = str(self.root)
         path = self.directory / 'updates.json'
         atomic_json(path, raw)
         config = UpdateConfig.load(path)
         self.assertTrue(config.enabled)
-        self.assertEqual(config.repository_type, 'gitea')
+        self.assertEqual(config.repository_type, 'github')

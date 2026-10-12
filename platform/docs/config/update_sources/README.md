@@ -1,13 +1,8 @@
-# `config/update_sources`
+# Former central update-source configuration
 
-This page follows the source directory. The reference below records its modules and contracts; follow child guides for nested implementations.
+The JSON declarations have moved into each RobotSystem package at
+`src/robot_systems/SYSTEM/storage/update_source.json`. Build targets point to
+these files via `update_source` in `config/release_targets.json`.
 
-[Parent guide](../README.md).
-
-<!-- source-navigation:start -->
-## Source navigation
-
-[Resource reference](RESOURCES.md) — non-Python files and their formats; values remain in the owning storage/source files.
-
-[Complete source index](../../SOURCE_INDEX.md).
-<!-- source-navigation:end -->
+See [per-system source configuration](../../robot_systems/update_sources.md)
+for provider URLs, machine-owned settings and migration.

@@ -8,7 +8,11 @@ Source directory: [src/engine/updates](../../../src/engine/updates/).
 | `updater.py` | Discovery, staging, offline activation, recovery and rollback |
 | `releases.py` | Platform manifest validation, extraction and release identity |
 | `robot_releases.py` | Exact platform/backend selection validation and robot archive extraction |
-| `gitea_source.py` | Complete robot release discovery from Gitea attachments |
+| `repository_releases.py` | Shared complete-release selection and manifest verification |
+| `github_source.py` | GitHub repository release discovery and confined asset URLs |
+| `gitlab_source.py` | GitLab project release links, nested groups and custom API roots |
+| `svn_source.py` | Bounded, non-interactive SVN feed reads with cached station credentials |
+| `gitea_source.py` | Compatibility discovery for existing Gitea station configurations |
 | `service.py` | Local IPC client, per-user daemon and offline backend-stop/activation loop |
 | `service_install.py` | User systemd unit installation and service marker |
 | `remote_support.py` | Literal release configuration parsing and installed package version reconciliation |

@@ -12,7 +12,7 @@ Every Python file is parsed without executing it, including vendor code, demos a
 | `bootstrap` | [Guide](environment_bootstrap/README.md) | 0 |
 | `config` | [Guide](config/README.md) | 0 |
 | `config/factory_defaults` | [Guide](config/factory_defaults/README.md) | 0 |
-| `config/update_sources` | [Guide](config/update_sources/README.md) | 0 |
+| `src/robot_systems/*/storage/update_source.json` | [Guide](robot_systems/update_sources.md) | 0 |
 | `packaging` | [Guide](packaging/README.md) | 2 |
 | `packaging/platform/paint_config` | [Guide](packaging/platform/paint_config/README.md) | 0 |
 | `packaging/platform` | [Guide](packaging/platform/README.md) | 9 |
