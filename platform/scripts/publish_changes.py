@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Commit selected changes, publish through SVN, then push to Gitea and GitLab.
+"""Commit selected changes, publish through SVN, then push to the GitHub SVN mirror.
 
 Run from this checkout (paths are relative to your current directory):
   python3 platform/scripts/publish_changes.py --all -m "Describe the change"
@@ -144,7 +144,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--all", action="store_true", help="Stage all tracked/untracked changes across the repository")
     parser.add_argument("--resume", action="store_true", help="Publish existing commits; do not stage or create a commit")
     parser.add_argument("--dry-run", action="store_true", help="Display changes/commands without modifying any repository")
-    parser.add_argument("--remote", action="append", help="Git push remote; repeat for multiple (default: gitea-test and gitlab-test)")
+    parser.add_argument("--remote", action="append", help="Git push remote; repeat for multiple (default: github-svn-mirror)")
     parser.add_argument("paths", nargs="*", help="Files/directories to stage, relative to the current directory")
     args = parser.parse_args(argv)
     if args.resume and (args.message or args.all or args.paths):
@@ -154,7 +154,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     if args.all and args.paths:
         parser.error("choose --all or explicit paths")
     if args.remote is None:
-        args.remote = ["gitea-test", "gitlab-test"]
+        args.remote = ["github-svn-mirror"]
     if any(not remote or remote.startswith("-") for remote in args.remote):
         parser.error("provide a valid remote name")
     return args

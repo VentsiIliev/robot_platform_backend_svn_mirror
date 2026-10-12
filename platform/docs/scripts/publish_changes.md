@@ -1,10 +1,9 @@
-# Publish changes to SVN, Gitea and GitLab
+# Publish changes to SVN and GitHub
 
 `scripts/publish_changes.py` automates the repository's shared `master` workflow:
-stage selected changes → commit → `git svn dcommit` → `git push gitea-test master`
-→ `git push gitlab-test master`.
-Both Git servers receive the SVN-generated `master` history. GitLab’s existing
-`main` and any earlier `gitea-test` branch are unchanged.
+stage selected changes → commit → `git svn dcommit` → `git push github-svn-mirror master`.
+The GitHub destination is https://github.com/VentsiIliev/robot_platform_backend_svn_mirror.
+Gitea and GitLab are no longer default publication destinations.
 It uses standard-library Python and your installed Git/git-svn. Git/SVN prompts
 use your terminal; the script does not store credentials. No deployment or release
 tag is created.
@@ -35,8 +34,7 @@ because SVN publication needs a clean tree. If a partial selection leaves other
 changes, it stops without committing and preserves the selected staging.
 
 If run from `platform/`, use `python3 scripts/publish_changes.py` instead.
-`--remote NAME` overrides the default destinations (`gitea-test` and
-`gitlab-test`). Repeat `--remote` to select multiple destinations. Publication is restricted to the shared `master` branch, including
+`--remote NAME` overrides the default destinations (`github-svn-mirror`). Repeat `--remote` to select multiple destinations. Publication is restricted to the shared `master` branch, including
 an explicit rejection of the protected `run_main.py` branch.
 
 ## Retry an interrupted or failed publication
@@ -46,11 +44,10 @@ python3 platform/scripts/publish_changes.py --resume
 ```
 
 `--resume` creates no commit and stages nothing. It requires a clean tree, runs
-SVN publication and then retries both Git pushes. Use it after fixing credentials,
+SVN publication and then retries the GitHub push. Use it after fixing credentials,
 connectivity or another publication error. A failed Git push after a successful
-SVN commit does not mean SVN failed; SVN is already published. If GitLab fails
-after Gitea succeeds, Gitea is already published too. Retrying with `--resume`
-safely pushes the same history to both servers. Do not rerun the
+SVN commit does not mean SVN failed; SVN is already published. Retrying with `--resume`
+pushes the SVN-generated history to GitHub without creating another commit. Do not rerun the
 commit mode just to retry that push.
 
 SVN publishes **all pending local commits**, not only the newly created commit.
@@ -61,7 +58,7 @@ stashes changes, resolves conflicts or undoes a completed SVN publication.
 
 ## Checks and verification
 
-Preflight verifies branch, SVN tracking/configuration, both Git remotes, installed
+Preflight verifies branch, SVN tracking/configuration, selected Git remotes, installed
 git-svn and absence of an active merge/rebase/cherry-pick/revert. Before committing
 it checks staged whitespace; before/after SVN it checks the clean tree. These are
 publication checks, not application tests: run appropriate project tests before
@@ -70,4 +67,4 @@ invoking it.
 `tests/scripts/test_publish_changes.py` uses disposable local Git repositories
 with simulated SVN/push adapters. It checks ordering, rewritten-head verification,
 dry-run immutability, protected branches, leftover changes, SVN failure, missing remotes and retry
-after either Git push fails. No real repository publication is performed by those tests.
+after a Git push fails. No real repository publication is performed by those tests.
