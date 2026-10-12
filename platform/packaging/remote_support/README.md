@@ -41,6 +41,12 @@ service failure rather than silently rewriting its credentials or configuration.
 
 The packaged vendor installer reads `release.conf` beside its script. Edit that
 file to set `DOWNLOAD_BASE_URL`, `RELEASE`, `PACKAGE` and `EXPECTED_VERSION`.
+The current source and release destination is the SVN-backed GitHub mirror,
+`VentsiIliev/robot_platform_backend_svn_mirror`. The branded RustDesk source lives
+in the sibling `plproject_remote_control/` directory of SVN trunk. The former
+standalone `plproject_remote_support` repository is historical only; its existing
+Linux and Android release assets have been copied to the mirror with SHA-256
+verification. See [source and release notes](../../../plproject_remote_control/SVN_IMPORT.md).
 The download URL is `DOWNLOAD_BASE_URL/RELEASE/PACKAGE`; package verification
 checks the configured expected version. The payload bundles this configuration,
 so changes apply to newly built robot releases. Existing archives and installed
@@ -73,5 +79,8 @@ authentication. The user update service permits this scoped sudo elevation.
 
 Existing installations need one trusted installer maintenance run to provision
 the helper and refresh their user service before automatic package upgrades work.
+Stations whose helper policy still trusts the former standalone repository need
+a trusted maintenance installer run to approve the mirror download source; old
+archives retain their original configuration until rebuilt.
 Remote-support package installation is a machine-wide change: application rollback
 restores platform/backend and data, but does not undo an installed support package.
