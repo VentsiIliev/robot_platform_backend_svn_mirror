@@ -43,6 +43,7 @@ class ModbusSlaveConfig:
     profile_name: str = 'default'
     transport_type: str = 'modbus_register'
     max_retries: int = 30
+    bitwise_register: int = 1
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'ModbusSlaveConfig':
@@ -51,6 +52,7 @@ class ModbusSlaveConfig:
             profile_name=str(data.get('profile_name', 'default')),
             transport_type=str(data.get('transport_type', 'modbus_register')),
             max_retries=int(data.get('max_retries', 30)),
+            bitwise_register=int(data.get('bitwise_register', 1)),
         )
 
     def to_dict(self) -> Dict[str, Any]:

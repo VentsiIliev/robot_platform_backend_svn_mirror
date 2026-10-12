@@ -43,6 +43,14 @@ class TransportRegistry:
     def build_for_slave(self, config: ModbusConfig, slave_name: str) -> IRegisterTransport:
         slave = config.get_slave(slave_name)
         connection = config.get_connection(slave_name)
+        if slave.transport_type == 'modbus_bitwise_fc16':
+            from src.engine.hardware.communication.modbus.modbus_bitwise_fc16_transport import ModbusBitwiseFc16Transport
+            return ModbusBitwiseFc16Transport(
+                port=connection.port, slave_address=connection.slave_address,
+                baudrate=connection.baudrate, bytesize=connection.bytesize,
+                stopbits=connection.stopbits, parity=connection.parity,
+                timeout=connection.timeout, holding_register=slave.bitwise_register,
+            )
         return self.get(slave.transport_type).factory(connection)
 
     def build_for_slave_id(self, config: ModbusConfig, slave_id: int) -> IRegisterTransport:
@@ -50,6 +58,7 @@ class TransportRegistry:
 
 
 def build_default_transport_registry() -> TransportRegistry:
+    from src.engine.hardware.communication.modbus.modbus_bitwise_fc16_transport import ModbusBitwiseFc16Transport
     from src.engine.hardware.communication.modbus.modbus_register_transport import (
         ModbusRegisterTransport,
     )
@@ -61,6 +70,14 @@ def build_default_transport_registry() -> TransportRegistry:
     )
 
     registry = TransportRegistry()
+    registry.register(TransportDescriptor(
+        key='modbus_bitwise_fc16',
+        label='Modbus bit outputs (FC16 holding register)',
+        factory=lambda c: ModbusBitwiseFc16Transport(
+            port=c.port, slave_address=c.slave_address, baudrate=c.baudrate,
+            bytesize=c.bytesize, stopbits=c.stopbits, parity=c.parity, timeout=c.timeout,
+        ),
+    ))
     registry.register(TransportDescriptor(
         key="modbus_register",
         label="Standard Modbus Registers",

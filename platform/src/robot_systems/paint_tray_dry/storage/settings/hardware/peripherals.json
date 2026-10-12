@@ -43,12 +43,12 @@
     "enabled": true,
     "slave_id": 10,
     "inputs": {
-      "start": "X1",
-      "pause": "X0"
+      "start": 9,
+      "pause": 10
     },
     "outputs": {
-      "start": "Y0",
-      "pause": "Y1"
+      "start": 9,
+      "pause": 10
     },
     "commands": {
       "start_on": 1,
@@ -79,13 +79,16 @@
     "statuses": {}
   },
   "operator_lights": {
-    "enabled": false,
-    "slave_id": 0,
+    "enabled": true,
+    "slave_id": 10,
     "inputs": {},
-    "outputs": {},
+    "outputs": {
+      "light_9": 1,
+      "light_10": 1
+    },
     "commands": {
-      "on": 1,
-      "off": 0
+      "light_9_bit": 9,
+      "light_10_bit": 10
     },
     "statuses": {}
   }
