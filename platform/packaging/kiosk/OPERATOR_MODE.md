@@ -93,6 +93,29 @@ An accepted close follows the existing cleanup path: the robot system is stopped
 and the managed ROS backend is stopped according to its configuration. This has
 not been commissioned on hardware. The mode does not replace the emergency stop.
 
+## Planned maintenance with automatic login
+
+With automatic login enabled, a successful kiosk exit logs out normally and GDM
+immediately starts the kiosk session again. This is the expected production
+recovery behavior. Before using the kiosk password to enter a maintenance
+session, first connect through SSH and disable automatic and timed login:
+
+```bash
+ssh pl_user@ROBOT_IP
+sudo auto_login.sh off
+```
+
+Then use the kiosk exit control and the shared kiosk password. The clean exit
+returns to the GDM login screen and stays there, where the maintenance account
+must authenticate. Restore normal unattended startup after maintenance:
+
+```bash
+sudo auto_login.sh on pl_user
+```
+
+Changing the GDM setting does not terminate the current session. Do not use the
+operator account password as the kiosk exit password.
+
 ## Ubuntu session deployment still required
 
 The application flag alone does not restrict GNOME shortcuts, virtual consoles,

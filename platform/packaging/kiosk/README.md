@@ -6,6 +6,10 @@ and timed login, or `sudo auto_login.sh on` to enable automatic login for the
 saved GDM account. `sudo auto_login.sh on pl_user` selects an explicit account.
 Changes apply on the next login/reboot; no session is stopped. This does not
 change the selected GNOME session or any packaged application settings.
+For planned maintenance, run the `off` command over SSH before entering the
+shared kiosk exit password. Otherwise GDM immediately logs the operator back in
+and the platform reopens, which is the intended unattended recovery behavior.
+After maintenance, run `sudo auto_login.sh on pl_user` to restore normal startup.
 
 Run these steps on the target Ubuntu machine with GDM3 and an existing non-root
 account. The installer uses GNOME Kiosk's X11 session, matching the existing
