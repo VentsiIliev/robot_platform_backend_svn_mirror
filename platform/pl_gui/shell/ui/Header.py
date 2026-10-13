@@ -25,6 +25,7 @@ DASHBOARD_BUTTON_ICON_PATH: str = os.path.join(RESOURCE_DIR, "pl_ui_icons", "DAS
 class Header(QFrame):
     user_account_clicked = pyqtSignal()
     power_off_requested = pyqtSignal()
+    help_requested = pyqtSignal()
     fps_updated = pyqtSignal(float)  # Signal to emit updated FPS values
 
     def __init__(
@@ -93,6 +94,32 @@ class Header(QFrame):
         )
         self.remote_support_badge.hide()
         self.header_layout.addWidget(self.remote_support_badge)
+
+        # Context-sensitive application help. AppShell shows this only when the
+        # active application exposes an onboarding tour.
+        self.help_button: QPushButton = QPushButton()
+        self.help_button.setIcon(load_icon("fa5s.question", color=PRIMARY))
+        self.help_button.setFixedSize(48, 48)
+        self.help_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.help_button.setStyleSheet(f"""
+            QPushButton {{
+                background: white;
+                border: 1px solid {BORDER};
+                border-radius: 8px;
+                padding: 0px;
+            }}
+            QPushButton:hover {{
+                border: 2px solid {PRIMARY};
+                background-color: rgba(122, 90, 248, 0.08);
+            }}
+            QPushButton:pressed {{
+                background-color: rgba(122, 90, 248, 0.14);
+                border: 2px solid {PRIMARY_DARK};
+            }}
+        """)
+        self.help_button.clicked.connect(self._on_help_clicked)
+        self.help_button.hide()
+        self.header_layout.addWidget(self.help_button)
 
         # Platform shutdown button. Runtime wiring decides whether it is visible.
         self.power_toggle_button: QPushButton = QPushButton()
@@ -190,8 +217,14 @@ class Header(QFrame):
     def _on_power_off_clicked(self) -> None:
         self.power_off_requested.emit()
 
+    def _on_help_clicked(self) -> None:
+        self.help_requested.emit()
+
     def retranslateUi(self) -> None:
         self.power_toggle_button.setToolTip(self.tr("Turn Off Platform"))
+        help_text = self.tr("Take a tour") or "Take a tour"
+        self.help_button.setToolTip(help_text)
+        self.help_button.setAccessibleName(help_text)
         source = "Remote session active"
         translated = self.tr(source) or source
         self.remote_support_badge.setToolTip(translated)
@@ -216,6 +249,7 @@ class Header(QFrame):
 
         self.menu_button.setIconSize(QSize(icon_size, icon_size))
         self.power_toggle_button.setIconSize(QSize(26, 26))
+        self.help_button.setIconSize(QSize(26, 26))
         self.dashboardButton.setIconSize(QSize(icon_size, icon_size))
         self.userAccountButton.setIconSize(QSize(26, 26))
         super().resizeEvent(event)

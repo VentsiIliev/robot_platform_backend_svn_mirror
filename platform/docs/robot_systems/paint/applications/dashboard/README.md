@@ -20,6 +20,7 @@ Process Status details show "Waiting for paint stopping to finish." during clean
 | `assets/` | [assets](assets/README.md) |
 | `controller/` | [controller](controller/README.md) |
 | `model/` | [model](model/README.md) |
+| `onboarding/` | [onboarding](onboarding/README.md) |
 | `service/` | [service](service/README.md) |
 | `ui/` | [ui](ui/README.md) |
 | `view/` | [view](view/README.md) |
@@ -30,3 +31,44 @@ Process Status details show "Waiting for paint stopping to finish." during clean
 ## Navigation guard
 
 Leaving is blocked while paint is running, paused or stopping, or finite dashboard workers are pending. The process query reads lifecycle state without hardware I/O. Camera feeds and continuous monitoring are excluded. Stop unlocks navigation only after production and hardware-stop workers finish.
+
+## Operator onboarding tour
+
+The Paint Dashboard opts into the shared onboarding capability through
+`PaintDashboardView.start_onboarding_tour()`. While the dashboard is active, the
+shell header displays a question-mark button. Hiding or cleaning up the dashboard
+stops its window-level overlay.
+
+Paint-owned steps live in
+`applications/dashboard/onboarding/paint_dashboard_tour.py`; shared rendering and
+navigation live in `src/applications/base/onboarding/`. The shell has no dependency
+on paint code.
+
+The tour covers:
+
+1. Welcome — centered, with no spotlight
+2. Tray and camera view
+3. Drying Duration
+4. Drying Time for the selected workpiece
+5. Number of Passes
+6. Process Scaling
+7. Pass Speed
+8. Resolved Velocity and Acceleration
+9. Press Offset
+10. Apply All
+11. Paint Control
+12. Machine controls
+13. Run controls
+14. Status and messages
+
+Optional hidden targets are skipped. `PaintDashboardView.onboarding_target()`
+routes stable logical IDs to `PaintPlateLayout`, `PaintControlsDrawer`, and the
+dashboard panels, avoiding translated-text lookup and layout-index coupling.
+
+The tour is modal. Operators can stop it with the touch-sized top-right close
+button, Skip, or Escape. Back and Next/Finish are touch-sized, and arrow-key
+navigation remains available.
+
+Card text uses the `PaintDashboardOnboarding` translation context. English entries
+currently live in `storage/translations/en.json`; adding matching source keys to
+another language catalog localizes the tour without Python changes.

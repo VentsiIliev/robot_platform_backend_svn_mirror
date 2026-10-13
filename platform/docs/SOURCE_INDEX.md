@@ -53,6 +53,7 @@ Every Python file is parsed without executing it, including vendor code, demos a
 | `src/applications/aruco_z_probe/view` | [Guide](applications/aruco_z_probe/view/README.md) | 2 |
 | `src/applications/base` | [Guide](applications/base/README.md) | 24 |
 | `src/applications/base/config` | [Guide](applications/base/config/README.md) | 1 |
+| `src/applications/base/onboarding` | [Guide](applications/base/onboarding/README.md) | 3 |
 | `src/applications/base/resources` | [Guide](applications/base/resources/README.md) | 0 |
 | `src/applications/base/widgets` | [Guide](applications/base/widgets/README.md) | 4 |
 | `src/applications/broker_debug` | [Guide](applications/broker_debug/README.md) | 3 |
@@ -465,6 +466,7 @@ Every Python file is parsed without executing it, including vendor code, demos a
 | `src/robot_systems/paint/applications/dashboard/assets` | [Guide](robot_systems/paint/applications/dashboard/assets/README.md) | 0 |
 | `src/robot_systems/paint/applications/dashboard/controller` | [Guide](robot_systems/paint/applications/dashboard/controller/README.md) | 1 |
 | `src/robot_systems/paint/applications/dashboard/model` | [Guide](robot_systems/paint/applications/dashboard/model/README.md) | 1 |
+| `src/robot_systems/paint/applications/dashboard/onboarding` | [Guide](robot_systems/paint/applications/dashboard/onboarding/README.md) | 2 |
 | `src/robot_systems/paint/applications/dashboard/service` | [Guide](robot_systems/paint/applications/dashboard/service/README.md) | 3 |
 | `src/robot_systems/paint/applications/dashboard/ui` | [Guide](robot_systems/paint/applications/dashboard/ui/README.md) | 7 |
 | `src/robot_systems/paint/applications/dashboard/view` | [Guide](robot_systems/paint/applications/dashboard/view/README.md) | 1 |

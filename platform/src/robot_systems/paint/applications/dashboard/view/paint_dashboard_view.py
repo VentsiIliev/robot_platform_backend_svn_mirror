@@ -58,6 +58,9 @@ from src.robot_systems.paint.applications.dashboard.ui.paint_quick_access_panel 
     PaintQuickAccessPanel,
 )
 from src.robot_systems.paint.applications.dashboard.config import PaintDashboardUiConfig
+from src.robot_systems.paint.applications.dashboard.onboarding import (
+    build_paint_dashboard_tour,
+)
 
 
 _MAX_MESSAGE_ROWS = 50
@@ -282,6 +285,7 @@ class PaintDashboardView(IApplicationView):
         self._status_flyout_note: QLabel | None = None
         self._status_flyout_animation: QPropertyAnimation | None = None
         self._active_status_card = None
+        self._onboarding_tour = None
         super().__init__("PaintDashboard", parent)
 
     @property
@@ -473,7 +477,41 @@ class PaintDashboardView(IApplicationView):
         self.camera_feed_visible.emit(self.is_camera_feed_visible())
         self.dashboard_shown.emit()
 
+    def start_onboarding_tour(self) -> None:
+        """Capability used by the shell's context-sensitive help button."""
+        if self._onboarding_tour is None:
+            self._onboarding_tour = build_paint_dashboard_tour(self)
+        self._onboarding_tour.start()
+
+    def onboarding_target(self, target_id: str) -> QWidget | None:
+        """Resolve stable logical tour targets without exposing layout positions."""
+        if target_id in {"drying_duration", "drying_time", "tray_canvas"}:
+            resolver = getattr(self._plate_layout, "onboarding_target", None)
+            return resolver(target_id) if callable(resolver) else None
+        if target_id in {
+            "pass_count",
+            "process_scaling",
+            "speed",
+            "resolved_speed",
+            "press_offset",
+            "apply_all",
+            "paint_control",
+        }:
+            resolver = getattr(self._settings_widget, "onboarding_target", None)
+            return resolver(target_id) if callable(resolver) else None
+        targets = {
+            "dashboard": getattr(self, "_dashboard", None),
+            "tray": self._preview_stack or self._expanded_tabs or self._plate_layout,
+            "paint_settings": self._quick_controls or self._settings_panel,
+            "machine_controls": self._quick_access,
+            "process_controls": getattr(getattr(self, "_dashboard", None), "control_buttons", None),
+            "status": self._status_rail or self._message_panel,
+        }
+        return targets.get(target_id)
+
     def hideEvent(self, event) -> None:
+        if self._onboarding_tour is not None:
+            self._onboarding_tour.stop()
         self.camera_feed_visible.emit(False)
         super().hideEvent(event)
 
@@ -1737,4 +1775,7 @@ class PaintDashboardView(IApplicationView):
         return translated.format(**values)
 
     def clean_up(self) -> None:
-        pass
+        if self._onboarding_tour is not None:
+            self._onboarding_tour.stop()
+            self._onboarding_tour.deleteLater()
+            self._onboarding_tour = None

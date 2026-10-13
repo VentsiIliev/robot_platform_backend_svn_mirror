@@ -6,6 +6,62 @@ It also contains reusable UI infrastructure that is safe to share across applica
 
 ---
 
+## Reusable onboarding tours
+
+**Package:** `src/applications/base/onboarding/`
+
+Applications can opt into context-sensitive onboarding with the shared
+`OnboardingTour` overlay. The shared component owns presentation and lifecycle:
+
+- a full-window modal veil and optional rounded spotlight
+- collision-aware card placement around the highlighted widget
+- touch-sized Back, Next/Finish, and close controls
+- Skip, Escape, and left/right keyboard navigation
+- dot progress, focus restoration, and accessible progress/close text
+- automatic omission of targets that are absent, hidden, or zero-sized
+- translated-on-display labels through an injected translator
+
+The application owns its step text and target resolution. Keep those definitions
+beside the application rather than putting application terminology in the shared
+module:
+
+```python
+from PyQt6.QtCore import QCoreApplication
+
+from src.applications.base.onboarding import OnboardingStep, OnboardingTour
+
+
+def build_my_tour(view) -> OnboardingTour:
+    return OnboardingTour(
+        host_provider=view.window,
+        steps=(
+            OnboardingStep(
+                target=lambda: view.onboarding_target("editor"),
+                title="Editor",
+                body="Configure the item here.",
+            ),
+        ),
+        translator=lambda source: (
+            QCoreApplication.translate("MyOnboarding", source) or source
+        ),
+        parent=view,
+    )
+```
+
+The root application view opts into the shell header action by exposing
+`start_onboarding_tour()`. `AppShell` detects this method on the active widget; no
+application registration or robot-system-specific shell branch is required.
+
+Use logical target IDs and public target resolvers on composite widgets. Do not
+search by translated button text or depend on layout indexes. Stop the tour from
+`hideEvent()` and `clean_up()` so a window-level overlay cannot survive navigation.
+Use `spotlight=False` for a centered introduction that dims the entire host.
+
+Tour strings are localization-ready through the injected translator. Adding a
+language requires catalog entries under the same Qt context, not Python changes.
+
+---
+
 ## Class Hierarchy
 
 ```
@@ -479,6 +535,7 @@ Schema-based forms built through `KeyboardSettingsView` or `build_with_keyboard_
 | Source subdirectory | Guide |
 |---|---|
 | `config/` | [config](config/README.md) |
+| `onboarding/` | [onboarding](onboarding/README.md) |
 | `resources/` | [resources](resources/README.md) |
 | `widgets/` | [widgets](widgets/README.md) |
 

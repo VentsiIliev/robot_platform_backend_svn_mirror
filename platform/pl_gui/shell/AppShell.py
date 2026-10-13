@@ -132,6 +132,7 @@ class AppShell(QWidget):
 
         self.stacked_widget.addWidget(app_widget)
         self.stacked_widget.setCurrentIndex(1)
+        self._update_onboarding_action(app_widget)
         return app_widget
 
     @staticmethod
@@ -197,6 +198,7 @@ class AppShell(QWidget):
 
         self.current_running_app = None
         self.current_app_folder = None
+        self._update_onboarding_action(None)
 
         # Go back to folders page
         self.stacked_widget.setCurrentIndex(0)
@@ -235,6 +237,7 @@ class AppShell(QWidget):
         self.header.menu_button.setVisible(False)
         self.header.dashboardButton.setVisible(False)
         self.header.power_toggle_button.setVisible(False)
+        self.header.help_requested.connect(self._start_current_app_onboarding)
         # self.header.user_account_clicked.connect(self.show_session_info_widget)
 
         machine_toolbar_frame = QFrame()
@@ -260,6 +263,16 @@ class AppShell(QWidget):
 
         # Setup keyboard shortcuts
         # self.setup_keyboard_shortcuts()
+
+    def _start_current_app_onboarding(self) -> None:
+        widget = self.running_widgets.get(self.current_running_app)
+        start_tour = getattr(widget, "start_onboarding_tour", None)
+        if callable(start_tour):
+            start_tour()
+
+    def _update_onboarding_action(self, widget: QWidget | None) -> None:
+        start_tour = getattr(widget, "start_onboarding_tour", None)
+        self.header.help_button.setVisible(callable(start_tour))
 
     def create_folders_page(self):
         """Create and configure the folders page from AppDescriptors"""

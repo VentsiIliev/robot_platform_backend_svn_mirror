@@ -301,6 +301,15 @@ class PaintPlateLayout(QWidget):
         else:
             self._render_selection_metadata()
 
+    def onboarding_target(self, target_id: str) -> QWidget | None:
+        """Return stable, named targets used by the dashboard tour."""
+        targets = {
+            "drying_duration": self._drying_duration_box,
+            "drying_time": self._selected_drying_box,
+            "tray_canvas": self._canvas,
+        }
+        return targets.get(target_id)
+
     def set_editable(
         self,
         editable: bool,

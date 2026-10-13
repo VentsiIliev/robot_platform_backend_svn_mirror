@@ -397,6 +397,19 @@ class PaintControlsDrawer(QWidget):
         root.addWidget(self._scroll, 1)
         self.retranslateUi()
 
+    def onboarding_target(self, target_id: str) -> QWidget | None:
+        """Return stable, named targets used by the dashboard tour."""
+        targets = {
+            "pass_count": getattr(self, "_pass_count_box", self._pass_count_row),
+            "process_scaling": self._acceleration_scale_box,
+            "speed": self._velocity_row,
+            "resolved_speed": self._pass_1_resolved_speed,
+            "press_offset": self._offset_row,
+            "apply_all": self._unmatched_apply,
+            "paint_control": self._paint_head_box,
+        }
+        return targets.get(target_id)
+
     def _apply_compact_layout(self) -> None:
         self._unmatched_box.setMinimumHeight(300)
         summary = QWidget()

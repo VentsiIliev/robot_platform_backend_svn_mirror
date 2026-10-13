@@ -788,6 +788,48 @@ if __name__ == "__main__":
 
 ---
 
+## Optional — Add a context-sensitive onboarding tour
+
+Use `src.applications.base.onboarding.OnboardingTour` when an application needs a
+guided, touchscreen-friendly introduction. Keep the reusable overlay generic and
+put step definitions beside the owning application.
+
+The application view must expose `start_onboarding_tour()`. `AppShell` detects that
+capability on the active widget and shows the header help button automatically;
+applications without it do not show the action.
+
+Targets should be resolved by stable logical IDs:
+
+```python
+def onboarding_target(self, target_id: str) -> QWidget | None:
+    return {
+        "editor": self._editor,
+        "save": self._save_button,
+    }.get(target_id)
+```
+
+Build the tour with callable targets so widgets are resolved when a step is shown:
+
+```python
+OnboardingStep(
+    target=lambda: view.onboarding_target("editor"),
+    title="Editor",
+    body="Configure the item here.",
+)
+```
+
+Rules:
+
+- do not search targets by translated text or layout position
+- use `spotlight=False` for a centered introductory card
+- stop the tour in `hideEvent()` and `clean_up()`
+- add all step and navigation strings to the owning translation context/catalog
+- verify hidden optional targets are skipped
+- keep the tour modal unless a separately reviewed workflow explicitly permits
+  interaction with highlighted robot controls
+
+---
+
 ## Critical Rules Summary
 
 | Rule | Why |
@@ -830,3 +872,4 @@ if __name__ == "__main__":
 - [ ] Step 11 — Settings dataclass + serializer declared (if needed)
 - [ ] Step 12 — `WidgetApplication` + factory function wired into robot app via `ApplicationSpec`
 - [ ] Step 13 — Standalone runner works with `StubMyService`
+- [ ] Optional — onboarding uses shared `OnboardingTour`, stable targets, cleanup, and catalogs
