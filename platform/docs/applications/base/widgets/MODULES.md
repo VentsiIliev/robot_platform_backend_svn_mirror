@@ -8,6 +8,7 @@ Generated from Python ASTs. Signatures, declared defaults, imports and docstring
 
 - [card_checkbox.py](#card_checkboxpy)
 - [custom_virtual_keyboard.py](#custom_virtual_keyboardpy)
+- [fluid_progress.py](#fluid_progresspy)
 - [keyboard_number_field.py](#keyboard_number_fieldpy)
 - [virtual_keyboard_widget_factory.py](#virtual_keyboard_widget_factorypy)
 
@@ -130,6 +131,20 @@ Directly declared public methods and constructor (inherited methods are document
 ```python
 def mousePressEvent(self, event: QMouseEvent) -> None
 ```
+
+## `fluid_progress.py`
+
+Source: [src/applications/base/widgets/fluid_progress.py](../../../../src/applications/base/widgets/fluid_progress.py).
+
+Native PyQt6 determinate/indeterminate progress indicators using the shared
+platform palette. Public widgets are `InkBar`, `PlumeLine`, and `Vessel`, all
+derived from `FluidProgress`.
+
+```python
+def create_fluid_progress(style: str="plume", parent=None) -> FluidProgress
+```
+
+Supported styles are `"ink"`, `"plume"`, and `"vessel"`.
 
 ## `keyboard_number_field.py`
 

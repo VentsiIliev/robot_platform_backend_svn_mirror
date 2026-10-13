@@ -35,7 +35,8 @@ excluded = [f"src.robot_systems.{path.name}" for path in (ROOT / "src/robot_syst
 analysis = Analysis([str(ROOT / "packaging/platform/platform_entrypoint.py")], pathex=[str(ROOT)],
                     binaries=[], datas=datas,
                     hiddenimports=[f"src.robot_systems.{target['robot_system']}.bootstrap_provider",
-                                   "src.applications.network_settings.build_application"],
+                                   "src.applications.network_settings.build_application",
+                                   "src.applications.base.widgets.fluid_progress"],
                     hookspath=[], hooksconfig={}, runtime_hooks=[], excludes=excluded,
                     noarchive=False, optimize=0)
 pyz = PYZ(analysis.pure)

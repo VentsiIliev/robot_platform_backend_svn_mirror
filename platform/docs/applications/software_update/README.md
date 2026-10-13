@@ -21,6 +21,13 @@ Checks run in the background and the button is disabled while an operation runs.
 Download remains disabled until updates are enabled; installation requires a
 staged release and the existing production-state gate.
 
+While downloading and verifying, the view displays the shared fluid progress
+widget in indeterminate mode because the updater service does not currently
+publish byte-level progress. `SoftwareUpdateView.PROGRESS_WIDGET_STYLE` selects
+the visual in one place and defaults to `"plume"`; `"ink"` and `"vessel"` are
+drop-in alternatives. A successful download leaves the indicator at 100%, while
+a failed download hides and resets it.
+
 The same screen supports absolute local release directories for trusted testing,
 or signed HTTPS feeds for remote updates. Both paths preserve machine data and
 validate release identity/checksums before staging. See the local-feed example in
@@ -29,8 +36,9 @@ the packaging guide.
 Every explicitly requested check presents its completed result in an information
 dialog (new version or up to date), or a critical dialog when the check fails.
 The status line retains the same result. Request/completion/failure logs help
-diagnose signal or worker issues. Frozen self-tests exercise the Check button and
-background result callback without hardware or interactive dialogs.
+diagnose signal or worker issues. Frozen self-tests exercise the Check button,
+background result callback, selected update indicator, and every packaged fluid
+progress variant without hardware or interactive dialogs.
 
 <!-- source-navigation:start -->
 ## Source navigation

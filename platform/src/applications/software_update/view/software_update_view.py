@@ -1,11 +1,13 @@
 from PyQt6.QtCore import QEvent, Qt, pyqtSignal
 from PyQt6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QMessageBox
 from src.applications.base.i_application_view import IApplicationView
+from src.applications.base.widgets.fluid_progress import create_fluid_progress
 from pl_gui.settings.settings_view.styles import BG_COLOR, TEXT_COLOR, APP_PAGE_TITLE_STYLE, ACTION_BTN_STYLE, GHOST_BTN_STYLE
 
 
 class SoftwareUpdateView(IApplicationView):
     SHOW_JOG_WIDGET = False
+    PROGRESS_WIDGET_STYLE = "plume"
     check_requested = pyqtSignal()
     download_requested = pyqtSignal()
     install_requested = pyqtSignal()
@@ -28,6 +30,8 @@ class SoftwareUpdateView(IApplicationView):
         self._details.setWordWrap(True)
         self._description = QLabel()
         self._description.setWordWrap(True)
+        self._progress = create_fluid_progress(self.PROGRESS_WIDGET_STYLE, self)
+        self._progress.setVisible(False)
         self._status = QLabel()
         self._status.setTextFormat(Qt.TextFormat.PlainText)
         self._status.setWordWrap(True)
@@ -42,7 +46,7 @@ class SoftwareUpdateView(IApplicationView):
         self._check.clicked.connect(self._on_check)
         self._download.clicked.connect(self._on_download)
         self._install.clicked.connect(self._on_install)
-        for widget in (self._title, self._details, self._description, self._check, self._download, self._install, self._status):
+        for widget in (self._title, self._details, self._description, self._progress, self._check, self._download, self._install, self._status):
             layout.addWidget(widget)
         layout.addStretch()
         self._install.setEnabled(False)
@@ -59,6 +63,14 @@ class SoftwareUpdateView(IApplicationView):
         self._check.setEnabled(not busy)
         self._download.setEnabled(not busy and enabled)
         self._install.setEnabled(not busy and staged)
+
+    def set_download_progress(self, active: bool, complete: bool = False):
+        self._progress.setVisible(active or complete)
+        self._progress.set_waiting(active)
+        self._progress.set_running(active)
+        self._progress.set_progress(100 if complete else 0)
+        if not active and not complete:
+            self._progress.reset()
 
     def set_status(self, source, **arguments):
         self._status_source = source

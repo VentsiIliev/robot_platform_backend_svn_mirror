@@ -123,7 +123,9 @@ Installed layout:
 
 The separate `robot-update-paint_tray_dry.service` runs in the desktop user's
 systemd manager. The Software Update screen sends it check, download and queue
-requests. It verifies and stages the complete release, waits until the platform
+requests. While the service downloads and verifies the archive, the screen shows
+an indeterminate fluid progress indicator; the service does not yet expose byte
+progress. It verifies and stages the complete release, waits until the platform
 exits, stops the bundled backend, and switches both components together. The
 stable launcher waits for activation and reopens the platform. This service
 requires a running user manager; no system-wide daemon or user lingering is

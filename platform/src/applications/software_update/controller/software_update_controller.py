@@ -54,6 +54,7 @@ class SoftwareUpdateController(IApplicationController, BackgroundWorker):
         self._run(self._model.check, self._checked, "Checking for updates…", checking=True)
 
     def _download(self):
+        self._view.set_download_progress(True)
         self._run(self._model.download, self._downloaded, "Downloading and verifying update…")
 
     def _install(self):
@@ -81,6 +82,7 @@ class SoftwareUpdateController(IApplicationController, BackgroundWorker):
         if self._stopped:
             return
         self._busy = False
+        self._view.set_download_progress(False, complete=True)
         self.load()
         self._view.set_status("Version {version} is ready to install", version=result["version"])
 
@@ -88,6 +90,8 @@ class SoftwareUpdateController(IApplicationController, BackgroundWorker):
         if self._stopped:
             return
         self._busy = False
+        if not self._checking:
+            self._view.set_download_progress(False)
         self._actions()
         self._view.set_error(message)
         self._logger.warning("Update operation failed: %s", message)

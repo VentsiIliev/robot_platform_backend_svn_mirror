@@ -40,6 +40,14 @@ class TestPaintPackagingProfile(unittest.TestCase):
         self.assertIn('allowed = set(target["packages"])', script)
         self.assertIn("Other robot system bundled", script)
 
+    def test_fluid_progress_widget_is_explicitly_packaged_and_self_tested(self):
+        spec = (PACKAGING_ROOT / "platform.spec").read_text(encoding="utf-8")
+        entrypoint = (PACKAGING_ROOT / "platform_entrypoint.py").read_text(encoding="utf-8")
+
+        self.assertIn('"src.applications.base.widgets.fluid_progress"', spec)
+        self.assertIn('for style in ("ink", "plume", "vessel")', entrypoint)
+        self.assertIn('type(view._progress).__name__ != "PlumeLine"', entrypoint)
+
 
 def _literal_assignments(path: Path) -> dict[str, object]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))

@@ -41,6 +41,7 @@ def self_test():
     from src.bootstrap.startup_config import load_startup_config, load_bootstrap_provider
     from src.applications.software_update.software_update_factory import SoftwareUpdateFactory
     from src.applications.software_update.service.stub_software_update_service import StubSoftwareUpdateService
+    from src.applications.base.widgets.fluid_progress import create_fluid_progress
     from src.engine.localization.localization_service import LocalizationService
 
     from src.bootstrap.run_main import main as _run_platform
@@ -51,6 +52,15 @@ def self_test():
     target = json.loads((resource_root / "config/release-target.json").read_text())
     load_factory_defaults(resource_root, target)
     app = QApplication([])
+    # Exercise all selectable progress variants so packaging cannot silently
+    # omit a style that is not currently selected by the update view.
+    for style in ("ink", "plume", "vessel"):
+        progress = create_fluid_progress(style)
+        progress.resize(360, progress.height())
+        progress.set_waiting(True)
+        progress.set_running(True)
+        progress.grab()
+        progress.deleteLater()
     from PyQt6.QtGui import QPixmap
     from src.applications.login.view.login_view import _LOGO_PATH, _MACHINE_IMAGE_PATH
     for asset in (_LOGO_PATH, _MACHINE_IMAGE_PATH):
@@ -67,6 +77,8 @@ def self_test():
     localization = LocalizationService(str(catalog), state_file=str(Path(temporary.name) / "language.json"))
     localization.set_language("bg")
     view = SoftwareUpdateFactory().build(StubSoftwareUpdateService())
+    if type(view._progress).__name__ != "PlumeLine":
+        raise RuntimeError("Bundled update progress widget selection is incorrect")
     if view._title.text() != "Актуализация на софтуера":
         raise RuntimeError("Bundled Bulgarian update catalog missing")
     localization.set_language("en")

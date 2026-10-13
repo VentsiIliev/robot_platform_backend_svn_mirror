@@ -359,7 +359,10 @@ Downloads/migrations that fail leave the previous release and live data intact.
 A failed GUI exit leaves a queued update unapplied.
 
 The result is recorded in `update-state/result.json` and displayed when the Update
-screen next opens. If activation fails, the launcher reopens the previous platform. The frozen self-test verifies imports, resources and Qt before staging. Runtime
+screen next opens. During download and verification, that screen uses the shared
+fluid progress indicator in indeterminate mode. If activation fails, the launcher
+reopens the previous platform. The frozen self-test verifies imports, resources,
+Qt, and every selectable fluid progress widget before staging. Runtime
 health monitoring and automatic rollback on a later GUI startup failure are not implemented; use
 explicit recovery/rollback. Production rollout still requires testing a real
 bundle on a clean target machine with its GUI/hardware dependencies.

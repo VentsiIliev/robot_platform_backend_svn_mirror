@@ -46,10 +46,21 @@ class SoftwareUpdateTests(unittest.TestCase):
             return original()
         with patch.object(self.service, "download", side_effect=download):
             self.view._download.click()
+            self.assertFalse(self.view._progress.isHidden())
+            self.assertTrue(self.view._progress.waiting)
+            self.assertTrue(self.view._progress.running)
             self.wait_done()
         self.assertNotEqual(gui_thread, threads[0])
         self.assertTrue(self.view._install.isEnabled())
         self.assertIn("1.1.0", self.view._details.text())
+        self.assertFalse(self.view._progress.running)
+        self.assertEqual(100, self.view._progress.progress)
+
+    def test_progress_style_is_selected_in_one_place(self):
+        from src.applications.base.widgets.fluid_progress import PlumeLine
+
+        self.assertEqual("plume", self.view.PROGRESS_WIDGET_STYLE)
+        self.assertIsInstance(self.view._progress, PlumeLine)
 
     def test_install_schedules_and_does_not_quit_application(self):
         self.view._controller._downloaded(self.service.download())
