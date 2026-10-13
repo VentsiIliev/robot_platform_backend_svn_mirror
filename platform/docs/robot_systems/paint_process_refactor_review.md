@@ -488,7 +488,7 @@ Files to inspect:
 
 - `src/robot_systems/paint/processes/paint/workpiece_path_executor.py`
 - `src/robot_systems/paint/processes/paint/pivot_projection.py`
-- `src/robot_systems/paint/processes/paint/config.py`
+- `src/robot_systems/paint/processes/paint/configuration/models.py`
 - `src/engine/robot/path_preparation/default_workpiece_path_preparation_service.py`
 - `src/robot_systems/paint/domain/paint_workpiece_editor_adapter.py`
 - `src/robot_systems/paint/domain/contour_editor_schema.py`

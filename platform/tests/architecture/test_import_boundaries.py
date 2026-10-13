@@ -44,7 +44,7 @@ _LEGACY_VIOLATIONS = {
     ),
     ImportViolation(
         "src/applications/workpiece_editor/controller/workpiece_editor_controller.py",
-        "src.robot_systems.paint.processes.paint.config",
+        "src.robot_systems.paint.processes.paint.configuration.models",
     ),
     ImportViolation(
         "src/applications/workpiece_editor/editor_core/adapters/workpiece_adapter.py",

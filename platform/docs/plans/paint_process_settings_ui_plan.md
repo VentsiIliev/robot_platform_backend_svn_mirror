@@ -7,7 +7,7 @@
 Create a standalone MVC application for configuring the Paint process knobs that currently live in:
 
 ```text
-src/robot_systems/paint/processes/paint/config.py
+src/robot_systems/paint/processes/paint/configuration/models.py
 ```
 
 The screen must follow the existing application architecture, use the same visual style as the rest of the platform, support localization from the start, persist values through the established settings system, and update the running Paint process without requiring a full system restart.
@@ -36,8 +36,8 @@ Implemented files include:
 
 ```text
 src/robot_systems/paint/applications/paint_process_settings/
-src/robot_systems/paint/processes/paint/paint_process_config_serializer.py
-src/robot_systems/paint/processes/paint/paint_process_config_service.py
+src/robot_systems/paint/processes/paint/configuration/serializer.py
+src/robot_systems/paint/processes/paint/configuration/service.py
 ```
 
 The current runtime rule is:
@@ -201,7 +201,7 @@ PaintProcessConfigService
 Suggested location:
 
 ```text
-src/robot_systems/paint/processes/paint/paint_process_config_service.py
+src/robot_systems/paint/processes/paint/configuration/service.py
 ```
 
 Both the UI application service and the Paint runtime should depend on this service interface:
@@ -253,7 +253,7 @@ Do not keep using the module-level `PAINT_PROCESS_CONFIG` as the live runtime so
 Add a runtime config service:
 
 ```text
-src/robot_systems/paint/processes/paint/paint_process_config_service.py
+src/robot_systems/paint/processes/paint/configuration/service.py
 ```
 
 Expected responsibility:

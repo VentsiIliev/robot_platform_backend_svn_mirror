@@ -16,8 +16,8 @@ from src.engine.process.process_requirements import ProcessRequirements
 from src.shared_contracts.events.process_events import ProcessState
 from src.engine.system.i_system_manager import ISystemManager
 from src.robot_systems.paint.component_ids import ProcessID
-from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
-from src.robot_systems.paint.processes.paint.incremental_adjustment import (
+from src.robot_systems.paint.processes.paint.configuration.models import PAINT_PROCESS_CONFIG
+from src.robot_systems.paint.processes.paint.adjustment.session import (
     AdjustmentStep,
     PaintAdjustmentSession,
 )

@@ -9,13 +9,13 @@ from src.robot_systems.paint.applications.dashboard.dashboard_state import Dashb
 from src.robot_systems.paint.applications.dashboard.model.paint_dashboard_model import PaintDashboardModel
 from src.robot_systems.paint.applications.dashboard.service.i_paint_dashboard_service import DashboardCommandResult
 from src.robot_systems.paint.applications.dashboard.service.paint_dashboard_service import PaintDashboardService
-from src.robot_systems.paint.processes.paint.config import PaintDropoffConfig, PaintProcessConfig
-from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
-from src.robot_systems.paint.processes.paint.execution_machine.machine_factory import PaintExecutionMachineFactory
-from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
-from src.robot_systems.paint.processes.paint.execution_control import PaintExecutionControl
+from src.robot_systems.paint.processes.paint.configuration.models import PaintDropoffConfig, PaintProcessConfig
+from src.robot_systems.paint.processes.paint.workflow.context import PaintExecutionContext
+from src.robot_systems.paint.processes.paint.workflow.machine_factory import PaintExecutionMachineFactory
+from src.robot_systems.paint.processes.paint.workflow.state import PaintExecutionState
+from src.robot_systems.paint.processes.paint.production.execution_control import PaintExecutionControl
 from src.robot_systems.paint.processes.paint.paint_process import PaintProcess
-from src.robot_systems.paint.processes.paint.paint_production_service import PaintProductionService
+from src.robot_systems.paint.processes.paint.production.service import PaintProductionService
 from src.robot_systems.paint.processes.paint.tray_dry.errors import (
     TrayBusyError, TrayConfirmationRequiredError, TrayErrorCode, TrayLayoutChangedError,
 )
@@ -152,7 +152,7 @@ class TestTrayReadiness(unittest.TestCase):
         production = MagicMock()
         production._path_executor._plate_layout_service = self.layout
         ctx = PaintExecutionContext(production, lambda: False, PaintExecutionControl())
-        with patch('src.robot_systems.paint.processes.paint.execution_machine.machine_factory.handle_prepare_dropoff',
+        with patch('src.robot_systems.paint.processes.paint.workflow.machine_factory.handle_prepare_dropoff',
                    side_effect=TrayLayoutChangedError()):
             machine = PaintExecutionMachineFactory().build(ctx, initial_state=PaintExecutionState.PREPARE_DROPOFF)
             machine.start_execution()

@@ -13,7 +13,7 @@ Generated from Python ASTs. Signatures, declared defaults, imports and docstring
 
 Source: [src/robot_systems/paint/applications/paint_process_settings/view/paint_process_settings_schema.py](../../../../../../src/robot_systems/paint/applications/paint_process_settings/view/paint_process_settings_schema.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `PyQt6.QtCore`, `pl_gui.settings.settings_view.schema`, `src.engine.robot.path_preparation`, `src.robot_systems.paint.processes.paint.config`.
+Imports (including optional/function-local imports; not a startup dependency list): `PyQt6.QtCore`, `pl_gui.settings.settings_view.schema`, `src.engine.robot.path_preparation`, `src.robot_systems.paint.processes.paint.configuration.models`.
 
 ### `_t`
 
@@ -121,7 +121,7 @@ def build_paint_process_settings_tabs(dropoff_strategies: tuple[str, ...]=('move
 
 Source: [src/robot_systems/paint/applications/paint_process_settings/view/paint_process_settings_view.py](../../../../../../src/robot_systems/paint/applications/paint_process_settings/view/paint_process_settings_view.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `PyQt6.QtCore`, `PyQt6.QtWidgets`, `pl_gui.settings.settings_view`, `pl_gui.settings.settings_view.styles`, `pl_gui.settings.settings_view.widget_factory`, `src.applications.base.app_dialog`, `src.applications.base.i_application_view`, `src.applications.base.keyboard_settings_view`, `src.applications.base.styled_message_box`, `src.applications.base.widgets.custom_virtual_keyboard`, `src.robot_systems.paint.applications.paint_process_settings.view.paint_process_settings_schema`, `src.robot_systems.paint.processes.paint.config`.
+Imports (including optional/function-local imports; not a startup dependency list): `PyQt6.QtCore`, `PyQt6.QtWidgets`, `pl_gui.settings.settings_view`, `pl_gui.settings.settings_view.styles`, `pl_gui.settings.settings_view.widget_factory`, `src.applications.base.app_dialog`, `src.applications.base.i_application_view`, `src.applications.base.keyboard_settings_view`, `src.applications.base.styled_message_box`, `src.applications.base.widgets.custom_virtual_keyboard`, `src.robot_systems.paint.applications.paint_process_settings.view.paint_process_settings_schema`, `src.robot_systems.paint.processes.paint.configuration.models`.
 
 ### `_t`
 

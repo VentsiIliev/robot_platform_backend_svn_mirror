@@ -1,0 +1,1 @@
+"""Workpiece painting operations."""

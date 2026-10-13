@@ -5,7 +5,7 @@ from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.engine.vision import IVisionService
 from src.engine.work_areas.i_work_area_service import IWorkAreaService
 from src.robot_systems.paint.timing import timed_step
-from src.robot_systems.paint.processes.paint.config import PaintNavigationReturnConfig
+from src.robot_systems.paint.processes.paint.configuration.models import PaintNavigationReturnConfig
 
 _logger = logging.getLogger(__name__)
 

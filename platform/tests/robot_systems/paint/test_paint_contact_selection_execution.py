@@ -2,14 +2,14 @@ import unittest
 
 import numpy as np
 
-from src.robot_systems.paint.processes.paint.config import PaintSimulationConfig
-from src.robot_systems.paint.processes.paint.execute.paint_contact_executor import (
+from src.robot_systems.paint.processes.paint.configuration.models import PaintSimulationConfig
+from src.robot_systems.paint.processes.paint.operations.painting.executor import (
     _apply_non_paint_clearance,
 )
-from src.robot_systems.paint.processes.paint.plan.paint_contact_motion.source_plan import (
+from src.robot_systems.paint.processes.paint.planning.projection.source_plan import (
     _trim_and_profile_selected_interval,
 )
-from src.robot_systems.paint.processes.paint.plan.paint_contact_motion.core import (
+from src.robot_systems.paint.processes.paint.planning.projection.core import (
     _orient_open_source_path_for_contact_side,
 )
 

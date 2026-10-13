@@ -12,7 +12,7 @@ from src.robot_systems.paint.applications.paint_process_settings.model.paint_pro
 from src.robot_systems.paint.applications.paint_process_settings.view.paint_process_settings_view import (
     PaintProcessSettingsView,
 )
-from src.robot_systems.paint.processes.paint.config import (
+from src.robot_systems.paint.processes.paint.configuration.models import (
     MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN,
     MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
     MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN,

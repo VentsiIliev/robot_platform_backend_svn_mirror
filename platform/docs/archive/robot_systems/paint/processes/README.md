@@ -50,7 +50,7 @@ Important behavior:
 
 ## `PaintProductionService`
 
-**File:** `src/robot_systems/paint/processes/paint/paint_production_service.py`
+**File:** `src/robot_systems/paint/processes/paint/production/service.py`
 
 `PaintProductionService` owns the actual one-cycle production flow:
 
@@ -66,7 +66,7 @@ It is intentionally UI-free. The workpiece editor uses the same lower-level serv
 
 ## Configuration
 
-**File:** `src/robot_systems/paint/processes/paint/config.py`
+**File:** `src/robot_systems/paint/processes/paint/configuration/models.py`
 
 `PAINT_PROCESS_CONFIG` is the single source of truth for platform-side paint-process behavior.
 

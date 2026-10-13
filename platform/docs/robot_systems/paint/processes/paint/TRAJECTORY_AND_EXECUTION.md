@@ -1,18 +1,18 @@
 # Paint planning and execution
 
-Current execution is composed from shared path preparation, paint-specific transfer/contact planning and a business execution machine. The old `execute/pivot_projection/core.py` path is absent.
+Current execution is composed from shared path preparation, paint-specific transfer/contact planning and a business execution machine. The old `operations/pivot_projection/core.py` path is absent.
 
 ## Plans and coordinates
 
 `DefaultWorkpiecePathPreparationService` produces the shared `WorkpieceExecutionPlan` from raw workpiece geometry and targeting context. Its job/pickup/path fields are documented in [path preparation](../../../../engine/robot/path_preparation/README.md). This plan is input to paint-specific motion planning, not a promise that its points are already final robot waypoints.
 
-`PaintPickupTransferPlanner` in `plan/pickup_transfer_planner.py` builds pickup/transfer poses. `plan/paint_contact_motion/source_plan.py` prepares source contact data; `core.py` projects continuous contact motion and supports rebasing initial rotation. `execute/execution_plane/strategies.py` selects plane behavior. Exact axes, offsets, pass tuning and projection defaults are defined by typed configuration and the active snapshot.
+`PaintPickupTransferPlanner` in `planning/pickup/transfer_planner.py` builds pickup/transfer poses. `planning/projection/source_plan.py` prepares source contact data; `core.py` projects continuous contact motion and supports rebasing initial rotation. `planning/projection/planes.py` selects plane behavior. Exact axes, offsets, pass tuning and projection defaults are defined by typed configuration and the active snapshot.
 
-`execute/projection_preview.py` builds editor-facing projected paths/snapshots. Preview is not robot execution; diagnostic figures and cached editor results do not establish successful hardware movement.
+`src/robot_systems/paint/visualization/paint_preview_geometry.py` builds editor-facing projected paths/snapshots through the injected `IPaintPreviewGeometry` contract. Preview is not robot execution; diagnostic figures and cached editor results do not establish successful hardware movement.
 
 ## Execution ownership
 
-`PaintWorkpiecePathExecutor` implements the shared editor path-execution contract and delegates phases to `PaintPickupExecutor`, `PaintMotionExecutor`, `PaintContactExecutor`, `PaintEdgeCleanupExecutor` and `PaintDropoffExecutor`. Its facade also resolves current configuration, poses and preview behavior.
+`PaintWorkpiecePathExecutor` adapts the editor contract to `PaintExecutionRuntime` and an injected preview provider. The runtime composes pickup, shared motion, painting, and cleanup. Dropoff preparation and release delegate to an injected `IDropoffStrategy`; concrete lifecycle strategies live in `operations/dropoff/strategies/`. Route and verification algorithms live in `operations/dropoff/motion.py`.
 
 The production `PaintExecutionMachineFactory` wires handlers for magazine loading, capture, preparation, plan construction, pickup, contact paint, cleanup, dropoff and post-return. `PaintExecutionState` and `PaintExecutionTransitions` define legal business transitions. The legacy `EXECUTE_PAINT` path and the split pickup/contact/dropoff path coexist in the state contract; exact route depends on construction/configuration.
 
@@ -22,7 +22,7 @@ The public process may already be `STOPPED` while production cancellation or the
 
 Plate-layout and automatic-dryer paths have their own destination/release coordination. Reservation, committed occupancy, vacuum release, return motion and dryer readiness are separate operations. See [tray](tray_dry/README.md) and [dryer](auto_dryer/README.md).
 
-For exact APIs/defaults use [plan](plan/README.md), [execute](execute/README.md) and [execution machine](execution_machine/README.md). The [previous projection/order description](../../../../archive/robot_systems/paint/processes/paint/TRAJECTORY_AND_EXECUTION.md) is retained for historical context and must not be used as a fixed execution sequence.
+For exact APIs/defaults use [planning](planning/README.md), [operations](operations/README.md) and [workflow](workflow/README.md). The [previous projection/order description](../../../../archive/robot_systems/paint/processes/paint/TRAJECTORY_AND_EXECUTION.md) is retained for historical context and must not be used as a fixed execution sequence.
 
 ## Motion completion and failures
 

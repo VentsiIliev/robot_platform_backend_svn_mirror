@@ -1,28 +1,29 @@
+from src.robot_systems.paint.processes.paint.operations.dropoff.strategies.movement_group import MovementGroupDropoff
 import math
 import unittest
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from src.engine.robot.motion_sequence import OrderedMotionType, serialize_ordered_motion_commands
 
-from src.robot_systems.paint.processes.paint.config import DropoffStrategy, PaintDropoffConfig
-from src.robot_systems.paint.processes.paint.config import PaintProcessConfig
-from src.robot_systems.paint.processes.paint.next_cycle_target import NextCycleTarget
+from src.robot_systems.paint.processes.paint.configuration.models import DropoffStrategy, PaintDropoffConfig
+from src.robot_systems.paint.processes.paint.configuration.models import PaintProcessConfig
+from src.robot_systems.paint.contracts.next_cycle_target import NextCycleTarget
 from src.robot_systems.paint.applications.paint_process_settings.mapper import PaintProcessSettingsMapper
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler import (
+from src.robot_systems.paint.processes.paint.workflow.handlers.magazine_load.magazine_execute_pickup_release_handler import (
     calculate_workpiece_dropoff_pose,
 )
 from src.robot_systems.paint.processes.paint.tray_dry.plate_layout import (
     PlateLayoutService,
     validate_plate_corners,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler import (
-    _should_preplan_dropoff_in_ordered_chain,
+from src.robot_systems.paint.processes.paint.operations.dropoff.strategies.plate_layout import (
+    PlateLayoutDropoff,
     _paint_pass_metadata,
     _workpiece_footprint_mm,
     _workpiece_layout_geometry,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
+from src.robot_systems.paint.processes.paint.operations.dropoff.strategies.plate_layout import (
     build_plate_entry_segments_for_paint_chain,
     _execute_plate_layout_preparation,
     _execute_plate_layout_ordered_release,
@@ -239,19 +240,23 @@ class TestPlateLayoutDropoff(unittest.TestCase):
 
     def test_plate_dropoff_preparation_is_not_appended_to_pickup_paint_chain(self) -> None:
         executor = MagicMock()
-        executor._paint_process_config.return_value.dropoff.strategy = DropoffStrategy.PLATE_LAYOUT
+        executor._paint_process_config.return_value = PaintProcessConfig(dropoff=PaintDropoffConfig(strategy=DropoffStrategy.PLATE_LAYOUT))
 
-        self.assertFalse(_should_preplan_dropoff_in_ordered_chain(executor))
+        self.assertEqual((), PlateLayoutDropoff(executor).plan_paint_approach(cleanup_pending=False).value.segments)
         executor._edge_cleanup.should_run_after_xz_ry.assert_not_called()
         executor._edge_cleanup.should_run_after_xy_rz.assert_not_called()
 
     def test_existing_dropoff_strategy_keeps_ordered_preparation(self) -> None:
         executor = MagicMock()
-        executor._paint_process_config.return_value.dropoff.strategy = DropoffStrategy.MOVEMENT_GROUP
+        executor._paint_process_config.return_value = PaintProcessConfig()
         executor._edge_cleanup.should_run_after_xz_ry.return_value = False
         executor._edge_cleanup.should_run_after_xy_rz.return_value = False
 
-        self.assertTrue(_should_preplan_dropoff_in_ordered_chain(executor))
+        command = object()
+        with patch('src.robot_systems.paint.processes.paint.operations.dropoff.strategies.movement_group.build_ordered_dropoff_preparation_segments', return_value=([command], [0.0] * 6)):
+            approach = MovementGroupDropoff(executor).plan_paint_approach(cleanup_pending=False).value
+        self.assertEqual((command,), approach.segments)
+        self.assertTrue(approach.prepares_release)
 
     def test_settings_mapper_roundtrips_plate_strategy_and_corners(self) -> None:
         config = PaintProcessConfig(dropoff=PaintDropoffConfig(
@@ -403,7 +408,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         executor._last_process_start_rz = 0.0
         executor._last_process_end_pose = [0, 0, 0, 180, 0, 360.0]
         executor._motion.move_ordered_pickup_sequence.return_value = True
-        executor._motion.turn_vacuum_off.return_value = (True, "")
+        executor._vacuum.turn_vacuum_off.return_value = (True, "")
         executor._enable_vacuum_pump = False
         executor._is_vacuum_pump_enabled.return_value = False
         executor._robot_service.get_execution_status.return_value = {
@@ -427,7 +432,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         ok, message = _execute_plate_layout_ordered_release(executor, next_cycle_start=next_start)
 
         self.assertTrue(ok, message)
-        executor._motion.turn_vacuum_off.assert_called_once_with(
+        executor._vacuum.turn_vacuum_off.assert_called_once_with(
             wait_for_blow_off=False
         )
         entry = serialize_ordered_motion_commands(
@@ -663,7 +668,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         executor._plate_layout_service = service
         executor._last_process_start_rz = 0.0
         executor._last_paint_contact_end_rz = 360.0
-        executor._optimized_plate_entry_gate_pose = [200, 100, 180, 180, 0, 270.0]
+        executor._dropoff_paint_detach_pose = [200, 100, 180, 180, 0, 270.0]
 
         segments, final_pose, error = build_plate_entry_segments_for_paint_chain(executor)
 
@@ -701,7 +706,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         executor._plate_layout_service = service
         executor._last_process_start_rz = -30.0
         executor._last_paint_contact_end_rz = -244.0
-        executor._optimized_plate_entry_gate_pose = [200, 100, 180, 180, 0, -153.0]
+        executor._dropoff_paint_detach_pose = [200, 100, 180, 180, 0, -153.0]
 
         segments, final_pose, error = build_plate_entry_segments_for_paint_chain(executor)
 

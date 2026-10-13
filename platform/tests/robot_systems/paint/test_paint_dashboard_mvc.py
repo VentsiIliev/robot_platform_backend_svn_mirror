@@ -15,7 +15,7 @@ from src.robot_systems.paint.applications.dashboard.dashboard_state import Dashb
 from src.robot_systems.paint.applications.dashboard.model.paint_dashboard_model import (
     PaintDashboardModel,
 )
-from src.robot_systems.paint.processes.paint.dashboard_live_view_events import (
+from src.robot_systems.paint.contracts.events.dashboard_events import (
     PaintDashboardLiveViewEvent,
     PaintDashboardLiveViewTopics,
     PaintDashboardMessageEvent,

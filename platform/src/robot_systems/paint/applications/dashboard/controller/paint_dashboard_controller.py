@@ -20,7 +20,7 @@ from src.robot_systems.paint.applications.dashboard.dashboard_state import Dashb
 from src.robot_systems.paint.processes.paint.tray_dry.errors import (
     TrayError, TrayConfirmationRequiredError,
 )
-from src.robot_systems.paint.processes.paint.dashboard_live_view_events import (
+from src.robot_systems.paint.contracts.events.dashboard_events import (
     PaintDashboardLiveViewTopics,
     PaintDashboardMessageTopics,
 )

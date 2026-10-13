@@ -62,7 +62,7 @@ process exit.
 
 The paint system constructs one `PlateLayoutService` and injects it into the
 executor, production service and dashboard. Drop-off state handlers call public
-production methods, backed by the `DropoffExecutor` protocol and `DropoffResult`.
+production methods, backed by the `IDropoffStrategy` protocol and `DropoffResult`.
 Mutable unwind and prepositioning bookkeeping stays inside the executor.
 
 Regression tests cover delayed workers, rollback, delegated cleanup, transient

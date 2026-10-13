@@ -1,7 +1,7 @@
 import math
 import unittest
 
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler import (
+from src.robot_systems.paint.processes.paint.workflow.handlers.magazine_load.magazine_execute_pickup_release_handler import (
     calculate_workpiece_dropoff_pose,
 )
 

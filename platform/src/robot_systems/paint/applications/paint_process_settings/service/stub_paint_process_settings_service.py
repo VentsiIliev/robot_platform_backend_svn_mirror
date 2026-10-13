@@ -1,7 +1,7 @@
 from src.robot_systems.paint.applications.paint_process_settings.service.i_paint_process_settings_service import (
     IPaintProcessSettingsService,
 )
-from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG, PaintProcessConfig
+from src.robot_systems.paint.processes.paint.configuration.models import PAINT_PROCESS_CONFIG, PaintProcessConfig
 
 
 class StubPaintProcessSettingsService(IPaintProcessSettingsService):

@@ -10,7 +10,7 @@ from src.robot_systems.paint.applications.paint_process_settings.mapper import P
 from src.robot_systems.paint.applications.paint_process_settings.service.paint_process_settings_application_service import (
     PaintProcessSettingsApplicationService,
 )
-from src.robot_systems.paint.processes.paint.config import PaintProcessConfig
+from src.robot_systems.paint.processes.paint.configuration.models import PaintProcessConfig
 
 
 class _FakeModel:

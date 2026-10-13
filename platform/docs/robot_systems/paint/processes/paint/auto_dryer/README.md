@@ -11,3 +11,7 @@ Readiness, movement acknowledgement and successful workpiece release are separat
 
 [Complete source index](../../../../../SOURCE_INDEX.md).
 <!-- source-navigation:end -->
+
+## Standalone simulation
+
+`simulation_runner.py` simulates consecutive dryer release cycles without hardware. Run `python src/robot_systems/paint/processes/paint/auto_dryer/simulation_runner.py --cycles 3`. It verifies fresh move/done/eject progression even when a stale DONE remains from the preceding cycle.

@@ -1,4 +1,7 @@
 from __future__ import annotations
+from src.robot_systems.paint.processes.paint.operations.dropoff.strategies.configured import ConfiguredDropoffStrategy
+from src.robot_systems.paint.processes.paint.operations.dropoff.strategies.plate_layout import PlateLayoutDropoff
+from src.robot_systems.paint.processes.paint.planning.pose_helpers import _camera_to_tcp_delta
 
 import json
 import unittest
@@ -16,7 +19,7 @@ from src.robot_systems.paint.applications.paint_motion_plane_setup.domain.plane_
     Pose6D,
     infer_plane,
 )
-from src.robot_systems.paint.processes.paint.config import (
+from src.robot_systems.paint.processes.paint.configuration.models import (
     PAINT_PROCESS_CONFIG,
     PaintContactStagingConfig,
     PaintDropoffConfig,
@@ -26,22 +29,21 @@ from src.robot_systems.paint.processes.paint.config import (
     PaintSafeTravelConfig,
     PaintSimulationConfig,
 )
-from src.robot_systems.paint.processes.paint.paint_process_config_serializer import PaintProcessConfigSerializer
-from src.robot_systems.paint.processes.paint.execute.edge_cleanup_executor import PaintEdgeCleanupExecutor
-from src.robot_systems.paint.processes.paint.execute.paint_contact_executor import (
-    PaintContactExecutor,
+from src.robot_systems.paint.processes.paint.configuration.serializer import PaintProcessConfigSerializer
+from src.robot_systems.paint.processes.paint.operations.edge_cleanup.executor import PaintEdgeCleanupExecutor
+from src.robot_systems.paint.processes.paint.operations.painting.executor import (
+    PaintingExecutor,
     _remove_projected_local_reversals,
     _workpiece_largest_side_mm,
 )
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
-from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor import (
+from src.robot_systems.paint.processes.paint.production.execution_runtime import (
     PaintExecutorContactMotionConfig,
     PaintExecutorDependencies,
-    PaintWorkpiecePathExecutor,
-    _camera_to_tcp_delta,
+    PaintExecutionRuntime,
     _normalize_contact_motion_config,
 )
-from src.robot_systems.paint.processes.paint.plan.paint_contour_interpolation import (
+from src.robot_systems.paint.processes.paint.planning.contours.interpolation import (
     smooth_contour_xy_bounded,
 )
 
@@ -118,15 +120,15 @@ class TestPaintProcessConfig(unittest.TestCase):
             plate_passage_gate_pose=[1, 2, 3, 180, 0, 15],
         ))
         owner = SimpleNamespace(_paint_process_config=lambda: config)
-        executor = PaintContactExecutor(owner)
+        executor = PlateLayoutDropoff(owner)
 
         self.assertEqual(
             [1.0, 2.0, 3.0, 180.0, 0.0, 15.0],
-            executor._plate_entry_detach_pose(
+            executor.painting_detach_pose(
                 is_final_job=True, paint_start_rz=0.0, paint_end_rz=0.0
             ),
         )
-        self.assertIsNone(executor._plate_entry_detach_pose(
+        self.assertIsNone(executor.painting_detach_pose(
             is_final_job=False, paint_start_rz=0.0, paint_end_rz=0.0
         ))
 
@@ -134,7 +136,7 @@ class TestPaintProcessConfig(unittest.TestCase):
         owner = SimpleNamespace(_paint_process_config=PaintProcessConfig)
 
         self.assertIsNone(
-            PaintContactExecutor(owner)._plate_entry_detach_pose(
+            PlateLayoutDropoff(owner).painting_detach_pose(
                 is_final_job=True, paint_start_rz=0.0, paint_end_rz=0.0
             )
         )
@@ -148,7 +150,7 @@ class TestPaintProcessConfig(unittest.TestCase):
         ))
         owner = SimpleNamespace(_paint_process_config=lambda: config)
 
-        pose = PaintContactExecutor(owner)._plate_entry_detach_pose(
+        pose = PlateLayoutDropoff(owner).painting_detach_pose(
             is_final_job=True,
             paint_start_rz=0.0,
             paint_end_rz=360.0,
@@ -275,6 +277,7 @@ class TestPaintProcessConfig(unittest.TestCase):
             _paint_process_config=lambda: config,
         )
 
+        owner._dropoff_strategy = ConfiguredDropoffStrategy(owner)
         cleanup = PaintEdgeCleanupExecutor(owner)
         offset_pose = cleanup._perpendicular_offset_pose([100.0, 200.0, 300.0, 0.0, 0.0, 0.0])
 
@@ -623,8 +626,9 @@ class TestPaintProcessConfig(unittest.TestCase):
                 )
             },
         )()
-        executor = PaintWorkpiecePathExecutor(
+        executor = PaintExecutionRuntime(
             dependencies=PaintExecutorDependencies(
+        dropoff_strategy_factory=ConfiguredDropoffStrategy,
                 robot_service=None,
                 paint_process_config_service=service,
             ),
@@ -655,6 +659,7 @@ class TestPaintProcessConfig(unittest.TestCase):
             },
         )()
 
+        owner._dropoff_strategy = ConfiguredDropoffStrategy(owner)
         cleanup = PaintEdgeCleanupExecutor(owner)
 
         self.assertTrue(cleanup.should_run_after_xy_rz())
@@ -675,6 +680,7 @@ class TestPaintProcessConfig(unittest.TestCase):
             _set_runtime_contact_motion_config=MagicMock(),
             _make_runtime_contact_motion_config=MagicMock(return_value=SimpleNamespace(motion_plane="xy_z_rz")),
         )
+        owner._dropoff_strategy = ConfiguredDropoffStrategy(owner)
         cleanup = PaintEdgeCleanupExecutor(owner)
         cleanup._preplan_cleanup_path = MagicMock(
             return_value=SimpleNamespace(
@@ -713,6 +719,7 @@ class TestPaintProcessConfig(unittest.TestCase):
             _dropoff_position_provider=None,
             _read_provider_position=lambda _provider: None,
         )
+        owner._dropoff_strategy = ConfiguredDropoffStrategy(owner)
         cleanup = PaintEdgeCleanupExecutor(owner)
 
         ok, msg, waypoints = cleanup._execute_ordered_cleanup_chain(
@@ -782,7 +789,8 @@ class TestPaintProcessConfig(unittest.TestCase):
             ]
         )
 
-        ok, msg, waypoints = PaintContactExecutor(owner).execute(execution_plan)
+        owner._dropoff_strategy = ConfiguredDropoffStrategy(owner)
+        ok, msg, waypoints = PaintingExecutor(owner).execute(execution_plan)
 
         self.assertTrue(ok, msg)
         self.assertEqual(waypoints, 1)

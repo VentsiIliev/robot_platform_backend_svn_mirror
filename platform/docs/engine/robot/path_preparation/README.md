@@ -318,14 +318,14 @@ Both accept `debug_dir` and return silently when it is empty.
 
 | Consumer | Import |
 |----------|--------|
-| `src/robot_systems/paint/processes/paint/execute/workpiece_path_executor.py` | `IWorkpiecePathPreparationService`, `WorkpieceExecutionPlan` |
-| `src/robot_systems/paint/processes/paint/execution_machine/handlers/workflow/plan_handler.py` | calls `service._path_preparation_service.build_execution_plan(...)` |
-| `src/robot_systems/paint/processes/paint/plan/*` | `WorkpieceExecutionPlan`; `geometry.rebuild_pose_path_from_xy` |
-| `src/robot_systems/paint/processes/paint/magazine_load_service.py` | `geometry.compute_pickup_rz_from_min_rect_long_axis` |
+| `src/robot_systems/paint/processes/paint/production/execution_runtime.py` | `IWorkpiecePathPreparationService`, `WorkpieceExecutionPlan` |
+| `src/robot_systems/paint/processes/paint/workflow/handlers/workflow/plan_handler.py` | calls `service._path_preparation_service.build_execution_plan(...)` |
+| `src/robot_systems/paint/processes/paint/planning/*` | `WorkpieceExecutionPlan`; `geometry.rebuild_pose_path_from_xy` |
+| `src/robot_systems/paint/processes/paint/production/magazine/service.py` | `geometry.compute_pickup_rz_from_min_rect_long_axis` |
 | `src/robot_systems/paint/applications/dashboard/service/paint_dashboard_service.py` | `config`, `pixel_to_mm` mode constants |
-| `src/robot_systems/paint/processes/paint/config.py` | mode constants |
+| `src/robot_systems/paint/processes/paint/configuration/models.py` | mode constants |
 | `src/robot_systems/{glue,paint}/application_wiring.py` | construct `DefaultWorkpiecePathPreparationService` |
-| `src/robot_systems/paint/processes/paint/execute/{pickup,dropoff,edge_cleanup,paint_contact}_executor.py`, `projection_preview.py`, `diagnostics.py` | `WorkpieceExecutionPlan` |
+| `src/robot_systems/paint/processes/paint/operations/{pickup,dropoff,edge_cleanup,painting}/executor.py`, system-level `visualization/paint_preview_geometry.py` and `diagnostics/trajectory.py` | `WorkpieceExecutionPlan` |
 
 ---
 

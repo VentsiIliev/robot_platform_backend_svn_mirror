@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, call, patch
 
 import numpy as np
 
-from src.robot_systems.paint.processes.paint.config import (
+from src.robot_systems.paint.processes.paint.configuration.models import (
     PaintDropoffConfig,
     PaintNavigationReturnConfig,
     PaintProcessConfig,
@@ -249,7 +249,7 @@ class TestPaintDashboardService(unittest.TestCase):
         self.assertEqual("movement_group", saved_dropoff.strategy)
 
     def test_demo_drying_mode_resolves_odd_auto_and_even_manual_cycles(self) -> None:
-        from src.robot_systems.paint.processes.paint.paint_production_service import (
+        from src.robot_systems.paint.processes.paint.production.service import (
             PaintProductionService,
         )
 

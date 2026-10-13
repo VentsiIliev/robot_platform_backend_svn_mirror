@@ -289,8 +289,8 @@ failed retract; `message == "retract_timeout"` sets `timed_out=True`.
 | Consumer | Usage |
 |----------|-------|
 | `src/robot_systems/paint/paint_robot_system.py` | Builds `VacuumPickupCondition` and `TimedDummyPickupCondition` |
-| `src/robot_systems/paint/processes/paint/execute/pickup_executor.py` | Imports the procedure + configs |
-| `src/robot_systems/paint/processes/paint/execution_machine/handlers/magazine_load/magazine_execute_pickup_release_handler.py` | Imports the condition/procedure types |
+| `src/robot_systems/paint/processes/paint/operations/pickup/executor.py` | Imports the procedure + configs |
+| `src/robot_systems/paint/processes/paint/workflow/handlers/magazine_load/magazine_execute_pickup_release_handler.py` | Imports the condition/procedure types |
 
 ---
 

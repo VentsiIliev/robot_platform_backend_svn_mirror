@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from src.robot_systems.paint.processes.paint.config import (
+from src.robot_systems.paint.processes.paint.configuration.models import (
     MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN,
     MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
     MAGAZINE_PICKUP_MODE_VISION_PLANNED,
@@ -9,26 +9,26 @@ from src.robot_systems.paint.processes.paint.config import (
     PaintMagazineLoadConfig,
     PaintProcessConfig,
 )
-from src.robot_systems.paint.processes.paint.execution_control import PaintExecutionControl
-from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler import (
+from src.robot_systems.paint.processes.paint.production.execution_control import PaintExecutionControl
+from src.robot_systems.paint.processes.paint.workflow.context import PaintExecutionContext
+from src.robot_systems.paint.processes.paint.workflow.handlers.magazine_load.magazine_execute_pickup_release_handler import (
     _verify_fixed_pickup_start_pose,
     execute_magazine_pickup_release,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_move_to_magazine_handler import (
+from src.robot_systems.paint.processes.paint.workflow.handlers.magazine_load.magazine_move_to_magazine_handler import (
     handle_magazine_move_to_magazine,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_capture_handler import (
+from src.robot_systems.paint.processes.paint.workflow.handlers.magazine_load.magazine_capture_handler import (
     handle_magazine_capture,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_prepare_pickup_release_handler import (
+from src.robot_systems.paint.processes.paint.workflow.handlers.magazine_load.magazine_prepare_pickup_release_handler import (
     handle_magazine_prepare_pickup_release,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.state import (
+from src.robot_systems.paint.processes.paint.workflow.state import (
     PaintExecutionState,
     PaintExecutionTransitions,
 )
-from src.robot_systems.paint.processes.paint.paint_process_config_serializer import (
+from src.robot_systems.paint.processes.paint.configuration.serializer import (
     PaintProcessConfigSerializer,
 )
 from src.robot_systems.paint.applications.paint_process_settings.mapper import (
@@ -106,13 +106,13 @@ class TestFixedMagazinePickup(unittest.TestCase):
         executor._paint_process_config.return_value = process_config
         executor._pickup_z_mm = 0.0
         executor._pickup_safety_z_min_mm = 0.0
-        executor._motion.turn_vacuum_on.return_value = (True, "Vacuum on")
-        executor._motion.turn_vacuum_off.return_value = (True, "Vacuum off")
+        executor._vacuum.turn_vacuum_on.return_value = (True, "Vacuum on")
+        executor._vacuum.turn_vacuum_off.return_value = (True, "Vacuum off")
         service = MagicMock()
         service._path_executor = executor
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler._execute_magazine_servo_contact_pickup_release",
+            "src.robot_systems.paint.processes.paint.workflow.handlers.magazine_load.magazine_execute_pickup_release_handler._execute_magazine_servo_contact_pickup_release",
             return_value=(True, "Picked"),
         ) as execute_servo:
             ok, message = execute_magazine_pickup_release(
@@ -131,7 +131,7 @@ class TestFixedMagazinePickup(unittest.TestCase):
             [10.0, 20.0, 120.0, 180.0, 0.0, 30.0],
             execute_servo.call_args.kwargs["retract_reference_pose"],
         )
-        executor._motion.turn_vacuum_off.assert_called_once_with(
+        executor._vacuum.turn_vacuum_off.assert_called_once_with(
             wait_for_blow_off=False
         )
 
@@ -141,15 +141,15 @@ class TestFixedMagazinePickup(unittest.TestCase):
         executor._paint_process_config.return_value = config
         executor._pickup_z_mm = 20.0
         executor._pickup_safety_z_min_mm = 0.0
-        executor._motion.turn_vacuum_on.return_value = (True, "")
-        executor._motion.turn_vacuum_off.return_value = (True, "")
+        executor._vacuum.turn_vacuum_on.return_value = (True, "")
+        executor._vacuum.turn_vacuum_off.return_value = (True, "")
         fixed_pose = [0.0, 0.0, 100.0, 180.0, 0.0, 0.0]
         executor._robot_service.get_current_position_fresh.return_value = [
             1.5, 0.0, 100.0, 180.0, 0.0, 0.0
         ]
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler._execute_magazine_servo_contact_pickup_release",
+            "src.robot_systems.paint.processes.paint.workflow.handlers.magazine_load.magazine_execute_pickup_release_handler._execute_magazine_servo_contact_pickup_release",
             return_value=(True, "corrected"),
         ) as execute_servo:
             ok, message = execute_magazine_pickup_release(
@@ -166,7 +166,7 @@ class TestFixedMagazinePickup(unittest.TestCase):
 
         self.assertTrue(ok, message)
         execute_servo.assert_called_once()
-        executor._motion.turn_vacuum_off.assert_called_once_with(
+        executor._vacuum.turn_vacuum_off.assert_called_once_with(
             wait_for_blow_off=False
         )
 

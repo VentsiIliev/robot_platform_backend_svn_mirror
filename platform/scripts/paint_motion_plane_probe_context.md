@@ -121,10 +121,10 @@ instead of requiring every possible named plane combination to exist in code.
 
 Likely integration targets to revisit:
 
-- `src/robot_systems/paint/processes/paint/config.py`
-- `src/robot_systems/paint/processes/paint/execute/workpiece_path_executor.py`
-- `src/robot_systems/paint/processes/paint/execute/pivot_projection/core.py`
-- `src/robot_systems/paint/processes/paint/execute/execution_plane/strategies.py`
+- `src/robot_systems/paint/processes/paint/configuration/models.py`
+- `src/robot_systems/paint/processes/paint/production/execution_runtime.py`
+- `src/robot_systems/paint/processes/paint/operations/pivot_projection/core.py`
+- `src/robot_systems/paint/processes/paint/planning/projection/planes.py`
 - `src/robot_systems/paint/application_wiring.py`
 
 The existing paint projection appears to project in a canonical plane and then

@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from src.robot_systems.paint.processes.paint.magazine_load_service import (
+from src.robot_systems.paint.processes.paint.production.magazine.service import (
     PaintMagazineLoadService,
 )
 

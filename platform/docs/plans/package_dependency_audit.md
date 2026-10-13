@@ -116,8 +116,8 @@ Static AST scan of `src/` and `pl_gui/`: includes demos, nested imports, fallbac
 
 ### applications → system:paint
 
-- `src/applications/workpiece_editor/controller/workpiece_editor_controller.py:819` → `src.robot_systems.paint.processes.paint.config.PAINT_PROCESS_CONFIG`
-- `src/applications/workpiece_editor/controller/workpiece_editor_controller.py:857` → `src.robot_systems.paint.processes.paint.config.PAINT_PROCESS_CONFIG`
+- `src/applications/workpiece_editor/controller/workpiece_editor_controller.py:819` → `src.robot_systems.paint.processes.paint.configuration.models.PAINT_PROCESS_CONFIG`
+- `src/applications/workpiece_editor/controller/workpiece_editor_controller.py:857` → `src.robot_systems.paint.processes.paint.configuration.models.PAINT_PROCESS_CONFIG`
 - `src/applications/workpiece_editor/editor_core/adapters/workpiece_adapter.py:5` → `src.robot_systems.paint.domain.paint_workpiece_editor_adapter.PaintWorkpieceEditorAdapter`
 
 ### bootstrap → applications

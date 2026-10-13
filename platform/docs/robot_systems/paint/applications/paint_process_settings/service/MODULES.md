@@ -14,7 +14,7 @@ Generated from Python ASTs. Signatures, declared defaults, imports and docstring
 
 Source: [src/robot_systems/paint/applications/paint_process_settings/service/i_paint_process_settings_service.py](../../../../../../src/robot_systems/paint/applications/paint_process_settings/service/i_paint_process_settings_service.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `abc`, `src.robot_systems.paint.processes.paint.config`.
+Imports (including optional/function-local imports; not a startup dependency list): `abc`, `src.robot_systems.paint.processes.paint.configuration.models`.
 
 ### `IPaintProcessSettingsService`
 
@@ -70,7 +70,7 @@ Return persisted (vacuum pump enabled, vacuum sensor enabled) flags.
 
 Source: [src/robot_systems/paint/applications/paint_process_settings/service/paint_process_settings_application_service.py](../../../../../../src/robot_systems/paint/applications/paint_process_settings/service/paint_process_settings_application_service.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `src.robot_systems.paint.applications.paint_process_settings.service.i_paint_process_settings_service`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.paint_process_config_service`, `typing`.
+Imports (including optional/function-local imports; not a startup dependency list): `src.robot_systems.paint.applications.paint_process_settings.service.i_paint_process_settings_service`, `src.robot_systems.paint.processes.paint.configuration.models`, `src.robot_systems.paint.processes.paint.configuration.service`, `typing`.
 
 ### `PaintProcessSettingsApplicationService`
 
@@ -122,7 +122,7 @@ def move_to_waypoint(self, waypoint: dict) -> bool
 
 Source: [src/robot_systems/paint/applications/paint_process_settings/service/stub_paint_process_settings_service.py](../../../../../../src/robot_systems/paint/applications/paint_process_settings/service/stub_paint_process_settings_service.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `src.robot_systems.paint.applications.paint_process_settings.service.i_paint_process_settings_service`, `src.robot_systems.paint.processes.paint.config`.
+Imports (including optional/function-local imports; not a startup dependency list): `src.robot_systems.paint.applications.paint_process_settings.service.i_paint_process_settings_service`, `src.robot_systems.paint.processes.paint.configuration.models`.
 
 ### `StubPaintProcessSettingsService`
 

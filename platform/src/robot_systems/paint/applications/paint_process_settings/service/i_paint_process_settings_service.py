@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from src.robot_systems.paint.processes.paint.config import PaintProcessConfig
+from src.robot_systems.paint.processes.paint.configuration.models import PaintProcessConfig
 
 
 class IPaintProcessSettingsService(ABC):

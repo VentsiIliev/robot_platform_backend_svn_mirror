@@ -1,6 +1,6 @@
 import unittest
 
-from src.robot_systems.paint.processes.paint.work_area_nesting import WorkAreaNestingService
+from src.robot_systems.paint.processes.paint.production.magazine.nesting import WorkAreaNestingService
 
 
 class WorkAreaNestingServiceTest(unittest.TestCase):

@@ -11,7 +11,7 @@ Generated from Python ASTs. Signatures, declared defaults, imports and docstring
 - [test_dropoff_motion_corridor.py](#test_dropoff_motion_corridorpy)
 - [test_dryer_release_coordinator.py](#test_dryer_release_coordinatorpy)
 - [test_fixed_magazine_pickup.py](#test_fixed_magazine_pickuppy)
-- [test_incremental_adjustment.py](#test_incremental_adjustmentpy)
+- [test_adjustment/session.py](#test_incremental_adjustmentpy)
 - [test_magazine_pickup_release_pose.py](#test_magazine_pickup_release_posepy)
 - [test_magazine_release_pose.py](#test_magazine_release_posepy)
 - [test_paint_adjustment.py](#test_paint_adjustmentpy)
@@ -82,7 +82,7 @@ def test_paint_exposes_matching_tester_in_tests_folder(self)
 
 Source: [tests/robot_systems/paint/test_dropoff_motion_corridor.py](../../../../tests/robot_systems/paint/test_dropoff_motion_corridor.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `src.engine.robot.motion_sequence`, `src.robot_systems.paint.paint_robot_system`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execute.dropoff_executor`, `src.robot_systems.paint.processes.paint.execute.paint_motion_executor`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers`, `src.robot_systems.paint.processes.paint.next_cycle_target`, `src.robot_systems.paint.processes.paint.paint_process_config_service`, `types`, `unittest`, `unittest.mock`.
+Imports (including optional/function-local imports; not a startup dependency list): `src.engine.robot.motion_sequence`, `src.robot_systems.paint.paint_robot_system`, `src.robot_systems.paint.processes.paint.configuration.models`, `src.robot_systems.paint.processes.paint.operations.dropoff.executor`, `src.robot_systems.paint.processes.paint.motion.executor`, `src.robot_systems.paint.processes.paint.operations.dropoff.motion`, `src.robot_systems.paint.contracts.next_cycle_target`, `src.robot_systems.paint.processes.paint.configuration.service`, `types`, `unittest`, `unittest.mock`.
 
 ### `TestDropoffMotionCorridor`
 
@@ -186,7 +186,7 @@ def test_failed_next_position_does_not_send_eject(self) -> None
 
 Source: [tests/robot_systems/paint/test_fixed_magazine_pickup.py](../../../../tests/robot_systems/paint/test_fixed_magazine_pickup.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `src.robot_systems.paint.applications.paint_process_settings.mapper`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execution_control`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_capture_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_move_to_magazine_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_prepare_pickup_release_handler`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.paint_process_config_serializer`, `unittest`, `unittest.mock`.
+Imports (including optional/function-local imports; not a startup dependency list): `src.robot_systems.paint.applications.paint_process_settings.mapper`, `src.robot_systems.paint.processes.paint.configuration.models`, `src.robot_systems.paint.processes.paint.production.execution_control`, `src.robot_systems.paint.processes.paint.workflow.context`, `src.robot_systems.paint.processes.paint.workflow.handlers.magazine_load.magazine_capture_handler`, `src.robot_systems.paint.processes.paint.workflow.handlers.magazine_load.magazine_execute_pickup_release_handler`, `src.robot_systems.paint.processes.paint.workflow.handlers.magazine_load.magazine_move_to_magazine_handler`, `src.robot_systems.paint.processes.paint.workflow.handlers.magazine_load.magazine_prepare_pickup_release_handler`, `src.robot_systems.paint.processes.paint.workflow.state`, `src.robot_systems.paint.processes.paint.configuration.serializer`, `unittest`, `unittest.mock`.
 
 ### `TestFixedMagazinePickup`
 
@@ -268,11 +268,11 @@ def test_start_pose_verification_refuses_position_mismatch(self)
 def test_start_pose_verification_waits_for_two_settled_samples(self)
 ```
 
-## `test_incremental_adjustment.py`
+## `test_adjustment/session.py`
 
-Source: [tests/robot_systems/paint/test_incremental_adjustment.py](../../../../tests/robot_systems/paint/test_incremental_adjustment.py).
+Source: [tests/robot_systems/paint/test_adjustment/session.py](../../../../tests/robot_systems/paint/test_adjustment/session.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `src.robot_systems.paint.processes.paint.adjustment_settings_serializer`, `src.robot_systems.paint.processes.paint.execute.incremental_paint_executor`, `src.robot_systems.paint.processes.paint.incremental_adjustment`, `src.robot_systems.paint.processes.paint.paint_process`, `src.robot_systems.paint.processes.paint.results`, `src.shared_contracts.events.process_events`, `threading`, `time`, `types`, `unittest`, `unittest.mock`.
+Imports (including optional/function-local imports; not a startup dependency list): `src.robot_systems.paint.processes.paint.adjustment.settings_serializer`, `src.robot_systems.paint.processes.paint.adjustment.incremental_painting`, `src.robot_systems.paint.processes.paint.adjustment.session`, `src.robot_systems.paint.processes.paint.paint_process`, `src.robot_systems.paint.processes.paint.results`, `src.shared_contracts.events.process_events`, `threading`, `time`, `types`, `unittest`, `unittest.mock`.
 
 ### `_contact_result`
 
@@ -320,7 +320,7 @@ def test_executor_finishes_from_partial_inspection_pose(self)
 
 Source: [tests/robot_systems/paint/test_magazine_pickup_release_pose.py](../../../../tests/robot_systems/paint/test_magazine_pickup_release_pose.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `math`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler`, `unittest`.
+Imports (including optional/function-local imports; not a startup dependency list): `math`, `src.robot_systems.paint.processes.paint.workflow.handlers.magazine_load.magazine_execute_pickup_release_handler`, `unittest`.
 
 ### `TestMagazinePickupReleasePose`
 
@@ -350,7 +350,7 @@ def test_rejects_non_finite_orientation(self) -> None
 
 Source: [tests/robot_systems/paint/test_magazine_release_pose.py](../../../../tests/robot_systems/paint/test_magazine_release_pose.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `src.robot_systems.paint.processes.paint.magazine_load_service`, `types`, `unittest`, `unittest.mock`.
+Imports (including optional/function-local imports; not a startup dependency list): `src.robot_systems.paint.processes.paint.production.magazine.service`, `types`, `unittest`, `unittest.mock`.
 
 ### `TestMagazineReleasePose`
 
@@ -431,7 +431,7 @@ def test_auxiliary_subscription_preview_buttons_and_cleanup(self) -> None
 
 Source: [tests/robot_systems/paint/test_paint_adjustment_service.py](../../../../tests/robot_systems/paint/test_paint_adjustment_service.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `dataclasses`, `json`, `pathlib`, `src.engine.common_settings_ids`, `src.engine.hardware.communication.modbus.modbus`, `src.engine.hardware.peripherals`, `src.robot_systems.paint.applications.paint_adjustment.service.i_paint_adjustment_service`, `src.robot_systems.paint.applications.paint_adjustment.service.paint_adjustment_service`, `src.robot_systems.paint.component_ids`, `src.robot_systems.paint.hardware.paint_head_availability_adapter`, `src.robot_systems.paint.processes.paint.incremental_adjustment`, `unittest`, `unittest.mock`.
+Imports (including optional/function-local imports; not a startup dependency list): `dataclasses`, `json`, `pathlib`, `src.engine.common_settings_ids`, `src.engine.hardware.communication.modbus.modbus`, `src.engine.hardware.peripherals`, `src.robot_systems.paint.applications.paint_adjustment.service.i_paint_adjustment_service`, `src.robot_systems.paint.applications.paint_adjustment.service.paint_adjustment_service`, `src.robot_systems.paint.component_ids`, `src.robot_systems.paint.hardware.paint_head_availability_adapter`, `src.robot_systems.paint.processes.paint.adjustment.session`, `unittest`, `unittest.mock`.
 
 ### `PaintAdjustmentServiceTests`
 
@@ -497,7 +497,7 @@ def test_step_must_be_positive_integer(self)
 
 Source: [tests/robot_systems/paint/test_paint_contact_selection_execution.py](../../../../tests/robot_systems/paint/test_paint_contact_selection_execution.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `numpy`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execute.paint_contact_executor`, `src.robot_systems.paint.processes.paint.plan.paint_contact_motion.core`, `src.robot_systems.paint.processes.paint.plan.paint_contact_motion.source_plan`, `unittest`.
+Imports (including optional/function-local imports; not a startup dependency list): `numpy`, `src.robot_systems.paint.processes.paint.configuration.models`, `src.robot_systems.paint.processes.paint.operations.painting.executor`, `src.robot_systems.paint.processes.paint.planning.projection.core`, `src.robot_systems.paint.processes.paint.planning.projection.source_plan`, `unittest`.
 
 ### `TestPaintContactSelectionExecution`
 
@@ -527,7 +527,7 @@ def test_clearance_offsets_only_non_contact_pose_along_paint_axis(self)
 
 Source: [tests/robot_systems/paint/test_paint_contour_interpolation.py](../../../../tests/robot_systems/paint/test_paint_contour_interpolation.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `numpy`, `src.robot_systems.paint.processes.paint.plan.paint_contour_interpolation`, `unittest`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `numpy`, `src.robot_systems.paint.processes.paint.planning.contours.interpolation`, `unittest`.
 
 ### `_pose_path_from_xy`
 
@@ -583,7 +583,7 @@ def test_mm_hairpin_cleanup_removes_fold_after_simple_resampling(self) -> None
 
 Source: [tests/robot_systems/paint/test_paint_cycle_runner.py](../../../../tests/robot_systems/paint/test_paint_cycle_runner.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `src.robot_systems.paint.processes.paint.execution_control`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.production.cycle_runner`, `src.robot_systems.paint.processes.paint.results`, `unittest`, `unittest.mock`.
+Imports (including optional/function-local imports; not a startup dependency list): `src.robot_systems.paint.processes.paint.production.execution_control`, `src.robot_systems.paint.processes.paint.workflow.context`, `src.robot_systems.paint.processes.paint.workflow.state`, `src.robot_systems.paint.processes.paint.production.cycle_runner`, `src.robot_systems.paint.processes.paint.results`, `unittest`, `unittest.mock`.
 
 ### `PaintCycleRunnerTests`
 
@@ -625,7 +625,7 @@ def test_construction_and_execution_exceptions_propagate_to_owner(self)
 
 Source: [tests/robot_systems/paint/test_paint_dashboard_mvc.py](../../../../tests/robot_systems/paint/test_paint_dashboard_mvc.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `PyQt6.QtWidgets`, `__future__`, `os`, `src.robot_systems.paint.applications.dashboard.controller.paint_dashboard_controller`, `src.robot_systems.paint.applications.dashboard.dashboard_state`, `src.robot_systems.paint.applications.dashboard.model.paint_dashboard_model`, `src.robot_systems.paint.processes.paint.dashboard_live_view_events`, `src.shared_contracts.events.robot_events`, `src.shared_contracts.events.shell_events`, `src.shared_contracts.events.vision_events`, `time`, `types`, `unittest`, `unittest.mock`.
+Imports (including optional/function-local imports; not a startup dependency list): `PyQt6.QtWidgets`, `__future__`, `os`, `src.robot_systems.paint.applications.dashboard.controller.paint_dashboard_controller`, `src.robot_systems.paint.applications.dashboard.dashboard_state`, `src.robot_systems.paint.applications.dashboard.model.paint_dashboard_model`, `src.robot_systems.paint.contracts.events.dashboard_events`, `src.shared_contracts.events.robot_events`, `src.shared_contracts.events.shell_events`, `src.shared_contracts.events.vision_events`, `time`, `types`, `unittest`, `unittest.mock`.
 
 ### `_signal`
 
@@ -1032,7 +1032,7 @@ def test_dashboard_message_queue_keeps_latest_fifo_rows(self) -> None
 
 Source: [tests/robot_systems/paint/test_paint_execution_machine.py](../../../../tests/robot_systems/paint/test_paint_execution_machine.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `numpy`, `src.engine.vision.i_capture_snapshot_service`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execute.pickup_executor`, `src.robot_systems.paint.processes.paint.execution_control`, `src.robot_systems.paint.processes.paint.execution_machine`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.plan_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.preparation_handler`, `src.robot_systems.paint.processes.paint.magazine_load_service`, `src.robot_systems.paint.processes.paint.match.results`, `src.robot_systems.paint.processes.paint.paint_contact_job`, `src.robot_systems.paint.processes.paint.results`, `types`, `unittest`, `unittest.mock`.
+Imports (including optional/function-local imports; not a startup dependency list): `numpy`, `src.engine.vision.i_capture_snapshot_service`, `src.robot_systems.paint.processes.paint.configuration.models`, `src.robot_systems.paint.processes.paint.operations.pickup.executor`, `src.robot_systems.paint.processes.paint.production.execution_control`, `src.robot_systems.paint.processes.paint.workflow`, `src.robot_systems.paint.processes.paint.workflow.handlers.common.motion_handlers`, `src.robot_systems.paint.processes.paint.operations.dropoff.motion`, `src.robot_systems.paint.processes.paint.workflow.handlers.workflow.pickup_handler`, `src.robot_systems.paint.processes.paint.workflow.handlers.workflow.plan_handler`, `src.robot_systems.paint.processes.paint.workflow.handlers.workflow.preparation_handler`, `src.robot_systems.paint.processes.paint.production.magazine.service`, `src.robot_systems.paint.processes.paint.match.results`, `src.robot_systems.paint.processes.paint.planning.projection.command_job`, `src.robot_systems.paint.processes.paint.results`, `types`, `unittest`, `unittest.mock`.
 
 ### `_prepared_result`
 
@@ -1077,12 +1077,12 @@ class TestPostRetractPickupVerification(unittest.TestCase):
 Directly declared public methods and constructor (inherited methods are documented on their base class):
 
 ```python
-@patch('src.robot_systems.paint.processes.paint.execute.pickup_executor.time.sleep')
+@patch('src.robot_systems.paint.processes.paint.operations.pickup.executor.time.sleep')
 def test_rejects_signal_that_drops_during_sustained_verification(self, sleep_mock)
 ```
 
 ```python
-@patch('src.robot_systems.paint.processes.paint.execute.pickup_executor.time.sleep')
+@patch('src.robot_systems.paint.processes.paint.operations.pickup.executor.time.sleep')
 def test_accepts_only_sustained_signal(self, sleep_mock)
 ```
 
@@ -1224,7 +1224,7 @@ def __init__(self, events: list[str]) -> None
 
 Source: [tests/robot_systems/paint/test_paint_execution_plane_strategies.py](../../../../tests/robot_systems/paint/test_paint_execution_plane_strategies.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `src.robot_systems.paint.processes.paint.execute.execution_plane`, `unittest`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `src.robot_systems.paint.processes.paint.planning.projection.planes`, `unittest`.
 
 ### `TestPaintExecutionPlaneStrategies`
 
@@ -1250,7 +1250,7 @@ def test_xz_strategy_uses_z_offset_ry_alignment_and_optional_flip(self) -> None
 
 Source: [tests/robot_systems/paint/test_paint_geometry_and_config.py](../../../../tests/robot_systems/paint/test_paint_geometry_and_config.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `json`, `numpy`, `src.engine.robot.motion_sequence`, `src.engine.robot.path_preparation`, `src.robot_systems.paint`, `src.robot_systems.paint.applications.paint_motion_plane_setup.domain.plane_inference`, `src.robot_systems.paint.applications.paint_process_settings.mapper`, `src.robot_systems.paint.applications.paint_process_settings.view.paint_process_settings_schema`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execute.edge_cleanup_executor`, `src.robot_systems.paint.processes.paint.execute.paint_contact_executor`, `src.robot_systems.paint.processes.paint.execute.workpiece_path_executor`, `src.robot_systems.paint.processes.paint.paint_process_config_serializer`, `src.robot_systems.paint.processes.paint.plan.paint_contour_interpolation`, `types`, `unittest`, `unittest.mock`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `json`, `numpy`, `src.engine.robot.motion_sequence`, `src.engine.robot.path_preparation`, `src.robot_systems.paint`, `src.robot_systems.paint.applications.paint_motion_plane_setup.domain.plane_inference`, `src.robot_systems.paint.applications.paint_process_settings.mapper`, `src.robot_systems.paint.applications.paint_process_settings.view.paint_process_settings_schema`, `src.robot_systems.paint.processes.paint.configuration.models`, `src.robot_systems.paint.processes.paint.operations.edge_cleanup.executor`, `src.robot_systems.paint.processes.paint.operations.painting.executor`, `src.robot_systems.paint.processes.paint.production.execution_runtime`, `src.robot_systems.paint.processes.paint.configuration.serializer`, `src.robot_systems.paint.processes.paint.planning.contours.interpolation`, `types`, `unittest`, `unittest.mock`.
 
 ### `TestProjectedPathSanitizer`
 
@@ -1534,7 +1534,7 @@ def test_view_exposes_saved_values_and_direction(self)
 
 Source: [tests/robot_systems/paint/test_paint_matching_service.py](../../../../tests/robot_systems/paint/test_paint_matching_service.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `json`, `numpy`, `pathlib`, `src.engine.vision.i_capture_snapshot_service`, `src.robot_systems.paint.domain.workpieces.matching_selection`, `src.robot_systems.paint.processes.paint.match.workpiece_matching_service`, `src.robot_systems.paint.processes.paint.plan`, `tempfile`, `unittest`, `unittest.mock`.
+Imports (including optional/function-local imports; not a startup dependency list): `json`, `numpy`, `pathlib`, `src.engine.vision.i_capture_snapshot_service`, `src.robot_systems.paint.domain.workpieces.matching_selection`, `src.robot_systems.paint.processes.paint.match.workpiece_matching_service`, `src.robot_systems.paint.processes.paint.planning`, `tempfile`, `unittest`, `unittest.mock`.
 
 ### `_square`
 
@@ -1828,7 +1828,7 @@ def test_target_options_and_default_name_follow_definitions(self)
 
 Source: [tests/robot_systems/paint/test_paint_pivot_projection.py](../../../../tests/robot_systems/paint/test_paint_pivot_projection.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `numpy`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.plan.paint_contact_motion`, `unittest`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `numpy`, `src.robot_systems.paint.processes.paint.configuration.models`, `src.robot_systems.paint.processes.paint.planning.projection`, `unittest`.
 
 ### `TestPaintPivotProjection`
 
@@ -1894,7 +1894,7 @@ def test_project_paint_motion_geometry_continuous_does_not_schedule_rotation_on_
 
 Source: [tests/robot_systems/paint/test_paint_process_integration.py](../../../../tests/robot_systems/paint/test_paint_process_integration.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `numpy`, `src.engine.vision.i_capture_snapshot_service`, `src.robot_systems.paint.component_ids`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.dashboard_live_view_events`, `src.robot_systems.paint.processes.paint.execute.edge_cleanup_executor`, `src.robot_systems.paint.processes.paint.execute.paint_motion_executor`, `src.robot_systems.paint.processes.paint.execution_control`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_capture_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.capture_handler`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.incremental_adjustment`, `src.robot_systems.paint.processes.paint.magazine_load_result`, `src.robot_systems.paint.processes.paint.magazine_load_service`, `src.robot_systems.paint.processes.paint.match.results`, `src.robot_systems.paint.processes.paint.paint_process`, `src.robot_systems.paint.processes.paint.paint_production_service`, `src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service`, `src.robot_systems.paint.processes.paint.results`, `src.shared_contracts.events.process_events`, `threading`, `time`, `types`, `unittest`, `unittest.mock`.
+Imports (including optional/function-local imports; not a startup dependency list): `numpy`, `src.engine.vision.i_capture_snapshot_service`, `src.robot_systems.paint.component_ids`, `src.robot_systems.paint.processes.paint.configuration.models`, `src.robot_systems.paint.contracts.events.dashboard_events`, `src.robot_systems.paint.processes.paint.operations.edge_cleanup.executor`, `src.robot_systems.paint.processes.paint.motion.executor`, `src.robot_systems.paint.processes.paint.production.execution_control`, `src.robot_systems.paint.processes.paint.workflow.context`, `src.robot_systems.paint.processes.paint.workflow.handlers.magazine_load.magazine_capture_handler`, `src.robot_systems.paint.processes.paint.workflow.handlers.workflow.capture_handler`, `src.robot_systems.paint.processes.paint.workflow.state`, `src.robot_systems.paint.processes.paint.adjustment.session`, `src.robot_systems.paint.processes.paint.production.magazine.outcomes`, `src.robot_systems.paint.processes.paint.production.magazine.service`, `src.robot_systems.paint.processes.paint.match.results`, `src.robot_systems.paint.processes.paint.paint_process`, `src.robot_systems.paint.processes.paint.production.service`, `src.robot_systems.paint.processes.paint.planning.workpiece_preparation_service`, `src.robot_systems.paint.processes.paint.results`, `src.shared_contracts.events.process_events`, `threading`, `time`, `types`, `unittest`, `unittest.mock`.
 
 ### `_square`
 
@@ -2235,7 +2235,7 @@ def test_dashboard_button_stays_disabled_until_workers_exit(self)
 
 Source: [tests/robot_systems/paint/test_paint_process_settings_controller.py](../../../../tests/robot_systems/paint/test_paint_process_settings_controller.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `src.engine.robot.configuration.robot_settings`, `src.robot_systems.paint.applications.paint_process_settings.controller.paint_process_settings_controller`, `src.robot_systems.paint.applications.paint_process_settings.mapper`, `src.robot_systems.paint.applications.paint_process_settings.service.paint_process_settings_application_service`, `src.robot_systems.paint.processes.paint.config`, `types`, `unittest`, `unittest.mock`.
+Imports (including optional/function-local imports; not a startup dependency list): `src.engine.robot.configuration.robot_settings`, `src.robot_systems.paint.applications.paint_process_settings.controller.paint_process_settings_controller`, `src.robot_systems.paint.applications.paint_process_settings.mapper`, `src.robot_systems.paint.applications.paint_process_settings.service.paint_process_settings_application_service`, `src.robot_systems.paint.processes.paint.configuration.models`, `types`, `unittest`, `unittest.mock`.
 
 ### `_FakeModel`
 
@@ -2417,7 +2417,7 @@ def test_move_to_waypoint_uses_live_robot_settings(self)
 
 Source: [tests/robot_systems/paint/test_paint_profiles.py](../../../../tests/robot_systems/paint/test_paint_profiles.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `os`, `src.engine.common_settings_ids`, `src.robot_systems.paint.applications.paint_process_settings.view.paint_process_settings_schema`, `src.robot_systems.paint.component_ids`, `src.robot_systems.paint.paint_robot_system`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.paint_process_config_serializer`, `src.robot_systems.paint.processes.paint.paint_process_config_service`, `src.robot_systems.paint_auto_dry.bootstrap_provider`, `src.robot_systems.paint_auto_dry.paint_robot_system`, `src.robot_systems.paint_tray_dry.bootstrap_provider`, `src.robot_systems.paint_tray_dry.paint_robot_system`, `unittest`, `unittest.mock`.
+Imports (including optional/function-local imports; not a startup dependency list): `os`, `src.engine.common_settings_ids`, `src.robot_systems.paint.applications.paint_process_settings.view.paint_process_settings_schema`, `src.robot_systems.paint.component_ids`, `src.robot_systems.paint.paint_robot_system`, `src.robot_systems.paint.processes.paint.configuration.models`, `src.robot_systems.paint.processes.paint.configuration.serializer`, `src.robot_systems.paint.processes.paint.configuration.service`, `src.robot_systems.paint_auto_dry.bootstrap_provider`, `src.robot_systems.paint_auto_dry.paint_robot_system`, `src.robot_systems.paint_tray_dry.bootstrap_provider`, `src.robot_systems.paint_tray_dry.paint_robot_system`, `unittest`, `unittest.mock`.
 
 ### `TestPaintProfiles`
 
@@ -2467,7 +2467,7 @@ def test_providers_resolve_installed_storage_in_their_own_system(self)
 
 Source: [tests/robot_systems/paint/test_paint_runtime_services.py](../../../../tests/robot_systems/paint/test_paint_runtime_services.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `numpy`, `src.engine.hardware.fan.modbus.modbus_fan_control`, `src.engine.hardware.laser`, `src.engine.hardware.vacuum_pump.modbus.modbus_vacuum_pump_transport`, `src.engine.hardware.vacuum_pump.models.vacuum_pump_config`, `src.engine.hardware.vacuum_pump.vacuum_pump_controller`, `src.engine.hardware.vacuum_sensor.models.vacuum_sensor_config`, `src.engine.hardware.vacuum_sensor.vacuum_sensor_service`, `src.engine.hardware.xinje`, `src.engine.robot.calibration.robot_calibration_process`, `src.robot_systems.paint.applications.dashboard.service.paint_dashboard_service`, `src.robot_systems.paint.calibration.coordinator`, `src.robot_systems.paint.component_ids`, `src.robot_systems.paint.destinations`, `src.robot_systems.paint.hardware.paint_head_device`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.paint_production_service`, `src.shared_contracts.events.process_events`, `time`, `types`, `unittest`, `unittest.mock`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `numpy`, `src.engine.hardware.fan.modbus.modbus_fan_control`, `src.engine.hardware.laser`, `src.engine.hardware.vacuum_pump.modbus.modbus_vacuum_pump_transport`, `src.engine.hardware.vacuum_pump.models.vacuum_pump_config`, `src.engine.hardware.vacuum_pump.vacuum_pump_controller`, `src.engine.hardware.vacuum_sensor.models.vacuum_sensor_config`, `src.engine.hardware.vacuum_sensor.vacuum_sensor_service`, `src.engine.hardware.xinje`, `src.engine.robot.calibration.robot_calibration_process`, `src.robot_systems.paint.applications.dashboard.service.paint_dashboard_service`, `src.robot_systems.paint.calibration.coordinator`, `src.robot_systems.paint.component_ids`, `src.robot_systems.paint.destinations`, `src.robot_systems.paint.hardware.paint_head_device`, `src.robot_systems.paint.processes.paint.configuration.models`, `src.robot_systems.paint.processes.paint.production.service`, `src.shared_contracts.events.process_events`, `time`, `types`, `unittest`, `unittest.mock`.
 
 ### `TestPaintDashboardService`
 
@@ -2983,7 +2983,7 @@ def test_from_editor_dict_restores_declared_items_and_preserves_base_work_area(s
 
 Source: [tests/robot_systems/paint/test_paint_system_integration.py](../../../../tests/robot_systems/paint/test_paint_system_integration.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `dataclasses`, `numpy`, `src.applications.workpiece_editor`, `src.engine.common_service_ids`, `src.engine.common_settings_ids`, `src.engine.vision.calibration_vision_settings`, `src.robot_systems.paint`, `src.robot_systems.paint.applications.dashboard.config`, `src.robot_systems.paint.component_ids`, `src.robot_systems.paint.destinations`, `src.robot_systems.paint.domain.paint_segment_selection`, `src.robot_systems.paint.paint_robot_system`, `src.robot_systems.paint.processes.paint.config`, `types`, `unittest`, `unittest.mock`.
+Imports (including optional/function-local imports; not a startup dependency list): `dataclasses`, `numpy`, `src.applications.workpiece_editor`, `src.engine.common_service_ids`, `src.engine.common_settings_ids`, `src.engine.vision.calibration_vision_settings`, `src.robot_systems.paint`, `src.robot_systems.paint.applications.dashboard.config`, `src.robot_systems.paint.component_ids`, `src.robot_systems.paint.destinations`, `src.robot_systems.paint.domain.paint_segment_selection`, `src.robot_systems.paint.paint_robot_system`, `src.robot_systems.paint.processes.paint.configuration.models`, `types`, `unittest`, `unittest.mock`.
 
 ### `TestPaintApplicationWiring`
 
@@ -3119,7 +3119,7 @@ def test_profile_providers_apply_their_own_module(self)
 
 Source: [tests/robot_systems/paint/test_paint_timing.py](../../../../tests/robot_systems/paint/test_paint_timing.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.timing`, `unittest`, `unittest.mock`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `src.robot_systems.paint.processes.paint.workflow.state`, `src.robot_systems.paint.timing`, `unittest`, `unittest.mock`.
 
 ### `TestPaintTimingRecorder`
 
@@ -3143,7 +3143,7 @@ Source: [tests/robot_systems/paint/test_paint_typed_results.py](../../../../test
 
 Error categories survive operation boundaries and cleanup remains reliable.
 
-Imports (including optional/function-local imports; not a startup dependency list): `dataclasses`, `numpy`, `pathlib`, `src.engine.vision.i_capture_snapshot_service`, `src.robot_systems.paint.domain.workpieces.errors`, `src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository`, `src.robot_systems.paint.domain.workpieces.service.paint_workpiece_service`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execute.pickup_executor`, `src.robot_systems.paint.processes.paint.execution_control`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.lifecycle.terminal_common`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.preparation_handler`, `src.robot_systems.paint.processes.paint.execution_machine.machine_factory`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.incremental_adjustment`, `src.robot_systems.paint.processes.paint.match.results`, `src.robot_systems.paint.processes.paint.match.workpiece_matching_service`, `src.robot_systems.paint.processes.paint.paint_process`, `src.robot_systems.paint.processes.paint.plan.pickup_transfer_planner`, `src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service`, `src.robot_systems.paint.processes.paint.results`, `src.robot_systems.paint.processes.paint.tray_dry.plate_layout`, `src.shared_contracts.events.process_events`, `tempfile`, `tests.robot_systems.paint.test_tray_readiness`, `types`, `unittest`, `unittest.mock`.
+Imports (including optional/function-local imports; not a startup dependency list): `dataclasses`, `numpy`, `pathlib`, `src.engine.vision.i_capture_snapshot_service`, `src.robot_systems.paint.domain.workpieces.errors`, `src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository`, `src.robot_systems.paint.domain.workpieces.service.paint_workpiece_service`, `src.robot_systems.paint.processes.paint.configuration.models`, `src.robot_systems.paint.processes.paint.operations.pickup.executor`, `src.robot_systems.paint.processes.paint.production.execution_control`, `src.robot_systems.paint.processes.paint.workflow.context`, `src.robot_systems.paint.processes.paint.workflow.handlers.common.motion_handlers`, `src.robot_systems.paint.processes.paint.operations.dropoff.motion`, `src.robot_systems.paint.processes.paint.workflow.handlers.lifecycle.terminal_common`, `src.robot_systems.paint.processes.paint.workflow.handlers.workflow.preparation_handler`, `src.robot_systems.paint.processes.paint.workflow.machine_factory`, `src.robot_systems.paint.processes.paint.workflow.state`, `src.robot_systems.paint.processes.paint.adjustment.session`, `src.robot_systems.paint.processes.paint.match.results`, `src.robot_systems.paint.processes.paint.match.workpiece_matching_service`, `src.robot_systems.paint.processes.paint.paint_process`, `src.robot_systems.paint.processes.paint.planning.pickup.transfer_planner`, `src.robot_systems.paint.processes.paint.planning.workpiece_preparation_service`, `src.robot_systems.paint.processes.paint.results`, `src.robot_systems.paint.processes.paint.tray_dry.plate_layout`, `src.shared_contracts.events.process_events`, `tempfile`, `tests.robot_systems.paint.test_tray_readiness`, `types`, `unittest`, `unittest.mock`.
 
 ### `contour`
 
@@ -3303,7 +3303,7 @@ def test_print_summary_delegates_to_shared_helper(self)
 
 Source: [tests/robot_systems/paint/test_paint_workpiece_path_executor.py](../../../../tests/robot_systems/paint/test_paint_workpiece_path_executor.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `numpy`, `src.engine.geometry.planar`, `src.engine.robot.motion_sequence`, `src.engine.robot.path_preparation`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.configured_motion_waypoint`, `src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts`, `src.robot_systems.paint.processes.paint.execute.pickup_executor`, `src.robot_systems.paint.processes.paint.execute.workpiece_path_executor`, `src.robot_systems.paint.processes.paint.execution_control`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler`, `src.robot_systems.paint.processes.paint.motion.path_geometry`, `src.robot_systems.paint.processes.paint.motion.pose_comparison`, `src.robot_systems.paint.processes.paint.paint_contact_job`, `src.robot_systems.paint.processes.paint.results`, `threading`, `time`, `types`, `unittest`, `unittest.mock`.
+Imports (including optional/function-local imports; not a startup dependency list): `numpy`, `src.engine.geometry.planar`, `src.engine.robot.motion_sequence`, `src.engine.robot.path_preparation`, `src.robot_systems.paint.processes.paint.configuration.models`, `src.robot_systems.paint.processes.paint.motion.waypoint`, `src.robot_systems.paint.diagnostics.artifacts`, `src.robot_systems.paint.processes.paint.operations.pickup.executor`, `src.robot_systems.paint.processes.paint.production.execution_runtime`, `src.robot_systems.paint.processes.paint.production.execution_control`, `src.robot_systems.paint.processes.paint.operations.dropoff.motion`, `src.robot_systems.paint.processes.paint.workflow.handlers.magazine_load.magazine_execute_pickup_release_handler`, `src.robot_systems.paint.processes.paint.motion.path_geometry`, `src.robot_systems.paint.processes.paint.motion.pose_comparison`, `src.robot_systems.paint.processes.paint.planning.projection.command_job`, `src.robot_systems.paint.processes.paint.results`, `threading`, `time`, `types`, `unittest`, `unittest.mock`.
 
 ### `_make_executor`
 
@@ -3660,7 +3660,7 @@ def test_build_executed_snapshot_series_does_not_rotate_snapshots_from_command_a
 
 Source: [tests/robot_systems/paint/test_paint_workpiece_preparation_service.py](../../../../tests/robot_systems/paint/test_paint_workpiece_preparation_service.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `numpy`, `src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service`, `unittest`.
+Imports (including optional/function-local imports; not a startup dependency list): `numpy`, `src.robot_systems.paint.processes.paint.planning.workpiece_preparation_service`, `unittest`.
 
 ### `_square`
 
@@ -3866,7 +3866,7 @@ def test_missing_sensor_leaves_condition_unconfigured(self) -> None
 
 Source: [tests/robot_systems/paint/test_plate_layout_dropoff.py](../../../../tests/robot_systems/paint/test_plate_layout_dropoff.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `datetime`, `math`, `src.engine.robot.motion_sequence`, `src.robot_systems.paint.applications.paint_process_settings.mapper`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler`, `src.robot_systems.paint.processes.paint.next_cycle_target`, `src.robot_systems.paint.processes.paint.tray_dry.plate_layout`, `types`, `unittest`, `unittest.mock`.
+Imports (including optional/function-local imports; not a startup dependency list): `datetime`, `math`, `src.engine.robot.motion_sequence`, `src.robot_systems.paint.applications.paint_process_settings.mapper`, `src.robot_systems.paint.processes.paint.configuration.models`, `src.robot_systems.paint.processes.paint.operations.dropoff.motion`, `src.robot_systems.paint.processes.paint.workflow.handlers.magazine_load.magazine_execute_pickup_release_handler`, `src.robot_systems.paint.processes.paint.workflow.handlers.workflow.pickup_handler`, `src.robot_systems.paint.contracts.next_cycle_target`, `src.robot_systems.paint.processes.paint.tray_dry.plate_layout`, `types`, `unittest`, `unittest.mock`.
 
 ### `_corners`
 
@@ -4016,7 +4016,7 @@ Source: [tests/robot_systems/paint/test_trajectory_export_result.py](../../../..
 
 Optional exports report failures without raising into their motion caller.
 
-Imports (including optional/function-local imports; not a startup dependency list): `concurrent.futures`, `pathlib`, `src.robot_systems.paint.processes.paint.execute`, `src.robot_systems.paint.processes.paint.execute.trajectory_export_result`, `tempfile`, `unittest`, `unittest.mock`.
+Imports (including optional/function-local imports; not a startup dependency list): `concurrent.futures`, `pathlib`, `src.robot_systems.paint.processes.paint.operations`, `src.robot_systems.paint.diagnostics.trajectory_export_result`, `tempfile`, `unittest`, `unittest.mock`.
 
 ### `TestTrajectoryExportResult`
 
@@ -4080,7 +4080,7 @@ Source: [tests/robot_systems/paint/test_tray_readiness.py](../../../../tests/rob
 
 Tray confirmation protects physical occupancy across UI and production paths.
 
-Imports (including optional/function-local imports; not a startup dependency list): `PyQt6.QtCore`, `PyQt6.QtWidgets`, `dataclasses`, `json`, `pathlib`, `src.engine.localization.dict_translator`, `src.robot_systems.paint.applications.dashboard.controller.paint_dashboard_controller`, `src.robot_systems.paint.applications.dashboard.dashboard_state`, `src.robot_systems.paint.applications.dashboard.model.paint_dashboard_model`, `src.robot_systems.paint.applications.dashboard.service.i_paint_dashboard_service`, `src.robot_systems.paint.applications.dashboard.service.paint_dashboard_service`, `src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execution_control`, `src.robot_systems.paint.processes.paint.execution_machine.context`, `src.robot_systems.paint.processes.paint.execution_machine.machine_factory`, `src.robot_systems.paint.processes.paint.execution_machine.state`, `src.robot_systems.paint.processes.paint.paint_process`, `src.robot_systems.paint.processes.paint.paint_production_service`, `src.robot_systems.paint.processes.paint.tray_dry.errors`, `src.robot_systems.paint.processes.paint.tray_dry.plate_layout`, `src.shared_contracts.events.process_events`, `types`, `unittest`, `unittest.mock`.
+Imports (including optional/function-local imports; not a startup dependency list): `PyQt6.QtCore`, `PyQt6.QtWidgets`, `dataclasses`, `json`, `pathlib`, `src.engine.localization.dict_translator`, `src.robot_systems.paint.applications.dashboard.controller.paint_dashboard_controller`, `src.robot_systems.paint.applications.dashboard.dashboard_state`, `src.robot_systems.paint.applications.dashboard.model.paint_dashboard_model`, `src.robot_systems.paint.applications.dashboard.service.i_paint_dashboard_service`, `src.robot_systems.paint.applications.dashboard.service.paint_dashboard_service`, `src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view`, `src.robot_systems.paint.processes.paint.configuration.models`, `src.robot_systems.paint.processes.paint.production.execution_control`, `src.robot_systems.paint.processes.paint.workflow.context`, `src.robot_systems.paint.processes.paint.workflow.machine_factory`, `src.robot_systems.paint.processes.paint.workflow.state`, `src.robot_systems.paint.processes.paint.paint_process`, `src.robot_systems.paint.processes.paint.production.service`, `src.robot_systems.paint.processes.paint.tray_dry.errors`, `src.robot_systems.paint.processes.paint.tray_dry.plate_layout`, `src.shared_contracts.events.process_events`, `types`, `unittest`, `unittest.mock`.
 
 ### `tray_config`
 
@@ -4211,7 +4211,7 @@ def test_dialog_uses_current_language_for_every_profile(self)
 
 Source: [tests/robot_systems/paint/test_unmatched_second_pass.py](../../../../tests/robot_systems/paint/test_unmatched_second_pass.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `dataclasses`, `src.engine.robot.motion_sequence`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler`, `src.robot_systems.paint.processes.paint.paint_contact_job`, `src.robot_systems.paint.processes.paint.paint_process_config_serializer`, `unittest`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `dataclasses`, `src.engine.robot.motion_sequence`, `src.robot_systems.paint.processes.paint.configuration.models`, `src.robot_systems.paint.processes.paint.workflow.handlers.workflow.pickup_handler`, `src.robot_systems.paint.processes.paint.planning.projection.command_job`, `src.robot_systems.paint.processes.paint.configuration.serializer`, `unittest`.
 
 ### `TestUnmatchedSecondPass`
 
@@ -4241,7 +4241,7 @@ def test_second_pass_chain_unwinds_before_attach_and_contact(self) -> None
 
 Source: [tests/robot_systems/paint/test_work_area_nesting.py](../../../../tests/robot_systems/paint/test_work_area_nesting.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `src.robot_systems.paint.processes.paint.work_area_nesting`, `unittest`.
+Imports (including optional/function-local imports; not a startup dependency list): `src.robot_systems.paint.processes.paint.production.magazine.nesting`, `unittest`.
 
 ### `WorkAreaNestingServiceTest`
 

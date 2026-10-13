@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from src.robot_systems.paint.processes.paint.plan.paint_contour_interpolation import (
+from src.robot_systems.paint.processes.paint.planning.contours.interpolation import (
     PaintContourInterpolation,
     PaintContourInterpolationConfig,
     remove_local_hairpin_reversals_xy,

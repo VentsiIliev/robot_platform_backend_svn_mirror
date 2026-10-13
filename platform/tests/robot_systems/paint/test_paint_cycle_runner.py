@@ -1,9 +1,9 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from src.robot_systems.paint.processes.paint.execution_control import PaintExecutionControl
-from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
-from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
+from src.robot_systems.paint.processes.paint.production.execution_control import PaintExecutionControl
+from src.robot_systems.paint.processes.paint.workflow.context import PaintExecutionContext
+from src.robot_systems.paint.processes.paint.workflow.state import PaintExecutionState
 from src.robot_systems.paint.processes.paint.production.cycle_runner import run_paint_cycle
 from src.robot_systems.paint.processes.paint.results import (
     PaintFailureCode, PaintOperationResult, PaintOutcome,

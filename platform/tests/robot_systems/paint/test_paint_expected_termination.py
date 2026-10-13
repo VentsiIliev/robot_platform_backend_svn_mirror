@@ -4,11 +4,11 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from src.robot_systems.paint.processes.paint.results import PaintOperationResult, PaintOutcome, PaintFailureCode
-from src.robot_systems.paint.processes.paint.execution_control import PaintExecutionControl
-from src.robot_systems.paint.processes.paint.execution_machine import (
+from src.robot_systems.paint.processes.paint.production.execution_control import PaintExecutionControl
+from src.robot_systems.paint.processes.paint.workflow import (
     PaintExecutionContext, PaintExecutionMachineFactory, PaintExecutionState,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.preparation_handler import handle_prepare_workpiece
+from src.robot_systems.paint.processes.paint.workflow.handlers.workflow.preparation_handler import handle_prepare_workpiece
 from src.robot_systems.paint.processes.paint.paint_process import PaintProcess
 from src.shared_contracts.events.process_events import ProcessState
 

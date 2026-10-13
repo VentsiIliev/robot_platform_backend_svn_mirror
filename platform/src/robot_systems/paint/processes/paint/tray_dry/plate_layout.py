@@ -12,7 +12,7 @@ from src.robot_systems.paint.processes.paint.results import (
     Ready, PaintOperationResult, PaintOutcome, PaintFailureCode,
 )
 
-from src.robot_systems.paint.processes.paint.config import PaintDropoffConfig
+from src.robot_systems.paint.processes.paint.configuration.models import PaintDropoffConfig
 
 
 class TrayReadiness(StrEnum):

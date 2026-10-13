@@ -12,7 +12,7 @@ Generated from Python ASTs. Signatures, declared defaults, imports and docstring
 
 Source: [src/robot_systems/paint/applications/paint_process_settings/model/paint_process_settings_model.py](../../../../../../src/robot_systems/paint/applications/paint_process_settings/model/paint_process_settings_model.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `src.applications.base.i_application_model`, `src.robot_systems.paint.applications.paint_process_settings.service.i_paint_process_settings_service`, `src.robot_systems.paint.processes.paint.config`.
+Imports (including optional/function-local imports; not a startup dependency list): `src.applications.base.i_application_model`, `src.robot_systems.paint.applications.paint_process_settings.service.i_paint_process_settings_service`, `src.robot_systems.paint.processes.paint.configuration.models`.
 
 ### `PaintProcessSettingsModel`
 

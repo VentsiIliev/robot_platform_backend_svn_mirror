@@ -8,10 +8,10 @@ This document explains how paint execution works after a workpiece has already b
 
 Relevant code:
 
-- `src/robot_systems/paint/processes/paint/config.py`
-- `src/robot_systems/paint/processes/paint/execute/workpiece_path_executor.py`
-- `src/robot_systems/paint/processes/paint/execute/pivot_projection/core.py`
-- `src/robot_systems/paint/processes/paint/execute/execution_plane/strategies.py`
+- `src/robot_systems/paint/processes/paint/configuration/models.py`
+- `src/robot_systems/paint/processes/paint/production/execution_runtime.py`
+- `src/robot_systems/paint/processes/paint/operations/pivot_projection/core.py`
+- `src/robot_systems/paint/processes/paint/planning/projection/planes.py`
 - `src/engine/robot/path_preparation/default_workpiece_path_preparation_service.py`
 
 This document focuses on:

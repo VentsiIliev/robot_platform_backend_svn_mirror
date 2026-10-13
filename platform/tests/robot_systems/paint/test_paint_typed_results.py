@@ -1,3 +1,4 @@
+from src.robot_systems.paint.processes.paint.operations.dropoff.strategies.plate_layout import PlateLayoutDropoff
 """Error categories survive operation boundaries and cleanup remains reliable."""
 import unittest
 import tempfile
@@ -9,24 +10,26 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 
 from src.engine.vision.i_capture_snapshot_service import VisionCaptureSnapshot
-from src.robot_systems.paint.processes.paint.config import PaintProcessConfig
-from src.robot_systems.paint.processes.paint.execute.pickup_executor import PaintPickupExecutor
-from src.robot_systems.paint.processes.paint.execution_control import PaintExecutionControl
-from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
-from src.robot_systems.paint.processes.paint.execution_machine.machine_factory import PaintExecutionMachineFactory
-from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers import finish_paint_motion
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.lifecycle.terminal_common import restore_cycle_resources
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.preparation_handler import handle_prepare_workpiece
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import _execute_plate_layout_ordered_release
+from src.robot_systems.paint.processes.paint.configuration.models import PaintProcessConfig
+from src.robot_systems.paint.processes.paint.operations.pickup.executor import PaintPickupExecutor
+from src.robot_systems.paint.processes.paint.production.execution_control import PaintExecutionControl
+from src.robot_systems.paint.processes.paint.workflow.context import PaintExecutionContext
+from src.robot_systems.paint.processes.paint.workflow.machine_factory import PaintExecutionMachineFactory
+from src.robot_systems.paint.processes.paint.workflow.state import PaintExecutionState
+from src.robot_systems.paint.processes.paint.workflow.handlers.common.motion_handlers import finish_paint_motion
+from src.robot_systems.paint.processes.paint.workflow.handlers.lifecycle.terminal_common import restore_cycle_resources
+from src.robot_systems.paint.processes.paint.workflow.handlers.workflow.preparation_handler import handle_prepare_workpiece
+from src.robot_systems.paint.processes.paint.operations.dropoff.strategies.plate_layout import (
+    _execute_plate_layout_ordered_release,
+)
 from src.robot_systems.paint.processes.paint.match.workpiece_matching_service import PaintWorkpieceMatchingService
 from src.robot_systems.paint.processes.paint.match.results import NoMatch
-from src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service import PaintWorkpiecePreparationService
-from src.robot_systems.paint.processes.paint.plan.pickup_transfer_planner import PaintPickupTransferPlanner
+from src.robot_systems.paint.processes.paint.planning.workpiece_preparation_service import PaintWorkpiecePreparationService
+from src.robot_systems.paint.processes.paint.planning.pickup.transfer_planner import PaintPickupTransferPlanner
 from src.robot_systems.paint.processes.paint.results import (
     Failed, Ready, PaintFailureCode, PaintOperationError, PaintOperationResult, PaintOutcome,
 )
-from src.robot_systems.paint.processes.paint.incremental_adjustment import (
+from src.robot_systems.paint.processes.paint.adjustment.session import (
     AdjustmentPhase, AdjustmentStep, PaintAdjustmentSession, NextPaintSection,
     FinishAdjustment, CancelAdjustment,
 )
@@ -46,6 +49,7 @@ def contour():
 def context(service=None):
     service = service or MagicMock()
     service._path_executor._plate_layout_service = None
+    service._path_executor._dropoff_strategy = PlateLayoutDropoff(service._path_executor)
     return PaintExecutionContext(service, lambda: False, PaintExecutionControl(),
                                  process_config=PaintProcessConfig())
 
@@ -156,7 +160,7 @@ class TestPaintTypedResults(unittest.TestCase):
         result = PaintPickupExecutor(owner).execute_result(
             object(), pickup_plan=SimpleNamespace(contact_mode="invalid"))
         self.assertIs(result.failure.code, PaintFailureCode.INVALID_CONFIGURATION)
-        owner._motion.turn_vacuum_on.assert_not_called()
+        owner._vacuum.turn_vacuum_on.assert_not_called()
         owner._motion.move_ordered_pickup_sequence.assert_not_called()
 
     def test_height_measure_is_unavailable_rather_than_invalid_mode(self):
@@ -164,12 +168,12 @@ class TestPaintTypedResults(unittest.TestCase):
         result = PaintPickupExecutor(owner).execute_result(
             object(), pickup_plan=SimpleNamespace(contact_mode="height_measure"))
         self.assertIs(result.failure.code, PaintFailureCode.UNAVAILABLE)
-        owner._motion.turn_vacuum_on.assert_not_called()
+        owner._vacuum.turn_vacuum_on.assert_not_called()
 
     def test_pickup_vacuum_failure_preserves_its_message_and_category(self):
         owner = MagicMock()
         owner._active_execution_control = None
-        owner._motion.turn_vacuum_on.return_value = False, "vacuum controller disconnected"
+        owner._vacuum.turn_vacuum_on.return_value = False, "vacuum controller disconnected"
         plan = SimpleNamespace(contact_mode="planned", waypoints=(object(), object()),
                                contact_waypoint_index=1, motion_plan=object(),
                                change_plane_combined_with_first_contact=False,
@@ -187,7 +191,7 @@ class TestPaintTypedResults(unittest.TestCase):
         result = PaintPickupExecutor(owner).execute_result(object(), pickup_plan=plan)
         self.assertIs(result.outcome, PaintOutcome.CANCELLED)
         self.assertIsNone(result.failure)
-        owner._motion.turn_vacuum_on.assert_not_called()
+        owner._vacuum.turn_vacuum_on.assert_not_called()
 
     def matcher(self, list_fn):
         return PaintWorkpieceMatchingService(list_saved_workpieces_fn=list_fn,
@@ -273,7 +277,7 @@ class TestPaintTypedResults(unittest.TestCase):
         ctx.paint_previous_control = object()
         ctx.paint_timing_session = MagicMock()
         ctx.production_service._path_executor._plate_layout_service = MagicMock()
-        with patch("src.robot_systems.paint.processes.paint.execution_machine.machine_factory.handle_capture_workpiece",
+        with patch("src.robot_systems.paint.processes.paint.workflow.machine_factory.handle_capture_workpiece",
                    side_effect=RuntimeError("camera backend bug")):
             machine = PaintExecutionMachineFactory().build(ctx, initial_state=PaintExecutionState.CAPTURE_WORKPIECE)
             with self.assertLogs(level="ERROR"):
@@ -301,6 +305,6 @@ class TestPaintTypedResults(unittest.TestCase):
         with self.assertRaises(ValueError):
             _execute_plate_layout_ordered_release(executor, next_cycle_start=None)
         executor._motion.move_ordered_pickup_sequence.assert_not_called()
-        executor._motion.turn_vacuum_off.assert_not_called()
+        executor._vacuum.turn_vacuum_off.assert_not_called()
         self.assertIsNotNone(layout.pending)
         self.assertEqual(layout.snapshot(config.dropoff)["placements"], [])

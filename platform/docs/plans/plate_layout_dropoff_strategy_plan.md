@@ -123,7 +123,7 @@ planning seam through robot-system composition.
 Before implementation, confirm which drop-off implementation is authoritative at
 runtime. The repository currently contains strategy logic in both:
 
-- `processes/paint/execute/dropoff_executor.py`
+- `processes/paint/operations/dropoff/executor.py`
 - `execution_machine/handlers/dropoff/dropoff_handlers.py`
 
 Avoid implementing independent copies of plate-layout behavior in both locations.

@@ -10,7 +10,7 @@ from src.engine.common_settings_ids import CommonSettingsID
 from src.robot_systems.paint import application_wiring
 from src.robot_systems.paint.component_ids import ServiceID, SettingsID
 from src.robot_systems.paint.paint_robot_system import PaintRobotSystem
-from src.robot_systems.paint.processes.paint.config import PaintProcessConfig, PaintSafeTravelConfig
+from src.robot_systems.paint.processes.paint.configuration.models import PaintProcessConfig, PaintSafeTravelConfig
 from src.robot_systems.paint.applications.dashboard.config import PaintDashboardUiConfig
 
 
@@ -189,7 +189,7 @@ class TestPaintApplicationWiring(unittest.TestCase):
         built_executor = object()
 
         with (
-            patch("src.robot_systems.paint.processes.paint.execute.PaintWorkpiecePathExecutor", return_value=built_executor) as cls,
+            patch("src.robot_systems.paint.processes.paint.production.execution_runtime.PaintExecutionRuntime", return_value=built_executor) as cls,
             patch("src.robot_systems.paint.application_wiring._build_paint_path_preparation_service", return_value=path_preparation_service),
             patch("src.robot_systems.paint.application_wiring._build_paint_path_debug_dump_dir", return_value="/tmp/paint_debug"),
         ):
@@ -649,7 +649,7 @@ class TestPaintApplicationWiring(unittest.TestCase):
             )
 
         with (
-            patch("src.robot_systems.paint.processes.paint.plan.PaintWorkpiecePreparationService", return_value="built-preparation") as prep_cls,
+            patch("src.robot_systems.paint.processes.paint.planning.PaintWorkpiecePreparationService", return_value="built-preparation") as prep_cls,
             patch("src.robot_systems.paint.application_wiring._build_paint_matching_service", return_value=matching_service),
         ):
             built_preparation = application_wiring._build_paint_workpiece_preparation_service(robot_system)
@@ -694,7 +694,7 @@ class TestPaintApplicationWiring(unittest.TestCase):
             patch("src.robot_systems.paint.application_wiring._build_paint_workpiece_service", return_value=workpiece_service),
             patch("src.robot_systems.paint.application_wiring._build_paint_matching_service", return_value="matching"),
             patch("src.robot_systems.paint.application_wiring._build_paint_path_preparation_service", return_value="path-prep"),
-            patch("src.robot_systems.paint.application_wiring._build_paint_path_executor", return_value="path-executor"),
+            patch("src.robot_systems.paint.application_wiring._build_paint_path_executor", return_value=SimpleNamespace(prepare_projection_context=MagicMock())),
             patch("src.robot_systems.paint.application_wiring._build_paint_path_debug_dump_dir", return_value="/tmp/debug"),
             patch("src.robot_systems.paint.domain.contour_editor_schema.build_paint_segment_settings_schema", return_value="segment-schema"),
             patch("src.robot_systems.paint.domain.contour_editor_schema.build_paint_contour_form_schema", return_value="form-schema"),
@@ -714,7 +714,7 @@ class TestPaintApplicationWiring(unittest.TestCase):
         self.assertEqual(service.services.robot_service, "robot")
         self.assertIsNone(service.services.transformer)
         self.assertIs(service.services.transformer_getter(), "transformer")
-        self.assertEqual(service.services.path_executor, "path-executor")
+        self.assertIs(service.services.path_executor._preview._context_provider, service.services.path_executor._runtime.prepare_projection_context)
         self.assertEqual(service.services.path_preparation_service, "path-prep")
         self.assertEqual(service.services.matching_service, "matching")
         self.assertEqual(service.storage.save_fn({"id": "a"}), (True, "saved"))
@@ -934,7 +934,7 @@ class TestPaintRobotSystemStart(unittest.TestCase):
             patch("src.engine.robot.calibration.robot_calibration_process.RobotCalibrationProcess", return_value=calibration_process),
             patch("src.robot_systems.paint.calibration.coordinator.PaintCalibrationCoordinator", return_value=MagicMock()),
             patch(
-                "src.robot_systems.paint.processes.paint.paint_production_service.PaintProductionService",
+                "src.robot_systems.paint.processes.paint.production.service.PaintProductionService",
                 return_value=production_service,
             ) as production_cls,
             patch("src.robot_systems.paint.processes.PaintProcess", return_value=main_process),
@@ -987,7 +987,7 @@ class TestPaintRobotSystemStart(unittest.TestCase):
             patch("src.robot_systems.paint.paint_robot_system.build_robot_system_calibration_service", return_value=MagicMock()),
             patch("src.engine.robot.calibration.robot_calibration_process.RobotCalibrationProcess", return_value=MagicMock()),
             patch("src.robot_systems.paint.calibration.coordinator.PaintCalibrationCoordinator", return_value=MagicMock()),
-            patch("src.robot_systems.paint.processes.paint.paint_production_service.PaintProductionService", return_value=MagicMock()),
+            patch("src.robot_systems.paint.processes.paint.production.service.PaintProductionService", return_value=MagicMock()),
             patch("src.robot_systems.paint.processes.PaintProcess", return_value=MagicMock()),
             patch("src.robot_systems.paint.applications.dashboard.service.paint_dashboard_service.PaintDashboardService", return_value=MagicMock()),
             patch("src.robot_systems.paint.application_wiring._build_paint_workpiece_editor_service", return_value=MagicMock()),

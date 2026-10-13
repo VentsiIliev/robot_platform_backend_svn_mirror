@@ -8,7 +8,7 @@ from src.engine.hardware.operator_lights.config import OperatorLightsConfigSeria
 from src.engine.hardware.operator_lights.i_operator_lights import IOperatorLights
 from src.robot_systems.paint_tray_dry.service_builders import build_operator_lights_service
 from src.shared_contracts.declarations import ServiceSpec, SettingsSpec
-from src.robot_systems.paint.processes.paint.paint_process_config_serializer import PaintProcessConfigSerializer
+from src.robot_systems.paint.processes.paint.configuration.serializer import PaintProcessConfigSerializer
 
 
 class TrayDryerPaintRobotSystem(PaintRobotSystem):

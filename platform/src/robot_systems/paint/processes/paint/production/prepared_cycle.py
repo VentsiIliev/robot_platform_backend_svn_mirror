@@ -1,0 +1,73 @@
+"""Run a prepared workpiece through the shared production workflow."""
+from __future__ import annotations
+from typing import TYPE_CHECKING
+from src.engine.robot.path_preparation import WorkpieceExecutionPlan
+from src.robot_systems.paint.contracts.dropoff import DropoffResult
+from src.robot_systems.paint.processes.paint.configuration.models import DropoffStrategy
+if TYPE_CHECKING:
+    from .execution_runtime import PaintExecutionRuntime
+
+class _PreparedPaintProcessAdapter:
+    """Minimal production-service shape for editor execution of an already prepared plan."""
+
+    def __init__(self, path_executor: "PaintExecutionRuntime") -> None:
+        self._path_executor = path_executor
+
+    def prepare_dropoff(self) -> tuple[bool, str]:
+        return self._path_executor.prepare_dropoff()
+
+    def release_dropoff(self, context) -> DropoffResult:
+        return self._path_executor.release_dropoff()
+
+    @staticmethod
+    def _restore_brightness() -> None:
+        return None
+
+    @staticmethod
+    def _set_dashboard_live_view_paused(_paused: bool, *, reason: str = "", image: object | None = None) -> None:
+        return None
+
+    @staticmethod
+    def _log_phase_timing(_label: str, _started_at: float, **_fields: object) -> None:
+        return None
+
+    @staticmethod
+    def _next_cycle_start_target(_ctx: object) -> None:
+        """A single prepared-plan execution has no following production cycle."""
+        return None
+
+
+def run_prepared_paint_cycle(
+    runtime: PaintExecutionRuntime,
+    prepared_workpiece: WorkpieceExecutionPlan,
+    *,
+    control=None,
+) -> tuple[bool, str]:
+    """Run a prepared workpiece plan through the paint execution state machine."""
+    from src.robot_systems.paint.processes.paint.production.execution_control import PaintExecutionControl
+    from src.robot_systems.paint.processes.paint.workflow.context import PaintExecutionContext
+    from src.robot_systems.paint.processes.paint.production.cycle_runner import run_paint_cycle
+    from src.robot_systems.paint.processes.paint.workflow.state import PaintExecutionState
+
+    raw_config = runtime._refresh_paint_process_config_snapshot()
+    if raw_config.dropoff.strategy is DropoffStrategy.PLATE_LAYOUT or raw_config.dropoff.alternate_drying_demo:
+        runtime._plate_layout_service.ensure_ready(raw_config.dropoff)
+    runtime._refresh_runtime_config()
+    control = control or PaintExecutionControl()
+    context = PaintExecutionContext(
+        production_service=_PreparedPaintProcessAdapter(runtime),
+        stop_requested=lambda: False,
+        control=control,
+        process_config=runtime._paint_process_config(),
+        raw_process_config=raw_config,
+        magazine_config=None,
+    )
+    context.execution_plan = prepared_workpiece
+
+    execution = run_paint_cycle(
+        context,
+        initial_state=PaintExecutionState.PICKUP,
+    )
+    if execution.machine_error is not None:
+        return False, execution.machine_error
+    return execution.result.as_legacy_pair()

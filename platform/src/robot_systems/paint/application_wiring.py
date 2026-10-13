@@ -6,7 +6,7 @@ from src.engine.common_service_ids import CommonServiceID
 from src.engine.common_settings_ids import CommonSettingsID
 from src.robot_systems.paint.component_ids import ServiceID, SettingsID
 from src.robot_systems.paint import paint_system_config
-from src.robot_systems.paint.processes.paint.config import (
+from src.robot_systems.paint.processes.paint.configuration.models import (
     PAINT_PROCESS_CONFIG,
     PAINT_PROJECTION_RULES,
     PaintPivotProfile,
@@ -340,11 +340,11 @@ def _build_dryer_release_coordinator(robot_system):
 def _build_paint_path_executor(robot_system, *, plate_layout_service=None):
     from copy import deepcopy
 
-    from src.robot_systems.paint.processes.paint.execute import (
+    from src.robot_systems.paint.processes.paint.production.execution_runtime import (
         PaintExecutorDependencies,
         PaintExecutorContactMotionConfig,
         PaintExecutorMotionConfig,
-        PaintWorkpiecePathExecutor,
+        PaintExecutionRuntime,
     )
 
     robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
@@ -371,7 +371,10 @@ def _build_paint_path_executor(robot_system, *, plate_layout_service=None):
         binding = peripheral_config.peripherals.get("vacuum_pump")
         return bool(binding is not None and binding.enabled)
 
+    from src.robot_systems.paint.processes.paint.operations.dropoff.strategies.configured import ConfiguredDropoffStrategy
+
     dependencies = PaintExecutorDependencies(
+        dropoff_strategy_factory=ConfiguredDropoffStrategy,
         plate_layout_service=plate_layout_service,
         robot_service=robot_service,
         path_preparation_service=_build_paint_path_preparation_service(robot_system),
@@ -427,7 +430,7 @@ def _build_paint_path_executor(robot_system, *, plate_layout_service=None):
         camera_to_tcp_x_offset=effective_tcp_x,
         camera_to_tcp_y_offset=effective_tcp_y,
     )
-    return PaintWorkpiecePathExecutor(
+    return PaintExecutionRuntime(
         dependencies=dependencies,
         motion_config=motion_config,
         contact_motion_config=contact_motion_config,
@@ -440,7 +443,7 @@ def _build_paint_path_preparation_service(robot_system):
     from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
     from src.engine.robot.path_preparation import DefaultWorkpiecePathPreparationService
     from src.robot_systems.paint.domain.contour_editor_schema import build_paint_segment_settings_schema
-    from src.robot_systems.paint.processes.paint.plan.paint_contour_interpolation import (
+    from src.robot_systems.paint.processes.paint.planning.contours.interpolation import (
         PaintContourInterpolation,
         PaintContourInterpolationConfig,
         remove_local_hairpin_reversals_xy,
@@ -627,7 +630,7 @@ def _build_paint_matching_service(
 
 
 def _build_paint_workpiece_preparation_service(robot_system):
-    from src.robot_systems.paint.processes.paint.plan import PaintWorkpiecePreparationService
+    from src.robot_systems.paint.processes.paint.planning import PaintWorkpiecePreparationService
     from src.robot_systems.paint.domain.contour_editor_schema import build_paint_segment_settings_schema
 
     segment_defaults = build_paint_segment_settings_schema().get_defaults()
@@ -654,7 +657,7 @@ def _build_paint_workpiece_preparation_service(robot_system):
 
 
 def _build_paint_magazine_load_service(robot_system):
-    from src.robot_systems.paint.processes.paint.magazine_load_service import PaintMagazineLoadService
+    from src.robot_systems.paint.processes.paint.production.magazine.service import PaintMagazineLoadService
 
     return PaintMagazineLoadService(
         navigation=robot_system._navigation,
@@ -702,7 +705,14 @@ def _build_paint_workpiece_editor_service(robot_system):
         debug_dump_dir=_build_paint_path_debug_dump_dir(),
     )
     path_preparation_service = _build_paint_path_preparation_service(robot_system)
-    path_executor = _build_paint_path_executor(robot_system)
+    from src.robot_systems.paint.processes.paint.adapters.workpiece_editor import PaintWorkpiecePathExecutor
+
+    from src.robot_systems.paint.visualization.paint_preview_geometry import PaintPreviewGeometry
+
+    runtime = _build_paint_path_executor(robot_system)
+    path_executor = PaintWorkpiecePathExecutor(
+        runtime, preview=PaintPreviewGeometry(runtime.prepare_projection_context),
+    )
     debug_dump_dir = _build_paint_path_debug_dump_dir()
 
     def _save_fn(data: dict) -> tuple[bool, str]:

@@ -182,7 +182,7 @@ Write any calibrated register position, or preview it without I/O.
 
 Source: [src/robot_systems/paint/applications/paint_adjustment/service/paint_adjustment_service.py](../../../../../../src/robot_systems/paint/applications/paint_adjustment/service/paint_adjustment_service.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `.i_paint_adjustment_service`, `__future__`, `logging`, `src.engine.common_settings_ids`, `src.engine.hardware.communication.modbus.modbus`, `src.engine.hardware.communication.transport_registry`, `src.engine.hardware.peripherals`, `src.engine.repositories.interfaces.i_settings_service`, `src.robot_systems.paint.component_ids`, `src.robot_systems.paint.hardware.paint_head_device`, `src.robot_systems.paint.processes.paint.incremental_adjustment`, `typing`.
+Imports (including optional/function-local imports; not a startup dependency list): `.i_paint_adjustment_service`, `__future__`, `logging`, `src.engine.common_settings_ids`, `src.engine.hardware.communication.modbus.modbus`, `src.engine.hardware.communication.transport_registry`, `src.engine.hardware.peripherals`, `src.engine.repositories.interfaces.i_settings_service`, `src.robot_systems.paint.component_ids`, `src.robot_systems.paint.hardware.paint_head_device`, `src.robot_systems.paint.processes.paint.adjustment.session`, `typing`.
 
 ### `PaintAdjustmentService`
 

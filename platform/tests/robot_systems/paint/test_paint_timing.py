@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import MagicMock
 
-from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
+from src.robot_systems.paint.processes.paint.workflow.state import PaintExecutionState
 from src.robot_systems.paint.timing import TimingRecorder
 
 

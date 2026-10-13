@@ -14,7 +14,7 @@ from src.robot_systems.paint.component_ids import SettingsID
 from src.robot_systems.paint.hardware.paint_head_availability_adapter import (
     PaintHeadAvailabilityAdapter,
 )
-from src.robot_systems.paint.processes.paint.incremental_adjustment import AdjustmentStep
+from src.robot_systems.paint.processes.paint.adjustment.session import AdjustmentStep
 from src.robot_systems.paint.applications.paint_adjustment.service.i_paint_adjustment_service import PaintAdjustmentOptions
 
 

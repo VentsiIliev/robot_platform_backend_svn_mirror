@@ -147,7 +147,7 @@ def __init__(self) -> None
 
 Source: [src/robot_systems/paint/processes/paint/tray_dry/plate_layout.py](../../../../../../src/robot_systems/paint/processes/paint/tray_dry/plate_layout.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `.errors`, `__future__`, `dataclasses`, `datetime`, `enum`, `math`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.results`, `threading`, `typing`.
+Imports (including optional/function-local imports; not a startup dependency list): `.errors`, `__future__`, `dataclasses`, `datetime`, `enum`, `math`, `src.robot_systems.paint.processes.paint.configuration.models`, `src.robot_systems.paint.processes.paint.results`, `threading`, `typing`.
 
 ### `TrayReadiness`
 

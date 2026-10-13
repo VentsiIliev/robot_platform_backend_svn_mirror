@@ -196,7 +196,7 @@ then closes remaining dependencies.
 
 Cycle faults and explicit process errors halt motion while preserving the
 current vacuum command; ordinary operator Stop retains its vacuum-off behavior.
-Drop-off handlers use the public `DropoffExecutor` / `DropoffResult` boundary;
+Drop-off handlers use the public `IDropoffStrategy` / `DropoffResult` boundary;
 executor bookkeeping stays inside the executor. See
 [recovery and ownership](../paint_tray_dry/RECOVERY.md) for light retries,
 startup rollback, timeout handling and commissioning checks.

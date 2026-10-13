@@ -11,7 +11,7 @@ This page follows the source directory. The reference below records its modules 
 
 | Source subdirectory | Guide |
 |---|---|
-| `execute/` | [execute](execute/README.md) |
+| `operations/` | [operations](operations/README.md) |
 
 [Complete source index](../../../../../SOURCE_INDEX.md).
 <!-- source-navigation:end -->

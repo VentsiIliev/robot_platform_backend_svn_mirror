@@ -12,7 +12,7 @@ Generated from Python ASTs. Signatures, declared defaults, imports and docstring
 
 Source: [src/robot_systems/paint/applications/paint_process_settings/controller/paint_process_settings_controller.py](../../../../../../src/robot_systems/paint/applications/paint_process_settings/controller/paint_process_settings_controller.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `PyQt6.QtCore`, `src.applications.base.background_worker`, `src.applications.base.i_application_controller`, `src.applications.base.styled_message_box`, `src.robot_systems.paint.applications.paint_process_settings.mapper`, `src.robot_systems.paint.applications.paint_process_settings.model.paint_process_settings_model`, `src.robot_systems.paint.applications.paint_process_settings.view.paint_process_settings_view`, `src.robot_systems.paint.processes.paint.config`, `src.robot_systems.paint.processes.paint.tray_dry.plate_layout`.
+Imports (including optional/function-local imports; not a startup dependency list): `PyQt6.QtCore`, `src.applications.base.background_worker`, `src.applications.base.i_application_controller`, `src.applications.base.styled_message_box`, `src.robot_systems.paint.applications.paint_process_settings.mapper`, `src.robot_systems.paint.applications.paint_process_settings.model.paint_process_settings_model`, `src.robot_systems.paint.applications.paint_process_settings.view.paint_process_settings_view`, `src.robot_systems.paint.processes.paint.configuration.models`, `src.robot_systems.paint.processes.paint.tray_dry.plate_layout`.
 
 ### `PaintProcessSettingsController`
 

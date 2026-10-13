@@ -1880,7 +1880,7 @@ instrument = minimalmodbus.Instrument(PORT, SLAVE_ID)
 
 Source: [scripts/test_paint_contour_interpolation_from_dump.py](../../scripts/test_paint_contour_interpolation_from_dump.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `argparse`, `cv2`, `datetime`, `numpy`, `os`, `pathlib`, `src.engine.common_service_ids`, `src.engine.core.message_broker`, `src.engine.repositories.settings_service_factory`, `src.engine.work_areas.work_area_service`, `src.robot_systems.default_service_builders`, `src.robot_systems.paint.paint_robot_system`, `src.robot_systems.paint.processes.paint.plan.paint_contour_interpolation`, `sys`, `time`, `types`.
+Imports (including optional/function-local imports; not a startup dependency list): `__future__`, `argparse`, `cv2`, `datetime`, `numpy`, `os`, `pathlib`, `src.engine.common_service_ids`, `src.engine.core.message_broker`, `src.engine.repositories.settings_service_factory`, `src.engine.work_areas.work_area_service`, `src.robot_systems.default_service_builders`, `src.robot_systems.paint.paint_robot_system`, `src.robot_systems.paint.processes.paint.planning.contours.interpolation`, `sys`, `time`, `types`.
 
 Module declarations (expressions are shown without evaluating them):
 

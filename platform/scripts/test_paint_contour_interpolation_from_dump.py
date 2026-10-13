@@ -17,7 +17,7 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib-robot-app-platform")
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.robot_systems.paint.processes.paint.plan.paint_contour_interpolation import (
+from src.robot_systems.paint.processes.paint.planning.contours.interpolation import (
     PaintContourInterpolation,
     PaintContourInterpolationConfig,
 )

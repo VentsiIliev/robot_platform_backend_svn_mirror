@@ -1,3 +1,6 @@
+from src.robot_systems.paint.contracts.dropoff import DropoffApproach
+from src.robot_systems.paint.processes.paint.operations.dropoff.strategies.movement_group import MovementGroupDropoff
+from src.robot_systems.paint.processes.paint.motion.recovery import PaintMotionRecovery
 import threading
 import time
 import unittest
@@ -8,26 +11,26 @@ import numpy as np
 
 from src.engine.vision.i_capture_snapshot_service import VisionCaptureSnapshot
 from src.robot_systems.paint.component_ids import ProcessID
-from src.robot_systems.paint.processes.paint.config import PaintMagazineLoadConfig, PaintProcessConfig
-from src.robot_systems.paint.processes.paint.dashboard_live_view_events import PaintDashboardLiveViewTopics
-from src.robot_systems.paint.processes.paint.magazine_load_result import (
+from src.robot_systems.paint.processes.paint.configuration.models import PaintMagazineLoadConfig, PaintProcessConfig
+from src.robot_systems.paint.contracts.events.dashboard_events import PaintDashboardLiveViewTopics
+from src.robot_systems.paint.processes.paint.production.magazine.outcomes import (
     ALL_MAGAZINES_EMPTY,
     NO_WORKPIECE_AT_MAGAZINE,
 )
-from src.robot_systems.paint.processes.paint.magazine_load_service import PaintMagazineLoadService
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_capture_handler import (
+from src.robot_systems.paint.processes.paint.production.magazine.service import PaintMagazineLoadService
+from src.robot_systems.paint.processes.paint.workflow.handlers.magazine_load.magazine_capture_handler import (
     _ordered_contours,
     _ordered_contours_nearest_to_calibration,
     handle_magazine_capture,
 )
-from src.robot_systems.paint.processes.paint.execution_control import PaintExecutionControl
-from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.capture_handler import handle_capture_workpiece
-from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
+from src.robot_systems.paint.processes.paint.production.execution_control import PaintExecutionControl
+from src.robot_systems.paint.processes.paint.workflow.context import PaintExecutionContext
+from src.robot_systems.paint.processes.paint.workflow.handlers.workflow.capture_handler import handle_capture_workpiece
+from src.robot_systems.paint.processes.paint.workflow.state import PaintExecutionState
 from src.robot_systems.paint.processes.paint.paint_process import PaintProcess
-from src.robot_systems.paint.processes.paint.paint_production_service import PaintProductionService
-from src.robot_systems.paint.processes.paint.incremental_adjustment import PaintAdjustmentSession
-from src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service import (
+from src.robot_systems.paint.processes.paint.production.service import PaintProductionService
+from src.robot_systems.paint.processes.paint.adjustment.session import PaintAdjustmentSession
+from src.robot_systems.paint.processes.paint.planning.workpiece_preparation_service import (
     PaintWorkpiecePreparationService,
 )
 from src.shared_contracts.events.process_events import ProcessState, ProcessTopics
@@ -62,7 +65,7 @@ def _prepared_result(raw, message):
 class TestPaintProductionServiceIntegration(unittest.TestCase):
 
     def test_ordered_pickup_requires_completed_integer_success(self):
-        from src.robot_systems.paint.processes.paint.execute.paint_motion_executor import PaintMotionExecutor
+        from src.robot_systems.paint.processes.paint.motion.executor import PaintMotionExecutor
 
         for value in (False, True, None, 1, 0.0, "0", -12, 0):
             with self.subTest(value=value):
@@ -72,14 +75,14 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
                 owner._pickup_user = 0
                 owner._robot_service.execute_ordered_motion_chain.return_value = value
                 owner._robot_service.get_last_motion_error.return_value = "motion failed"
-                executor = PaintMotionExecutor(owner)
+                executor = PaintMotionExecutor(owner._robot_service, tool_provider=lambda: owner._pickup_tool, user_provider=lambda: owner._pickup_user, recovery=PaintMotionRecovery(owner._robot_service, lambda: owner._active_execution_control))
                 self.assertEqual(executor.move_ordered_pickup_sequence("pickup", [object()]), type(value) is int and value == 0)
                 owner._robot_service.execute_ordered_motion_chain.assert_called_once()
                 if type(value) is not int or value != 0:
                     self.assertEqual(executor.last_motion_error, "motion failed")
 
     def test_ordered_cleanup_does_not_record_completion_on_invalid_result(self):
-        from src.robot_systems.paint.processes.paint.execute.edge_cleanup_executor import PaintEdgeCleanupExecutor
+        from src.robot_systems.paint.processes.paint.operations.edge_cleanup.executor import PaintEdgeCleanupExecutor
         from time import perf_counter
 
         for value in (False, True, None, 1, 0.0, "0", -12, 0):
@@ -91,7 +94,9 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
                 owner._last_process_end_pose = None
                 owner._robot_service.execute_ordered_motion_chain.return_value = value
                 owner._robot_service.get_last_trajectory_command_info.return_value = {"raw": {"error": "motion failed"}}
+                owner._dropoff_strategy = MovementGroupDropoff(owner)
                 executor = PaintEdgeCleanupExecutor(owner)
+                executor._cleanup_dropoff_approach = DropoffApproach(prepares_release=True)
                 pose = [0.0] * 6
                 executor.build_ordered_cleanup_segments = MagicMock(return_value=([object()], pose))
                 ok, message, _ = executor._execute_ordered_cleanup_chain(pose, pose, [pose], started=perf_counter())

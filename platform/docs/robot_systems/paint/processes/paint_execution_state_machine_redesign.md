@@ -34,7 +34,7 @@ This makes it hard to find phase logic and risky to modify one phase without tou
 ## Target Structure
 
 ```text
-src/robot_systems/paint/processes/paint/execution_machine/
+src/robot_systems/paint/processes/paint/workflow/
   __init__.py
   context.py
   state.py
@@ -247,8 +247,8 @@ needed.
 Minimum checks:
 
 ```bash
-python3 -m py_compile src/robot_systems/paint/processes/paint/paint_production_service.py
-python3 -m py_compile src/robot_systems/paint/processes/paint/execute/workpiece_path_executor.py
+python3 -m py_compile src/robot_systems/paint/processes/paint/production/service.py
+python3 -m py_compile src/robot_systems/paint/processes/paint/production/execution_runtime.py
 python -m unittest tests/robot_systems/paint/test_paint_workpiece_path_executor.py -v
 python -m unittest tests/robot_systems/paint/test_paint_process_integration.py -v
 ```
@@ -303,16 +303,16 @@ The move sequence builders are being moved beside the phase code that owns the
 robot behavior. This is the practical lookup map for motion tuning:
 
 - Magazine pickup/release transfer segments:
-  `src/robot_systems/paint/processes/paint/execute/pickup_executor.py`
+  `src/robot_systems/paint/processes/paint/operations/pickup/executor.py`
   `build_magazine_pickup_release_segments(...)`
 - Paint pickup/staging ordered-chain segments:
-  `src/robot_systems/paint/processes/paint/execute/pickup_executor.py`
+  `src/robot_systems/paint/processes/paint/operations/pickup/executor.py`
   `build_paint_pickup_segments(...)`
 - Paint-contact ordered path segments:
-  `src/robot_systems/paint/processes/paint/execute/pickup_executor.py`
+  `src/robot_systems/paint/processes/paint/operations/pickup/executor.py`
   `build_ordered_paint_contact_segments(...)`
 - Dropoff preparation segments:
-  `src/robot_systems/paint/processes/paint/execution_machine/handlers/dropoff_handlers.py`
+  `src/robot_systems/paint/processes/paint/workflow/handlers/dropoff_handlers.py`
   `build_ordered_dropoff_preparation_segments(...)`
 
 `PaintWorkpiecePathExecutor` still contains compatibility delegates while the

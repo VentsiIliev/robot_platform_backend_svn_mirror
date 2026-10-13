@@ -4,15 +4,15 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from src.robot_systems.paint.processes.paint.incremental_adjustment import (
+from src.robot_systems.paint.processes.paint.adjustment.session import (
     AdjustmentStep,
     PaintAdjustmentSession,
     PaintPathCursor,
 )
-from src.robot_systems.paint.processes.paint.execute.incremental_paint_executor import (
+from src.robot_systems.paint.processes.paint.adjustment.incremental_painting import (
     run_incremental_paint_contact,
 )
-from src.robot_systems.paint.processes.paint.adjustment_settings_serializer import (
+from src.robot_systems.paint.processes.paint.adjustment.settings_serializer import (
     PaintAdjustmentSettingsSerializer,
 )
 from src.robot_systems.paint.processes.paint.paint_process import PaintProcess

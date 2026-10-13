@@ -816,7 +816,7 @@ class WorkpieceEditorController(IApplicationController):
         _t0 = perf_counter()
         self._restore_live_feed()
         if action.requires_projected_path_plot:
-            from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
+            from src.robot_systems.paint.processes.paint.configuration.models import PAINT_PROCESS_CONFIG
             if PAINT_PROCESS_CONFIG.enable_pivot_debug_plot:
                 try:
                     source_paths = self._model.get_last_execution_preview_paths()
@@ -854,7 +854,7 @@ class WorkpieceEditorController(IApplicationController):
             motion_snapshots=None,
             approve_label: str = "Approve",
     ) -> bool:
-        from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
+        from src.robot_systems.paint.processes.paint.configuration.models import PAINT_PROCESS_CONFIG
         if not PAINT_PROCESS_CONFIG.enable_pivot_debug_plot:
             return True
         from src.engine.robot.path_interpolation.new_interpolation.debug_plotting import plot_pivot_path_debug

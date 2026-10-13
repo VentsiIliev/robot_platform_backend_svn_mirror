@@ -105,7 +105,7 @@ All consumers import it **lazily inside the function** so matplotlib/OpenCV figu
 
 | Consumer | Import site |
 |---|---|
-| Paint diagnostics | `src/robot_systems/paint/processes/paint/execute/diagnostics.py:515` |
+| Paint diagnostics | `src/robot_systems/paint/diagnostics/trajectory.py:515` |
 | Paint dashboard | `src/robot_systems/paint/applications/dashboard/service/paint_dashboard_service.py:610` |
 | Path preparation | `src/engine/robot/path_preparation/default_workpiece_path_preparation_service.py:905` |
 | Workpiece editor | `src/applications/workpiece_editor/controller/workpiece_editor_controller.py:440,746,860` |

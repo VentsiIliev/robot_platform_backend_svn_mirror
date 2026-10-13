@@ -2,18 +2,18 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import replace
-from src.robot_systems.paint.processes.paint.paint_contact_job import PaintContactCommandJob
+from src.robot_systems.paint.processes.paint.planning.projection.command_job import PaintContactCommandJob
 from src.engine.robot.motion_sequence import serialize_ordered_motion_commands
 
-from src.robot_systems.paint.processes.paint.config import (
+from src.robot_systems.paint.processes.paint.configuration.models import (
     PaintProcessConfig,
     UnmatchedSecondPassConfig,
     scale_paint_process_accelerations,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler import (
+from src.robot_systems.paint.processes.paint.workflow.handlers.workflow.pickup_handler import (
     build_ordered_second_pass_segments,
 )
-from src.robot_systems.paint.processes.paint.paint_process_config_serializer import (
+from src.robot_systems.paint.processes.paint.configuration.serializer import (
     PaintProcessConfigSerializer,
 )
 

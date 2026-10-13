@@ -1009,7 +1009,7 @@ src/robot_systems/paint/
     view/
     controller/
 
-  processes/paint/execution_machine/
+  processes/paint/workflow/
     VERIFY_SHAFT_ALIGNMENT state/handler
 ```
 

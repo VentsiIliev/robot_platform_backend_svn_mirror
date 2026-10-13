@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service import (
+from src.robot_systems.paint.processes.paint.planning.workpiece_preparation_service import (
     PaintWorkpiecePreparationService,
     contour_to_workpiece_raw,
 )

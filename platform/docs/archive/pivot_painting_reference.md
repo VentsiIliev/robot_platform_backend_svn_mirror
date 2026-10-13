@@ -20,7 +20,7 @@ These phases intentionally do not use the same reference frame in all cases.
 - `src/robot_systems/paint/application_wiring.py`
 - `src/robot_systems/paint/processes/paint/workpiece_path_executor.py`
 - `src/robot_systems/paint/processes/paint/pivot_projection.py`
-- `src/robot_systems/paint/processes/paint/config.py`
+- `src/robot_systems/paint/processes/paint/configuration/models.py`
 - `src/engine/robot/path_preparation/default_workpiece_path_preparation_service.py`
 
 ## Motion Planes

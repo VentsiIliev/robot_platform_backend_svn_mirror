@@ -1,6 +1,6 @@
 from dataclasses import replace
 
-from src.robot_systems.paint.processes.paint.config import (
+from src.robot_systems.paint.processes.paint.configuration.models import (
     PaintDropoffConfig,
     PaintEdgeCleanupConfig,
     PaintNavigationReturnConfig,

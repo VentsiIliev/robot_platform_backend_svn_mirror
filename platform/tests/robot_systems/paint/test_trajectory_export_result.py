@@ -5,8 +5,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
-from src.robot_systems.paint.processes.paint.execute import diagnostics
-from src.robot_systems.paint.processes.paint.execute.trajectory_export_result import (
+from src.robot_systems.paint.diagnostics import trajectory as diagnostics
+from src.robot_systems.paint.diagnostics.trajectory_export_result import (
     ExportFailed, ExportFailureCode, ExportSkipped, ExportWritten,
 )
 

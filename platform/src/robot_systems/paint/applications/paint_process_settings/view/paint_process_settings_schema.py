@@ -5,7 +5,7 @@ from src.engine.robot.path_preparation import (
     PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR,
     PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL,
 )
-from src.robot_systems.paint.processes.paint.config import (
+from src.robot_systems.paint.processes.paint.configuration.models import (
     MAGAZINE_PROCESSING_STRATEGIES,
     MAGAZINE_PICKUP_MODES,
     PICKUP_CONTACT_MODES,

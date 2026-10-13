@@ -4,8 +4,8 @@ import unittest
 
 import numpy as np
 
-from src.robot_systems.paint.processes.paint.config import PaintSimulationConfig
-from src.robot_systems.paint.processes.paint.plan.paint_contact_motion import (
+from src.robot_systems.paint.processes.paint.configuration.models import PaintSimulationConfig
+from src.robot_systems.paint.processes.paint.planning.projection import (
     project_paint_motion_geometry_continuous,
     rebase_projected_paint_path_to_zero_start_rz,
 )

@@ -33,10 +33,10 @@ from src.robot_systems.base_robot_system import BaseRobotSystem
 from src.robot_systems.paint import application_wiring, paint_system_config
 from src.robot_systems.paint.calibration.provider import PaintRobotSystemCalibrationProvider
 from src.robot_systems.paint.component_ids import ServiceID, SettingsID
-from src.robot_systems.paint.processes.paint.paint_process_config_serializer import (
+from src.robot_systems.paint.processes.paint.configuration.serializer import (
     PaintProcessConfigSerializer,
 )
-from src.robot_systems.paint.processes.paint.adjustment_settings_serializer import (
+from src.robot_systems.paint.processes.paint.adjustment.settings_serializer import (
     PaintAdjustmentSettingsSerializer,
 )
 from src.robot_systems.paint.service_builders import (
@@ -551,9 +551,9 @@ class PaintRobotSystem(BaseRobotSystem):
         from src.robot_systems.paint.navigation import PaintNavigationService
         from src.robot_systems.paint.processes import PaintProcess
         from src.engine.process.process_requirements import ProcessRequirements
-        from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
-        from src.robot_systems.paint.processes.paint.paint_process_config_service import PaintProcessConfigService
-        from src.robot_systems.paint.processes.paint.paint_production_service import PaintProductionService
+        from src.robot_systems.paint.processes.paint.configuration.models import PAINT_PROCESS_CONFIG
+        from src.robot_systems.paint.processes.paint.configuration.service import PaintProcessConfigService
+        from src.robot_systems.paint.processes.paint.production.service import PaintProductionService
         from src.robot_systems.paint.domain.workpieces.matching_selection import PaintMatchingSelection
 
         observe(_logger, "paint.system.starting", profile=self.metadata.name,

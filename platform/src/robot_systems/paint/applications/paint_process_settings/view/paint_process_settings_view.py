@@ -35,7 +35,7 @@ from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEd
 from src.robot_systems.paint.applications.paint_process_settings.view.paint_process_settings_schema import (
     build_paint_process_settings_tabs,
 )
-from src.robot_systems.paint.processes.paint.config import (
+from src.robot_systems.paint.processes.paint.configuration.models import (
     MAGAZINE_PROCESSING_STRATEGY_BATCH_NESTING,
     MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN,
     MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,

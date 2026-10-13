@@ -1,13 +1,11 @@
-# `src/robot_systems/paint/processes/paint/motion`
+# Shared paint movement and recovery
 
-This page follows the source directory. The reference below records its modules and contracts; follow child guides for nested implementations.
+`PaintMotionExecutor` submits individual moves and ordered chains through `IRobotService`. Tool and user providers are evaluated at execution time. It receives a `PaintMotionRecovery` collaborator; it does not receive the entire paint runtime or own vacuum control.
 
-[Parent guide](../README.md).
+`PaintMotionRecovery` owns interruption state, protected-segment checks, the backend resume index, and geometric fallback when no usable index is available. The existing execution control still owns pause/stop requests. Protected contact segments defer robot stopping. Motion retries retain the existing ordered-command and fresh-pose semantics.
 
-<!-- source-navigation:start -->
-## Source navigation
+Pose comparison, sampling, and path geometry remain shared utilities in this package. Vacuum commands belong to the robot-system hardware package.
 
-[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
+[Module reference](MODULES.md).
 
-[Complete source index](../../../../../SOURCE_INDEX.md).
-<!-- source-navigation:end -->
+`waypoint.py` defines a validated six-axis position with its complete motion profile. Planning and execution share this data contract.

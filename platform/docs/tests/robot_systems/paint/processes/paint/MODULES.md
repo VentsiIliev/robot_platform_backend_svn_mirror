@@ -12,7 +12,7 @@ Generated from Python ASTs. Signatures, declared defaults, imports and docstring
 
 Source: [tests/robot_systems/paint/processes/paint/test_motion_primitives.py](../../../../../../tests/robot_systems/paint/processes/paint/test_motion_primitives.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `src.engine.robot.motion_sequence`, `src.robot_systems.paint.processes.paint.execute.paint_motion_executor`, `src.robot_systems.paint.processes.paint.execute.pickup_executor`, `src.robot_systems.paint.processes.paint.motion`, `src.robot_systems.paint.processes.paint.paint_contact_job`, `types`, `unittest`, `unittest.mock`.
+Imports (including optional/function-local imports; not a startup dependency list): `src.engine.robot.motion_sequence`, `src.robot_systems.paint.processes.paint.motion.executor`, `src.robot_systems.paint.processes.paint.operations.pickup.executor`, `src.robot_systems.paint.processes.paint.motion`, `src.robot_systems.paint.processes.paint.planning.projection.command_job`, `types`, `unittest`, `unittest.mock`.
 
 ### `_FakeClock`
 

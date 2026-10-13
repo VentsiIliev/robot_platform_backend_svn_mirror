@@ -75,8 +75,8 @@ current`. Returns `0.0`, `+180.0`, or `-180.0` (after unwrap).
 | `src/engine/robot/path_preparation/geometry.py` | `nearest_axis_equivalent_degrees`, `normalize_degrees`, `unwrap_degrees` |
 | `src/engine/robot/path_preparation/default_workpiece_path_preparation_service.py` | `nearest_axis_equivalent_degrees`, `unwrap_degrees` (pickup-RZ normalization) |
 | `src/engine/robot/targeting/target_point_geometry.py` | planar helpers |
-| `src/robot_systems/paint/processes/paint/plan/*` | heading/pose math |
-| `src/robot_systems/paint/processes/paint/execute/*` | rotation and unwrap |
+| `src/robot_systems/paint/processes/paint/planning/*` | heading/pose math |
+| `src/robot_systems/paint/processes/paint/operations/*` | rotation and unwrap |
 | `src/robot_systems/paint/processes/paint/motion/pose_comparison.py` | angle comparison |
 
 ---

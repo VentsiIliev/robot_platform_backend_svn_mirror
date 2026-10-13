@@ -1,3 +1,4 @@
+from src.robot_systems.paint.processes.paint.motion.recovery import PaintMotionRecovery
 import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -8,24 +9,22 @@ from src.engine.robot.motion_sequence import (
     serialize_ordered_motion_commands,
 )
 
-from src.robot_systems.paint.processes.paint.execute.dropoff_executor import (
-    MovementGroupDropoffStrategy,
-    PaintDropoffExecutor,
-)
-from src.robot_systems.paint.processes.paint.execute.paint_motion_executor import (
+from src.robot_systems.paint.processes.paint.operations.dropoff.strategies.movement_group import MovementGroupDropoffPlanner
+from src.robot_systems.paint.processes.paint.operations.dropoff.executor import DropoffWaypointExecutor
+from src.robot_systems.paint.processes.paint.motion.executor import (
     PaintMotionExecutor,
 )
 from src.robot_systems.paint.paint_robot_system import (
     PaintRobotSystem,
     _build_sub_zero_dropoff_corridor,
 )
-from src.robot_systems.paint.processes.paint.config import DropoffStrategy, PaintDropoffConfig
-from src.robot_systems.paint.processes.paint.next_cycle_target import NextCycleTarget
-from src.robot_systems.paint.processes.paint.paint_process_config_service import (
+from src.robot_systems.paint.processes.paint.configuration.models import DropoffStrategy, PaintDropoffConfig
+from src.robot_systems.paint.contracts.next_cycle_target import NextCycleTarget
+from src.robot_systems.paint.processes.paint.configuration.service import (
     PaintProcessConfigService,
 )
-from src.robot_systems.paint.processes.paint.config import PaintProcessConfig
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
+from src.robot_systems.paint.processes.paint.configuration.models import PaintProcessConfig
+from src.robot_systems.paint.processes.paint.operations.dropoff.motion import (
     execute_dropoff_release_for_executor,
 )
 
@@ -43,8 +42,9 @@ class TestDropoffMotionCorridor(unittest.TestCase):
             release_align_blendR=0.0,
         )
         motion = MagicMock()
+        vacuum = MagicMock()
         motion.move_pickup_phase.side_effect = [True, True, False]
-        motion.turn_vacuum_off.return_value = (True, "")
+        vacuum.turn_vacuum_off.return_value = (True, "")
         owner = SimpleNamespace(
             _dropoff_motion_corridor_id="workpiece_drop_opening",
             _dropoff_unwind_prepared=False,
@@ -52,6 +52,7 @@ class TestDropoffMotionCorridor(unittest.TestCase):
             _last_prepositioned_start_group=None,
             _robot_service=MagicMock(),
             _motion=motion,
+            _vacuum=vacuum,
             _vacuum_sensor=None,
             _enable_vacuum_pump=False,
             _is_vacuum_pump_enabled=lambda: False,
@@ -60,7 +61,7 @@ class TestDropoffMotionCorridor(unittest.TestCase):
         )
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers._resolve_dropoff_align_pose",
+            "src.robot_systems.paint.processes.paint.operations.dropoff.strategies.movement_group._resolve_dropoff_align_pose",
             return_value=[300.0, 120.0, -80.0, 180.0, 0.0, 0.0],
         ):
             ok, message = execute_dropoff_release_for_executor(owner)
@@ -68,7 +69,7 @@ class TestDropoffMotionCorridor(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("Workpiece release completed", message)
         self.assertIn("robot may still be inside the dropoff passage", message)
-        motion.turn_vacuum_off.assert_called_once()
+        vacuum.turn_vacuum_off.assert_called_once()
 
     def test_sub_zero_release_retracts_then_moves_to_and_validates_next_cycle_start(self):
         dropoff = SimpleNamespace(
@@ -83,8 +84,9 @@ class TestDropoffMotionCorridor(unittest.TestCase):
         )
         robot = MagicMock()
         motion = MagicMock()
+        vacuum = MagicMock()
         motion.move_pickup_phase.return_value = True
-        motion.turn_vacuum_off.return_value = (True, "")
+        vacuum.turn_vacuum_off.return_value = (True, "")
         owner = SimpleNamespace(
             _dropoff_motion_corridor_id="workpiece_drop_opening",
             _dropoff_unwind_prepared=False,
@@ -94,6 +96,7 @@ class TestDropoffMotionCorridor(unittest.TestCase):
             _pickup_tool=1,
             _pickup_user=2,
             _motion=motion,
+            _vacuum=vacuum,
             _vacuum_sensor=None,
             _enable_vacuum_pump=False,
             _is_vacuum_pump_enabled=lambda: False,
@@ -116,7 +119,7 @@ class TestDropoffMotionCorridor(unittest.TestCase):
         ]
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers._resolve_dropoff_align_pose",
+            "src.robot_systems.paint.processes.paint.operations.dropoff.strategies.movement_group._resolve_dropoff_align_pose",
             return_value=[300.0, 120.0, -80.0, 180.0, 0.0, 0.0],
         ):
             ok, message = execute_dropoff_release_for_executor(
@@ -231,10 +234,10 @@ class TestDropoffMotionCorridor(unittest.TestCase):
         target = [300.0, 120.0, -80.0, 180.0, 0.0, 0.0]
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execute.dropoff_executor._resolve_dropoff_align_pose",
+            "src.robot_systems.paint.processes.paint.operations.dropoff.strategies.movement_group._resolve_dropoff_align_pose",
             return_value=target,
         ):
-            plan = MovementGroupDropoffStrategy().build_plan(owner, MagicMock())
+            plan = MovementGroupDropoffPlanner().build_plan(owner, MagicMock())
 
         self.assertEqual(len(plan.waypoints), 3)
         approach, descent, retract = plan.waypoints
@@ -262,10 +265,10 @@ class TestDropoffMotionCorridor(unittest.TestCase):
             _paint_process_config=lambda: SimpleNamespace(dropoff=dropoff),
         )
         with patch(
-            "src.robot_systems.paint.processes.paint.execute.dropoff_executor._resolve_dropoff_align_pose",
+            "src.robot_systems.paint.processes.paint.operations.dropoff.strategies.movement_group._resolve_dropoff_align_pose",
             return_value=[300.0, 120.0, -80.0, 180.0, 0.0, 0.0],
         ):
-            plan = MovementGroupDropoffStrategy().build_plan(owner, MagicMock())
+            plan = MovementGroupDropoffPlanner().build_plan(owner, MagicMock())
 
         self.assertEqual(plan.waypoints, ())
 
@@ -278,7 +281,7 @@ class TestDropoffMotionCorridor(unittest.TestCase):
             _pickup_user=2,
         )
 
-        ok = PaintMotionExecutor(owner).move_pickup_phase(
+        ok = PaintMotionExecutor(owner._robot_service, tool_provider=lambda: owner._pickup_tool, user_provider=lambda: owner._pickup_user, recovery=PaintMotionRecovery(owner._robot_service, lambda: owner._active_execution_control)).move_pickup_phase(
             "Drop through opening",
             [300.0, 120.0, -80.0, 180.0, 0.0, 0.0],
             velocity=20.0,
@@ -307,7 +310,7 @@ class TestDropoffMotionCorridor(unittest.TestCase):
             _pickup_user=2,
         )
 
-        ok = PaintMotionExecutor(owner).move_pickup_phase(
+        ok = PaintMotionExecutor(owner._robot_service, tool_provider=lambda: owner._pickup_tool, user_provider=lambda: owner._pickup_user, recovery=PaintMotionRecovery(owner._robot_service, lambda: owner._active_execution_control)).move_pickup_phase(
             "Fast travel",
             [300.0, 120.0, 80.0, 180.0, 0.0, 0.0],
             velocity=70.0,
@@ -341,7 +344,7 @@ class TestDropoffMotionCorridor(unittest.TestCase):
             _pickup_user=2,
             _active_execution_control=None,
         )
-        motion = PaintMotionExecutor(owner)
+        motion = PaintMotionExecutor(owner._robot_service, tool_provider=lambda: owner._pickup_tool, user_provider=lambda: owner._pickup_user, recovery=PaintMotionRecovery(owner._robot_service, lambda: owner._active_execution_control))
         segments = [
             OrderedPositionCommand("before", OrderedMotionType.PTP, (0, 0, 10, 0, 0, 0), OrderedMotionProfile(20, 30, 5)),
             OrderedPositionCommand("fast", OrderedMotionType.FAST_LINEAR, (1, 2, 20, 0, 0, 0), OrderedMotionProfile(40, 50, 5)),
@@ -368,24 +371,26 @@ class TestDropoffMotionCorridor(unittest.TestCase):
             release_align_blendR=0.0,
         )
         motion = MagicMock()
+        vacuum = MagicMock()
         motion.move_pickup_phase.side_effect = [True, True, False]
-        motion.turn_vacuum_off.return_value = (True, "")
+        vacuum.turn_vacuum_off.return_value = (True, "")
         owner = SimpleNamespace(
             _dropoff_motion_corridor_id="workpiece_drop_opening",
             _dropoff_unwind_prepared=False,
             _motion=motion,
+            _vacuum=vacuum,
             _paint_process_config=lambda: SimpleNamespace(dropoff=dropoff),
         )
         with patch(
-            "src.robot_systems.paint.processes.paint.execute.dropoff_executor._resolve_dropoff_align_pose",
+            "src.robot_systems.paint.processes.paint.operations.dropoff.strategies.movement_group._resolve_dropoff_align_pose",
             return_value=[300.0, 120.0, -80.0, 180.0, 0.0, 0.0],
         ):
-            ok, message = PaintDropoffExecutor(owner).execute(MagicMock())
+            ok, message = DropoffWaypointExecutor(owner).execute(MagicMock())
 
         self.assertFalse(ok)
         self.assertIn("Retracting", message)
         self.assertEqual(motion.move_pickup_phase.call_count, 3)
-        motion.turn_vacuum_off.assert_called_once_with()
+        vacuum.turn_vacuum_off.assert_called_once_with()
 
 
 if __name__ == "__main__":

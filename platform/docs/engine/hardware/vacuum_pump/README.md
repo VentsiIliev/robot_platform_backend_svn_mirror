@@ -192,7 +192,7 @@ spirit as `hardware/generator/mock_runner.py` and `hardware/motor/mock_runner.py
 |----------|-------|
 | `src/robot_systems/paint/service_builders.py` | Calls `build_modbus_vacuum_pump_controller(...)` |
 | `src/robot_systems/paint/paint_robot_system.py` | Declares `service_type=IVacuumPumpController` |
-| `src/robot_systems/paint/processes/paint/paint_production_service.py` | Optional `vacuum_pump` dependency |
+| `src/robot_systems/paint/processes/paint/production/service.py` | Optional `vacuum_pump` dependency |
 | `src/robot_systems/glue/glue_robot_system.py` | Declares `service_type=IVacuumPumpController` |
 | `src/robot_systems/glue/service_builders.py` | Wires **glue's own** `src.robot_systems.glue.domain.vacuum_pump.VacuumPumpController` — a different class implementing the same interface |
 | `src/robot_systems/glue/processes/pick_and_place*` | Consumes the interface |

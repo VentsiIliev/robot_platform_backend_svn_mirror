@@ -11,9 +11,9 @@ from src.engine.diagnostics.events import diagnostic_context, observe
 
 _logger = logging.getLogger(__name__)
 
-from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
-from src.robot_systems.paint.processes.paint.execution_machine.machine_factory import PaintExecutionMachineFactory
-from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
+from src.robot_systems.paint.processes.paint.workflow.context import PaintExecutionContext
+from src.robot_systems.paint.processes.paint.workflow.machine_factory import PaintExecutionMachineFactory
+from src.robot_systems.paint.processes.paint.workflow.state import PaintExecutionState
 from src.robot_systems.paint.processes.paint.results import PaintFailureCode, PaintOperationResult
 
 

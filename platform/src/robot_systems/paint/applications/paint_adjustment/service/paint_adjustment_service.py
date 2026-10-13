@@ -13,7 +13,7 @@ from src.engine.hardware.peripherals import PeripheralConfig
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
 from src.robot_systems.paint.component_ids import SettingsID
 from src.robot_systems.paint.hardware.paint_head_device import PaintHeadDevice
-from src.robot_systems.paint.processes.paint.incremental_adjustment import AdjustmentStep
+from src.robot_systems.paint.processes.paint.adjustment.session import AdjustmentStep
 
 from .i_paint_adjustment_service import IPaintAdjustmentService, PaintHeadCommandResult, PaintHeadDialConfig, PaintAdjustmentOptions
 

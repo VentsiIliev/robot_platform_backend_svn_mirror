@@ -1,3 +1,4 @@
+from src.robot_systems.paint.processes.paint.operations.dropoff.strategies.configured import ConfiguredDropoffStrategy
 import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -5,41 +6,41 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 
 from src.engine.vision.i_capture_snapshot_service import VisionCaptureSnapshot
-from src.robot_systems.paint.processes.paint.config import (
+from src.robot_systems.paint.processes.paint.configuration.models import (
     PICKUP_CONTACT_MODE_PLANNED,
     DropoffStrategy,
     PaintMagazineLoadConfig,
     PaintProcessConfig,
 )
-from src.robot_systems.paint.processes.paint.execution_control import PaintExecutionControl
-from src.robot_systems.paint.processes.paint.paint_contact_job import PaintContactCommandJob
-from src.robot_systems.paint.processes.paint.execution_machine import (
+from src.robot_systems.paint.processes.paint.production.execution_control import PaintExecutionControl
+from src.robot_systems.paint.processes.paint.planning.projection.command_job import PaintContactCommandJob
+from src.robot_systems.paint.processes.paint.workflow import (
     PaintExecutionContext,
     PaintExecutionMachineFactory,
     PaintExecutionState,
     PaintExecutionTransitions,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers import (
+from src.robot_systems.paint.processes.paint.workflow.handlers.common.motion_handlers import (
     motion_failure_message,
     unwind_joint6_at_cycle_start,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
+from src.robot_systems.paint.processes.paint.operations.dropoff.motion import (
     open_dropoff_passage_for_preparation,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler import (
+from src.robot_systems.paint.processes.paint.workflow.handlers.workflow.pickup_handler import (
     handle_pickup,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.preparation_handler import (
+from src.robot_systems.paint.processes.paint.workflow.handlers.workflow.preparation_handler import (
     handle_prepare_workpiece,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.plan_handler import (
+from src.robot_systems.paint.processes.paint.workflow.handlers.workflow.plan_handler import (
     handle_build_execution_plan,
 )
-from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
+from src.robot_systems.paint.processes.paint.operations.pickup.executor import (
     PickupPlan,
     pickup_condition_is_active_after_retract,
 )
-from src.robot_systems.paint.processes.paint.magazine_load_service import PaintMagazineLoadService
+from src.robot_systems.paint.processes.paint.production.magazine.service import PaintMagazineLoadService
 
 from src.robot_systems.paint.processes.paint.results import Ready, PaintOperationResult, PaintOutcome, PaintFailureCode
 from src.robot_systems.paint.processes.paint.match.results import NoMatch, PreparedWorkpiece
@@ -119,7 +120,7 @@ class TestWorkpiecePreparationHandler(unittest.TestCase):
 
 
 class TestPostRetractPickupVerification(unittest.TestCase):
-    @patch("src.robot_systems.paint.processes.paint.execute.pickup_executor.time.sleep")
+    @patch("src.robot_systems.paint.processes.paint.operations.pickup.executor.time.sleep")
     def test_rejects_signal_that_drops_during_sustained_verification(self, sleep_mock):
         condition = MagicMock()
         condition.is_active.side_effect = [True, True, False]
@@ -134,7 +135,7 @@ class TestPostRetractPickupVerification(unittest.TestCase):
         self.assertEqual(3, condition.is_active.call_count)
         self.assertEqual(2, sleep_mock.call_count)
 
-    @patch("src.robot_systems.paint.processes.paint.execute.pickup_executor.time.sleep")
+    @patch("src.robot_systems.paint.processes.paint.operations.pickup.executor.time.sleep")
     def test_accepts_only_sustained_signal(self, sleep_mock):
         condition = MagicMock()
         condition.is_active.return_value = True
@@ -298,6 +299,7 @@ class TestCalibrationPickupTestMode(unittest.TestCase):
             _paint_process_config=lambda: PaintProcessConfig(),
             _wait_for_paint_resume=lambda _control: True,
         )
+        executor._dropoff_strategy = ConfiguredDropoffStrategy(executor)
         ctx = PaintExecutionContext(
             production_service=SimpleNamespace(_path_executor=executor),
             stop_requested=lambda: False,
@@ -308,17 +310,17 @@ class TestCalibrationPickupTestMode(unittest.TestCase):
 
         with (
             patch(
-                "src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler.start_paint_motion_if_needed"
+                "src.robot_systems.paint.processes.paint.workflow.handlers.workflow.pickup_handler.start_paint_motion_if_needed"
             ),
             patch(
-                "src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler.unwind_joint6_at_cycle_start",
+                "src.robot_systems.paint.processes.paint.workflow.handlers.workflow.pickup_handler.unwind_joint6_at_cycle_start",
                 return_value=True,
             ),
             patch(
-                "src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler.execute_ordered_pickup_and_paint_contact_result"
+                "src.robot_systems.paint.processes.paint.workflow.handlers.workflow.pickup_handler.execute_ordered_pickup_and_paint_contact_result"
             ) as ordered_chain,
             patch(
-                "src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler.finish_paint_motion"
+                "src.robot_systems.paint.processes.paint.workflow.handlers.workflow.pickup_handler.finish_paint_motion"
             ) as finish_motion,
         ):
             next_state = handle_pickup(ctx)
@@ -567,9 +569,10 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
             workpiece={"workpieceId": "saved"},
         )
         service._path_executor = _FakePhasedPathExecutor(events)
-        from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor import PaintWorkpiecePathExecutor
-        service.prepare_dropoff.side_effect = lambda: PaintWorkpiecePathExecutor.prepare_dropoff(service._path_executor)
-        service.release_dropoff.side_effect = lambda ctx: PaintWorkpiecePathExecutor.release_dropoff(service._path_executor)
+        service._path_executor._dropoff_strategy = ConfiguredDropoffStrategy(service._path_executor)
+        from src.robot_systems.paint.processes.paint.production.execution_runtime import PaintExecutionRuntime
+        service.prepare_dropoff.side_effect = lambda: PaintExecutionRuntime.prepare_dropoff(service._path_executor)
+        service.release_dropoff.side_effect = lambda ctx: PaintExecutionRuntime.release_dropoff(service._path_executor)
 
         service._next_cycle_start_target.return_value = None
         service._pause_dashboard_live_view_after_capture.return_value = False
@@ -660,6 +663,8 @@ class _FakePhasedPathExecutor:
         self._motion = SimpleNamespace(
             move_pickup_phase=self._move_pickup_phase,
             move_ordered_pickup_sequence=lambda _label, _segments: True,
+        )
+        self._vacuum = SimpleNamespace(
             turn_vacuum_on=lambda: (True, ""),
             turn_vacuum_off=self._turn_vacuum_off,
         )

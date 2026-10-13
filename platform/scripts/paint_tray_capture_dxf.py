@@ -127,7 +127,7 @@ def build_vision(area):
 
 def smooth_paint_contour(contour, mm_per_pixel):
     """Apply paint's pixel and mm processing stages, returning float pixel XY."""
-    from src.robot_systems.paint.processes.paint.plan.paint_contour_interpolation import (
+    from src.robot_systems.paint.processes.paint.planning.contours.interpolation import (
         PaintContourInterpolation,
         PaintContourInterpolationConfig,
         remove_local_hairpin_reversals_xy,

@@ -47,7 +47,7 @@ def run_standalone() -> None
 
 Source: [src/robot_systems/paint/applications/paint_process_settings/mapper.py](../../../../../src/robot_systems/paint/applications/paint_process_settings/mapper.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `dataclasses`, `src.robot_systems.paint.processes.paint.config`.
+Imports (including optional/function-local imports; not a startup dependency list): `dataclasses`, `src.robot_systems.paint.processes.paint.configuration.models`.
 
 ### `PaintProcessSettingsMapper`
 

@@ -174,7 +174,7 @@ Keep this separate from `use_combined_paint_speed_control`. During initial rollo
 
 Candidate locations:
 
-- `src/robot_systems/paint/processes/paint/config.py`
+- `src/robot_systems/paint/processes/paint/configuration/models.py`
 - Paint settings serializer and mapper
 - `src/robot_systems/paint/applications/dashboard/config.py` for visibility/presentation only
 

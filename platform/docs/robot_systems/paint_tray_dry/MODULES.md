@@ -35,7 +35,7 @@ def create_bootstrap_provider() -> RobotSystemBootstrapProvider
 
 Source: [src/robot_systems/paint_tray_dry/paint_robot_system.py](../../../src/robot_systems/paint_tray_dry/paint_robot_system.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `dataclasses`, `os`, `src.robot_systems.paint.component_ids`, `src.robot_systems.paint.paint_robot_system`, `src.robot_systems.paint.processes.paint.paint_process_config_serializer`.
+Imports (including optional/function-local imports; not a startup dependency list): `dataclasses`, `os`, `src.robot_systems.paint.component_ids`, `src.robot_systems.paint.paint_robot_system`, `src.robot_systems.paint.processes.paint.configuration.serializer`.
 
 ### `TrayDryerPaintRobotSystem`
 

@@ -9,8 +9,8 @@ from src.engine.robot.motion_sequence import (
     OrderedPositionCommand,
     OrderedUnwindJoint6Command,
 )
-from src.robot_systems.paint.processes.paint.execute.paint_motion_executor import (
-    PaintMotionExecutor,
+from src.robot_systems.paint.processes.paint.motion.recovery import (
+    PaintMotionRecovery,
 )
 from src.robot_systems.paint.processes.paint.motion import (
     FreshPoseReadError,
@@ -19,10 +19,10 @@ from src.robot_systems.paint.processes.paint.motion import (
     shift_path_rotation,
     wait_for_stable_pose,
 )
-from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
+from src.robot_systems.paint.processes.paint.operations.pickup.executor import (
     build_ordered_paint_contact_segments,
 )
-from src.robot_systems.paint.processes.paint.paint_contact_job import PaintContactCommandJob
+from src.robot_systems.paint.processes.paint.planning.projection.command_job import PaintContactCommandJob
 
 
 class _FakeClock:
@@ -171,7 +171,7 @@ class TestOrderedMotionResume(unittest.TestCase):
 
     def test_backend_resume_index_is_applied_to_original_command_list(self):
         robot = MagicMock()
-        motion = PaintMotionExecutor(SimpleNamespace(_robot_service=robot))
+        motion = PaintMotionRecovery(robot, lambda: None)
         commands = [
             OrderedUnwindJoint6Command("unwind", 10.0, 10.0),
             self._position("first", 0.0),
@@ -187,7 +187,7 @@ class TestOrderedMotionResume(unittest.TestCase):
     def test_geometric_fallback_near_final_target_is_bounds_safe(self):
         robot = MagicMock()
         robot.get_current_position_fresh.return_value = [10.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        motion = PaintMotionExecutor(SimpleNamespace(_robot_service=robot))
+        motion = PaintMotionRecovery(robot, lambda: None)
         commands = [self._position("first", 0.0), self._position("second", 10.0)]
 
         remaining = motion.trim_ordered_pickup_segments_from_current_pose(commands)

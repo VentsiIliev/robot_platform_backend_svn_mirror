@@ -2,7 +2,7 @@ from src.applications.base.i_application_model import IApplicationModel
 from src.robot_systems.paint.applications.paint_process_settings.service.i_paint_process_settings_service import (
     IPaintProcessSettingsService,
 )
-from src.robot_systems.paint.processes.paint.config import PaintProcessConfig
+from src.robot_systems.paint.processes.paint.configuration.models import PaintProcessConfig
 
 
 class PaintProcessSettingsModel(IApplicationModel):
