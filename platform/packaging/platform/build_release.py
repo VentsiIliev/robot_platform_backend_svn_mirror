@@ -79,12 +79,13 @@ def main():
                 target.add(source / "packaging/kiosk/setup_kiosk.sh",
                            arcname="platform/installation/kiosk/setup_kiosk.sh")
             updater_prefix = "platform/installation/updater"
-            target.add(source / "packaging/runtime/manage.py", arcname=f"{updater_prefix}/manage.py")
-            def exclude_updater_cache(member):
-                return None if "__pycache__" in Path(member.name).parts else member
-            target.add(source / "src/engine/updates", arcname=f"{updater_prefix}/src/engine/updates", filter=exclude_updater_cache)
-            target.add(source / "src/__init__.py", arcname=f"{updater_prefix}/src/__init__.py")
-            target.add(source / "src/engine/__init__.py", arcname=f"{updater_prefix}/src/engine/__init__.py")
+            if not (bundle / "installation/updater/manage.py").is_file():
+                target.add(source / "packaging/runtime/manage.py", arcname=f"{updater_prefix}/manage.py")
+                def exclude_updater_cache(member):
+                    return None if "__pycache__" in Path(member.name).parts else member
+                target.add(source / "src/engine/updates", arcname=f"{updater_prefix}/src/engine/updates", filter=exclude_updater_cache)
+                target.add(source / "src/__init__.py", arcname=f"{updater_prefix}/src/__init__.py")
+                target.add(source / "src/engine/__init__.py", arcname=f"{updater_prefix}/src/engine/__init__.py")
             if args.migrations:
                 target.add(args.migrations, arcname="migrations")
     with archive.open("rb") as stream:

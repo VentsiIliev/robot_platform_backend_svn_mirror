@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import shutil
 import subprocess
 import tarfile
 import tempfile
@@ -222,6 +223,15 @@ with patch.object(manager, 'install_remote_support'), patch.object(manager, 'ins
         (bundle / target["executable"]).write_text("#!/bin/sh\nexit 0\n")
         (config / "release-target.json").write_text(json.dumps(target))
         (config / "factory-defaults.json").write_bytes((ROOT / "config/factory_defaults/paint_tray_dry.json").read_bytes())
+        updater = bundle / "installation/updater"
+        (updater / "src/engine").mkdir(parents=True)
+        shutil.copy2(ROOT / "packaging/runtime/manage.py", updater / "manage.py")
+        shutil.copytree(
+            ROOT / "src/engine/updates", updater / "src/engine/updates",
+            ignore=shutil.ignore_patterns("__pycache__"),
+        )
+        shutil.copy2(ROOT / "src/__init__.py", updater / "src/__init__.py")
+        shutil.copy2(ROOT / "src/engine/__init__.py", updater / "src/engine/__init__.py")
         output = self.directory / "output"
         subprocess.run(["/usr/bin/python3", str(ROOT / "packaging/platform/build_release.py"),
                         "paint_tray_dry", "1.0.0", "--bundle", str(bundle), "--output", str(output)],
@@ -232,6 +242,7 @@ with patch.object(manager, 'install_remote_support'), patch.object(manager, 'ins
             prefix = "platform/installation/updater"
             self.assertIn(prefix + "/manage.py", names)
             self.assertIn(prefix + "/src/engine/updates/updater.py", names)
+            self.assertEqual(len(names), len(set(names)), "release archive has duplicate entries")
             self.assertFalse(any("__pycache__" in name for name in names))
         # Verify independent imports under system Python.
         extracted = self.directory / "extracted"
