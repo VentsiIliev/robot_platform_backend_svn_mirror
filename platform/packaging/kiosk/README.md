@@ -88,7 +88,10 @@ clean up its background programs on exit and preserve the main exit status.
 System services such as SSH or remote support are configured separately.
 GNOME Kiosk provides no desktop menu or configurable application allowlist;
 controls inside the robot app remain the responsibility of the app's roles.
-This script does not block virtual terminals, SSH, or other login sessions.
+The installer disables X11 virtual-terminal switching (`Ctrl+Alt+F1` through
+`Ctrl+Alt+F12`) and the X server reset shortcut for all graphical sessions.
+SSH and authenticated non-graphical logins remain available for maintenance.
+Reboot after installation or removal so the X server reloads this policy.
 
 ## Restore / redo
 

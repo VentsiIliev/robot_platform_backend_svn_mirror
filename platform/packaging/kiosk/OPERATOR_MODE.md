@@ -126,7 +126,9 @@ Keep the normal GNOME session for development and administrator maintenance.
 The station deployment must configure and test:
 
 - Automatic login/start in the dedicated kiosk session.
-- No desktop shell, terminals, Alt+Tab escape, workspace switching or console access.
+- No desktop shell, terminals, Alt+Tab escape, workspace switching or virtual-console access.
+- X11 blocks `Ctrl+Alt+Fn` virtual-terminal switching through the installed
+  `ServerFlags` policy; a reboot is required after installing or removing it.
 - Account-scoped shortcut and logout/reboot restrictions.
 - A supervisor that restarts unexpected app exits without exposing a desktop.
 - An authenticated session exit that returns to the display manager, where the

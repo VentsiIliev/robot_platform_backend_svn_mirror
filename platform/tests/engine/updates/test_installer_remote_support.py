@@ -288,6 +288,8 @@ class FirstInstallSetupTests(unittest.TestCase):
         source = (ROOT / 'packaging/kiosk/setup_kiosk.sh').read_text()
         self.assertIn('test -r "$password_file"', source)
         self.assertIn("printf 'export ROBOT_PLATFORM_KIOSK_MODE=1", source)
+        self.assertIn('Option "DontVTSwitch" "true"', source)
+        self.assertIn('Option "DontZap" "true"', source)
 
     def test_combined_installer_provisions_first_install_only(self):
         source = ROOT / 'packaging/robot/install_robot.py'
