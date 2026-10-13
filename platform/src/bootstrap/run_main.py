@@ -172,13 +172,20 @@ def main() -> None:
             kiosk_password,
         )
 
+    from src.bootstrap.shutdown_guard import ShutdownGuard
+    shutdown_guard = ShutdownGuard(
+        robot_app.get_shutdown_block_reason,
+        next_guard=kiosk_exit_guard,
+    )
+
     # 4b — Create shell BEFORE login (empty content area, header + language selector visible)
     shell = AppShell(
         app_descriptors=[],
         widget_factory=lambda _: QWidget(),   # placeholder, never invoked during login
         languages=localization_svc.available_languages(),
-        close_guard=kiosk_exit_guard,
+        close_guard=shutdown_guard,
     )
+    shutdown_guard.parent = shell
     if kiosk_exit_guard is not None:
         kiosk_exit_guard.parent = shell
     shell.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)

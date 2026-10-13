@@ -137,6 +137,10 @@ class BaseRobotSystem(ABC):
             )
         return self._resolved.get(name)
 
+    def get_shutdown_block_reason(self) -> str | None:
+        """Return a stable reason key when platform shutdown must be refused."""
+        return None
+
     def get_targeting_provider(self):
         return getattr(self, "_targeting_provider", None)
 

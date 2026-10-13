@@ -30,8 +30,8 @@
       "robot_driver": "zeroerr",
       "backend": "zeroerr",
       "backend_profile": "paint_short_links",
-      "release_version": "1.0.9",
-      "platform_version": "1.0.9",
+      "release_version": "1.0.10",
+      "platform_version": "1.0.10",
       "backend_version": "1.0.1"
     }
   }

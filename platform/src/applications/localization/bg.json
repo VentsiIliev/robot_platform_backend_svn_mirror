@@ -111,6 +111,12 @@
     "Operation Running": "Операцията се изпълнява",
     "An operation is running or stopping. Please stop it or wait for it to finish before leaving.": "Операцията се изпълнява или спира. Спрете я или изчакайте да приключи, преди да напуснете екрана."
   },
+  "ShutdownGuard": {
+    "Shutdown not allowed": "Изключването не е разрешено",
+    "Stop the active process before shutting down the platform.": "Спрете активния процес, преди да изключите платформата.",
+    "Stop the robot and wait until motion has finished before shutting down the platform.": "Спрете робота и изчакайте движението да приключи, преди да изключите платформата.",
+    "Robot state could not be verified. Check the robot connection before shutting down the platform.": "Състоянието на робота не може да бъде потвърдено. Проверете връзката с робота, преди да изключите платформата."
+  },
   "KioskExitDialog": {
     "Exit kiosk mode": "Изход от киоск режим",
     "Password": "Парола",

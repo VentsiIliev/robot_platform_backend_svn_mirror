@@ -111,6 +111,12 @@
     "Operation Running": "Operation Running",
     "An operation is running or stopping. Please stop it or wait for it to finish before leaving.": "An operation is running or stopping. Please stop it or wait for it to finish before leaving."
   },
+  "ShutdownGuard": {
+    "Shutdown not allowed": "Shutdown not allowed",
+    "Stop the active process before shutting down the platform.": "Stop the active process before shutting down the platform.",
+    "Stop the robot and wait until motion has finished before shutting down the platform.": "Stop the robot and wait until motion has finished before shutting down the platform.",
+    "Robot state could not be verified. Check the robot connection before shutting down the platform.": "Robot state could not be verified. Check the robot connection before shutting down the platform."
+  },
   "KioskExitDialog": {
     "Exit kiosk mode": "Exit kiosk mode",
     "Password": "Password",

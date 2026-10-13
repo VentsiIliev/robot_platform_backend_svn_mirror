@@ -358,3 +358,11 @@ raise `ShutdownPendingError`. This retains resources and the running flag for a
 later `stop()` attempt. Other shutdown-hook errors still trigger managed cleanup.
 The paint system uses this contract to wait for its production and stop workers
 before hardware teardown; see [paint recovery](paint_tray_dry/RECOVERY.md).
+
+`BaseRobotSystem.get_shutdown_block_reason()` is the non-mutating shell-exit
+readiness hook. The default permits exit. Systems with live motion/process state
+override it with a stable reason key. The paint implementation refuses exit for
+running, paused or stopping production/calibration processes, active or queued
+robot motion, and unknown execution status. This check runs before kiosk password
+authentication and must never issue stop commands; the operator stops the process
+and robot explicitly, then requests exit again.

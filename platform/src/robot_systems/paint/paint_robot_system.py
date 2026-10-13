@@ -67,6 +67,7 @@ from src.shared_contracts.declarations import (
     WorkAreaDefinition,
     WorkAreaObserverBinding,
 )
+from src.shared_contracts.events.process_events import ProcessState
 
 _logger = logging.getLogger(__name__)
 
@@ -800,6 +801,43 @@ class PaintRobotSystem(BaseRobotSystem):
             )
         elif dropoff_corridor is not None:
             self._robot.register_motion_corridor(dropoff_corridor)
+
+    def get_shutdown_block_reason(self) -> str | None:
+        """Refuse exit while a process or robot motion is active; never stop either."""
+        active_states = (ProcessState.RUNNING, ProcessState.PAUSED)
+        for attribute in ("_main_process", "_calibration_process"):
+            process = getattr(self, attribute, None)
+            if process is not None and (
+                getattr(process, "state", None) in active_states
+                or bool(getattr(process, "is_stopping", False))
+            ):
+                return "process_active"
+
+        robot = getattr(self, "_robot", None)
+        if robot is None:
+            return None
+        status = robot.get_execution_status()
+        if not isinstance(status, dict):
+            return "state_unknown"
+        if self._execution_status_is_active(status):
+            return "robot_moving"
+        return None
+
+    @classmethod
+    def _execution_status_is_active(cls, status: dict) -> bool:
+        if bool(status.get("is_executing")) or int(status.get("queue_size", 0) or 0) > 0:
+            return True
+        if str(status.get("state", "")).lower() in {
+            "executing", "moving", "running", "stopping",
+        }:
+            return True
+        for key in ("ordered_motion_chain", "ordered_motion"):
+            nested = status.get(key)
+            if isinstance(nested, dict) and (
+                bool(nested.get("active")) or cls._execution_status_is_active(nested)
+            ):
+                return True
+        return False
 
     def on_stop(self) -> None:
         observe(_logger, "paint.system.stopping", profile=self.metadata.name)
