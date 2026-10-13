@@ -55,7 +55,15 @@ Injected into the concrete `LoginApplicationService`. Decouples camera/QR decodi
 
 ## `LoginView`
 
-`LoginView(QDialog)` — three-page stacked widget inside a two-panel layout (logo left, content right).
+`LoginView(QDialog)` uses a full-dialog WebGL fluid background with native Qt
+cards layered above it. The left logo is composited into the same browser surface
+so the effect can flow across it; forms, buttons, camera preview and validation
+remain native Qt widgets. The page still has the same three-page controller API
+and login/QR signals.
+
+The runtime dependency is `PyQt6-WebEngine`. Production packaging explicitly
+bundles `view/fluid_assets/index.html` and `fluid.js`, and the frozen self-test
+rejects a release when either resource is absent.
 
 ### Pages
 

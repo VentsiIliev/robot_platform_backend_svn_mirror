@@ -18,6 +18,7 @@ datas = [(str(config_dir / "platform.json"), "config"),
 # Give the system-specific source file a stable bundled name for the installer.
 # PyInstaller retains its basename; the target marker identifies which file to read.
 for resource in ("src/applications/base/resources", "src/applications/localization",
+                 "src/applications/login/view/fluid_assets",
                  "pl_gui/dashboard/resources", "pl_gui/shell/resources"):
     datas.append((str(ROOT / resource), resource))
 for translations in sorted((ROOT / "src/applications").glob("*/localization")):

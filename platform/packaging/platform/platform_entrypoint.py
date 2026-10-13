@@ -56,6 +56,10 @@ def self_test():
     for asset in (_LOGO_PATH, _MACHINE_IMAGE_PATH):
         if QPixmap(asset).isNull():
             raise RuntimeError(f"Bundled login image could not be loaded: {asset}")
+    fluid_assets = resource_root / "src/applications/login/view/fluid_assets"
+    for asset in (fluid_assets / "index.html", fluid_assets / "fluid.js"):
+        if not asset.is_file() or asset.stat().st_size == 0:
+            raise RuntimeError(f"Bundled login fluid asset is missing: {asset}")
     import tempfile
     temporary = tempfile.TemporaryDirectory()
     resource_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
