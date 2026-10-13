@@ -818,7 +818,9 @@ class PaintRobotSystem(BaseRobotSystem):
             return None
         status = robot.get_execution_status()
         if not isinstance(status, dict):
-            return "state_unknown"
+            # During backend startup there is no execution snapshot yet. With no
+            # active process, absence of status is not evidence of robot motion.
+            return None
         if self._execution_status_is_active(status):
             return "robot_moving"
         return None

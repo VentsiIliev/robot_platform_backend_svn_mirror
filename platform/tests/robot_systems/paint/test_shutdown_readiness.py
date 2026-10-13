@@ -55,9 +55,6 @@ class TestPaintShutdownReadiness(unittest.TestCase):
     def test_idle_system_allows_shutdown(self):
         self.assertIsNone(self.system.get_shutdown_block_reason())
 
-    def test_missing_execution_status_fails_closed(self):
+    def test_missing_execution_status_during_backend_startup_allows_shutdown(self):
         self.system._robot.get_execution_status.return_value = None
-        self.assertEqual(
-            self.system.get_shutdown_block_reason(),
-            "state_unknown",
-        )
+        self.assertIsNone(self.system.get_shutdown_block_reason())

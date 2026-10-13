@@ -13,9 +13,10 @@ password, including Alt+F4 when delivered by the window manager. It does not cha
 the operator session or use account passwords. Cancel or incorrect passwords deny
 exit. Five failed attempts trigger a 30-second cooldown shared across exit dialogs.
 Before the password dialog is shown, the platform performs a read-only shutdown
-readiness check. An active or stopping process, active robot execution, queued
-motion, or an unavailable execution status blocks exit and tells the operator to
-stop the process/robot first. The exit action never stops them automatically.
+readiness check. An active or stopping process, active robot execution, or queued
+motion blocks exit and tells the operator to stop the process/robot first. A
+missing execution snapshot during backend startup does not block shutdown. The
+exit action never stops the process or robot automatically.
 Running applications can also veto closing.
 
 ## Set or rotate the password
