@@ -11,7 +11,15 @@ def build_payload(destination: Path, vendor_installer: Path | None = None) -> No
     if "--provision-only" not in vendor_installer.read_text():
         raise ValueError("Vendor installer must support --provision-only")
     destination.mkdir(parents=True, exist_ok=True)
-    for name in ("install.sh", "README.md", "update_package.py", "install_update_helper.sh"):
+    for name in (
+        "install.sh",
+        "install_openssh.sh",
+        "install_rustdesk.sh",
+        "install_auto_login.sh",
+        "README.md",
+        "update_package.py",
+        "install_update_helper.sh",
+    ):
         shutil.copy2(source / name, destination / name)
     config = vendor_installer.with_name("release.conf")
     if not config.is_file():

@@ -13,6 +13,21 @@ sudo bash packaging/remote_support/install.sh ROBOT_UI_USER \
   --vendor-installer packaging/remote_support/install_pl_remote_support.sh
 ```
 
+`install.sh` is the full provisioning orchestrator. Its components can also be
+run or retried independently:
+
+```bash
+sudo bash packaging/remote_support/install_openssh.sh
+sudo bash packaging/remote_support/install_rustdesk.sh ROBOT_UI_USER \
+  --vendor-installer packaging/remote_support/install_pl_remote_support.sh
+sudo bash packaging/remote_support/install_auto_login.sh ROBOT_UI_USER
+sudo bash packaging/remote_support/install_update_helper.sh ROBOT_UI_USER
+```
+
+Each component validates its own prerequisites and stops on failure. The
+RustDesk component owns migration from the former timed-access services because
+that migration must finish before `rustdesk.service` is enabled permanently.
+
 Release bundles contain the equivalent payload at `installation/remote-support`.
 Downloads require network access and administrator privileges. Existing SSH
 configuration and RustDesk credentials/relay settings remain in place. The

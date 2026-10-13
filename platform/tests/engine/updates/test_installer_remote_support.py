@@ -24,6 +24,9 @@ class RemoteSupportInstallTests(unittest.TestCase):
             root = Path(temporary)
             payload = root / 'payload'
             builder.build_payload(payload)
+            for name in ('install_openssh.sh', 'install_rustdesk.sh',
+                         'install_auto_login.sh', 'install_update_helper.sh'):
+                self.assertTrue((payload / name).is_file(), name)
             self.assertEqual((payload / 'release.conf').read_bytes(),
                              (ROOT / 'packaging/remote_support/release.conf').read_bytes())
             (payload / 'release.conf').write_text(
@@ -84,7 +87,7 @@ source "$1" --provision-only
             run.assert_not_called()
 
     def test_boot_provisioning_retires_gate_before_starting_services(self):
-        # Run the installer with command doubles and an isolated drop-in path.
+        # Run the component scripts with command doubles and isolated paths.
         # No package manager, host service, or host configuration is touched.
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -102,24 +105,31 @@ source "$1" --provision-only
                 path = commands / name
                 path.write_text(stub + extra)
                 path.chmod(0o755)
-            source = (ROOT / 'packaging/remote_support/install.sh').read_text()
-            source = source.replace('[[ ${EUID} -ne 0 ]]', '[[ 0 -ne 0 ]]')
-            source = source.replace('/etc/systemd/system/rustdesk.service.d/plproject-remote-support.conf', str(gate))
-            source = source.replace('/usr/sbin/sshd', str(commands / 'sshd'))
-            source = source.replace('install -d -o root -g root -m 0755 /run/sshd',
-                                    f'install -d -m 0755 "{ssh_runtime}"')
-            installer = root / 'install.sh'
+            source_dir = ROOT / 'packaging/remote_support'
+            for name in ('install.sh', 'install_openssh.sh', 'install_rustdesk.sh',
+                         'install_auto_login.sh'):
+                source = (source_dir / name).read_text()
+                source = source.replace('[[ ${EUID} -ne 0 ]]', '[[ 0 -ne 0 ]]')
+                source = source.replace('[[ ${EUID} -ne 0 ||', '[[ 0 -ne 0 ||')
+                source = source.replace(
+                    '/etc/systemd/system/rustdesk.service.d/plproject-remote-support.conf',
+                    str(gate))
+                source = source.replace('/usr/sbin/sshd', str(commands / 'sshd'))
+                source = source.replace('install -d -o root -g root -m 0755 /run/sshd',
+                                        f'install -d -m 0755 "{ssh_runtime}"')
+                source = source.replace('install -o root -g root -m 0755', 'install -m 0755')
+                source = source.replace('/usr/local/bin/auto_login.sh',
+                                        str(root / 'installed-auto-login.sh'))
+                (root / name).write_text(source)
             (root / 'auto_login.sh').write_text('#!/bin/bash\n')
             (root / 'install_update_helper.sh').write_text('#!/bin/bash\necho "install-update-helper $*" >> "$CALL_LOG"\n')
-            source = source.replace('install -o root -g root -m 0755', 'install -m 0755')
-            source = source.replace('/usr/local/bin/auto_login.sh', str(root / 'installed-auto-login.sh'))
-            installer.write_text(source)
-            subprocess.run(['bash', str(installer), 'operator'], check=True,
+            subprocess.run(['bash', str(root / 'install.sh'), 'operator'], check=True,
                            env={**os.environ, 'PATH': str(commands) + ':' + os.environ['PATH'], 'CALL_LOG': str(log)},
                            capture_output=True)
             calls = log.read_text()
             self.assertFalse(gate.exists())
-            self.assertIn('apt-get -o DPkg::Lock::Timeout=600 install -y openssh-server libzbar0 libxcb-cursor0', calls)
+            self.assertIn('apt-get -o DPkg::Lock::Timeout=600 install -y openssh-server', calls)
+            self.assertIn('apt-get -o DPkg::Lock::Timeout=600 install -y libzbar0 libxcb-cursor0', calls)
             self.assertIn('sshd -t', calls)
             self.assertEqual(ssh_runtime.stat().st_mode & 0o777, 0o755)
             self.assertIn('systemctl enable --now ssh.service', calls)
