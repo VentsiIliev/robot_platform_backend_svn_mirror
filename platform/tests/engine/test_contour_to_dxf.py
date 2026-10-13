@@ -17,7 +17,7 @@ class ContourDXFTests(unittest.TestCase):
         self.path = Path(self.folder.name) / 'contour.dxf'
         self.contour = np.array([[10, 20], [30, 20], [30, 30], [10, 30]], dtype=float)
 
-    def test_readable_closed_mm_polyline_and_unchanged_input(self):
+    def test_readable_closed_mm_spline_and_unchanged_input(self):
         original = self.contour.copy()
         self.assertEqual(write_contour_dxf(self.path, self.contour, 0.5), self.path)
         document = ezdxf.readfile(self.path)
@@ -25,10 +25,15 @@ class ContourDXFTests(unittest.TestCase):
         self.assertEqual(document.header['$INSUNITS'], 4)
         entities = list(document.modelspace())
         self.assertEqual(len(entities), 1)
-        self.assertEqual(entities[0].dxftype(), 'LWPOLYLINE')
+        self.assertEqual(entities[0].dxftype(), 'SPLINE')
         self.assertTrue(entities[0].closed)
+        self.assertTrue(entities[0].dxf.flags & entities[0].PERIODIC)
+        self.assertEqual(entities[0].dxf.degree, 3)
         self.assertEqual(entities[0].dxf.layer, 'CONTOUR')
-        np.testing.assert_allclose(list(entities[0].get_points('xy')), [[0, 5], [10, 5], [10, 0], [0, 0]])
+        np.testing.assert_allclose(
+            np.asarray(entities[0].control_points)[:-3, :2],
+            [[0, 5], [10, 5], [10, 0], [0, 0]],
+        )
         np.testing.assert_array_equal(self.contour, original)
 
     def test_opencv_input_and_repeated_closing_vertex(self):
@@ -36,7 +41,8 @@ class ContourDXFTests(unittest.TestCase):
         write_contour_dxf(self.path, contour)
         document = ezdxf.readfile(self.path)
         self.assertEqual(document.header['$INSUNITS'], 0)
-        self.assertEqual(len(document.modelspace().query('LWPOLYLINE')[0]), 4)
+        spline = document.modelspace().query('SPLINE')[0]
+        self.assertEqual(len(spline.control_points), 7)
 
     def test_existing_output_is_preserved(self):
         self.path.write_text('original')
@@ -50,7 +56,7 @@ class ContourDXFTests(unittest.TestCase):
         self.assertEqual(saved, self.path)
         document = ezdxf.readfile(saved)
         self.assertEqual(document.dxfversion, 'AC1015')
-        self.assertEqual(len(document.modelspace().query('LWPOLYLINE')[0]), 4)
+        self.assertEqual(len(document.modelspace().query('SPLINE')[0].control_points), 7)
         self.assertGreater(document.viewports.get('*Active')[0].dxf.height, 5)
 
     def test_failed_validation_leaves_no_export_or_temporary_file(self):

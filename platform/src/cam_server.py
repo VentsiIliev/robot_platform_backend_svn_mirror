@@ -19,14 +19,9 @@ if not cam.isOpened():
  raise RuntimeError("Failed to open camera")
 
 
-
-
 latest_jpeg = None
 latest_frame_id = 0
 capture_running = True
-
-
-
 
 def _camera_loop():
  global latest_jpeg, latest_frame_id

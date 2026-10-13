@@ -1,4 +1,4 @@
-"""Export image-space XY contours as closed CAD polylines."""
+"""Export image-space XY contours as closed CAD splines."""
 from pathlib import Path
 import os
 import tempfile
@@ -43,7 +43,10 @@ def write_contour_dxf(path, contour, mm_per_pixel=None) -> Path:
 
     document = ezdxf.new('R2000', units=0 if mm_per_pixel is None else units.MM)
     document.layers.new('CONTOUR', dxfattribs={'color': 3})
-    document.modelspace().add_lwpolyline(cad_xy, close=True, dxfattribs={'layer': 'CONTOUR', 'color': 3})
+    spline = document.modelspace().add_spline(
+        dxfattribs={'layer': 'CONTOUR', 'color': 3},
+    )
+    spline.set_closed(np.column_stack((cad_xy, np.zeros(len(cad_xy)))), degree=3)
     document.header['$MEASUREMENT'] = 1
     document.header['$LUNITS'] = 2
     document.header['$LUPREC'] = 4
@@ -67,10 +70,11 @@ def write_contour_dxf(path, contour, mm_per_pixel=None) -> Path:
         if audit.has_errors or audit.has_fixes:
             raise ValueError('DXF validation failed: file requires repairs')
         entities = list(reopened.modelspace())
-        if (len(entities) != 1 or entities[0].dxftype() != 'LWPOLYLINE'
+        if (len(entities) != 1 or entities[0].dxftype() != 'SPLINE'
                 or not entities[0].closed
+                or not entities[0].dxf.flags & entities[0].PERIODIC
                 or reopened.units != document.units
-                or not np.allclose(np.asarray(entities[0].get_points('xy')), cad_xy,
+                or not np.allclose(np.asarray(entities[0].control_points)[:-3, :2], cad_xy,
                                    rtol=1e-12, atol=1e-9)):
             raise ValueError('DXF validation failed: exported contour differs from capture')
         # Publish the validated file atomically without replacing an existing file.
