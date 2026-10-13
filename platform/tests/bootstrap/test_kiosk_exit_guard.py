@@ -17,6 +17,11 @@ class TestKioskExit(unittest.TestCase):
     def test_config(self):
         self.assertFalse(_load_ui_startup_config({}).kiosk_mode)
         self.assertTrue(_load_ui_startup_config({'kiosk_mode': True}).kiosk_mode)
+        with patch.dict(os.environ, {'ROBOT_PLATFORM_KIOSK_MODE': '1'}):
+            self.assertTrue(_load_ui_startup_config({'kiosk_mode': False}).kiosk_mode)
+        with patch.dict(os.environ, {'ROBOT_PLATFORM_KIOSK_MODE': 'true'}):
+            with self.assertRaisesRegex(RuntimeError, 'must be'):
+                _load_ui_startup_config({'kiosk_mode': False})
         with self.assertRaises(RuntimeError):
             _load_ui_startup_config({'kiosk_mode': 'false'})
 

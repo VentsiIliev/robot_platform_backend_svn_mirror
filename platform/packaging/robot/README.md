@@ -101,8 +101,11 @@ python3 -B robot/install.py
 ```
 
 First installation provisions native dependencies, remote support, GNOME Kiosk
-and the per-user updater. Maintenance installation preserves desktop and machine
-settings. Explicit `--setup-system --kiosk enabled` retries system provisioning.
+and the per-user updater. Kiosk provisioning automatically installs the shared
+exit-password hash embedded during the platform build; repeated installation
+preserves the station's existing hash.
+Maintenance installation preserves desktop and machine settings. Explicit
+`--setup-system --kiosk enabled` retries system provisioning.
 Package installation waits for the apt/dpkg lock held by automatic OS updates.
 
 Installed layout:

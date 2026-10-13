@@ -205,8 +205,9 @@ class FirstInstallSetupTests(unittest.TestCase):
         installer = self.root / 'current/platform/installation/kiosk/setup_kiosk.sh'
         installer.parent.mkdir(parents=True)
         installer.touch()
-        with patch.object(manager.os, 'geteuid', return_value=1000), patch.object(manager, 'desktop_user', return_value='operator'), patch.object(manager.subprocess, 'run') as run:
+        with patch.object(manager.os, 'geteuid', return_value=1000), patch.object(manager, 'desktop_user', return_value='operator'), patch.object(manager, 'provision_kiosk_password') as provision, patch.object(manager.subprocess, 'run') as run:
             manager.install_kiosk(self.root, self.config, 'manual')
+            provision.assert_called_once_with(self.root)
             command = run.call_args.args[0]
             self.assertEqual(command[:5], ['sudo', 'bash', str(installer), 'install', '--user'])
             self.assertEqual(command[command.index('--autologin') + 1], 'no')
@@ -216,6 +217,77 @@ class FirstInstallSetupTests(unittest.TestCase):
             run.reset_mock()
             manager.install_kiosk(self.root, self.config, 'off')
             run.assert_not_called()
+
+    def test_kiosk_password_is_provisioned_once_and_validated_for_operator(self):
+        manifest = self.root / 'current/manifest.json'
+        executable = self.root / 'current/platform/paint-robot'
+        executable.parent.mkdir(parents=True)
+        executable.touch()
+        manifest.write_text('{"executable": "paint-robot"}')
+        password = self.root / 'etc/kiosk-password.json'
+        with patch.object(manager, 'KIOSK_PASSWORD_FILE', password), \
+             patch.object(manager.os, 'geteuid', return_value=1000), \
+             patch.object(manager, 'desktop_user', return_value='operator'), \
+             patch.object(manager.subprocess, 'run') as run:
+            run.return_value.returncode = 1
+            manager.provision_kiosk_password(self.root)
+        commands = [call.args[0] for call in run.call_args_list]
+        self.assertIn(['sudo', str(executable), '--set-kiosk-password', '--read-group',
+                       'robot-kiosk'], commands)
+        self.assertEqual(commands[-1], ['sudo', 'runuser', '-u', 'operator', '--',
+                                        'test', '-r', str(password)])
+
+    def test_kiosk_password_resolves_combined_robot_platform_executable(self):
+        manifest = self.root / 'current/manifest.json'
+        executable = self.root / 'current/platform/paint-robot'
+        executable.parent.mkdir(parents=True)
+        executable.touch()
+        manifest.write_text('{"components": {"platform": {"executable": "paint-robot"}}}')
+        password = self.root / 'etc/kiosk-password.json'
+        with patch.object(manager, 'KIOSK_PASSWORD_FILE', password), \
+             patch.object(manager.os, 'geteuid', return_value=0), \
+             patch.object(manager, 'desktop_user', return_value='operator'), \
+             patch.object(manager.subprocess, 'run') as run:
+            run.return_value.returncode = 1
+            manager.provision_kiosk_password(self.root)
+        self.assertIn(
+            [str(executable), '--set-kiosk-password', '--read-group', 'robot-kiosk'],
+            [call.args[0] for call in run.call_args_list],
+        )
+
+    def test_existing_kiosk_password_is_preserved(self):
+        password = self.root / 'etc/kiosk-password.json'
+        with patch.object(manager, 'KIOSK_PASSWORD_FILE', password), \
+             patch.object(manager.os, 'geteuid', return_value=0), \
+             patch.object(manager, 'desktop_user', return_value='operator'), \
+             patch.object(manager.subprocess, 'run') as run:
+            run.return_value.returncode = 0
+            manager.provision_kiosk_password(self.root)
+        commands = [call.args[0] for call in run.call_args_list]
+        self.assertFalse(any('--set-kiosk-password' in command for command in commands))
+        self.assertEqual(commands[-1], ['runuser', '-u', 'operator', '--', 'test', '-r',
+                                        str(password)])
+
+    def test_packaged_kiosk_password_is_installed_without_prompt(self):
+        password = self.root / 'etc/kiosk-password.json'
+        packaged = self.root / 'current/platform/installation/kiosk/kiosk-password.json'
+        packaged.parent.mkdir(parents=True)
+        packaged.write_text('{"version": 1}')
+        with patch.object(manager, 'KIOSK_PASSWORD_FILE', password), \
+             patch.object(manager.os, 'geteuid', return_value=0), \
+             patch.object(manager, 'desktop_user', return_value='operator'), \
+             patch.object(manager.subprocess, 'run') as run:
+            run.return_value.returncode = 1
+            manager.provision_kiosk_password(self.root)
+        commands = [call.args[0] for call in run.call_args_list]
+        self.assertIn(['install', '-o', 'root', '-g', 'robot-kiosk', '-m', '0640',
+                       str(packaged), str(password)], commands)
+        self.assertFalse(any('--set-kiosk-password' in command for command in commands))
+
+    def test_kiosk_session_requires_password_and_enables_application_guard(self):
+        source = (ROOT / 'packaging/kiosk/setup_kiosk.sh').read_text()
+        self.assertIn('test -r "$password_file"', source)
+        self.assertIn("printf 'export ROBOT_PLATFORM_KIOSK_MODE=1", source)
 
     def test_combined_installer_provisions_first_install_only(self):
         source = ROOT / 'packaging/robot/install_robot.py'

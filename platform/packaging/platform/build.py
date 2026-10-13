@@ -10,11 +10,65 @@ import sys
 
 from targets import ROOT, load_target, prepare_target
 
+DEFAULT_KIOSK_PASSWORD_FILE = Path.home() / ".config/pl-project/kiosk-password.json"
+
+
+def confirm_kiosk_password(password_source):
+    """Require an explicit choice before embedding a credential in a release."""
+    if not sys.stdin.isatty():
+        if os.environ.get("PL_KIOSK_PASSWORD_CONFIRMED") == "1":
+            return
+        raise RuntimeError(
+            "Non-interactive build requires PL_KIOSK_PASSWORD_CONFIRMED=1 after "
+            "the kiosk password hash has been reviewed."
+        )
+    while True:
+        answer = input(
+            f"Kiosk password hash: {password_source}\n"
+            "Is this password set and ready for this release? "
+            "[u]se / [c]hange / [q]uit: "
+        ).strip().lower()
+        if answer in {"u", "use"}:
+            return
+        if answer in {"c", "change"}:
+            from src.bootstrap.kiosk_password import main as set_kiosk_password
+            set_kiosk_password(["--file", str(password_source)])
+            continue
+        if answer in {"", "q", "quit"}:
+            raise RuntimeError("Build cancelled before packaging the kiosk password hash")
+        print("Choose 'u', 'c', or 'q'.")
+
+
+def prepare_kiosk_password():
+    """Resolve, validate and confirm the shared production credential hash."""
+    configured = os.environ.get("PL_KIOSK_PASSWORD_FILE")
+    password_source = Path(configured).expanduser() if configured else DEFAULT_KIOSK_PASSWORD_FILE
+    password_source = password_source.resolve()
+    if not password_source.is_file():
+        raise RuntimeError(
+            "Shared kiosk password hash is required. Create "
+            f"{DEFAULT_KIOSK_PASSWORD_FILE} or set PL_KIOSK_PASSWORD_FILE."
+        )
+    sys.path.insert(0, str(ROOT))
+    from src.bootstrap.kiosk_password import KioskPassword
+    KioskPassword(password_source)
+    confirm_kiosk_password(password_source)
+    # Revalidate after the optional interactive rotation.
+    KioskPassword(password_source)
+    return password_source
+
+
+def stage_kiosk_password(destination, password_source=None):
+    """Embed the already reviewed shared production credential hash."""
+    password_source = password_source or prepare_kiosk_password()
+    shutil.copy2(password_source, destination)
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("target", help="Key from config/release_targets.json")
     args = parser.parse_args()
+    kiosk_password = prepare_kiosk_password()
     target = load_target(args.target)
     config_dir = ROOT / "build/platform-config" / args.target
     prepare_target(args.target, config_dir)
@@ -50,6 +104,7 @@ def main():
     installation = bundle / "installation"
     (installation / "kiosk").mkdir(exist_ok=True)
     shutil.copy2(ROOT / "packaging/kiosk/setup_kiosk.sh", installation / "kiosk/setup_kiosk.sh")
+    stage_kiosk_password(installation / "kiosk/kiosk-password.json", kiosk_password)
     shutil.copy2(ROOT / "packaging/runtime/manage.py", installation / "system-setup.py")
     shutil.copytree(ROOT / "src/engine/updates", installation / "src/engine/updates",
                     ignore=shutil.ignore_patterns("__pycache__"), dirs_exist_ok=True)

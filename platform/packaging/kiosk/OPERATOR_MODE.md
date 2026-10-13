@@ -1,7 +1,11 @@
 # Operator kiosk mode
 
 In `config/platform.json`, set `ui.kiosk_mode` to `true` and launch using the
-normal launcher. Set it to `false` for development.
+normal launcher. Set it to `false` for development. The generated GNOME kiosk
+session launcher sets the narrowly scoped `ROBOT_PLATFORM_KIOSK_MODE=1`
+deployment override, so entering that session always enables the same guard even
+when source configuration remains in development mode. No other override value
+is accepted.
 
 When enabled, the app forces fullscreen, disables the development login bypass,
 and always shows the header exit control. Closing requires a separate kiosk exit
@@ -14,9 +18,34 @@ Running applications can still veto closing.
 
 Only a salted PBKDF2-HMAC-SHA256 hash (600,000 iterations) is stored. Enter passwords
 twice through a hidden terminal prompt, never command arguments, JSON configuration,
-environment variables or logs. Minimum length: 12 characters. No default password.
+environment variables or logs. Minimum length: 12 characters. There is no
+hard-coded plaintext password.
 Missing, corrupt, symlinked or overly permissive hash files prevent kiosk startup
 before hardware/backend initialization.
+
+Production releases embed one administrator-generated hash and therefore install
+the same kiosk exit password on every newly provisioned station by default. The
+plaintext password is never embedded. Create the build credential once, outside
+the repository, before building a release:
+
+```bash
+mkdir -p /home/ilv/.config/pl-project
+chmod 700 /home/ilv/.config/pl-project
+cd /home/ilv/Desktop/25488_ZeroErr_git/platform
+.venv/bin/python -m src.bootstrap.kiosk_password \
+  --file /home/ilv/.config/pl-project/kiosk-password.json
+chmod 600 /home/ilv/.config/pl-project/kiosk-password.json
+```
+
+The build uses that path by default. Set `PL_KIOSK_PASSWORD_FILE` only when the
+hash is stored elsewhere. A build without a valid shared hash fails rather than
+producing a release that asks each station for a different password. Existing
+stations keep their local hash during updates, so an SSH rotation is not undone.
+Before packaging, the build asks whether to use the selected hash, rotate it
+through a hidden prompt, or cancel. Non-interactive automation fails closed
+unless `PL_KIOSK_PASSWORD_CONFIRMED=1` is explicitly set after reviewing the
+credential for that release; this variable is only an approval flag and never
+contains the password.
 
 Development: create a private directory outside the repository, then run:
 

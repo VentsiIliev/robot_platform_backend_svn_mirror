@@ -95,6 +95,20 @@ Kiosk for the desktop account running the installer. Kiosk uses X11 with
 automatic login and launches through the stable installed launcher, so future
 versions are followed without rewriting the kiosk configuration. Installation
 never logs out, starts the robot application, or reboots automatically.
+Before enabling kiosk, the installer creates the protected password directory,
+adds the desktop account to the read-only credential group, and installs the
+shared password hash embedded in the release. Existing station hashes are
+validated and preserved. The kiosk launcher explicitly activates the
+application-level exit guard; setup fails instead of creating an
+unauthenticated kiosk session when the credential is missing or unreadable.
+
+The build requires `/home/ilv/.config/pl-project/kiosk-password.json` by default.
+Set `PL_KIOSK_PASSWORD_FILE` to use another administrator-controlled hash file.
+The build then asks whether to use, change, or reject that credential before it
+is packaged. Non-interactive release jobs must explicitly set
+`PL_KIOSK_PASSWORD_CONFIRMED=1` after the release operator reviews the hash.
+See [operator kiosk mode](../kiosk/OPERATOR_MODE.md#set-or-rotate-the-password)
+for initial creation and SSH rotation.
 
 System provisioning also installs `libzbar0` and `libxcb-cursor0`, native runtime
 libraries required by the packaged platform. Existing releases that lack this

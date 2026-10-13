@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from src.engine.diagnostics.events import observe
 import re
 from dataclasses import dataclass, field
@@ -144,6 +145,12 @@ def _load_ui_startup_config(raw_config: object) -> UiStartupConfig:
         return UiStartupConfig()
     if not isinstance(raw_config, dict):
         raise RuntimeError("'ui' must be a JSON object")
+    kiosk_mode = _read_bool(raw_config, "kiosk_mode", default=False, prefix="ui")
+    kiosk_override = os.environ.get("ROBOT_PLATFORM_KIOSK_MODE")
+    if kiosk_override is not None:
+        if kiosk_override != "1":
+            raise RuntimeError("ROBOT_PLATFORM_KIOSK_MODE must be '1' when set")
+        kiosk_mode = True
     return UiStartupConfig(
         dev_skip_login=_read_bool(raw_config, "dev_skip_login", default=False, prefix="ui"),
         skip_splash=_read_bool(raw_config, "skip_splash", default=False, prefix="ui"),
@@ -166,7 +173,7 @@ def _load_ui_startup_config(raw_config: object) -> UiStartupConfig:
             prefix="ui",
         ),
         kiosk_password_file=_read_password_path(raw_config),
-        kiosk_mode=_read_bool(raw_config, "kiosk_mode", default=False, prefix="ui"),
+        kiosk_mode=kiosk_mode,
         fullscreen=_read_bool(raw_config, "fullscreen", default=True, prefix="ui"),
         window_width=_read_positive_int(raw_config, "window_width", default=1280, prefix="ui"),
         window_height=_read_positive_int(raw_config, "window_height", default=1024, prefix="ui"),

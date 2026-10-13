@@ -21,6 +21,9 @@ from src.engine.updates.service_install import install_service
 from src.engine.updates.releases import validate_manifest, release_executable
 from src.engine.updates.environment import subprocess_environment
 
+KIOSK_PASSWORD_FILE = Path("/etc/robot-platform/kiosk-password.json")
+KIOSK_PASSWORD_GROUP = "robot-kiosk"
+
 
 def desktop_user():
     """Identify the desktop account even when invoked through sudo."""
@@ -54,6 +57,7 @@ def install_kiosk(root, config_path, mode, launcher=None):
     """Launch through the stable updater path so kiosk follows future releases."""
     if mode == "off":
         return
+    provision_kiosk_password(root)
     installer = root / "current/platform/installation/kiosk/setup_kiosk.sh"
     if not installer.is_file():
         raise RuntimeError("Kiosk payload is missing; rebuild this release")
@@ -66,6 +70,44 @@ def install_kiosk(root, config_path, mode, launcher=None):
     if os.geteuid() != 0:
         command.insert(0, "sudo")
     subprocess.run(command, check=True)
+
+
+def provision_kiosk_password(root):
+    """Create or validate the administrator-owned kiosk exit credential."""
+    ui_user = desktop_user()
+
+    def privileged(command, *, check=True):
+        command = list(command)
+        if os.geteuid() != 0:
+            command.insert(0, "sudo")
+        return subprocess.run(command, check=check)
+
+    privileged(["groupadd", "-f", KIOSK_PASSWORD_GROUP])
+    privileged(["usermod", "-aG", KIOSK_PASSWORD_GROUP, ui_user])
+    privileged(["install", "-d", "-o", "root", "-g", KIOSK_PASSWORD_GROUP,
+                "-m", "0750", str(KIOSK_PASSWORD_FILE.parent)])
+    password_exists = privileged(
+        ["test", "-f", str(KIOSK_PASSWORD_FILE)], check=False,
+    ).returncode == 0
+    if not password_exists:
+        packaged_password = root / "current/platform/installation/kiosk/kiosk-password.json"
+        if packaged_password.is_file():
+            privileged(["install", "-o", "root", "-g", KIOSK_PASSWORD_GROUP,
+                        "-m", "0640", str(packaged_password), str(KIOSK_PASSWORD_FILE)])
+        else:
+            manifest = json.loads((root / "current/manifest.json").read_text(encoding="utf-8"))
+            executable_name = manifest.get("executable")
+            if executable_name is None:
+                executable_name = manifest.get("components", {}).get("platform", {}).get("executable")
+            if not isinstance(executable_name, str) or Path(executable_name).name != executable_name:
+                raise RuntimeError("Installed release does not declare a valid platform executable")
+            executable = root / "current/platform" / executable_name
+            if not executable.is_file():
+                raise RuntimeError("Kiosk password tool is missing from the installed platform release")
+            privileged([str(executable), "--set-kiosk-password", "--read-group",
+                        KIOSK_PASSWORD_GROUP])
+    privileged(["runuser", "-u", ui_user, "--", "test", "-r",
+                str(KIOSK_PASSWORD_FILE)])
 
 
 def prepare_system_setup(root, *, first_install, mode=None, setup_system=False):

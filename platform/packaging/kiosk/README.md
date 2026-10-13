@@ -12,11 +12,19 @@ account. The installer uses GNOME Kiosk's X11 session, matching the existing
 deployment. It installs kiosk packages, creates the launcher and log directory,
 selects the account's kiosk session, and optionally enables automatic login.
 It does not create accounts, configure hardware permissions, or install your app.
+The generated session launcher enables application kiosk mode only inside that
+session. Setup refuses to create the launcher until the dedicated kiosk password
+hash exists and is readable by the kiosk account, preventing an unauthenticated
+application exit inside a restricted session.
 
 ## Integrated platform installation
 
 New platform and combined robot release installers configure kiosk on first
 installation only, using this script. Automatic login defaults to enabled.
+Production builds require and embed the shared kiosk password hash. On first
+kiosk provisioning, the integrated installer installs that hash automatically,
+so every new station uses the same exit password. Only the hash is packaged and
+installed; updates and repeated setup preserve a station's existing hash.
 Use `--kiosk manual` for a manual-login test or `--kiosk off` to skip kiosk.
 Subsequent installs and software updates preserve the kiosk configuration;
 `--setup-system` explicitly reruns setup on an existing machine. Pending first
@@ -25,6 +33,9 @@ setup is retried after failure. See [installation policy](../platform/README.md#
 ## Install and test
 
 From the platform checkout, prepare the robot application **as the kiosk user**:
+
+Before standalone source-checkout kiosk setup, provision the password as
+described in [Operator kiosk mode](OPERATOR_MODE.md#set-or-rotate-the-password).
 
 ```bash
 ./launch_robot_app.sh --setup-only
