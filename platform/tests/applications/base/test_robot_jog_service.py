@@ -245,6 +245,7 @@ class TestRobotJogService(unittest.TestCase):
 
     def test_recovery_mode_scopes_collision_override_to_servo_z_plus(self):
         robot = MagicMock()
+        robot.set_collision_detection_suppressed.return_value = {"success": True}
         robot.set_active_tool.return_value = True
         robot.set_active_workobject.return_value = True
         robot.start_servo_jog.return_value = 0
@@ -261,8 +262,30 @@ class TestRobotJogService(unittest.TestCase):
             robot.start_servo_jog.call_args.kwargs["disable_collision_checking"]
         )
 
+    def test_recovery_mode_suppresses_sensorless_collision_monitor(self):
+        robot = MagicMock()
+        robot.set_collision_detection_suppressed.return_value = {"success": True}
+        service = RobotJogService(robot_service=robot)
+
+        self.assertTrue(service.set_recovery_mode(True))
+
+        robot.set_collision_detection_suppressed.assert_called_once_with(True)
+        self.assertTrue(service.recovery_mode_enabled())
+
+    def test_recovery_mode_is_rejected_when_suppression_fails(self):
+        robot = MagicMock()
+        robot.set_collision_detection_suppressed.return_value = {
+            "success": False,
+            "error": "backend unavailable",
+        }
+        service = RobotJogService(robot_service=robot)
+
+        self.assertFalse(service.set_recovery_mode(True))
+        self.assertFalse(service.recovery_mode_enabled())
+
     def test_recovery_mode_disables_collision_for_operator_selected_servo_axis(self):
         robot = MagicMock()
+        robot.set_collision_detection_suppressed.return_value = {"success": True}
         robot.set_active_tool.return_value = True
         robot.set_active_workobject.return_value = True
         robot.start_servo_jog.return_value = 0
@@ -281,6 +304,7 @@ class TestRobotJogService(unittest.TestCase):
 
     def test_recovery_servo_uses_configured_recovery_speed_limit(self):
         robot = MagicMock()
+        robot.set_collision_detection_suppressed.return_value = {"success": True}
         robot.set_active_tool.return_value = True
         robot.set_active_workobject.return_value = True
         robot.start_servo_jog.return_value = 0
@@ -299,6 +323,7 @@ class TestRobotJogService(unittest.TestCase):
 
     def test_recovery_step_above_zero_requests_collision_recovery_without_floor_bypass(self):
         robot = MagicMock()
+        robot.set_collision_detection_suppressed.return_value = {"success": True}
         robot.set_active_tool.return_value = True
         robot.set_active_workobject.return_value = True
         robot.get_current_position.return_value = [10, 20, 30, 0, 0, 0]

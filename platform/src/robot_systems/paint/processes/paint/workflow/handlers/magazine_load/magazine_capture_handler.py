@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 
 from src.robot_systems.paint.processes.paint.results import PaintOperationResult, PaintOutcome
+from src.robot_systems.paint.processes.paint.dry_run import DryRunDatasetExhausted
 
 from src.robot_systems.paint.processes.paint.workflow.context import PaintExecutionContext
 from src.robot_systems.paint.processes.paint.workflow.handlers.common.guards import guard_control
@@ -29,14 +30,15 @@ def handle_magazine_capture(ctx: PaintExecutionContext) -> PaintExecutionState:
     auto_discovery = (
         pickup_mode == MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN
     )
-    if auto_discovery and ctx.magazine_discovery_active_contour is not None:
+    dry_run = bool(ctx.process_config and ctx.process_config.enable_dry_run_mode)
+    if not dry_run and auto_discovery and ctx.magazine_discovery_active_contour is not None:
         ctx.magazine_contour = ctx.magazine_discovery_active_contour
         _logger.info(
             "[MAGAZINE_LOAD] Reusing active auto-discovery pile; queued_piles=%d",
             len(ctx.magazine_discovery_contours),
         )
         return PaintExecutionState.MAGAZINE_PREPARE_PICKUP_RELEASE
-    if auto_discovery and ctx.magazine_discovery_contours:
+    if not dry_run and auto_discovery and ctx.magazine_discovery_contours:
         ctx.magazine_discovery_active_contour = ctx.magazine_discovery_contours.pop(0)
         ctx.magazine_contour = ctx.magazine_discovery_active_contour
         _logger.info(
@@ -92,9 +94,25 @@ def handle_magazine_capture(ctx: PaintExecutionContext) -> PaintExecutionState:
         return PaintExecutionState.ERROR
 
     capture_started = perf_counter()
-    ctx.magazine_snapshot = ctx.production_service._capture_snapshot_service.capture_snapshot(
-        source="paint_magazine_load"
-    )
+    if dry_run:
+        try:
+            source = ctx.production_service._dry_run_snapshot_source
+            ctx.magazine_snapshot = source.capture_for_cycle(
+                ctx.cycle_index,
+                work_area_id="magazine",
+                placement_key="magazine",
+            )
+            metadata = dict(ctx.dry_run_metadata or {})
+            metadata["magazine"] = dict(source.last_metadata or {})
+            ctx.dry_run_metadata = metadata
+        except DryRunDatasetExhausted as exc:
+            ctx.magazine_discovery_empty_capture = True
+            ctx.set_outcome(PaintOperationResult(PaintOutcome.NO_WORKPIECE, str(exc)))
+            return PaintExecutionState.FINISHED
+    else:
+        ctx.magazine_snapshot = ctx.production_service._capture_snapshot_service.capture_snapshot(
+            source="paint_magazine_load"
+        )
     capture_elapsed = perf_counter() - capture_started
     ctx.production_service._set_dashboard_live_view_paused(
         True,
@@ -115,7 +133,7 @@ def handle_magazine_capture(ctx: PaintExecutionContext) -> PaintExecutionState:
         return interrupted
 
     contour_started = perf_counter()
-    if auto_discovery:
+    if auto_discovery and not dry_run:
         ctx.magazine_discovery_contours = _ordered_contours_nearest_to_calibration(
             ctx,
             ctx.magazine_snapshot.contours,

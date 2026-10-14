@@ -3,6 +3,7 @@
 ROS2 Bridge Server - Exposes the shared MoveIt robot backend via REST API.
 """
 import os
+import json
 import logging
 import socket
 import sys
@@ -13,6 +14,8 @@ import traceback
 from flask import Flask, Response, jsonify, request
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
+from std_srvs.srv import Trigger
+from std_msgs.msg import String
 from werkzeug.exceptions import HTTPException
 
 from robot_controller import RobotController
@@ -381,6 +384,22 @@ def start_rest_server(
         logger=logger,
         monitor_rate_hz=50.0,
     )
+    collision_config_channel = {"publisher": None, "subscription": None}
+    collision_config_publisher_lock = threading.Lock()
+    collision_config_state = {"suppressed": None}
+    collision_config_state_changed = threading.Condition()
+
+    def on_collision_config_state(message: String) -> None:
+        try:
+            state = json.loads(message.data)
+            suppressed = state.get("collision_detection_suppressed")
+            if not isinstance(suppressed, bool):
+                return
+            with collision_config_state_changed:
+                collision_config_state["suppressed"] = suppressed
+                collision_config_state_changed.notify_all()
+        except (TypeError, ValueError, json.JSONDecodeError):
+            logger.warning("Invalid collision monitor config-state payload")
     runtime_api = RuntimeApi(
         robot_getter=lambda: robot,
         node_getter=lambda: node,
@@ -394,9 +413,90 @@ def start_rest_server(
     def api_response(response):
         return jsonify(response.body), response.status
 
+    def call_trigger_service(service_name: str, timeout_s: float = 3.0):
+        """Call a sibling ROS Trigger service without spinning this node twice."""
+        client = node.create_client(Trigger, service_name)
+        try:
+            if not client.wait_for_service(timeout_sec=timeout_s):
+                return _response_error(
+                    f"ROS service is unavailable: {service_name}", 503)
+            future = client.call_async(Trigger.Request())
+            completed = threading.Event()
+            future.add_done_callback(lambda _future: completed.set())
+            if not completed.wait(timeout_s):
+                return _response_error(
+                    f"ROS service timed out: {service_name}", 504)
+            result = future.result()
+            if result is None:
+                return _response_error(
+                    f"ROS service returned no result: {service_name}", 500)
+            status = 200 if result.success else 409
+            return jsonify({
+                "success": bool(result.success),
+                "message": str(result.message),
+            }), status
+        finally:
+            node.destroy_client(client)
+
     @app.route("/move/linear", methods=["POST"])
     def move_linear():
         return api_response(runtime_api.move_linear(request.json))
+
+    @app.route("/collision/calibration/recording/start", methods=["POST"])
+    def start_collision_calibration_recording():
+        return call_trigger_service(
+            "/zeroerr_collision_calibration_runner/start_external")
+
+    @app.route("/collision/calibration/recording/stop", methods=["POST"])
+    def stop_collision_calibration_recording():
+        return call_trigger_service("/zeroerr_collision_calibration_runner/stop")
+
+    @app.route("/collision/monitor/suppression", methods=["POST"])
+    def set_collision_monitor_suppression():
+        payload = request.get_json(silent=True) or {}
+        if not isinstance(payload.get("suppressed"), bool):
+            return _response_error("suppressed must be a boolean", 400)
+        message = String()
+        message.data = json.dumps({
+            "collision_detection_suppressed": payload["suppressed"],
+        })
+        with collision_config_publisher_lock:
+            publisher = collision_config_channel["publisher"]
+            if publisher is None:
+                publisher = node.create_publisher(
+                    String, "/zeroerr/collision_monitor/config", 10)
+                collision_config_channel["publisher"] = publisher
+                collision_config_channel["subscription"] = node.create_subscription(
+                    String,
+                    "/zeroerr/collision_monitor/config_state",
+                    on_collision_config_state,
+                    10,
+                )
+        discovery_deadline = time.monotonic() + 1.0
+        while (
+            publisher.get_subscription_count() < 1
+            and time.monotonic() < discovery_deadline
+        ):
+            time.sleep(0.02)
+        if publisher.get_subscription_count() < 1:
+            return _response_error(
+                "collision monitor config subscriber is unavailable", 503)
+        publisher.publish(message)
+        requested = payload["suppressed"]
+        confirmation_deadline = time.monotonic() + 2.0
+        with collision_config_state_changed:
+            while (
+                collision_config_state["suppressed"] is not requested
+                and time.monotonic() < confirmation_deadline
+            ):
+                collision_config_state_changed.wait(timeout=0.05)
+            if collision_config_state["suppressed"] is not requested:
+                return _response_error(
+                    "collision monitor did not confirm suppression update", 504)
+        return jsonify({
+            "success": True,
+            "suppressed": payload["suppressed"],
+        })
 
     @app.route("/move/fast_lin", methods=["POST"])
     def move_fast_lin():

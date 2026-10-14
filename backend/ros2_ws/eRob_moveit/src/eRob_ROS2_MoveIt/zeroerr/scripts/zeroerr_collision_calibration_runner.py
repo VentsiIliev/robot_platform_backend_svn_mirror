@@ -107,6 +107,9 @@ class CalibrationRunner(Node):
         self._collision_active_joints = set()
         self._event_csv_file = None
         self._event_csv_writer = None
+        self._training_csv_file = None
+        self._training_csv_writer = None
+        self._last_training_write = 0.0
 
         self.validator = self.create_client(
             ValidateTrajectoryStates,
@@ -133,6 +136,7 @@ class CalibrationRunner(Node):
         self.status_pub = self.create_publisher(String, '~/status', qos)
         self.create_service(Trigger, '~/start', self._on_start)
         self.create_service(Trigger, '~/start_test', self._on_start_test)
+        self.create_service(Trigger, '~/start_external', self._on_start_external)
         self.create_service(Trigger, '~/stop', self._on_stop)
         self.create_service(Trigger, '~/write_summary', self._on_write_summary)
         self.create_timer(0.5, self._publish_status)
@@ -177,7 +181,8 @@ class CalibrationRunner(Node):
         now = time.monotonic()
         with self._lock:
             self._pose = msg.pose
-            if self.dry_run or not self._running or self._csv_writer is None:
+            if ((self.dry_run and self._run_type != 'external_motion')
+                    or not self._running or self._csv_writer is None):
                 return
             period = float(self.get_parameter('coverage_log_period_sec').value)
             if now - self._last_coverage_write < period or self._positions is None:
@@ -221,9 +226,14 @@ class CalibrationRunner(Node):
             goal.cancel_goal_async()
 
     def _on_collision_state(self, msg: DynamicJointState) -> None:
-        """Record rising collision indications during a supervised test run."""
+        """Record observer samples or rising indications for the active run."""
         with self._lock:
-            if not self._running or self._run_type != 'false_positive_test':
+            if not self._running:
+                return
+            if self._run_type == 'external_motion':
+                self._append_external_training_sample(msg)
+                return
+            if self._run_type != 'false_positive_test':
                 return
             stage = self._stage
             profile = self._dynamic_profile
@@ -283,6 +293,11 @@ class CalibrationRunner(Node):
         del request
         return self._begin_run(response, 'false_positive_test')
 
+    def _on_start_external(self, request, response):
+        """Start passive recording; the caller owns all robot motion."""
+        del request
+        return self._begin_run(response, 'external_motion')
+
     def _begin_run(self, response, run_type):
         with self._lock:
             if self._running:
@@ -297,7 +312,8 @@ class CalibrationRunner(Node):
                 response.success = False
                 response.message = 'robot is moving; wait until it is stationary'
                 return response
-            if not self.dry_run and (
+            live_run = run_type == 'external_motion' or not self.dry_run
+            if live_run and (
                     not self._drive_state_seen
                     or not getattr(self, '_drives_operation_enabled', False)):
                 response.success = False
@@ -314,9 +330,10 @@ class CalibrationRunner(Node):
             self._run_type = run_type
             self._collision_events = []
             self._collision_active_joints = set()
+            self._last_training_write = 0.0
         threading.Thread(target=self._run, daemon=True).start()
         response.success = True
-        response.message = f'{run_type} started (dry_run={self.dry_run})'
+        response.message = f'{run_type} started (dry_run={self.dry_run and not live_run})'
         return response
 
     def _on_stop(self, request, response):
@@ -564,6 +581,16 @@ class CalibrationRunner(Node):
         self._csv_file = open(self._run_directory / 'coverage_points.csv', 'w', newline='')
         self._csv_writer = csv.writer(self._csv_file)
         self._csv_writer.writerow(['unix_time', 'stage', 'x_m', 'y_m', 'z_m'] + self.joint_names)
+        if self._run_type == 'external_motion':
+            self._training_csv_file = open(
+                self._run_directory / 'collision_training.csv', 'w', newline='')
+            self._training_csv_writer = csv.writer(self._training_csv_file)
+            self._training_csv_writer.writerow([
+                'timestamp', 'joint', 'position_rad', 'velocity_rad_s',
+                'acceleration_rad_s2', 'torque_sensor_nm', 'measured_torque_nm',
+                'expected_torque_nm', 'external_torque_nm',
+                'following_error_actual',
+            ])
         if self._run_type == 'false_positive_test':
             self._event_csv_file = open(
                 self._run_directory / 'false_positive_events.csv', 'w', newline='')
@@ -626,6 +653,19 @@ class CalibrationRunner(Node):
     def _run(self):
         try:
             self._open_run_log()
+            if self._run_type == 'external_motion':
+                with self._lock:
+                    self._stage = 'recording_external_motion'
+                    self._dynamic_profile = 'paint_process'
+                while True:
+                    with self._lock:
+                        if self._stop_requested:
+                            break
+                    time.sleep(0.05)
+                with self._lock:
+                    self._stage = 'stopped'
+                    self._dynamic_profile = 'none'
+                return
             with self._lock:
                 anchor = list(self._positions)
             planned_start = list(anchor)
@@ -728,12 +768,46 @@ class CalibrationRunner(Node):
                 self._event_csv_file.close()
                 self._event_csv_file = None
                 self._event_csv_writer = None
+            if self._training_csv_file is not None:
+                self._training_csv_file.flush()
+                self._training_csv_file.close()
+                self._training_csv_file = None
+                self._training_csv_writer = None
             path = self._write_summary()
             if path:
                 self.get_logger().info(f'Calibration coverage summary: {path}')
             with self._lock:
                 self._active_goal = None
                 self._running = False
+
+    def _append_external_training_sample(self, msg: DynamicJointState) -> None:
+        """Write one synchronized, model-ready sample for every reported joint."""
+        writer = self._training_csv_writer
+        handle = self._training_csv_file
+        if writer is None or handle is None:
+            return
+        timestamp = time.time()
+        period = max(0.0, float(self.get_parameter('coverage_log_period_sec').value))
+        if timestamp - self._last_training_write < period:
+            return
+        positions = dict(zip(self.joint_names, self._positions or []))
+        velocities = dict(zip(self.joint_names, self._velocities or []))
+        accelerations = dict(zip(self.joint_names, self._accelerations or []))
+        for joint_name, values in zip(msg.joint_names, msg.interface_values):
+            fields = dict(zip(values.interface_names, values.values))
+            writer.writerow([
+                f'{timestamp:.9f}', joint_name,
+                positions.get(joint_name, fields.get('position', math.nan)),
+                velocities.get(joint_name, fields.get('velocity', math.nan)),
+                accelerations.get(joint_name, math.nan),
+                fields.get('torque_sensor', math.nan),
+                fields.get('measured_torque', math.nan),
+                fields.get('expected_torque', math.nan),
+                fields.get('external_torque', math.nan),
+                fields.get('following_error_actual', math.nan),
+            ])
+        handle.flush()
+        self._last_training_write = timestamp
 
 
 def main(args=None):

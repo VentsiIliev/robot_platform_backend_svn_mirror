@@ -150,6 +150,7 @@ def run_incremental_paint_contact_result(ctx) -> PaintOperationResult:
                     blend_radius=0.0,
                 ),
             ))
+        owner._motion.record_ordered_chain("incremental paint", commands)
         result = owner._robot_service.execute_ordered_motion_chain(
             segments=commands,
             tool=owner._pickup_tool,

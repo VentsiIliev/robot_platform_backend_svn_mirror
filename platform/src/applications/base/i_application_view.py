@@ -84,6 +84,10 @@ class IApplicationView(AppWidget):
         if self._drawer is not None:
             self._drawer.set_visible(enabled)
 
+    def set_recovery_mode_checked(self, enabled: bool) -> None:
+        if self._jog_widget is not None:
+            self._jog_widget.set_recovery_mode_checked(enabled)
+
     def set_jog_position(self, pos: list) -> None:
         if self._jog_widget is not None:
             self._jog_widget.set_position(pos)

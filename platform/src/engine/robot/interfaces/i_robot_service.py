@@ -75,6 +75,16 @@ class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
     def get_last_trajectory_command_info(self):
         return None
 
+    def start_collision_calibration_recording(self) -> dict:
+        return {"success": False, "error": "recording_not_supported"}
+
+    def stop_collision_calibration_recording(self) -> dict:
+        return {"success": False, "error": "recording_not_supported"}
+
+    def set_collision_detection_suppressed(self, suppressed: bool) -> dict:
+        """Temporarily suppress sensorless collision detection for recovery motion."""
+        return {"success": False, "error": "collision_suppression_unsupported"}
+
     def unwind_joint6(
         self,
         blocking: bool = True,

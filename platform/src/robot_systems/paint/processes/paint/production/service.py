@@ -67,6 +67,8 @@ class PaintProductionService:
         vision_service=None,
         messaging_service=None,
         plate_layout_service: PlateLayoutService | None = None,
+        dry_run_snapshot_source=None,
+        failure_artifact_root=None,
     ) -> None:
         """Store the services needed to capture, prepare, plan, and execute one paint cycle."""
         self._workpiece_preparation = workpiece_preparation_service
@@ -88,6 +90,8 @@ class PaintProductionService:
         self._active_execution_context: PaintExecutionContext | None = None
         self._last_execution_context: PaintExecutionContext | None = None
         self._prepositioned_start_group: str | None = None
+        self._dry_run_snapshot_source = dry_run_snapshot_source
+        self._failure_artifact_root = failure_artifact_root
 
     def ensure_tray_ready_for_start(self, config: PaintProcessConfig | None = None) -> None:
         """Enforce tray readiness for UI, physical buttons and direct production."""
@@ -186,6 +190,19 @@ class PaintProductionService:
             return PaintOperationResult.failed(PaintFailureCode.INVALID_CONFIGURATION, 'process_settings', process_config_result[1])
 
         process_config = process_config_result[2]
+        if process_config is not None and process_config.enable_dry_run_mode:
+            if self._dry_run_snapshot_source is None:
+                return PaintOperationResult.failed(
+                    PaintFailureCode.INVALID_CONFIGURATION,
+                    "dry_run",
+                    "Dry-run mode is enabled but its dataset source is unavailable",
+                )
+            self._dry_run_snapshot_source.start_run()
+            _logger.warning(
+                "[DRY_RUN] Starting synthetic production; camera workpiece "
+                "detection and physical pickup sensing are bypassed; vacuum "
+                "pump operation remains enabled"
+            )
         magazine_config = process_config.magazine_load if process_config is not None else None
         if retry_unmatched_workpiece:
             if not self.can_retry_unmatched_workpiece():
@@ -703,14 +720,29 @@ class PaintProductionService:
             ]
         with self._active_context_lock:
             self._active_execution_context = context
+        raised_exception = None
+        execution = None
         try:
             execution = run_paint_cycle(context, initial_state=initial_state)
+            if execution.result.failure is not None and context.operation_failure is None:
+                context.set_outcome(execution.result)
+        except Exception as exc:
+            raised_exception = exc
+            raise
         finally:
             self._last_execution_context = context
             self._log_execution_state_timing(context)
             with self._active_context_lock:
                 if self._active_execution_context is context:
                     self._active_execution_context = None
+            has_failure = bool(
+                context.operation_failure is not None
+                or context.tray_failure is not None
+                or raised_exception is not None
+                or (execution is not None and execution.result.failure is not None)
+            )
+            if has_failure:
+                self._store_failure_bundle(context, raised_exception)
             self._path_executor.set_cycle_dropoff_strategy(None)
 
         self.last_failure = context.tray_failure or context.operation_failure
@@ -719,6 +751,17 @@ class PaintProductionService:
             self._restore_brightness()
             self._set_dashboard_live_view_paused(False, reason="paint cycle finished")
         return execution.result
+
+    def _store_failure_bundle(self, context, raised_exception=None) -> None:
+        if self._failure_artifact_root is None:
+            return
+        from src.robot_systems.paint.diagnostics.failure_bundle import write_paint_failure_bundle
+        write_paint_failure_bundle(
+            context,
+            self._path_executor,
+            self._failure_artifact_root,
+            raised_exception=raised_exception,
+        )
 
     @staticmethod
     def _effective_dropoff_strategy(process_config, cycle_index: int) -> str | None:

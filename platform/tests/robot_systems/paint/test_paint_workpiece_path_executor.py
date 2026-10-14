@@ -4,6 +4,7 @@ from src.robot_systems.paint.visualization.paint_preview_geometry import PaintPr
 import unittest
 import threading
 import time
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -22,10 +23,13 @@ from src.robot_systems.paint.processes.paint.configuration.models import (
     PaintProcessConfig,
     PaintSafeTravelConfig,
     PaintToDropoffSafeTravelConfig,
+    PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
+    MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN,
 )
 from src.robot_systems.paint.processes.paint.production.execution_control import PaintExecutionControl
 from src.robot_systems.paint.processes.paint.workflow.handlers.magazine_load.magazine_execute_pickup_release_handler import (
     execute_magazine_pickup_release,
+    _dry_run_accepts_minimum_z_result,
 )
 from src.robot_systems.paint.processes.paint.operations.dropoff.motion import (
     _on_workpiece_release_verified,
@@ -699,6 +703,59 @@ class TestPaintExecutionRuntime(unittest.TestCase):
         self.assertEqual(segments[3]["position"], [10.0, 20.0, 30.0, 180.0, 0.0, 0.0])
         self.assertEqual(31.0, segments[3]["vel"])
         self.assertEqual(32.0, segments[3]["acc"])
+
+    def test_dry_run_sensor_magazine_pickup_still_requires_vacuum(self):
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(
+            enable_dry_run_mode=True,
+            pickup_motion=replace(
+                PaintProcessConfig().pickup_motion,
+                pickup_contact_mode=PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
+            ),
+        )
+        executor = _make_executor(
+            robot_service=MagicMock(),
+            paint_process_config_service=config_service,
+        )
+        executor._vacuum.turn_vacuum_on = MagicMock(return_value=(True, ""))
+        executor._vacuum.turn_vacuum_off = MagicMock(return_value=(True, ""))
+
+        with patch(
+            "src.robot_systems.paint.processes.paint.workflow.handlers.magazine_load."
+            "magazine_execute_pickup_release_handler."
+            "_execute_magazine_servo_contact_pickup_release",
+            return_value=(True, ""),
+        ):
+            ok, message = execute_magazine_pickup_release(
+                SimpleNamespace(_path_executor=executor),
+                pickup_xy=(11.0, 22.0),
+                pickup_rz=33.0,
+                pickup_base_pose=[0.0, 0.0, 100.0, 180.0, 0.0, 0.0],
+                release_pose=[10.0, 20.0, 30.0, 180.0, 0.0, 0.0],
+                magazine_pickup_mode=MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN,
+            )
+
+        self.assertTrue(ok, message)
+        executor._vacuum.turn_vacuum_on.assert_called_once_with(required=True)
+
+    def test_only_dry_run_accepts_minimum_z_as_pickup_success(self):
+        executor = MagicMock()
+        result = SimpleNamespace(success=False, message="minimum_z_reached")
+        executor._paint_process_config.return_value = PaintProcessConfig(
+            enable_dry_run_mode=True
+        )
+        self.assertTrue(_dry_run_accepts_minimum_z_result(executor, result))
+
+        executor._paint_process_config.return_value = PaintProcessConfig(
+            enable_dry_run_mode=False
+        )
+        self.assertFalse(_dry_run_accepts_minimum_z_result(executor, result))
+
+        executor._paint_process_config.return_value = PaintProcessConfig(
+            enable_dry_run_mode=True
+        )
+        result.message = "timeout"
+        self.assertFalse(_dry_run_accepts_minimum_z_result(executor, result))
 
     def test_resume_pickup_target_release_continues_from_current_pose_to_next_target(self):
         config_service = MagicMock()

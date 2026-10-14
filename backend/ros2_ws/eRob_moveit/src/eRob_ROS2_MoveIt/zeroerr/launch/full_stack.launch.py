@@ -163,7 +163,7 @@ def generate_launch_description():
             default_value=str(bool(runtime_value(
                 package_path,
                 "COLLISION_CALIBRATION_RUNNER_ENABLED",
-                False,
+                True,
             ))).lower(),
             description="Start the idle-by-default MoveIt-validated calibration runner",
         )

@@ -193,7 +193,7 @@ class SyntheticDataset:
         """Get list of available shape types"""
         # Return shapes that are implemented in the factory
         implemented_shapes = [
-            ShapeType.CIRCLE, ShapeType.ELLIPSE, ShapeType.RECTANGLE, 
+            ShapeType.CIRCLE, ShapeType.ELLIPSE, ShapeType.EGG, ShapeType.RECTANGLE,
             ShapeType.SQUARE, ShapeType.TRIANGLE, ShapeType.DIAMOND,
             ShapeType.PENTAGON, ShapeType.HEXAGON, ShapeType.OCTAGON,
             ShapeType.STAR, ShapeType.HEART

@@ -74,12 +74,25 @@ Planner diagnostics distinguish:
 
 ### Dynamics-based collision detector
 
-`/scripts/safety/collision_detection/` contains a dynamics-based external torque detector.
+`/scripts/safety/collision_detection/` contains the rigid-body model and
+external-torque estimators. The deployed monitor is the `zeroerr` package's
+`zeroerr_collision_monitor.py` node.
 
-Current status in `RobotController`:
-- initialized
-- callback wired
-- presently disabled for automatic stopping unless explicitly enabled
+The production estimator is a generalized-momentum observer with calibrated
+friction, pose-residual and signed velocity/acceleration compensation. Both its
+residual correction and motion-conditioned thresholds distinguish positive and
+negative motion because collision-free torque behavior was found to be
+direction dependent.
+
+The detector supports passive reporting and active stopping. In active mode a
+confirmed detection stops current motion, clears queued motion, latches the
+runtime motion interlock and blocks later motion/drive-enable requests until
+operator acknowledgement. Recovery Jog can temporarily suppress detection, but
+the backend must confirm suppression and detection is restored on exit.
+
+See `zeroerr/docs/SENSORLESS_COLLISION_DETECTION.md` for the equations, clean
+data requirements, fitting procedure, validation, latch workflow and Recovery
+Jog behavior.
 
 ## Reachability Precheck Versus Real Execution
 

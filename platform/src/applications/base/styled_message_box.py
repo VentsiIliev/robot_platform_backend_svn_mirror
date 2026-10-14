@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Sequence
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QDialog, QFrame, QHBoxLayout, QLabel, QMessageBox, QPushButton,
     QVBoxLayout, QWidget,
@@ -71,10 +71,13 @@ class DialogAction:
     text: str
     primary: bool = False
     full_width: bool = False
+    close_dialog: bool = True
 
 
 class ActionWarningDialog(QDialog):
     """Optional action layout for warnings that need a clear next step."""
+
+    action_selected = pyqtSignal(str)
 
     def __init__(
         self, parent: QWidget, title: str, text: str, *,
@@ -82,6 +85,7 @@ class ActionWarningDialog(QDialog):
         actions: Sequence[DialogAction],
     ) -> None:
         super().__init__(parent)
+        self._actions = tuple(actions)
         self.selected_action: str | None = None
         self.setWindowTitle(title)
         self.setModal(True)
@@ -144,7 +148,7 @@ class ActionWarningDialog(QDialog):
 
         button_row = QHBoxLayout()
         button_row.setSpacing(10)
-        for action in actions:
+        for action in self._actions:
             button = QPushButton(action.text)
             button.setObjectName(f"warningAction_{action.key}")
             button.setProperty("action_key", action.key)
@@ -164,7 +168,13 @@ class ActionWarningDialog(QDialog):
     def _on_action_clicked(self) -> None:
         button = self.sender()
         self.selected_action = button.property("action_key") if button else None
-        self.accept()
+        if self.selected_action is None:
+            return
+        self.action_selected.emit(self.selected_action)
+        for action in self._actions:
+            if action.key == self.selected_action and action.close_dialog:
+                self.accept()
+                return
 
 
 def show_warning(

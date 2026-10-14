@@ -17,6 +17,7 @@ class ShapeType(Enum):
     # Basic geometric shapes
     CIRCLE = "circle"
     ELLIPSE = "ellipse"
+    EGG = "egg"
     RECTANGLE = "rectangle"
     SQUARE = "square"
     TRIANGLE = "triangle"
@@ -151,6 +152,44 @@ class EllipseGenerator(BaseShapeGenerator):
     
     def get_default_parameters(self) -> Dict[str, Any]:
         return {'base_size': 50, 'aspect_ratio': 0.6}
+
+
+class EggGenerator(BaseShapeGenerator):
+    """Generator for a smooth egg silhouette with a narrow top."""
+
+    def __init__(self):
+        super().__init__(ShapeType.EGG)
+
+    def generate(self, scale: float = 1.0, img_size: Tuple[int, int] = (256, 256), **kwargs) -> np.ndarray:
+        params = self.validate_parameters(**kwargs)
+        if scale <= 0.0:
+            raise ValueError("scale must be positive")
+
+        image = np.zeros(img_size, dtype=np.uint8)
+        height, width = img_size
+        center_x, center_y = width // 2, height // 2
+        base = float(params['base_size']) * min(float(scale), 2.0)
+        vertical_radius = base
+        horizontal_radius = base * float(params['width_ratio'])
+        taper = float(params['top_taper'])
+        sample_count = max(24, int(params['n_points']))
+
+        angle = np.linspace(0.0, 2.0 * np.pi, sample_count, endpoint=False)
+        radial_taper = 1.0 - taper * np.cos(angle)
+        x = center_x + horizontal_radius * np.sin(angle) * radial_taper
+        y = center_y - vertical_radius * np.cos(angle)
+        points = np.rint(np.column_stack((x, y))).astype(np.int32)
+        cv2.fillPoly(image, [points], 255)
+        contours, _ = cv2.findContours(image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        return contours[0] if contours else points.reshape(-1, 1, 2)
+
+    def get_default_parameters(self) -> Dict[str, Any]:
+        return {
+            'base_size': 50,
+            'width_ratio': 0.78,
+            'top_taper': 0.28,
+            'n_points': 120,
+        }
 
 
 class RectangleGenerator(BaseShapeGenerator):
@@ -861,6 +900,7 @@ class ShapeFactory:
 # Register basic generators
 ShapeFactory.register_generator(ShapeType.CIRCLE, CircleGenerator)
 ShapeFactory.register_generator(ShapeType.ELLIPSE, EllipseGenerator)
+ShapeFactory.register_generator(ShapeType.EGG, EggGenerator)
 ShapeFactory.register_generator(ShapeType.RECTANGLE, RectangleGenerator)
 ShapeFactory.register_generator(ShapeType.SQUARE, RectangleGenerator)
 ShapeFactory.register_generator(ShapeType.TRIANGLE, PolygonGenerator)

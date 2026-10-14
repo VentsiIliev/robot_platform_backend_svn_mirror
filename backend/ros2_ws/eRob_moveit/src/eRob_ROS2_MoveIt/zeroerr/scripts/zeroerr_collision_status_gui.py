@@ -22,6 +22,9 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSlider,
+    QDoubleSpinBox,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -60,6 +63,10 @@ class CollisionStatusNode(Node):
         self.reasons: Dict[str, str] = {}
         self.thresholds: Dict[str, float] = {}
         self.estimator = "unknown"
+        self.collision_sensitivity_percent = 100
+        self.confirm_cycles = 3
+        self.dynamic_threshold_max_ratio = 5.0
+        self.active_stop_enabled = False
         self.last_state_time = 0.0
         self.calibration = {}
         self.last_calibration_time = 0.0
@@ -99,6 +106,8 @@ class CollisionStatusNode(Node):
             Trigger, "/zeroerr_collision_calibration_runner/start_test")
         self.calibration_stop = self.create_client(
             Trigger, "/zeroerr_collision_calibration_runner/stop")
+        self.config_publisher = self.create_publisher(
+            String, "/zeroerr/collision_monitor/config", 10)
 
     def _on_state(self, msg: DynamicJointState) -> None:
         latest: Dict[str, Dict[str, float]] = {}
@@ -136,6 +145,47 @@ class CollisionStatusNode(Node):
         }
         mode = str(payload.get("dynamics_estimator_mode", "unknown"))
         self.estimator = mode
+        sensitivity = payload.get("collision_sensitivity_percent", 100.0)
+        try:
+            self.collision_sensitivity_percent = int(round(float(sensitivity)))
+        except (TypeError, ValueError):
+            self.collision_sensitivity_percent = 100
+        self.active_stop_enabled = bool(payload.get("active_stop_enabled", False))
+        try:
+            self.confirm_cycles = max(1, int(payload.get("confirm_cycles", 3)))
+        except (TypeError, ValueError):
+            self.confirm_cycles = 3
+        try:
+            self.dynamic_threshold_max_ratio = max(
+                1.0,
+                min(20.0, float(payload.get("dynamic_threshold_max_ratio", 5.0))),
+            )
+        except (TypeError, ValueError):
+            self.dynamic_threshold_max_ratio = 5.0
+
+    def set_collision_sensitivity(self, percent: int) -> None:
+        value = max(50, min(200, int(percent)))
+        msg = String()
+        msg.data = json.dumps({"collision_sensitivity_percent": value})
+        self.config_publisher.publish(msg)
+
+    def set_active_stop_enabled(self, enabled: bool) -> None:
+        msg = String()
+        msg.data = json.dumps({"active_stop_enabled": bool(enabled)})
+        self.config_publisher.publish(msg)
+
+    def set_confirm_cycles(self, cycles: int) -> None:
+        msg = String()
+        msg.data = json.dumps({"confirm_cycles": max(1, int(cycles))})
+        self.config_publisher.publish(msg)
+
+    def set_dynamic_threshold_max_ratio(self, ratio: float) -> None:
+        msg = String()
+        msg.data = json.dumps({
+            "dynamic_threshold_max_ratio": max(1.0, min(20.0, float(ratio)))
+        })
+        self.config_publisher.publish(msg)
+
 
     def _on_calibration_status(self, msg: String) -> None:
         try:
@@ -202,17 +252,77 @@ class CollisionStatusWindow(QMainWindow):
         calibration_layout = QHBoxLayout(calibration_group)
         self.calibration_status = QLabel("OFFLINE")
         self.calibration_status.setMinimumWidth(700)
-        self.start_calibration_button = QPushButton("Start calibration")
-        self.start_test_button = QPushButton("Run false-positive test")
-        self.stop_calibration_button = QPushButton("Stop calibration")
-        self.start_calibration_button.clicked.connect(self.start_calibration)
-        self.start_test_button.clicked.connect(self.start_collision_test)
-        self.stop_calibration_button.clicked.connect(self.stop_calibration)
         calibration_layout.addWidget(self.calibration_status, 1)
-        calibration_layout.addWidget(self.start_calibration_button)
-        calibration_layout.addWidget(self.start_test_button)
-        calibration_layout.addWidget(self.stop_calibration_button)
         layout.addWidget(calibration_group)
+
+        sensitivity_group = QGroupBox("Collision sensitivity")
+        sensitivity_layout = QHBoxLayout(sensitivity_group)
+        sensitivity_layout.addWidget(QLabel("Less sensitive"))
+        self.sensitivity_slider = QSlider(Qt.Orientation.Horizontal)
+        self.sensitivity_slider.setRange(50, 200)
+        self.sensitivity_slider.setSingleStep(5)
+        self.sensitivity_slider.setPageStep(10)
+        self.sensitivity_slider.setValue(100)
+        self.sensitivity_slider.setToolTip(
+            "100% is the calibrated baseline. Higher sensitivity lowers collision thresholds."
+        )
+        self.sensitivity_value = QLabel("100% (calibrated)")
+        self.sensitivity_value.setMinimumWidth(150)
+        self.sensitivity_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.sensitivity_slider.valueChanged.connect(self._preview_sensitivity)
+        self.sensitivity_slider.sliderReleased.connect(self._apply_sensitivity)
+        sensitivity_layout.addWidget(self.sensitivity_slider, 1)
+        sensitivity_layout.addWidget(QLabel("More sensitive"))
+        sensitivity_layout.addWidget(self.sensitivity_value)
+        self.active_mode_button = QPushButton("PASSIVE — REPORT ONLY")
+        self.active_mode_button.setCheckable(True)
+        self.active_mode_button.setMinimumWidth(220)
+        self.active_mode_button.clicked.connect(self._change_active_mode)
+        sensitivity_layout.addWidget(self.active_mode_button)
+        layout.addWidget(sensitivity_group)
+
+        confirmation_group = QGroupBox("Detection confirmation")
+        confirmation_layout = QHBoxLayout(confirmation_group)
+        confirmation_layout.addWidget(QLabel("Consecutive detections before latching:"))
+        self.confirm_cycles_spin = QSpinBox()
+        self.confirm_cycles_spin.setRange(1, 50)
+        self.confirm_cycles_spin.setValue(3)
+        self.confirm_cycles_spin.setSuffix(" samples")
+        self.confirm_cycles_spin.setToolTip(
+            "A joint must exceed its collision threshold for this many consecutive "
+            "monitor samples before the detector latches. Applies to both dynamics "
+            "and effort/following-error detection."
+        )
+        self.confirm_cycles_spin.editingFinished.connect(self._apply_confirm_cycles)
+        confirmation_layout.addWidget(self.confirm_cycles_spin)
+        confirmation_layout.addStretch(1)
+        confirmation_layout.addWidget(QLabel(
+            "Higher values reject brief spikes but delay collision response."
+        ))
+        layout.addWidget(confirmation_group)
+
+        dynamic_cap_group = QGroupBox("Fast-motion sensitivity")
+        dynamic_cap_layout = QHBoxLayout(dynamic_cap_group)
+        dynamic_cap_layout.addWidget(QLabel("Maximum dynamic threshold:"))
+        self.dynamic_threshold_max_ratio_spin = QDoubleSpinBox()
+        self.dynamic_threshold_max_ratio_spin.setRange(1.0, 20.0)
+        self.dynamic_threshold_max_ratio_spin.setDecimals(1)
+        self.dynamic_threshold_max_ratio_spin.setSingleStep(0.5)
+        self.dynamic_threshold_max_ratio_spin.setValue(5.0)
+        self.dynamic_threshold_max_ratio_spin.setSuffix(" × static")
+        self.dynamic_threshold_max_ratio_spin.setToolTip(
+            "Caps the learned motion-conditioned threshold relative to each joint's "
+            "static threshold. Lower values improve collision sensitivity during fast "
+            "motion but can increase false detections."
+        )
+        self.dynamic_threshold_max_ratio_spin.editingFinished.connect(
+            self._apply_dynamic_threshold_max_ratio)
+        dynamic_cap_layout.addWidget(self.dynamic_threshold_max_ratio_spin)
+        dynamic_cap_layout.addStretch(1)
+        dynamic_cap_layout.addWidget(QLabel(
+            "Lower values limit how much speed and acceleration can mask a collision."
+        ))
+        layout.addWidget(dynamic_cap_group)
 
         self.table = QTableWidget(len(JOINT_NAMES), len(COLUMNS))
         self.table.setHorizontalHeaderLabels(COLUMNS)
@@ -250,6 +360,7 @@ class CollisionStatusWindow(QMainWindow):
         any_active = False
         any_latched = False
         missing_inputs = False
+        observer_warming = False
 
         for row, joint_name in enumerate(JOINT_NAMES):
             state = self.node.state.get(joint_name, {})
@@ -267,14 +378,26 @@ class CollisionStatusWindow(QMainWindow):
             latched = bool(state.get("dynamics_latched", 0.0)) or bool(
                 state.get("contact_latched", 0.0)
             )
-            input_ok = self._finite(sensor) and self._finite(external) and not stale
-            missing_inputs |= not input_ok
+            observer_ready_value = state.get("observer_ready")
+            observer_ready = (
+                self._finite(observer_ready_value)
+                and float(observer_ready_value) >= 0.5
+            )
+            joint_warming = self._finite(sensor) and not observer_ready and not stale
+            observer_warming |= joint_warming
+            input_ok = (
+                self._finite(sensor)
+                and self._finite(external)
+                and observer_ready
+                and not stale
+            )
+            missing_inputs |= not input_ok and not joint_warming
             any_active |= active
             any_latched |= latched
 
             values = [
                 joint_name,
-                "OK" if input_ok else "MISSING",
+                "OK" if input_ok else "WARMING" if joint_warming else "MISSING",
                 self._number(sensor),
                 self._number(expected),
                 self._number(residual),
@@ -289,7 +412,9 @@ class CollisionStatusWindow(QMainWindow):
                 if column in (1, 7, 8):
                     item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 if column == 1:
-                    item.setBackground(QColor("#2e7d32" if input_ok else "#c62828"))
+                    item.setBackground(QColor(
+                        "#2e7d32" if input_ok else "#ef6c00" if joint_warming else "#c62828"
+                    ))
                     item.setForeground(QColor("white"))
                 elif column in (7, 8) and value == "YES":
                     item.setBackground(QColor("#c62828"))
@@ -299,12 +424,15 @@ class CollisionStatusWindow(QMainWindow):
         if stale:
             self._set_banner("MONITOR OFFLINE / STATE STALE", "#616161")
             detail = "No fresh monitor state received"
-        elif missing_inputs:
-            self._set_banner("DETECTOR NOT READY — INPUT MISSING", "#ef6c00")
-            detail = "At least one joint lacks valid torque or residual data"
         elif any_active or any_latched:
             self._set_banner("COLLISION DETECTED", "#c62828")
             detail = "One or more joints are ACTIVE or LATCHED"
+        elif observer_warming:
+            self._set_banner("DETECTOR WARMING UP — PROTECTION NOT ACTIVE", "#ef6c00")
+            detail = "Momentum observer is initializing or waiting for stable drives"
+        elif missing_inputs:
+            self._set_banner("DETECTOR NOT READY — INPUT MISSING", "#ef6c00")
+            detail = "At least one joint lacks valid torque or residual data"
         else:
             self._set_banner("NO COLLISION DETECTED", "#2e7d32")
             detail = "All detector inputs are valid"
@@ -314,6 +442,102 @@ class CollisionStatusWindow(QMainWindow):
             f"{detail}  |  estimator: {self.node.estimator}  |  last update: {age_text}"
         )
         self._refresh_calibration()
+        if not self.sensitivity_slider.isSliderDown():
+            configured = self.node.collision_sensitivity_percent
+            if self.sensitivity_slider.value() != configured:
+                self.sensitivity_slider.setValue(configured)
+        self._refresh_active_mode_button()
+        if not self.confirm_cycles_spin.hasFocus():
+            configured_cycles = self.node.confirm_cycles
+            if self.confirm_cycles_spin.value() != configured_cycles:
+                self.confirm_cycles_spin.setValue(configured_cycles)
+        if not self.dynamic_threshold_max_ratio_spin.hasFocus():
+            configured_ratio = self.node.dynamic_threshold_max_ratio
+            if self.dynamic_threshold_max_ratio_spin.value() != configured_ratio:
+                self.dynamic_threshold_max_ratio_spin.setValue(configured_ratio)
+
+    def _preview_sensitivity(self, value: int) -> None:
+        suffix = " (calibrated)" if value == 100 else ""
+        threshold_scale = 100.0 / value
+        self.sensitivity_value.setText(
+            f"{value}%{suffix} — thresholds ×{threshold_scale:.2f}"
+        )
+
+    def _apply_sensitivity(self) -> None:
+        value = self.sensitivity_slider.value()
+        if value < 100:
+            answer = QMessageBox.warning(
+                self,
+                "Reduce collision sensitivity?",
+                "This raises collision thresholds and can make lighter collisions harder "
+                "to detect. Apply the reduced sensitivity?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                self.sensitivity_slider.setValue(
+                    self.node.collision_sensitivity_percent)
+                return
+        self.node.set_collision_sensitivity(value)
+
+    def _apply_confirm_cycles(self) -> None:
+        self.node.set_confirm_cycles(self.confirm_cycles_spin.value())
+
+    def _apply_dynamic_threshold_max_ratio(self) -> None:
+        ratio = self.dynamic_threshold_max_ratio_spin.value()
+        if ratio > self.node.dynamic_threshold_max_ratio:
+            answer = QMessageBox.warning(
+                self,
+                "Increase fast-motion threshold cap?",
+                "A higher cap can make collisions during fast motion harder to detect. "
+                "Apply the increased cap?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                self.dynamic_threshold_max_ratio_spin.setValue(
+                    self.node.dynamic_threshold_max_ratio)
+                return
+        self.node.set_dynamic_threshold_max_ratio(ratio)
+
+    def _refresh_active_mode_button(self) -> None:
+        enabled = self.node.active_stop_enabled
+        self.active_mode_button.blockSignals(True)
+        self.active_mode_button.setChecked(enabled)
+        self.active_mode_button.setText(
+            "ACTIVE — STOPS MOTION" if enabled else "PASSIVE — REPORT ONLY")
+        self.active_mode_button.setStyleSheet(
+            "font-weight: bold; color: white; padding: 7px; "
+            f"background-color: {'#c62828' if enabled else '#616161'};"
+        )
+        self.active_mode_button.blockSignals(False)
+
+    def _change_active_mode(self, requested_active: bool) -> None:
+        if requested_active:
+            title = "Enable active collision stopping?"
+            message = (
+                "When a collision is confirmed, the monitor will cancel the active "
+                "trajectory, stop Servo jogging, and clear queued motion. The production "
+                "process will enter an error state. Enable ACTIVE mode?"
+            )
+        else:
+            title = "Switch collision monitor to passive?"
+            message = (
+                "Confirmed collisions will only be reported and logged; robot motion will "
+                "not be stopped automatically. Enable PASSIVE mode?"
+            )
+        answer = QMessageBox.question(
+            self,
+            title,
+            message,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            self._refresh_active_mode_button()
+            return
+        self.node.set_active_stop_enabled(requested_active)
+
 
     def _refresh_calibration(self) -> None:
         status_age = time.monotonic() - self.node.last_calibration_time
@@ -345,17 +569,6 @@ class CollisionStatusWindow(QMainWindow):
             "font-weight: bold; color: #c62828;" if online and not dry_run
             else "font-weight: bold; color: #1565c0;" if online
             else "font-weight: bold; color: #616161;"
-        )
-        pending = self.node.calibration_request_pending
-        self.start_calibration_button.setEnabled(
-            online and not running and not pending and self.node.calibration_start.service_is_ready()
-        )
-        self.start_test_button.setEnabled(
-            online and not running and not pending
-            and self.node.collision_test_start.service_is_ready()
-        )
-        self.stop_calibration_button.setEnabled(
-            online and running and not pending and self.node.calibration_stop.service_is_ready()
         )
 
     def start_calibration(self) -> None:

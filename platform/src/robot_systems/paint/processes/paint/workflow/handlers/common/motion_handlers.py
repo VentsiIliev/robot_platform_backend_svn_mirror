@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from src.robot_systems.paint.processes.paint.motion.failure import motion_failure_message
-import math
 from contextlib import nullcontext
 from time import monotonic, perf_counter, sleep
 
@@ -23,28 +22,6 @@ def unwind_joint6_at_cycle_start(ctx: PaintExecutionContext) -> bool:
         return True
     executor = ctx.production_service._path_executor
     robot_service = executor._robot_service
-
-    prepositioned_group = getattr(ctx.production_service, "_prepositioned_start_group", None)
-    paint_start_rz = getattr(executor, "_last_process_start_rz", None)
-    paint_end_rz = getattr(executor, "_last_paint_contact_end_rz", None)
-    if (
-        prepositioned_group
-        and isinstance(paint_start_rz, (int, float))
-        and not isinstance(paint_start_rz, bool)
-        and isinstance(paint_end_rz, (int, float))
-        and not isinstance(paint_end_rz, bool)
-    ):
-        paint_rz_delta = float(paint_end_rz) - float(paint_start_rz)
-        if math.isfinite(paint_rz_delta) and abs(paint_rz_delta) < 360.0:
-            _logger.info(
-                "[CYCLE_START] Skipping Joint 6 unwind after prepositioned partial paint "
-                "rotation group=%s paint_rz_delta=%.3fdeg",
-                prepositioned_group,
-                paint_rz_delta,
-            )
-            ctx.cycle_start_unwind_completed = True
-            return True
-
     config = ctx.process_config
     if config is None:
         config = executor._paint_process_config()

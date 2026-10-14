@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -60,6 +61,7 @@ class ZeroErrCollisionMonitor(Node):
         self.declare_parameter("input_sample_period_sec", 0.0)
         self.declare_parameter("print_table", False)
         self.declare_parameter("confirm_cycles", 3)
+        self.declare_parameter("dynamic_threshold_max_ratio", 5.0)
         self.declare_parameter("effort_thresholds", DEFAULT_EFFORT_THRESHOLDS)
         self.declare_parameter(
             "following_error_thresholds",
@@ -138,6 +140,10 @@ class ZeroErrCollisionMonitor(Node):
             for joint_name in JOINT_NAMES[: self._slave_count]
         }
         self._dynamic_threshold_decay_sec = 0.35
+        self._dynamic_threshold_max_ratio = max(
+            1.0,
+            float(self.get_parameter("dynamic_threshold_max_ratio").value),
+        )
         self._dynamic_threshold_envelope = {
             joint_name: np.zeros(4, dtype=float)
             for joint_name in JOINT_NAMES[: self._slave_count]
@@ -146,6 +152,10 @@ class ZeroErrCollisionMonitor(Node):
             joint_name: None for joint_name in JOINT_NAMES[: self._slave_count]
         }
         self._current_external_torque_thresholds = dict(self._external_torque_thresholds)
+        self._collision_sensitivity_percent = 100.0
+        self._active_stop_enabled = False
+        self._detection_suppressed = False
+        self._stop_request_armed = True
         self._friction_coulomb_nm = {
             joint_name: float(friction_coulomb_nm[index])
             for index, joint_name in enumerate(JOINT_NAMES[: self._slave_count])
@@ -156,6 +166,14 @@ class ZeroErrCollisionMonitor(Node):
         }
         self._position_correction_coefficients = {
             joint_name: np.zeros(9, dtype=float)
+            for joint_name in JOINT_NAMES[: self._slave_count]
+        }
+        self._motion_residual_correction_coefficients = {
+            joint_name: np.zeros(6, dtype=float)
+            for joint_name in JOINT_NAMES[: self._slave_count]
+        }
+        self._motion_residual_correction_limits = {
+            joint_name: np.array([np.inf, np.inf], dtype=float)
             for joint_name in JOINT_NAMES[: self._slave_count]
         }
 
@@ -253,6 +271,11 @@ class ZeroErrCollisionMonitor(Node):
             "/zeroerr/collision_monitor/config_state",
             10,
         )
+        self._stop_request_pub = self.create_publisher(
+            String,
+            "/zeroerr/collision_monitor/stop_request",
+            10,
+        )
 
         self.create_subscription(
             JointState,
@@ -270,6 +293,12 @@ class ZeroErrCollisionMonitor(Node):
             String,
             "/zeroerr/collision_monitor/config",
             self._on_config,
+            10,
+        )
+        self.create_subscription(
+            String,
+            "/zeroerr/collision_monitor/acknowledged",
+            self._on_collision_acknowledged,
             10,
         )
         self.create_timer(period, self._publish_snapshot)
@@ -359,6 +388,8 @@ class ZeroErrCollisionMonitor(Node):
                                 self._external_torque_thresholds[joint_name]
                                 for joint_name in JOINT_NAMES[: self._slave_count]
                             ],
+                            "collision_sensitivity_percent": self._collision_sensitivity_percent,
+                            "active_stop_enabled": self._active_stop_enabled,
                             "dynamic_threshold_enabled": self._dynamic_threshold_enabled,
                             "dynamic_threshold_feature_names": [
                                 "bias", "positive_velocity", "negative_velocity",
@@ -375,6 +406,7 @@ class ZeroErrCollisionMonitor(Node):
                                 for joint_name in JOINT_NAMES[: self._slave_count]
                             },
                             "dynamic_threshold_decay_sec": self._dynamic_threshold_decay_sec,
+                            "dynamic_threshold_max_ratio": self._dynamic_threshold_max_ratio,
                             "friction_coulomb_nm": [
                                 self._friction_coulomb_nm[joint_name]
                                 for joint_name in JOINT_NAMES[: self._slave_count]
@@ -388,6 +420,19 @@ class ZeroErrCollisionMonitor(Node):
                                     joint_name].tolist()
                                 for joint_name in JOINT_NAMES[: self._slave_count]
                                 if np.any(self._position_correction_coefficients[joint_name])
+                            },
+                            "motion_residual_correction_coefficients": {
+                                joint_name: self._motion_residual_correction_coefficients[
+                                    joint_name].tolist()
+                                for joint_name in JOINT_NAMES[: self._slave_count]
+                                if np.any(self._motion_residual_correction_coefficients[joint_name])
+                            },
+                            "motion_residual_correction_limits": {
+                                joint_name: self._motion_residual_correction_limits[
+                                    joint_name].tolist()
+                                for joint_name in JOINT_NAMES[: self._slave_count]
+                                if np.all(np.isfinite(
+                                    self._motion_residual_correction_limits[joint_name]))
                             },
                             "friction_velocity_deadband_rad_s": self._friction_velocity_deadband_rad_s,
                         },
@@ -423,6 +468,26 @@ class ZeroErrCollisionMonitor(Node):
             payload.get("external_torque_thresholds"),
             self._external_torque_thresholds,
         )
+        sensitivity = payload.get("collision_sensitivity_percent")
+        if sensitivity is not None:
+            sensitivity_value = float(sensitivity)
+            if np.isfinite(sensitivity_value):
+                self._collision_sensitivity_percent = float(
+                    np.clip(sensitivity_value, 50.0, 200.0))
+                updated = True
+        active_stop_enabled = payload.get("active_stop_enabled")
+        if active_stop_enabled is not None:
+            self._active_stop_enabled = bool(active_stop_enabled)
+            updated = True
+        detection_suppressed = payload.get("collision_detection_suppressed")
+        if detection_suppressed is not None:
+            requested = bool(detection_suppressed)
+            if requested != self._detection_suppressed:
+                self._detection_suppressed = requested
+                self.get_logger().warning(
+                    "[ZeroErrCollisionMonitor] collision detection %s for recovery jog"
+                    % ("SUPPRESSED" if requested else "restored")
+                )
         dynamic_threshold_enabled = payload.get("dynamic_threshold_enabled")
         if dynamic_threshold_enabled is not None:
             self._dynamic_threshold_enabled = bool(dynamic_threshold_enabled)
@@ -451,6 +516,12 @@ class ZeroErrCollisionMonitor(Node):
         if dynamic_decay is not None:
             self._dynamic_threshold_decay_sec = max(0.01, float(dynamic_decay))
             updated = True
+        dynamic_max_ratio = payload.get("dynamic_threshold_max_ratio")
+        if dynamic_max_ratio is not None:
+            ratio = float(dynamic_max_ratio)
+            if np.isfinite(ratio):
+                self._dynamic_threshold_max_ratio = float(np.clip(ratio, 1.0, 20.0))
+                updated = True
         updated |= self._apply_threshold_update(
             payload.get("friction_coulomb_nm"),
             self._friction_coulomb_nm,
@@ -468,6 +539,26 @@ class ZeroErrCollisionMonitor(Node):
                     self._position_correction_coefficients[joint_name] = np.asarray(
                         values, dtype=float)
                     updated = True
+        motion_corrections = payload.get("motion_residual_correction_coefficients")
+        if isinstance(motion_corrections, dict):
+            for joint_name, values in motion_corrections.items():
+                if joint_name not in self._motion_residual_correction_coefficients:
+                    continue
+                if isinstance(values, list) and len(values) == 6:
+                    coefficients = np.asarray(values, dtype=float)
+                    if np.all(np.isfinite(coefficients)):
+                        self._motion_residual_correction_coefficients[joint_name] = coefficients
+                        updated = True
+        motion_limits = payload.get("motion_residual_correction_limits")
+        if isinstance(motion_limits, dict):
+            for joint_name, values in motion_limits.items():
+                if joint_name not in self._motion_residual_correction_limits:
+                    continue
+                if isinstance(values, list) and len(values) == 2:
+                    limits = np.asarray(values, dtype=float)
+                    if np.all(np.isfinite(limits)) and np.all(limits > 0.0):
+                        self._motion_residual_correction_limits[joint_name] = limits
+                        updated = True
         friction_velocity_deadband_rad_s = payload.get("friction_velocity_deadband_rad_s")
         if friction_velocity_deadband_rad_s is not None:
             self._friction_velocity_deadband_rad_s = max(
@@ -486,6 +577,16 @@ class ZeroErrCollisionMonitor(Node):
             self._dynamics_reason[joint_name] = ""
             self._dynamic_threshold_envelope[joint_name].fill(0.0)
             self._dynamic_threshold_last_timestamp[joint_name] = None
+
+    def _on_collision_acknowledged(self, _msg: String) -> None:
+        self._clear_dynamics_collision_state()
+        for joint_name in JOINT_NAMES[: self._slave_count]:
+            self._contact_cycles[joint_name] = 0
+            self._contact_latched[joint_name] = False
+            self._contact_active[joint_name] = False
+        self._stop_request_armed = True
+        self.get_logger().warning(
+            "[ZeroErrCollisionMonitor] Collision latch cleared by operator acknowledgement")
 
     def _load_persisted_config(self) -> None:
         path = self._collision_config_path
@@ -610,6 +711,15 @@ class ZeroErrCollisionMonitor(Node):
                 f"ext_tau {external_torque:.2f} > {dynamic_threshold:.2f} dynamic"
             )
 
+            if self._detection_suppressed:
+                self._dynamics_active[joint_name] = False
+                self._dynamics_cycles[joint_name] = 0
+                self._contact_active[joint_name] = False
+                self._contact_cycles[joint_name] = 0
+                self._dynamics_reason[joint_name] = "suppressed by recovery jog"
+                self._contact_reason[joint_name] = "suppressed by recovery jog"
+                continue
+
             # The momentum observer must never assert a collision while the
             # slaves are starting, settling, or its stationary bias is being
             # initialized.  _update_external_torque_estimate() restarts that
@@ -617,10 +727,11 @@ class ZeroErrCollisionMonitor(Node):
             if not observer_ready:
                 self._dynamics_active[joint_name] = False
                 self._dynamics_cycles[joint_name] = 0
-                self._dynamics_latched[joint_name] = False
                 self._contact_active[joint_name] = False
                 self._contact_cycles[joint_name] = 0
-                self._contact_latched[joint_name] = False
+                if not (self._active_stop_enabled and not self._stop_request_armed):
+                    self._dynamics_latched[joint_name] = False
+                    self._contact_latched[joint_name] = False
                 continue
 
             # Both estimator backends produce external torque. The learned
@@ -633,12 +744,14 @@ class ZeroErrCollisionMonitor(Node):
                 self._dynamics_active[joint_name] = dynamics_active
                 self._contact_active[joint_name] = False
                 self._contact_cycles[joint_name] = 0
-                self._contact_latched[joint_name] = False
+                if not (self._active_stop_enabled and not self._stop_request_armed):
+                    self._contact_latched[joint_name] = False
                 if dynamics_active:
                     self._dynamics_cycles[joint_name] += 1
                 else:
                     self._dynamics_cycles[joint_name] = 0
-                    self._dynamics_latched[joint_name] = False
+                    if not (self._active_stop_enabled and not self._stop_request_armed):
+                        self._dynamics_latched[joint_name] = False
 
                 if (
                     self._dynamics_cycles[joint_name] >= self._confirm_cycles
@@ -650,6 +763,7 @@ class ZeroErrCollisionMonitor(Node):
                         f"{joint_name}: external_torque={external_torque:.2f} >= "
                         f"{dynamic_threshold:.2f} (dynamic)"
                     )
+                    self._request_motion_stop(joint_name, "dynamics")
                 continue
 
             exceeds_contact_thresholds = (
@@ -659,12 +773,14 @@ class ZeroErrCollisionMonitor(Node):
             self._contact_active[joint_name] = exceeds_contact_thresholds
             self._dynamics_active[joint_name] = False
             self._dynamics_cycles[joint_name] = 0
-            self._dynamics_latched[joint_name] = False
+            if not (self._active_stop_enabled and not self._stop_request_armed):
+                self._dynamics_latched[joint_name] = False
             if exceeds_contact_thresholds:
                 self._contact_cycles[joint_name] += 1
             else:
                 self._contact_cycles[joint_name] = 0
-                self._contact_latched[joint_name] = False
+                if not (self._active_stop_enabled and not self._stop_request_armed):
+                    self._contact_latched[joint_name] = False
 
             if (
                 self._contact_cycles[joint_name] >= self._confirm_cycles
@@ -677,6 +793,33 @@ class ZeroErrCollisionMonitor(Node):
                     f"following_error={following_error:.1f} >= "
                     f"{self._following_error_thresholds[joint_name]:.1f}"
                 )
+                self._request_motion_stop(joint_name, "effort/following-error")
+
+        if not any(
+            self._dynamics_active[name]
+            or self._dynamics_latched[name]
+            or self._contact_active[name]
+            or self._contact_latched[name]
+            for name in JOINT_NAMES[: self._slave_count]
+        ):
+            self._stop_request_armed = True
+
+    def _request_motion_stop(self, joint_name: str, detector: str) -> None:
+        if not self._active_stop_enabled or not self._stop_request_armed:
+            return
+        self._stop_request_armed = False
+        message = String()
+        message.data = json.dumps({
+            "timestamp": time.time(),
+            "joint": joint_name,
+            "detector": detector,
+            "mode": "active",
+        })
+        self._stop_request_pub.publish(message)
+        self.get_logger().error(
+            "[ZeroErrCollisionMonitor] ACTIVE mode requested motion stop: "
+            f"joint={joint_name} detector={detector}"
+        )
 
     def _inject_reasons(self, slaves: List[Dict[str, Optional[float]]]) -> None:
         for slave in slaves:
@@ -802,9 +945,7 @@ class ZeroErrCollisionMonitor(Node):
         now_s = self.get_clock().now().nanoseconds / 1e9
         if not drives_operational:
             self._all_drives_op_since = None
-            restart = getattr(self._estimator, "restart_warmup", None)
-            if restart is not None:
-                restart()
+            self._reset_estimator_after_drive_interruption()
             for joint_name in JOINT_NAMES[: self._slave_count]:
                 self._expected_torque_by_joint[joint_name] = None
                 self._torque_difference_by_joint[joint_name] = None
@@ -814,9 +955,7 @@ class ZeroErrCollisionMonitor(Node):
             self._all_drives_op_since = now_s
         stable_sec = max(0.0, float(self.get_parameter("drive_stable_sec").value))
         if now_s - self._all_drives_op_since < stable_sec:
-            restart = getattr(self._estimator, "restart_warmup", None)
-            if restart is not None:
-                restart()
+            self._reset_estimator_after_drive_interruption()
             for joint_name in JOINT_NAMES[: self._slave_count]:
                 self._expected_torque_by_joint[joint_name] = None
                 self._torque_difference_by_joint[joint_name] = None
@@ -867,10 +1006,19 @@ class ZeroErrCollisionMonitor(Node):
             self._compute_position_correction(joint_name, positions)
             for joint_name in JOINT_NAMES[: self._slave_count]
         ], dtype=float)
+        motion_residual_corrections = np.array([
+            self._compute_motion_residual_correction(
+                joint_name,
+                velocities[index],
+                acceleration_vector[index],
+            )
+            for index, joint_name in enumerate(JOINT_NAMES[: self._slave_count])
+        ], dtype=float)
         compensated_measured_torques = (
             np.array(measured_torques, dtype=float)
             - friction_torques
             - position_corrections
+            - motion_residual_corrections
         )
         self._estimator.update(
             compensated_measured_torques,
@@ -880,6 +1028,7 @@ class ZeroErrCollisionMonitor(Node):
         )
 
         filtered = self._estimator.filtered
+        observer_ready = bool(getattr(self._estimator, "ready", False))
         expected = self._estimator.expected_torque_history[-1] if self._estimator.expected_torque_history else None
         for index, joint_name in enumerate(JOINT_NAMES[: self._slave_count]):
             # Present expected torque in the original sensor domain. External
@@ -888,13 +1037,36 @@ class ZeroErrCollisionMonitor(Node):
                 float(expected[index])
                 + float(friction_torques[index])
                 + float(position_corrections[index])
+                + float(motion_residual_corrections[index])
                 if expected is not None else None
             )
             self._expected_torque_by_joint[joint_name] = expected_torque
             self._torque_difference_by_joint[joint_name] = (
                 float(measured_torques[index]) - expected_torque if expected_torque is not None else None
             )
-            self._external_torque_by_joint[joint_name] = float(filtered[index])
+            # The observer deliberately keeps its internal output at zero
+            # during initial bias learning. A drive interruption also makes
+            # the estimate unavailable until the drive-stability gate passes.
+            # Publishing that zero as a valid estimate makes consumers think
+            # collision protection is active when it is not.
+            self._external_torque_by_joint[joint_name] = (
+                float(filtered[index]) if observer_ready else None
+            )
+
+    def _reset_estimator_after_drive_interruption(self) -> None:
+        """Reset observer transients without discarding a completed bias calibration."""
+        self._last_velocity_vector = None
+        self._last_velocity_timestamp = None
+        if self._estimator is None:
+            return
+        if bool(getattr(self._estimator, "ready", False)):
+            reset = getattr(self._estimator, "reset", None)
+            if reset is not None:
+                reset()
+            return
+        restart = getattr(self._estimator, "restart_warmup", None)
+        if restart is not None:
+            restart()
 
     def _compute_external_torque_threshold(
         self,
@@ -905,11 +1077,11 @@ class ZeroErrCollisionMonitor(Node):
         """Return the motion-conditioned threshold, never below its static floor."""
         floor = float(self._external_torque_thresholds[joint_name])
         if not self._dynamic_threshold_enabled:
-            return floor
+            return floor * (100.0 / self._collision_sensitivity_percent)
         velocity_f = 0.0 if velocity is None else float(velocity)
         acceleration_f = 0.0 if acceleration is None else float(acceleration)
         if not np.isfinite(velocity_f) or not np.isfinite(acceleration_f):
-            return floor
+            return floor * (100.0 / self._collision_sensitivity_percent)
         limits = self._dynamic_threshold_training_limits[joint_name]
         velocity_f = float(np.clip(velocity_f, -limits[0], limits[0]))
         acceleration_f = float(np.clip(acceleration_f, -limits[1], limits[1]))
@@ -947,7 +1119,12 @@ class ZeroErrCollisionMonitor(Node):
             acceleration_negative * acceleration_negative,
         ], dtype=float)
         fitted = float(self._dynamic_threshold_coefficients[joint_name] @ features)
-        return max(floor, fitted) if np.isfinite(fitted) else floor
+        base_threshold = max(floor, fitted) if np.isfinite(fitted) else floor
+        base_threshold = min(
+            base_threshold,
+            floor * self._dynamic_threshold_max_ratio,
+        )
+        return base_threshold * (100.0 / self._collision_sensitivity_percent)
 
     def _format_table(self, slaves: List[Dict[str, Optional[float]]]) -> str:
         lines = [
@@ -1165,6 +1342,7 @@ class ZeroErrCollisionMonitor(Node):
                 "dynamics_active",
                 "dynamics_cycles",
                 "dynamics_latched",
+                "observer_ready",
             ]
             interface_value.values = [
                 self._state_value(slave.get("position")),
@@ -1186,6 +1364,14 @@ class ZeroErrCollisionMonitor(Node):
                 self._state_value(1.0 if self._dynamics_active[str(slave["joint"])] else 0.0),
                 self._state_value(float(self._dynamics_cycles[str(slave["joint"])])),
                 self._state_value(1.0 if self._dynamics_latched[str(slave["joint"])] else 0.0),
+                self._state_value(
+                    1.0
+                    if self._dynamics_enabled
+                    and self._estimator is not None
+                    and bool(getattr(self._estimator, "ready", False))
+                    and self._external_torque_by_joint.get(str(slave["joint"])) is not None
+                    else 0.0
+                ),
             ]
             msg.interface_values.append(interface_value)
 
@@ -1217,6 +1403,9 @@ class ZeroErrCollisionMonitor(Node):
                     self._current_external_torque_thresholds[joint_name]
                     for joint_name in JOINT_NAMES[: self._slave_count]
                 ],
+                "collision_sensitivity_percent": self._collision_sensitivity_percent,
+                "active_stop_enabled": self._active_stop_enabled,
+                "collision_detection_suppressed": self._detection_suppressed,
                 "dynamic_threshold_enabled": self._dynamic_threshold_enabled,
                 "dynamic_threshold_feature_names": [
                     "bias", "positive_velocity", "negative_velocity",
@@ -1233,6 +1422,20 @@ class ZeroErrCollisionMonitor(Node):
                     for joint_name in JOINT_NAMES[: self._slave_count]
                 },
                 "dynamic_threshold_decay_sec": self._dynamic_threshold_decay_sec,
+                "dynamic_threshold_max_ratio": self._dynamic_threshold_max_ratio,
+                "motion_residual_correction_coefficients": {
+                    joint_name: self._motion_residual_correction_coefficients[
+                        joint_name].tolist()
+                    for joint_name in JOINT_NAMES[: self._slave_count]
+                    if np.any(self._motion_residual_correction_coefficients[joint_name])
+                },
+                "motion_residual_correction_limits": {
+                    joint_name: self._motion_residual_correction_limits[
+                        joint_name].tolist()
+                    for joint_name in JOINT_NAMES[: self._slave_count]
+                    if np.all(np.isfinite(
+                        self._motion_residual_correction_limits[joint_name]))
+                },
                 "dynamics_estimator_mode": "momentum_observer",
                 "use_inverse_dynamics": True,
                 "friction_coulomb_nm": [
@@ -1299,6 +1502,31 @@ class ZeroErrCollisionMonitor(Node):
             np.sin(q23), np.cos(q23),
             np.sin(q234), np.cos(q234),
             np.sin(q3), np.cos(q3),
+        ], dtype=float)
+        return float(coefficients @ features)
+
+    def _compute_motion_residual_correction(
+        self,
+        joint_name: str,
+        velocity: float,
+        acceleration: float,
+    ) -> float:
+        """Predict repeatable directional motion residual from clean data."""
+        coefficients = self._motion_residual_correction_coefficients.get(joint_name)
+        limits = self._motion_residual_correction_limits.get(joint_name)
+        if coefficients is None or limits is None or not np.any(coefficients):
+            return 0.0
+        velocity = float(np.clip(float(velocity), -limits[0], limits[0]))
+        acceleration = float(np.clip(float(acceleration), -limits[1], limits[1]))
+        velocity_positive = max(velocity, 0.0)
+        velocity_negative = max(-velocity, 0.0)
+        features = np.array([
+            velocity_positive,
+            velocity_negative,
+            velocity_positive * velocity_positive,
+            velocity_negative * velocity_negative,
+            max(acceleration, 0.0),
+            max(-acceleration, 0.0),
         ], dtype=float)
         return float(coefficients @ features)
 

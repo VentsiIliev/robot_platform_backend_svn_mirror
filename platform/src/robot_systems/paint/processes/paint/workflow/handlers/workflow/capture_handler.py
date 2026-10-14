@@ -10,6 +10,7 @@ from src.robot_systems.paint.processes.paint.workflow.context import PaintExecut
 from src.robot_systems.paint.processes.paint.workflow.handlers.common.guards import guard_control
 from src.robot_systems.paint.processes.paint.workflow.state import PaintExecutionState
 from src.robot_systems.paint.processes.paint.planning import pick_largest_contour
+from src.robot_systems.paint.processes.paint.dry_run import DryRunDatasetExhausted
 
 
 _logger = logging.getLogger(__name__)
@@ -21,6 +22,21 @@ def handle_capture_workpiece(ctx: PaintExecutionContext) -> PaintExecutionState:
         return guarded
 
     service = ctx.production_service
+    if bool(ctx.process_config and ctx.process_config.enable_dry_run_mode):
+        try:
+            ctx.snapshot = service._dry_run_snapshot_source.capture_for_cycle(
+                ctx.cycle_index, work_area_id="paint", placement_key="paint",
+            )
+            metadata = dict(ctx.dry_run_metadata or {})
+            metadata["paint"] = dict(service._dry_run_snapshot_source.last_metadata or {})
+            ctx.dry_run_metadata = metadata
+        except DryRunDatasetExhausted as exc:
+            ctx.set_outcome(PaintOperationResult(PaintOutcome.NO_WORKPIECE, str(exc)))
+            return PaintExecutionState.FINISHED
+        service._set_dashboard_live_view_paused(
+            True, image=ctx.snapshot.frame, reason="dry-run workpiece generated",
+        )
+        return PaintExecutionState.PREPARE_WORKPIECE
     magazine_enabled = bool(
         ctx.magazine_config is not None and ctx.magazine_config.enabled
     )

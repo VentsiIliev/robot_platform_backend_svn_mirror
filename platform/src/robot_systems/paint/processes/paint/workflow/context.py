@@ -72,6 +72,7 @@ class PaintExecutionContext:
     adjustment_session: object | None = None
     magazine_nesting_has_more: bool = True
     cached_workpiece_contour: object | None = None
+    dry_run_metadata: dict | None = None
 
     diagnostic_cycle_id: str = field(default_factory=lambda: uuid4().hex)
 

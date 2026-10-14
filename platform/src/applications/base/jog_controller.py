@@ -27,6 +27,7 @@ def _coerce_joint_degrees(value: Any) -> list[float]:
 
 class _Bridge(QObject):
     frame_options_received = pyqtSignal(object, str)
+    recovery_mode_result = pyqtSignal(bool)
 
     def __init__(self, view, apply_frame_options):
         super().__init__()
@@ -42,6 +43,7 @@ class _Bridge(QObject):
         self._position_timer.timeout.connect(self.flush_position)
         self._position_timer.start()
         self.frame_options_received.connect(self.handle_frame_options)
+        self.recovery_mode_result.connect(self.handle_recovery_mode_result)
         self._destroy_slot_connected = True
         view.destroyed.connect(self.handle_view_destroyed)
 
@@ -79,6 +81,11 @@ class _Bridge(QObject):
         if self._view is None:
             return
         self._apply_frame_options(names_obj, default)
+
+    @pyqtSlot(bool)
+    def handle_recovery_mode_result(self, enabled: bool) -> None:
+        if self._view is not None and hasattr(self._view, "set_recovery_mode_checked"):
+            self._view.set_recovery_mode_checked(enabled)
 
     @pyqtSlot()
     def handle_view_destroyed(self) -> None:
@@ -145,6 +152,7 @@ class JogController:
         self._operation_lock = threading.Lock()
         self._pending_operations = 0
         self._servo_held = False
+        self._stopped = False
         self._jog_pool = QThreadPool()
         self._jog_pool.setMaxThreadCount(1)
         self._bridge    = _Bridge(view, self._apply_frame_options)
@@ -187,6 +195,9 @@ class JogController:
         pool.start(_FireAndForget(run))
 
     def stop(self) -> None:
+        if self._stopped:
+            return
+        self._stopped = True
         for topic, cb in self._subs:
             self._messaging.unsubscribe(topic, cb)
         self._subs.clear()
@@ -208,13 +219,27 @@ class JogController:
                 self._view.recovery_mode_changed.disconnect(self._on_recovery_mode_changed)
             except (RuntimeError, TypeError):
                 pass
+        setter = getattr(self._service, "set_recovery_mode", None)
+        if callable(setter):
+            # This is queued after all earlier jog/recovery operations, so a
+            # screen change cannot leave collision detection suppressed.
+            self._submit_operation(self._jog_pool, lambda: setter(False))
         self._bridge.stop()
         self._bridge.deleteLater()
 
     def _on_recovery_mode_changed(self, enabled: bool) -> None:
         setter = getattr(self._service, "set_recovery_mode", None)
         if callable(setter):
-            setter(bool(enabled))
+            requested = bool(enabled)
+
+            def apply_recovery_mode() -> None:
+                success = bool(setter(requested))
+                if not self._stopped:
+                    self._bridge.recovery_mode_result.emit(
+                        requested if success else self._service.recovery_mode_enabled()
+                    )
+
+            self._submit_operation(self._jog_pool, apply_recovery_mode)
 
     def _on_position(self, pos: list) -> None:
         self._bridge.ingest_position(pos if pos else [])

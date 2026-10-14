@@ -1,0 +1,208 @@
+from __future__ import annotations
+
+import logging
+import threading
+import time
+
+from src.shared_contracts.events.notification_events import (
+    DismissNotificationEvent,
+    NotificationAction,
+    NotificationActionEvent,
+    NotificationSeverity,
+    NotificationTopics,
+    UserNotificationEvent,
+)
+
+
+class PaintCollisionInterlockMonitor:
+    """System-lifetime collision notification and acknowledgement coordinator."""
+
+    SOURCE = "paint_collision_interlock"
+    ACTION_KEEP_HELD = "keep_collision_held"
+    ACTION_RELEASE = "release_collision_hold"
+    def __init__(
+        self,
+        robot_service,
+        messaging,
+        *,
+        vacuum_pump=None,
+        poll_period_s: float = 0.05,
+    ) -> None:
+        self._robot = robot_service
+        self._messaging = messaging
+        self._vacuum_pump = vacuum_pump
+        self._poll_period_s = max(0.05, float(poll_period_s))
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._last_event_key: str | None = None
+        self._last_publish_monotonic = 0.0
+        self._active_notice_key: str | None = None
+        self._vacuum_off_event_key: str | None = None
+        self._last_vacuum_attempt_monotonic = 0.0
+        self._release_in_progress = threading.Event()
+        self._logger = logging.getLogger(self.__class__.__name__)
+
+    def start(self) -> None:
+        if self._thread is not None and self._thread.is_alive():
+            return
+        self._stop_event.clear()
+        self._messaging.subscribe(NotificationTopics.ACTION, self._on_notification_action)
+        self._thread = threading.Thread(
+            target=self._run,
+            daemon=True,
+            name="PaintCollisionInterlockMonitor",
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        self._messaging.unsubscribe(NotificationTopics.ACTION, self._on_notification_action)
+        thread = self._thread
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=1.0)
+        self._thread = None
+
+    def _run(self) -> None:
+        while not self._stop_event.wait(self._poll_period_s):
+            self._poll_once()
+
+    def _poll_once(self) -> None:
+        try:
+            status = self._robot.get_execution_status()
+        except Exception:
+            self._logger.debug("Collision interlock status unavailable", exc_info=True)
+            return
+        if not isinstance(status, dict):
+            return
+        interlock = status.get("motion_interlock")
+        active = isinstance(interlock, dict) and bool(interlock.get("active", False))
+        if not active:
+            self._last_event_key = None
+            self._last_publish_monotonic = 0.0
+            self._vacuum_off_event_key = None
+            self._last_vacuum_attempt_monotonic = 0.0
+            self._dismiss_active_notice()
+            return
+        collision = status.get("collision_event")
+        timestamp = collision.get("timestamp") if isinstance(collision, dict) else None
+        reason = str(
+            (interlock or {}).get("reason")
+            or (collision or {}).get("detail")
+            or "The robot collision interlock is active."
+        )
+        event_key = f"{timestamp!r}:{reason}"
+        now = time.monotonic()
+        self._turn_vacuum_off_for_collision(event_key, now)
+        if self._release_in_progress.is_set():
+            return
+        if (
+            event_key == self._last_event_key
+            and now - self._last_publish_monotonic < 2.0
+        ):
+            return
+        self._last_event_key = event_key
+        self._last_publish_monotonic = now
+        self._publish_collision_notice(reason, event_key)
+
+    def _turn_vacuum_off_for_collision(self, event_key: str, now: float) -> None:
+        pump = self._vacuum_pump
+        if pump is None or self._vacuum_off_event_key == event_key:
+            return
+        if now - self._last_vacuum_attempt_monotonic < 0.5:
+            return
+        self._last_vacuum_attempt_monotonic = now
+        turn_off = getattr(pump, "turn_off_nonblocking", None)
+        if not callable(turn_off):
+            turn_off = getattr(pump, "turn_off", None)
+        if not callable(turn_off):
+            self._logger.error("Collision detected but vacuum pump has no OFF command")
+            return
+        try:
+            success = bool(turn_off())
+        except Exception:
+            self._logger.exception("Collision response failed to turn vacuum pump off")
+            return
+        if success:
+            self._vacuum_off_event_key = event_key
+            self._logger.warning("Collision response turned vacuum pump OFF")
+        else:
+            self._logger.error("Collision response could not turn vacuum pump OFF; retrying")
+
+    def _publish_collision_notice(self, reason: str, event_key: str) -> None:
+        notice_key = f"paint-collision:{event_key}"
+        self._active_notice_key = notice_key
+        self._messaging.publish(
+            NotificationTopics.USER,
+            UserNotificationEvent(
+                source=self.SOURCE,
+                severity=NotificationSeverity.CRITICAL,
+                title_key="notification.collision.title",
+                message_key="notification.collision.message",
+                fallback_title="Collision Detected",
+                fallback_message=(
+                    "Robot motion is held. Remove the obstruction, then release the "
+                    "collision hold when it is safe to move again."
+                ),
+                detail=reason,
+                dedupe_key=notice_key,
+                actions=(
+                    NotificationAction(
+                        key=self.ACTION_KEEP_HELD,
+                        title_key="notification.collision.keep_held",
+                        fallback_title="Keep Motion Held",
+                        close_dialog=False,
+                    ),
+                    NotificationAction(
+                        key=self.ACTION_RELEASE,
+                        title_key="notification.collision.release_hold",
+                        fallback_title="Release Collision Hold",
+                        primary=True,
+                    ),
+                ),
+            ),
+        )
+
+    def _on_notification_action(self, event: NotificationActionEvent) -> None:
+        if not isinstance(event, NotificationActionEvent) or event.source != self.SOURCE:
+            return
+        if event.action_key == self.ACTION_KEEP_HELD:
+            self._logger.info("Operator kept the collision motion hold active")
+            return
+        if event.action_key != self.ACTION_RELEASE or self._release_in_progress.is_set():
+            return
+        self._release_in_progress.set()
+        threading.Thread(
+            target=self._release_collision_hold,
+            daemon=True,
+            name="CollisionHoldRelease",
+        ).start()
+
+    def _release_collision_hold(self) -> None:
+        try:
+            acknowledge = getattr(self._robot, "acknowledge_collision_interlock", None)
+            if not callable(acknowledge):
+                self._logger.error("Robot backend does not support collision acknowledgement")
+                return
+            result = acknowledge()
+            if not isinstance(result, dict) or not bool(result.get("success", False)):
+                detail = (
+                    result.get("message") or result.get("error")
+                    if isinstance(result, dict) else "Invalid backend response"
+                )
+                self._logger.error("Collision hold release failed: %s", detail)
+                return
+            self._logger.warning("Collision hold release accepted by operator")
+        except Exception:
+            self._logger.exception("Collision hold release request failed")
+        finally:
+            self._release_in_progress.clear()
+
+    def _dismiss_active_notice(self) -> None:
+        key = self._active_notice_key
+        if key is None:
+            return
+        self._active_notice_key = None
+        self._messaging.publish(
+            NotificationTopics.DISMISS,
+            DismissNotificationEvent(dedupe_key=key),
+        )

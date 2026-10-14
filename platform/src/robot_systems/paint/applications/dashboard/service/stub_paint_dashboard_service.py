@@ -86,6 +86,13 @@ class StubPaintDashboardService(IPaintDashboardService):
     def reset_errors(self) -> None:
         self._state = "idle"
 
+    def acknowledge_collision(self) -> tuple[bool, str]:
+        self._state = "idle"
+        return True, "Collision hold cleared"
+
+    def collision_acknowledgement_required(self) -> bool:
+        return False
+
     def retry_unmatched_workpiece(self) -> bool:
         if self._state != "error":
             return False
@@ -145,6 +152,9 @@ class StubPaintDashboardService(IPaintDashboardService):
 
     def get_drying_mode(self) -> str:
         return self._drying_mode
+
+    def is_dry_run_mode_enabled(self) -> bool:
+        return False
 
     def set_drying_mode(self, mode: str) -> DashboardCommandResult:
         if mode not in {"auto", "manual", "demo"}:

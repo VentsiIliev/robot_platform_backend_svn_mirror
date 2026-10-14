@@ -169,7 +169,12 @@ class ZeroErrRuntimeAdapter(RuntimeBackendAdapter):
                 self._drive_effort_actual = np.array(msg.effort[:config.NUM_JOINTS], dtype=float)
 
     def set_drive_operation_enabled(self, robot_controller, enabled: bool) -> dict:
-        if enabled and not robot_controller.is_hardware_ready_for_motion():
+        drive_enable_ready = getattr(
+            robot_controller,
+            'is_hardware_ready_for_drive_enable',
+            robot_controller.is_hardware_ready_for_motion,
+        )
+        if enabled and not drive_enable_ready():
             with self._drive_enable_lock:
                 self._drive_operation_enabled_requested = False
             reason = robot_controller.get_hardware_fault_reason()

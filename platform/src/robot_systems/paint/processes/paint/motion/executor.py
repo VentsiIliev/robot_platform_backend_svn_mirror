@@ -14,11 +14,12 @@ _logger = logging.getLogger(__name__)
 class PaintMotionExecutor:
     """Submit individual robot moves and ordered sequences."""
 
-    def __init__(self, robot_service: IRobotService, *, tool_provider: Callable[[], int], user_provider: Callable[[], int], recovery: PaintMotionRecovery) -> None:
+    def __init__(self, robot_service: IRobotService, *, tool_provider: Callable[[], int], user_provider: Callable[[], int], recovery: PaintMotionRecovery, command_recorder: Callable[[dict], None] | None = None) -> None:
         self._robot_service = robot_service
         self._tool_provider = tool_provider
         self._user_provider = user_provider
         self._recovery = recovery
+        self._command_recorder = command_recorder
         self.last_motion_error: str | None = None
 
     @timed_step(_logger, "pickup_phase", label_arg="label")
@@ -38,6 +39,11 @@ class PaintMotionExecutor:
             raise ValueError(f"Pickup phase '{label}' requires explicit velocity and acceleration")
         if not isinstance(motion_type, OrderedMotionType):
             raise TypeError("motion_type must be an OrderedMotionType")
+        self._record({
+            "kind": "single_move", "label": label, "type": motion_type.value,
+            "position": list(pose), "vel": float(velocity), "acc": float(acceleration),
+            "blendR": float(blendR), "corridor_id": corridor_id,
+        })
         _logger.info(
             "[PICKUP] %s tool=%d user=%d pose=%s",
             label,
@@ -108,6 +114,7 @@ class PaintMotionExecutor:
             self._user_provider(),
             len(segments),
         )
+        self.record_ordered_chain(label, segments)
         if any(
             isinstance(segment, OrderedPositionCommand)
             and segment.motion_type is OrderedMotionType.FAST_LINEAR
@@ -169,3 +176,15 @@ class PaintMotionExecutor:
             ):
                 return False
         return flush_ordered_chunk()
+
+    def record_ordered_chain(self, label: str, segments: list[OrderedMotionCommand]) -> None:
+        """Record an exact ordered command payload before it reaches the robot."""
+        self._record({
+            "kind": "ordered_chain",
+            "label": label,
+            "commands": [segment.to_payload() for segment in segments],
+        })
+
+    def _record(self, payload: dict) -> None:
+        if self._command_recorder is not None:
+            self._command_recorder(payload)

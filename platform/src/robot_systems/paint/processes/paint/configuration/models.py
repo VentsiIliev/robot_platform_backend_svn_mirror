@@ -587,6 +587,10 @@ class PaintProcessConfig:
     pickup_axis_alignment_sign_value: float = 1.0
     # Turns the vacuum pump on/off around pickup and release.
     enable_vacuum_pump: bool = True
+    # Execute the normal Paint workflow from the reusable synthetic dataset.
+    enable_dry_run_mode: bool = False  # [LIVE SETTINGS]
+    # Persist collision-model training samples during a dry-run process.
+    collect_collision_calibration_data: bool = False  # [LIVE SETTINGS]
     # Test mode: finish the cycle immediately after calibration pickup/retract.
     stop_after_calibration_pickup: bool = False  # [LIVE SETTINGS]
     # Repeat production cycles until the active source no longer yields a workpiece.

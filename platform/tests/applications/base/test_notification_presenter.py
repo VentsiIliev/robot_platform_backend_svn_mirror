@@ -7,6 +7,8 @@ from src.applications.base.notification_presenter import (
 )
 from src.shared_contracts.events.notification_events import (
     DismissNotificationEvent,
+    NotificationAction,
+    NotificationActionEvent,
     NotificationSeverity,
     NotificationTopics,
     UserNotificationEvent,
@@ -74,6 +76,7 @@ class TestUserNotificationPresenter(unittest.TestCase):
             "Fallback Message",
         )
 
+
     @patch("src.applications.base.notification_presenter.make_warning")
     def test_dedupes_consecutive_notifications_with_same_key(self, mock_make_warning):
         dialog = MagicMock()
@@ -138,3 +141,29 @@ class TestUserNotificationPresenter(unittest.TestCase):
                 unittest.mock.call(NotificationTopics.DISMISS, presenter._on_dismiss),
             ],
         )
+
+    def test_action_selection_publishes_global_notification_action(self):
+        broker = MagicMock()
+        presenter = UserNotificationPresenter(
+            parent=MagicMock(),
+            messaging_service=broker,
+            translate=lambda key: key,
+        )
+        dialog = MagicMock()
+        event = self._make_event(
+            dedupe_key="collision-1",
+            actions=(NotificationAction(
+                key="release_collision_hold",
+                fallback_title="Release Collision Hold",
+            ),),
+        )
+        presenter._action_dialog_events[dialog] = event
+
+        with patch.object(presenter, "sender", return_value=dialog):
+            presenter._on_action_selected("release_collision_hold")
+
+        topic, payload = broker.publish.call_args.args
+        self.assertEqual(topic, NotificationTopics.ACTION)
+        self.assertIsInstance(payload, NotificationActionEvent)
+        self.assertEqual(payload.action_key, "release_collision_hold")
+        self.assertEqual(payload.dedupe_key, "collision-1")

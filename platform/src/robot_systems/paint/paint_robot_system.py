@@ -518,6 +518,18 @@ class PaintRobotSystem(BaseRobotSystem):
     def _build_pickup_condition(self):
         paint_config = self._paint_process_config_service.get_snapshot()
         pickup_motion = paint_config.pickup_motion
+        if bool(paint_config.enable_dry_run_mode):
+            from src.robot_systems.paint.processes.paint.dry_run import (
+                DryRunMinimumZPickupCondition,
+            )
+
+            _logger.warning(
+                "[DRY_RUN] Physical pickup sensor is replaced by minimum-Z confirmation"
+            )
+            return DryRunMinimumZPickupCondition(
+                self._robot,
+                minimum_z_mm=float(pickup_motion.servo_contact_min_z_mm),
+            )
         if bool(pickup_motion.servo_contact_dummy_sensor_enabled):
             from src.engine.robot.procedures import TimedDummyPickupCondition
 
@@ -699,6 +711,7 @@ class PaintRobotSystem(BaseRobotSystem):
         )
         self._paint_workpiece_preparation_service = application_wiring._build_paint_workpiece_preparation_service(self)
         self._paint_magazine_load_service = application_wiring._build_paint_magazine_load_service(self)
+        self._paint_dry_run_snapshot_source = application_wiring._build_paint_dry_run_snapshot_source(self)
         self._paint_production_service = PaintProductionService(
             workpiece_preparation_service=self._paint_workpiece_preparation_service,
             capture_snapshot_service=self._paint_capture_snapshot_service,
@@ -711,6 +724,8 @@ class PaintRobotSystem(BaseRobotSystem):
             navigation_service=self._navigation,
             vision_service=self._vision,
             messaging_service=self._messaging_service,
+            dry_run_snapshot_source=self._paint_dry_run_snapshot_source,
+            failure_artifact_root=self.storage_path("diagnostics", "paint_failures"),
         )
         self._main_process = PaintProcess(
             requirements=ProcessRequirements.requires(CommonServiceID.ROBOT),
@@ -758,6 +773,18 @@ class PaintRobotSystem(BaseRobotSystem):
             target_point_name="camera",
             frame_name="calibration",
         )
+
+        from src.robot_systems.paint.diagnostics.collision_interlock_monitor import (
+            PaintCollisionInterlockMonitor,
+        )
+
+        self._collision_interlock_monitor = PaintCollisionInterlockMonitor(
+            self._robot,
+            self._messaging_service,
+            vacuum_pump=self._vacuum_pump,
+        )
+        self.register_managed_resource(self._collision_interlock_monitor)
+        self._collision_interlock_monitor.start()
 
         self._robot.enable_robot()
         observe(_logger, "paint.system.ready", profile=self.metadata.name,
@@ -843,6 +870,10 @@ class PaintRobotSystem(BaseRobotSystem):
 
     def on_stop(self) -> None:
         observe(_logger, "paint.system.stopping", profile=self.metadata.name)
+        collision_monitor = getattr(self, "_collision_interlock_monitor", None)
+        if collision_monitor is not None:
+            collision_monitor.stop()
+            self.unregister_managed_resource(collision_monitor)
         process = getattr(self, "_main_process", None)
         if process is not None:
             process.shutdown()

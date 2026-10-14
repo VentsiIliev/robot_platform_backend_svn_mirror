@@ -73,6 +73,12 @@ def execution_payload(robot: IRobotBackend | None, node: RobotController | None,
             if isinstance(ordered_status, dict) and bool(ordered_status.get("active", False)):
                 status["ordered_motion_chain"] = ordered_status
         status["last_submitted_task_id"] = getattr(node, "last_submitted_task_id", None)
+        collision_event = getattr(node, "last_collision_event", None)
+        if isinstance(collision_event, dict):
+            status["collision_event"] = _to_jsonable(collision_event)
+        get_interlock = getattr(node, "get_motion_interlock_status", None)
+        if callable(get_interlock):
+            status["motion_interlock"] = _to_jsonable(get_interlock())
         payload.update({
             "success": True,
             "runtime_ready": motion_stack_ready,

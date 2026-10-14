@@ -57,9 +57,19 @@ class RobotJogService:
         self._recovery_mode = False
         self._lock = threading.Lock()
 
-    def set_recovery_mode(self, enabled: bool) -> None:
-        self._recovery_mode = bool(enabled)
+    def set_recovery_mode(self, enabled: bool) -> bool:
+        requested = bool(enabled)
+        setter = getattr(self._robot, "set_collision_detection_suppressed", None)
+        if not callable(setter):
+            _logger.error("[JOG] recovery mode rejected: collision suppression unsupported")
+            return False
+        result = setter(requested)
+        if not isinstance(result, dict) or not bool(result.get("success", False)):
+            _logger.error("[JOG] recovery mode rejected: collision suppression failed: %s", result)
+            return False
+        self._recovery_mode = requested
         _logger.warning("[JOG] recovery mode %s", "ENABLED" if self._recovery_mode else "disabled")
+        return True
 
     def recovery_mode_enabled(self) -> bool:
         return self._recovery_mode

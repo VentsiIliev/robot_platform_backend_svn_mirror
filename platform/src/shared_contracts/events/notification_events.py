@@ -14,6 +14,23 @@ class NotificationSeverity(str, Enum):
 
 
 @dataclass(frozen=True)
+class NotificationAction:
+    key: str
+    title_key: str = ""
+    fallback_title: str = ""
+    primary: bool = False
+    close_dialog: bool = True
+
+
+@dataclass(frozen=True)
+class NotificationActionEvent:
+    source: str
+    action_key: str
+    dedupe_key: str | None = None
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+@dataclass(frozen=True)
 class UserNotificationEvent:
     source: str
     severity: NotificationSeverity
@@ -24,6 +41,7 @@ class UserNotificationEvent:
     fallback_message: str = ""
     detail: str | None = None
     dedupe_key: str | None = None
+    actions: tuple[NotificationAction, ...] = ()
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -36,3 +54,4 @@ class DismissNotificationEvent:
 class NotificationTopics:
     USER = "ui/notification"
     DISMISS = "ui/notification/dismiss"
+    ACTION = "ui/notification/action"

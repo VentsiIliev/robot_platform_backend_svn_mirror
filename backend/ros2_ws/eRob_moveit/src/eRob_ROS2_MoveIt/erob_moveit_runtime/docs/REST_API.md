@@ -121,6 +121,42 @@ Response states include:
 - `STOP_REQUESTED_BUT_UNCONFIRMED`
 - `ERROR`
 
+### `GET /motion/interlock/status`
+
+Return the global motion-interlock state. An active sensorless-collision
+interlock blocks new motion and drive-enable requests until operator
+acknowledgement.
+
+### `POST /motion/interlock/reset`
+
+Acknowledge and reset the collision motion interlock. Reset does not suppress
+the detector; a continuing over-threshold condition can latch again.
+
+### `POST /collision/calibration/recording/start`
+
+Start passive recording of platform-owned motion for sensorless-collision model
+calibration. The robot is not moved by this endpoint.
+
+### `POST /collision/calibration/recording/stop`
+
+Stop and finalize the current external-motion recording session.
+
+### `POST /collision/monitor/suppression`
+
+Temporarily suppress sensorless collision detection for Recovery Jog only.
+
+```json
+{"suppressed": true}
+```
+
+The endpoint waits for the collision monitor to confirm the requested state.
+It returns an error if the monitor subscriber is unavailable or confirmation
+times out. Suppression does not clear an existing collision latch. The platform
+restores detection when Recovery Jog ends.
+
+See `zeroerr/docs/SENSORLESS_COLLISION_DETECTION.md` for the model, calibration,
+validation and operational safety requirements.
+
 ### `POST /workobject/set`
 Set a workobject/user frame.
 

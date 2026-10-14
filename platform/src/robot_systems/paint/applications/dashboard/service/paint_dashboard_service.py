@@ -90,6 +90,8 @@ class PaintDashboardService(IPaintDashboardService):
 
     def load_state(self) -> DashboardState:
         process_state = self._process.state.value
+        if self._process.collision_acknowledgement_required() is True:
+            process_state = ProcessState.ERROR.value
         is_paused = self._process.state == ProcessState.PAUSED
         is_stopping = getattr(self._process, "is_stopping", False) is True
         status_lines = self._status_lines(process_state)
@@ -147,6 +149,11 @@ class PaintDashboardService(IPaintDashboardService):
 
     def reset_errors(self) -> None:
         if self._process.state == ProcessState.ERROR:
+            failure = self._process.last_failure
+            if getattr(failure, "stage", None) == "collision_monitor":
+                self._logger.warning(
+                    "Reset Errors cannot bypass an active collision hold; use collision acknowledgement")
+                return
             self._process.reset_errors()
             return
         self._logger.debug(
@@ -154,8 +161,18 @@ class PaintDashboardService(IPaintDashboardService):
             getattr(self._process.state, "value", self._process.state),
         )
 
+    def acknowledge_collision(self) -> tuple[bool, str]:
+        return self._process.acknowledge_collision()
+
+    def collision_acknowledgement_required(self) -> bool:
+        return self._process.collision_acknowledgement_required()
+
     def retry_unmatched_workpiece(self) -> bool:
         return self._process.retry_unmatched_workpiece()
+
+    def is_dry_run_mode_enabled(self) -> bool:
+        service = self._paint_process_config_service
+        return bool(service is not None and service.get_snapshot().enable_dry_run_mode)
 
     def get_unmatched_paint_settings(self) -> dict[str, float | bool]:
         service = self._paint_process_config_service

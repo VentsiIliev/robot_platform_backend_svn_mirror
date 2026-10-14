@@ -200,6 +200,32 @@ class _ConditionLostAfterDetection:
 
 
 class ServoContactPickupExecutorTest(unittest.TestCase):
+    def test_waypoint_failure_preserves_motion_backend_detail(self):
+        motion = _FakeMotion()
+        motion.last_motion_error = "controller rejected segment 3 (result=-42)"
+        motion.move_ordered_pickup_sequence = lambda _label, _segments: False
+        executor = PaintPickupExecutor(SimpleNamespace(_motion=motion))
+
+        self.assertFalse(
+            executor._move_waypoint_sequence(
+                "Pickup approach before servo contact",
+                [PickupWaypoint("approach", [0, 0, 100, 0, 0, 0], 10, 10)],
+            )
+        )
+        self.assertEqual(
+            "Pickup approach before servo contact failed: "
+            "controller rejected segment 3 (result=-42)",
+            executor._last_failure_message,
+        )
+
+    def test_backend_failure_description_keeps_status_fields(self):
+        self.assertEqual(
+            "state='failed', result=-7, error='trajectory rejected'",
+            PaintPickupExecutor._describe_backend_result(
+                {"state": "failed", "result": -7, "error": "trajectory rejected"}
+            ),
+        )
+
     def test_magazine_approach_waits_for_two_inactive_status_samples(self):
         statuses = iter((
             {"is_executing": True, "state": "executing"},
@@ -978,6 +1004,82 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
             ["Moving to staging offset before first pivot contact pose"],
         )
         self.assertEqual(prepared_segments[0].position, (100.0, 120.0, 150.0, 180.0, 0.0, 0.0))
+
+    def test_dry_run_accepts_minimum_z_as_calibration_pickup_success(self):
+        robot = _FakeRobot()
+        motion = _FakeMotion()
+        original_move = motion.move_ordered_pickup_sequence
+
+        def move_and_apply_dry_retract(label, segments):
+            ok = original_move(label, segments)
+            if label == "Dry-run minimum-Z pickup retract":
+                robot.position = list(motion.sequences[-1][1][0]["position"])
+            return ok
+
+        motion.move_ordered_pickup_sequence = move_and_apply_dry_retract
+        pickup_motion = SimpleNamespace(
+            calibration_contact_execution_mode="sensor_controlled_fast_lin",
+            servo_contact_linear_mm_s=12.0,
+            servo_contact_min_z_mm=2.0,
+            servo_contact_fast_lin_velocity_percent=12.0,
+            servo_contact_fast_lin_acceleration_percent=30.0,
+            servo_contact_timeout_s=1.0,
+            servo_contact_poll_interval_s=0.01,
+            servo_contact_controlled_stop_duration_s=0.2,
+            servo_contact_stop_confirmation_timeout_s=1.0,
+            servo_contact_preflight_read_attempts=2,
+            servo_contact_read_failure_limit=3,
+            lift_align_vel_percent=30.0,
+            lift_align_acc_percent=30.0,
+        )
+        owner = SimpleNamespace(
+            _robot_service=robot,
+            _motion=motion,
+            _vacuum=motion,
+            _pickup_condition=SimpleNamespace(is_active=lambda: False),
+            _pickup_tool=1,
+            _pickup_user=0,
+            _active_execution_control=None,
+            _contact_motion_config=SimpleNamespace(motion_plane="xy_z_rz"),
+            _paint_process_config=lambda: SimpleNamespace(
+                pickup_motion=pickup_motion,
+                enable_dry_run_mode=True,
+            ),
+        )
+        plan = PickupPlan(
+            strategy_name="dry-run-test",
+            motion_plan=object(),
+            waypoints=(
+                PickupWaypoint("approach", [1, 2, 100, 180, 0, 0], 10, 10),
+                PickupWaypoint("contact", [1, 2, 2, 180, 0, 0], 10, 10),
+                PickupWaypoint("lift", [1, 2, 20, 180, 0, 0], 10, 10),
+            ),
+            contact_mode=PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
+            contact_waypoint_index=1,
+            retract_reference_pose=[1, 2, 20, 180, 0, 0],
+        )
+        robot.position = [1, 2, 2, 180, 0, 0]
+
+        with patch(
+            "src.robot_systems.paint.processes.paint.operations.pickup.executor.ServoUntilConditionProcedure.run",
+            return_value=SimpleNamespace(
+                success=False,
+                detected=False,
+                timed_out=False,
+                elapsed_s=0.1,
+                message="minimum_z_reached",
+            ),
+        ):
+            self.assertTrue(
+                PaintPickupExecutor(owner)._execute_servo_contact_pickup_sequence(plan)
+            )
+
+        self.assertEqual(0, motion.vacuum_off)
+        self.assertIn(
+            "Dry-run minimum-Z pickup retract",
+            [label for label, _segments in motion.sequences],
+        )
+        self.assertEqual(20.0, robot.position[2])
 
     def test_servo_pickup_with_safe_travel_never_revisits_calibration_xy(self):
         robot = _FakeRobot()

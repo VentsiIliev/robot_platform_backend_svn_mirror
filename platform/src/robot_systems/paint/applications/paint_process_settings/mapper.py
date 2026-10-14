@@ -286,6 +286,8 @@ class PaintProcessSettingsMapper:
         nav = settings.navigation_return
         return {
             "enable_vacuum_pump": settings.enable_vacuum_pump,
+            "enable_dry_run_mode": settings.enable_dry_run_mode,
+            "collect_collision_calibration_data": settings.collect_collision_calibration_data,
             "stop_after_calibration_pickup": settings.stop_after_calibration_pickup,
             "apply_camera_to_tcp_for_pickup": settings.apply_camera_to_tcp_for_pickup,
             "enable_z_shift_pixel_compensation": settings.enable_z_shift_pixel_compensation,
@@ -1044,6 +1046,15 @@ class PaintProcessSettingsMapper:
                 flat.get("pickup_axis_alignment_sign_value", base.pickup_axis_alignment_sign_value)
             ),
             enable_vacuum_pump=bool(flat.get("enable_vacuum_pump", base.enable_vacuum_pump)),
+            enable_dry_run_mode=bool(
+                flat.get("enable_dry_run_mode", base.enable_dry_run_mode)
+            ),
+            collect_collision_calibration_data=bool(
+                flat.get(
+                    "collect_collision_calibration_data",
+                    base.collect_collision_calibration_data,
+                )
+            ),
             stop_after_calibration_pickup=bool(
                 flat.get(
                     "stop_after_calibration_pickup",

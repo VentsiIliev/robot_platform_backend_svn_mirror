@@ -140,8 +140,8 @@ def main() -> None:
     # 1 — engine singletons
     ctx = EngineContext.build()
 
-    ros_backend = build_ros_backend_launcher_from_env(startup_config.ros_backend, startup_config.robot_system)
-    ros_backend.start()
+    # ros_backend = build_ros_backend_launcher_from_env(startup_config.ros_backend, startup_config.robot_system)
+    # ros_backend.start()
 
     # 2 — robot app (settings loaded, services wired)
     try:
@@ -223,7 +223,12 @@ def main() -> None:
     shell.header.power_off_requested.connect(_on_power_off_requested)
 
     startup_splash_coordinator = None
-    notification_presenter = None
+    notification_presenter = UserNotificationPresenter(
+        shell,
+        ctx.messaging_service,
+        translate=lambda key: localization_svc.translate("Notifications", key),
+    )
+    shell._notification_presenter = notification_presenter
     robot_connection_notifier = None
     if not skip_splash:
         startup_splash = StartupSplashView(shell)
@@ -233,13 +238,7 @@ def main() -> None:
         shell.stacked_widget.setCurrentWidget(startup_splash)
         shell.header.language_selector.languageChanged.connect(startup_splash.retranslateUi)
         startup_splash_coordinator = StartupSplashCoordinator(shell, startup_splash, ctx.messaging_service)
-        notification_presenter = UserNotificationPresenter(
-            shell,
-            ctx.messaging_service,
-            translate=lambda key: localization_svc.translate("Notifications", key),
-        )
         robot_connection_notifier = RobotConnectionNotifier(ctx.messaging_service, suppress_until_ready=True)
-        shell._notification_presenter = notification_presenter
         shell._robot_connection_notifier = robot_connection_notifier
         shell._startup_splash = startup_splash
         shell._startup_splash_coordinator = startup_splash_coordinator
@@ -294,8 +293,8 @@ def main() -> None:
     else:
         shell.show()
 
+    notification_presenter.start()
     if not skip_splash:
-        notification_presenter.start()
         robot_connection_notifier.start()
 
     def _show_login_view() -> None:

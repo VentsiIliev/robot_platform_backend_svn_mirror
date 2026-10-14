@@ -63,4 +63,5 @@ src/robot_systems/glue/storage/settings/vision/data/*.npy
 /src/robot_systems/**/storage/translations/.language_state.json
 /transformation_to_camera_center.json
 /src/robot_systems/paint/processes/paint/templogs.txt
+/src/robot_systems/paint_tray_dry/storage/diagnostics/
 /src/engine/vision/implementation/plvision/*.egg-info/

@@ -38,6 +38,9 @@ from src.robot_systems.paint.processes.paint.operations.pickup.executor import (
     pickup_pose_is_close,
 )
 from src.robot_systems.paint.processes.paint.production.magazine.outcomes import NO_WORKPIECE_AT_MAGAZINE
+from src.robot_systems.paint.processes.paint.dry_run.minimum_z_condition import (
+    accepts_minimum_z_result,
+)
 from src.robot_systems.paint.processes.paint.motion.pose_sampling import (
     read_fresh_pose,
     wait_for_stable_pose,
@@ -493,7 +496,56 @@ def _execute_magazine_servo_contact_pickup_release(
             result.elapsed_s,
             result.message,
         )
-        if not result.success:
+        dry_run_minimum_z_success = _dry_run_accepts_minimum_z_result(
+            executor, result
+        )
+        if dry_run_minimum_z_success:
+            _logger.warning(
+                "[DRY_RUN] Minimum pickup Z reached; accepting magazine pickup "
+                "as successful"
+            )
+            live_pose = _read_fresh_pose(executor._robot_service)
+            if len(live_pose) < 6:
+                discard_prepared()
+                return False, (
+                    "Dry-run magazine pickup reached minimum Z, but the robot "
+                    "pose was unavailable for the recovery retract"
+                )
+            target_z = (
+                float(safe_clearance_pose[2])
+                if full_retract
+                else float(live_pose[2]) + short_retract_distance_mm
+            )
+            if abs(float(live_pose[2]) - target_z) > 2.0:
+                retract_pose = list(live_pose[:6])
+                retract_pose[2] = target_z
+                _logger.warning(
+                    "[DRY_RUN] Magazine boundary result did not execute the "
+                    "configured retract; commanding explicit Fast LIN retract "
+                    "current_z=%.3f target_z=%.3f",
+                    float(live_pose[2]),
+                    target_z,
+                )
+                retract_segments = build_magazine_pickup_release_segments((
+                    MagazineTransferWaypoint(
+                        label="Retracting after dry-run magazine minimum-Z pickup",
+                        pose=retract_pose,
+                        velocity_percent=float(pickup_motion.lift_align_vel_percent),
+                        acceleration_percent=float(pickup_motion.lift_align_acc_percent),
+                        motion_type=OrderedMotionType.FAST_LINEAR,
+                        blend_radius=0.0,
+                    ),
+                ))
+                if not executor._motion.move_ordered_pickup_sequence(
+                    "Dry-run magazine minimum-Z pickup retract",
+                    retract_segments,
+                ):
+                    discard_prepared()
+                    return False, (
+                        "Dry-run magazine minimum-Z pickup succeeded, but its "
+                        "explicit Fast LIN retract failed"
+                    )
+        if not result.success and not dry_run_minimum_z_success:
             discard_prepared()
             no_workpiece_detected = (
                 result.timed_out
@@ -518,7 +570,7 @@ def _execute_magazine_servo_contact_pickup_release(
         # an empty descent. Confirm it once more after 50 ms before carrying
         # anything toward calibration, without imposing the previous 300 ms
         # delay on every successful pickup.
-        if not pickup_condition_is_active_after_retract(
+        if not dry_run_minimum_z_success and not pickup_condition_is_active_after_retract(
             condition,
             required_samples=int(
                 pickup_motion.magazine_post_retract_confirmation_samples
@@ -571,6 +623,14 @@ def _execute_magazine_servo_contact_pickup_release(
         return True, ""
     finally:
         discard_prepared()
+
+
+def _dry_run_accepts_minimum_z_result(executor, result) -> bool:
+    """Treat the descent boundary as successful contact only during dry run."""
+    return accepts_minimum_z_result(
+        enabled=bool(executor._paint_process_config().enable_dry_run_mode),
+        result=result,
+    )
 
 
 def _prepare_magazine_release(

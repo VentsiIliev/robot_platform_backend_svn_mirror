@@ -295,6 +295,26 @@ def _build_capture_snapshot_service(robot_system):
     )
 
 
+def _build_paint_dry_run_snapshot_source(robot_system):
+    from pathlib import Path
+
+    from src.robot_systems.paint.processes.paint.dry_run import PaintDryRunSnapshotSource
+
+    return PaintDryRunSnapshotSource(
+        # The reusable generated dataset belongs to the base Paint package and
+        # is shared by derived profiles with isolated runtime settings/storage.
+        manifest_path=(
+            Path(__file__).resolve().parent
+            / "storage" / "dry_run_workpieces" / "standard-v1" / "manifest.json"
+        ),
+        transformer_getter=lambda: robot_system.get_shared_vision_resolver()[0],
+        work_area_service=robot_system._work_area_service,
+        image_size_getter=lambda: _paint_camera_image_size(robot_system),
+        robot_service=robot_system._robot,
+        work_area_id="paint",
+    )
+
+
 def _build_paint_workpiece_service(robot_system):
     from src.robot_systems.paint.domain.workpieces import JsonPaintWorkpieceRepository, PaintWorkpieceService
 

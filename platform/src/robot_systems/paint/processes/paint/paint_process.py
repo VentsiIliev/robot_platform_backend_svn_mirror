@@ -5,7 +5,7 @@ import logging
 from uuid import uuid4
 from contextvars import copy_context
 from src.engine.diagnostics.events import diagnostic_context, observe
-from time import monotonic
+from time import monotonic, time
 from typing import Callable, Optional
 
 from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
@@ -66,6 +66,7 @@ class PaintProcess(BaseProcess):
         self._retry_unmatched_workpiece_requested = False
         self._adjustment_session: PaintAdjustmentSession | None = None
         self._pending_adjustment_session: PaintAdjustmentSession | None = None
+        self._collision_recording_active = threading.Event()
 
     @property
     def last_failure(self) -> TrayFailure | PaintFailure | None:
@@ -312,6 +313,52 @@ class PaintProcess(BaseProcess):
         """Clear the internal stop flag so a new run can be started after an error reset."""
         self._stopping = False
 
+    def acknowledge_collision(self) -> tuple[bool, str]:
+        failure = self._last_failure
+        has_collision_failure = (
+            isinstance(failure, PaintFailure)
+            and failure.stage == "collision_monitor"
+        )
+        if not has_collision_failure and not self._backend_collision_interlock_active():
+            return False, "No collision hold is awaiting acknowledgement"
+        method = getattr(self._robot_service, "acknowledge_collision_interlock", None)
+        if not callable(method):
+            return False, "Robot backend does not support collision acknowledgement"
+        try:
+            result = method()
+        except Exception as exc:
+            self._logger.exception("Collision acknowledgement request failed")
+            return False, str(exc)
+        if not isinstance(result, dict) or not bool(result.get("success", False)):
+            message = (
+                result.get("message") or result.get("error")
+                if isinstance(result, dict) else "Invalid backend response")
+            return False, str(message)
+        self._last_failure = None
+        if self.state == ProcessState.ERROR:
+            self.reset_errors()
+        return True, str(result.get("message") or "Collision hold cleared")
+
+    def collision_acknowledgement_required(self) -> bool:
+        failure = self._last_failure
+        return (
+            isinstance(failure, PaintFailure)
+            and failure.stage == "collision_monitor"
+        ) or self._backend_collision_interlock_active()
+
+    def _backend_collision_interlock_active(self) -> bool:
+        if self._robot_service is None:
+            return False
+        try:
+            status = self._robot_service.get_execution_status()
+        except Exception:
+            self._logger.exception("Failed to read collision interlock status")
+            return False
+        if not isinstance(status, dict):
+            return False
+        interlock = status.get("motion_interlock")
+        return isinstance(interlock, dict) and bool(interlock.get("active", False))
+
     def _run_in_background(self, *args, **kwargs) -> None:
         with diagnostic_context(run_id=self._diagnostic_run_id or uuid4().hex):
             observe(self._logger, "paint.run.started", metrics={"paint.runs.attempts": 1})
@@ -326,8 +373,21 @@ class PaintProcess(BaseProcess):
     ) -> None:
         """Execute one production cycle and translate the result into process state transitions."""
         run_stop_event = stop_event if stop_event is not None else self._run_stop_event
-        should_stop = run_stop_event.is_set
+        collision_abort = threading.Event()
+        collision_watch_done = threading.Event()
+        collision_holder: dict[str, dict] = {}
+        should_stop = lambda: run_stop_event.is_set() or collision_abort.is_set()
         failure: TrayFailure | PaintFailure | None = None
+        collision_watch_started_at = time()
+        collision_event = None
+        collision_watcher = threading.Thread(
+            target=self._watch_for_collision,
+            args=(collision_watch_started_at, collision_abort, collision_watch_done, collision_holder),
+            daemon=True,
+            name="PaintCollisionWatcher",
+        )
+        collision_watcher.start()
+        self._start_collision_calibration_recording()
         try:
             if retry_unmatched_workpiece:
                 result = self._production_service.run_once_result(
@@ -353,10 +413,26 @@ class PaintProcess(BaseProcess):
         except Exception as exc:
             self._logger.exception("Paint process failed")
             result = PaintOperationResult.failed(PaintFailureCode.INTERNAL, "paint_process", str(exc))
+        finally:
+            self._stop_collision_calibration_recording()
+            collision_watch_done.set()
+            collision_watcher.join(timeout=0.5)
 
         production_failure = self._production_service.last_failure
         if isinstance(production_failure, (TrayFailure, PaintFailure)):
             failure = production_failure
+        collision_event = collision_holder.get("event") or self._collision_event_since(
+            collision_watch_started_at)
+        if collision_event is not None:
+            joint = str(collision_event.get("joint") or "unknown joint")
+            detector = str(collision_event.get("detector") or "collision monitor")
+            message = f"Collision detected on {joint} by {detector}; robot motion was stopped"
+            result = PaintOperationResult.failed(
+                PaintFailureCode.MOTION,
+                "collision_monitor",
+                message,
+            )
+            failure = result.failure
         if failure is None:
             failure = result.failure
         effective_outcome = PaintOutcome.CANCELLED if run_stop_event.is_set() else result.outcome
@@ -408,3 +484,108 @@ class PaintProcess(BaseProcess):
             else:
                 self._logger.error("Paint process failed: %s", msg)
                 self._transition(ProcessState.ERROR, self._on_fault, msg)
+
+    def _collision_event_since(self, started_at: float) -> dict | None:
+        if self._robot_service is None:
+            return None
+        try:
+            status = self._robot_service.get_execution_status()
+        except Exception:
+            self._logger.exception("Failed to read collision notification from robot backend")
+            return None
+        if not isinstance(status, dict):
+            return None
+        event = status.get("collision_event")
+        if not isinstance(event, dict) or not bool(event.get("stop_requested", False)):
+            return None
+        try:
+            event_time = float(event.get("timestamp", 0.0))
+        except (TypeError, ValueError):
+            return None
+        return dict(event) if event_time >= started_at else None
+
+    def _watch_for_collision(
+        self,
+        started_at: float,
+        collision_abort: threading.Event,
+        done: threading.Event,
+        holder: dict[str, dict],
+    ) -> None:
+        while not done.wait(0.05):
+            event = self._collision_event_since(started_at)
+            if event is None:
+                continue
+            holder["event"] = event
+            collision_abort.set()
+            self._logger.error(
+                "Collision notification received during paint execution: %s", event)
+            try:
+                self._production_service.stop_current_phase()
+            except Exception:
+                self._logger.exception(
+                    "Failed to cancel current paint phase after collision notification")
+            return
+
+    def _collision_calibration_recording_enabled(self) -> bool:
+        service = self._paint_process_config_service
+        if service is None:
+            settings = PAINT_PROCESS_CONFIG
+        else:
+            try:
+                settings = service.get_snapshot()
+            except Exception:
+                self._logger.exception(
+                    "Failed to read settings for collision calibration recording"
+                )
+                return False
+        return bool(
+            settings.enable_dry_run_mode
+            and settings.collect_collision_calibration_data
+        )
+
+    def _start_collision_calibration_recording(self) -> None:
+        if not self._collision_calibration_recording_enabled() or self._robot_service is None:
+            return
+        start = getattr(self._robot_service, "start_collision_calibration_recording", None)
+        if not callable(start):
+            self._logger.warning("Dry-run calibration recording is unsupported by this robot")
+            return
+        try:
+            result = start()
+            if isinstance(result, dict) and result.get("success"):
+                self._collision_recording_active.set()
+                self._logger.info(
+                    "[DRY_RUN] Collision calibration recording started: %s",
+                    result.get("message", ""),
+                )
+            else:
+                self._logger.warning(
+                    "[DRY_RUN] Collision calibration recording did not start: %s",
+                    result,
+                )
+        except Exception:
+            self._logger.exception("Dry-run collision calibration recording start failed")
+
+    def _stop_collision_calibration_recording(self) -> None:
+        if not self._collision_recording_active.is_set() or self._robot_service is None:
+            return
+        # Clear first so concurrent process-stop and worker-finally paths cannot
+        # finalize the same backend session twice.
+        self._collision_recording_active.clear()
+        stop = getattr(self._robot_service, "stop_collision_calibration_recording", None)
+        if not callable(stop):
+            return
+        try:
+            result = stop()
+            if not (isinstance(result, dict) and result.get("success")):
+                self._logger.warning(
+                    "[DRY_RUN] Collision calibration recording stop failed: %s",
+                    result,
+                )
+            else:
+                self._logger.info(
+                    "[DRY_RUN] Collision calibration recording finalized: %s",
+                    result.get("message", ""),
+                )
+        except Exception:
+            self._logger.exception("Dry-run collision calibration recording stop failed")

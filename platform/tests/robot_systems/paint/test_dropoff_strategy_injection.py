@@ -152,6 +152,22 @@ class TestConfiguredDropoffStrategies(unittest.TestCase):
         self.assertIsNone(result.prepositioned_group)
         self.assertEqual('sensor still detects workpiece', result.message)
 
+    def test_dry_run_plate_release_does_not_stop_on_same_footprint_capacity(self):
+        config = replace(PaintProcessConfig(), enable_dry_run_mode=True)
+        owner = SimpleNamespace(
+            _last_prepositioned_start_group=None,
+            _plate_layout_service=SimpleNamespace(has_space_for_same_footprint=False),
+            _paint_process_config=lambda: config,
+        )
+        with patch(
+            'src.robot_systems.paint.processes.paint.operations.dropoff.strategies.plate_layout._execute_plate_layout_ordered_release',
+            return_value=(True, ''),
+        ):
+            result = PlateLayoutDropoff(owner).release_dropoff()
+
+        self.assertTrue(result.success)
+        self.assertFalse(result.tray_full)
+
 
 class TestDropoffCycleLifecycle(unittest.TestCase):
     @staticmethod
@@ -195,6 +211,34 @@ class TestDropoffCycleLifecycle(unittest.TestCase):
         request.calibration_source.assert_called_once_with()
         self.assertEqual(5.0, layout.reserve_result.call_args.kwargs['workpiece_rz_at_calibration_deg'])
         self.assertEqual([], robot.mock_calls)
+
+    def test_dry_run_full_plate_resets_virtual_layout_and_retries(self):
+        layout = MagicMock()
+        reservation = SimpleNamespace(
+            release_pose=[1, 2, 3, 180, 0, 0],
+            has_space_for_same_footprint=False,
+        )
+        layout.reserve_result.side_effect = [
+            PaintOperationResult(PaintOutcome.TRAY_FULL, 'No remaining capacity'),
+            Ready(reservation),
+        ]
+        config = replace(
+            PaintProcessConfig(
+                dropoff=PaintDropoffConfig(strategy=DropoffStrategy.PLATE_LAYOUT)
+            ),
+            enable_dry_run_mode=True,
+        )
+        owner = SimpleNamespace(
+            _plate_layout_service=layout,
+            _paint_process_config=lambda: config,
+            _resolve_pivot_offset_mm=lambda *args: 0.0,
+        )
+
+        result = PlateLayoutDropoff(owner).begin_cycle(self.request())
+
+        self.assertTrue(result.completed)
+        layout.clear.assert_called_once_with()
+        self.assertEqual(2, layout.reserve_result.call_count)
 
     def test_plate_reservation_rejects_missing_calibration_without_reserving(self):
         layout = MagicMock()

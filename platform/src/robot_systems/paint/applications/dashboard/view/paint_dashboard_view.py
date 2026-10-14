@@ -1394,6 +1394,23 @@ class PaintDashboardView(IApplicationView):
     def ask_production_start_confirmation(self, title: str, message: str) -> bool:
         return ask_yes_no(self, title, message, default_no=True)
 
+    def ask_collision_acknowledgement(self, title: str, message: str) -> bool:
+        action = show_styled_warning(
+            self,
+            title,
+            message,
+            heading=self._translate_text("Robot motion is held"),
+            actions=(
+                DialogAction("keep_hold", self._translate_text("Keep Hold")),
+                DialogAction(
+                    "acknowledge",
+                    self._translate_text("Acknowledge and Clear Hold"),
+                    primary=True,
+                ),
+            ),
+        )
+        return action == "acknowledge"
+
     def set_application_shortcuts(self, shortcuts: list) -> None:
         for widget in self._control_widgets():
             widget.set_application_shortcuts(shortcuts)

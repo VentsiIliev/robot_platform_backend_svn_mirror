@@ -686,6 +686,7 @@ class PaintEdgeCleanupExecutor:
             len(command_path),
             len(segments),
         )
+        self._owner._motion.record_ordered_chain("edge cleanup", segments)
         result = self._owner._robot_service.execute_ordered_motion_chain(
             segments,
             tool=self._owner._pickup_tool,

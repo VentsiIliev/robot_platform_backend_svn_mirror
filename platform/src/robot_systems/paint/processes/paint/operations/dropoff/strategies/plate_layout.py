@@ -91,10 +91,19 @@ class PlateLayoutDropoff(IDropoffStrategy):
         ok, message = _execute_plate_layout_ordered_release(
             self._runtime, next_cycle_start=next_cycle_start,
         )
+        config_getter = getattr(self._runtime, "_paint_process_config", None)
+        dry_run = bool(
+            config_getter is not None
+            and config_getter().enable_dry_run_mode
+        )
         return DropoffResult(
             success=ok, message=message,
             prepositioned_group=self._runtime._last_prepositioned_start_group if ok else None,
-            tray_full=ok and not self._runtime._plate_layout_service.has_space_for_same_footprint,
+            tray_full=(
+                ok
+                and not dry_run
+                and not self._runtime._plate_layout_service.has_space_for_same_footprint
+            ),
         )
 
 
@@ -748,8 +757,9 @@ def _reserve_plate_dropoff(request: DropoffCycleRequest, executor) -> PaintOpera
     if calibration_pose is None or len(calibration_pose) < 6:
         return PaintOperationResult.failed(PaintFailureCode.INVALID_CONFIGURATION, "tray_reservation", f"Plate-layout dropoff requires calibration movement group '{group_id}'")
 
+    process_config = executor._paint_process_config()
     result = executor._plate_layout_service.reserve_result(
-        executor._paint_process_config().dropoff,
+        process_config.dropoff,
         width_mm=width_mm,
         height_mm=height_mm,
         calibration_pose=list(calibration_pose),
@@ -758,6 +768,26 @@ def _reserve_plate_dropoff(request: DropoffCycleRequest, executor) -> PaintOpera
         outlines_mm=outlines_mm,
         paint_passes=paint_passes,
     )
+    if (
+        isinstance(result, PaintOperationResult)
+        and result.outcome is PaintOutcome.TRAY_FULL
+        and bool(process_config.enable_dry_run_mode)
+    ):
+        _logger.warning(
+            "[DRY_RUN] Virtual drop-off plate is full; resetting its simulated "
+            "occupancy and reserving the current workpiece on a fresh plate"
+        )
+        executor._plate_layout_service.clear()
+        result = executor._plate_layout_service.reserve_result(
+            process_config.dropoff,
+            width_mm=width_mm,
+            height_mm=height_mm,
+            calibration_pose=list(calibration_pose),
+            workpiece_rz_at_calibration_deg=float(align_pose[5]),
+            pose_calculator=calculate_workpiece_dropoff_pose,
+            outlines_mm=outlines_mm,
+            paint_passes=paint_passes,
+        )
     if not isinstance(result, Ready):
         return result
     reservation = result.value

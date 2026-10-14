@@ -37,6 +37,9 @@ from src.robot_systems.paint.diagnostics.trajectory import elapsed_s
 from src.robot_systems.paint.processes.paint.production.magazine.outcomes import (
     NO_WORKPIECE_AT_CALIBRATION,
 )
+from src.robot_systems.paint.processes.paint.dry_run.minimum_z_condition import (
+    accepts_minimum_z_result,
+)
 from src.robot_systems.paint.processes.paint.motion.pose_sampling import (
     read_fresh_pose,
     wait_for_stable_pose,
@@ -581,6 +584,9 @@ class PaintPickupExecutor:
             )
         if combined_segments and not has_fast_lin and prepared_plan_id is None:
             _logger.error("[PICKUP] Continuation preparation did not return a plan_id")
+            self._last_failure_message = (
+                "Pickup continuation preparation failed: backend returned no plan_id"
+            )
             return False
 
         def discard_prepared() -> None:
@@ -658,7 +664,49 @@ class PaintPickupExecutor:
             result.elapsed_s,
             result.message,
         )
-        if not result.success:
+        process_config = self._owner._paint_process_config()
+        dry_run_minimum_z_success = accepts_minimum_z_result(
+            enabled=bool(getattr(process_config, "enable_dry_run_mode", False)),
+            result=result,
+        )
+        if dry_run_minimum_z_success:
+            _logger.warning(
+                "[DRY_RUN] Minimum pickup Z reached; accepting calibration "
+                "pickup as successful"
+            )
+            live_pose = self._read_fresh_pose()
+            target_z = float(predicted_retract_pose[2])
+            if len(live_pose) < 6:
+                discard_prepared()
+                self._last_failure_message = (
+                    "Dry-run pickup reached minimum Z, but the robot pose was "
+                    "unavailable for the recovery retract"
+                )
+                return False
+            if abs(float(live_pose[2]) - target_z) > 2.0:
+                retract_pose = list(live_pose[:6])
+                retract_pose[2] = target_z
+                _logger.warning(
+                    "[DRY_RUN] Boundary result did not execute the configured "
+                    "retract; commanding explicit Fast LIN retract current_z=%.3f "
+                    "target_z=%.3f",
+                    float(live_pose[2]),
+                    target_z,
+                )
+                if not self._move_waypoint_sequence(
+                    "Dry-run minimum-Z pickup retract",
+                    [PickupWaypoint(
+                        "Retracting after dry-run minimum-Z pickup",
+                        retract_pose,
+                        float(pickup_motion.lift_align_vel_percent),
+                        float(pickup_motion.lift_align_acc_percent),
+                        OrderedMotionType.FAST_LINEAR,
+                        0.0,
+                    )],
+                ):
+                    discard_prepared()
+                    return False
+        if not result.success and not dry_run_minimum_z_success:
             discard_prepared()
             if result.timed_out or result.message == "timeout":
                 off_ok, off_msg = self._owner._vacuum.turn_vacuum_off()
@@ -698,10 +746,19 @@ class PaintPickupExecutor:
                 )
                 if not recovery_failures:
                     self._last_outcome = PaintOutcome.NO_WORKPIECE
+            elif not self._last_failure_message:
+                self._last_failure_message = (
+                    "Servo-contact pickup failed: "
+                    f"message={result.message!r}, detected={result.detected}, "
+                    f"timed_out={result.timed_out}"
+                )
             return False
-        if not pickup_condition_is_active_after_retract(condition):
+        if not dry_run_minimum_z_success and not pickup_condition_is_active_after_retract(condition):
             discard_prepared()
             off_ok, off_msg = self._owner._vacuum.turn_vacuum_off()
+            self._last_failure_message = (
+                "Pickup condition became inactive after Fast LIN retract"
+            )
             if not off_ok:
                 self._last_failure_message = (
                     "Workpiece is no longer detected after Fast LIN retract; "
@@ -712,6 +769,9 @@ class PaintPickupExecutor:
         if current_pose is None:
             discard_prepared()
             _logger.error("[PICKUP] Current pose unavailable after servo contact")
+            self._last_failure_message = (
+                "Pickup retract verification failed: current robot pose is unavailable"
+            )
             return False
         retract_delta = [
             float(current_pose[index]) - float(predicted_retract_pose[index])
@@ -739,6 +799,12 @@ class PaintPickupExecutor:
                 float(current_pose[2]),
                 retract_z_error,
             )
+            self._last_failure_message = (
+                "Pickup Fast LIN retract missed its target Z: "
+                f"target_z={float(predicted_retract_pose[2]):.3f} mm, "
+                f"actual_z={float(current_pose[2]):.3f} mm, "
+                f"error={retract_z_error:.3f} mm"
+            )
             return False
 
         if not combined_segments:
@@ -751,6 +817,11 @@ class PaintPickupExecutor:
                 and execution.get("result") == 0
             )
             if not ok:
+                self._last_failure_message = (
+                    "Prepared pickup continuation failed: "
+                    f"{self._describe_backend_result(execution)}"
+                )
+                _logger.error("[PICKUP] %s", self._last_failure_message)
                 discard_prepared()
         else:
             ok = self._owner._motion.move_ordered_pickup_sequence(
@@ -787,7 +858,24 @@ class PaintPickupExecutor:
                 for segment in segments
             ],
         )
-        return bool(self._owner._motion.move_ordered_pickup_sequence(label, segments))
+        ok = bool(self._owner._motion.move_ordered_pickup_sequence(label, segments))
+        if not ok:
+            detail = getattr(self._owner._motion, "last_motion_error", None)
+            self._last_failure_message = (
+                f"{label} failed: {detail}" if detail else f"{label} failed"
+            )
+        return ok
+
+    @staticmethod
+    def _describe_backend_result(result: object) -> str:
+        if not isinstance(result, dict):
+            return f"unexpected backend response {result!r}"
+        fields = []
+        for key in ("state", "result", "success", "error", "message", "detail"):
+            value = result.get(key)
+            if value is not None and value != "":
+                fields.append(f"{key}={value!r}")
+        return ", ".join(fields) or f"backend response contained no status fields: {result!r}"
 
     @staticmethod
     def _failure_message_for(label: str) -> str:

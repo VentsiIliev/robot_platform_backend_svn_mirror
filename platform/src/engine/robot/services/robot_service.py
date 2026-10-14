@@ -181,6 +181,28 @@ class RobotService(IRobotService):
             return {"success": False, "error": "controlled_stop_unsupported"}
         return method(expected_task_id, stop_duration_s=stop_duration_s)
 
+    def acknowledge_collision_interlock(self) -> dict:
+        method = getattr(self._motion, "acknowledge_collision_interlock", None)
+        return method() if callable(method) else {
+            "success": False, "error": "collision_acknowledgement_unsupported"}
+
+    def set_collision_detection_suppressed(self, suppressed: bool) -> dict:
+        method = getattr(self._motion, "set_collision_detection_suppressed", None)
+        return method(suppressed) if callable(method) else {
+            "success": False, "error": "collision_suppression_unsupported"}
+
+    def start_collision_calibration_recording(self) -> dict:
+        method = getattr(self._motion, "start_collision_calibration_recording", None)
+        return method() if callable(method) else {
+            "success": False, "error": "recording_not_supported",
+        }
+
+    def stop_collision_calibration_recording(self) -> dict:
+        method = getattr(self._motion, "stop_collision_calibration_recording", None)
+        return method() if callable(method) else {
+            "success": False, "error": "recording_not_supported",
+        }
+
     def get_current_position(self) -> List[float]:
         return list(self._state.position)
 

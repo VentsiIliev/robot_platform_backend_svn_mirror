@@ -31,7 +31,10 @@ def handle_prepare_workpiece(ctx: PaintExecutionContext) -> PaintExecutionState:
     phase_start = perf_counter()
     prepared = service._workpiece_preparation.prepare_result(
         ctx.contour, ctx.snapshot.frame,
-        enable_matching=bool(ctx.process_config.enable_workpiece_matching),
+        enable_matching=bool(
+            ctx.process_config.enable_workpiece_matching
+            and not ctx.process_config.enable_dry_run_mode
+        ),
         default_settings_override=_cycle_default_paint_settings(ctx),
     )
     if isinstance(prepared, NoMatch):

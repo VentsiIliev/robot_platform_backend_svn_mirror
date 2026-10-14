@@ -1426,6 +1426,65 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             logger.error("stop_motion error: %s", e, exc_info=True)
             return -1
 
+    def acknowledge_collision_interlock(self) -> dict:
+        try:
+            response = requests.post(
+                f"{self.server_url}/motion/interlock/reset", timeout=15)
+            raw = response.json()
+            if response.ok and bool(raw.get("success", False)):
+                self._mark_available()
+            return raw if isinstance(raw, dict) else {
+                "success": False, "error": "invalid interlock reset response"}
+        except Exception as exc:
+            self._mark_unavailable(exc)
+            logger.error("acknowledge_collision_interlock error: %s", exc, exc_info=True)
+            return {"success": False, "error": str(exc)}
+
+    def set_collision_detection_suppressed(self, suppressed: bool) -> dict:
+        try:
+            response = self._session.post(
+                f"{self.server_url}/collision/monitor/suppression",
+                json={"suppressed": bool(suppressed)},
+                timeout=5,
+            )
+            raw = response.json()
+            return raw if isinstance(raw, dict) else {
+                "success": False, "error": "invalid_response",
+            }
+        except Exception as exc:
+            logger.error("Collision monitor suppression update failed: %s", exc)
+            return {"success": False, "error": str(exc)}
+
+    def start_collision_calibration_recording(self) -> dict:
+        """Start a passive backend recording session for externally owned motion."""
+        try:
+            response = self._session.post(
+                f"{self.server_url}/collision/calibration/recording/start",
+                timeout=5,
+            )
+            raw = response.json()
+            return raw if isinstance(raw, dict) else {
+                "success": False, "error": "invalid_response",
+            }
+        except Exception as exc:
+            logger.error("Collision calibration recording start failed: %s", exc)
+            return {"success": False, "error": str(exc)}
+
+    def stop_collision_calibration_recording(self) -> dict:
+        """Stop and finalize the current passive backend recording session."""
+        try:
+            response = self._session.post(
+                f"{self.server_url}/collision/calibration/recording/stop",
+                timeout=5,
+            )
+            raw = response.json()
+            return raw if isinstance(raw, dict) else {
+                "success": False, "error": "invalid_response",
+            }
+        except Exception as exc:
+            logger.error("Collision calibration recording stop failed: %s", exc)
+            return {"success": False, "error": str(exc)}
+
     def controlled_stop(self, expected_task_id, *, stop_duration_s=None) -> dict:
         try:
             payload = {"expected_task_id": expected_task_id}

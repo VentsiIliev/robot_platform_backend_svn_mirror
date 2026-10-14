@@ -140,6 +140,9 @@
     "Demo Alternate": "Демо редуване"
   },
   "PaintDashboard": {
+    "Robot motion is held": "Движението на робота е блокирано",
+    "Keep Hold": "Запази блокировката",
+    "Acknowledge and Clear Hold": "Потвърди и изчисти блокировката",
     "Tray Readiness": "Готовност на тавата",
     "Tray occupancy is unknown": "Заетостта на тавата е неизвестна",
     "Confirm that the tray is physically empty before starting.": "Потвърдете, че тавата е физически празна, преди да стартирате.",
@@ -443,6 +446,10 @@
     "Return near the reference position if needed, rotate around the desired paint rotation axis, then capture.": "Върнете се близо до референтната позиция при нужда, завъртете около желаната paint ос на въртене, след това заснемете."
   },
   "PaintDashboardController": {
+    "Collision Detected": "Открит е сблъсък",
+    "Collision Hold Not Cleared": "Блокировката след сблъсък не е изчистена",
+    "The robot is not yet safe to acknowledge.": "Роботът все още не е в безопасно състояние за потвърждение.",
+    "Confirm the obstruction has been removed before clearing the collision hold.": "Потвърдете, че препятствието е отстранено, преди да изчистите блокировката след сблъсък.",
     "No Workpiece Found": "Няма намерен детайл",
     "No workpiece was found in the camera view. Place a workpiece in the active area and start again.": "В изображението на камерата не е намерен детайл. Поставете детайл в активната зона и стартирайте отново.",
     "Process Blocked": "Процесът е блокиран",
@@ -476,6 +483,10 @@
     "Capture Failed": "Заснемането е неуспешно"
   },
   "Notifications": {
+    "notification.collision.title": "Открит е сблъсък",
+    "notification.collision.message": "Движението на робота е блокирано. Отстранете препятствието, след което освободете блокировката, когато движението отново е безопасно.",
+    "notification.collision.keep_held": "Запази движението блокирано",
+    "notification.collision.release_hold": "Освободи блокировката",
     "notification.operator_lights.title": "Сигналните лампи не са достъпни",
     "notification.operator_lights.failed": "Светлинната индикация може да е неактуална. Повторен опит за запис на изходите."
   }

@@ -145,6 +145,7 @@ class PaintExecutionRuntime:
         # Per-run state and phase executors.
         self._last_execution_plan: WorkpieceExecutionPlan | None = None
         self._last_pickup_plan: PickupTransferPlan | None = None
+        self.diagnostic_motion_commands: list[dict] = []
         self._plate_layout_service = (
             dependencies.plate_layout_service
             if dependencies.plate_layout_service is not None else PlateLayoutService()
@@ -157,6 +158,7 @@ class PaintExecutionRuntime:
         self._motion = PaintMotionExecutor(
             self._robot_service, tool_provider=self._motion_tool,
             user_provider=self._motion_user, recovery=self._motion_recovery,
+            command_recorder=self._record_motion_command,
         )
         self._vacuum = PaintVacuumControl(
             self._vacuum_pump, enabled_provider=self._is_vacuum_pump_enabled,
@@ -275,10 +277,22 @@ class PaintExecutionRuntime:
 
     def _set_cycle_process_config_snapshot(self, config) -> None:
         """Freeze one raw settings snapshot for the active workpiece cycle."""
+        self.diagnostic_motion_commands.clear()
         if config is None:
             self._paint_process_config_snapshot = PAINT_PROCESS_CONFIG
         else:
             self._paint_process_config_snapshot = scale_paint_process_accelerations(config)
+        if self._paint_process_config_snapshot.enable_dry_run_mode:
+            from src.robot_systems.paint.processes.paint.configuration.models import (
+                PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
+            )
+            self._paint_process_config_snapshot = replace(
+                self._paint_process_config_snapshot,
+                pickup_motion=replace(
+                    self._paint_process_config_snapshot.pickup_motion,
+                    pickup_contact_mode=PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
+                ),
+            )
         self._apply_cycle_dropoff_strategy()
         self._enable_vacuum_pump = bool(self._paint_process_config_snapshot.enable_vacuum_pump)
         if self._pickup_condition_provider is not None:
@@ -785,6 +799,9 @@ class PaintExecutionRuntime:
 
     def _execution_control(self):
         return self._active_execution_control
+
+    def _record_motion_command(self, payload: dict) -> None:
+        self.diagnostic_motion_commands.append(dict(payload))
 
     def _motion_tool(self) -> int:
         return self._pickup_tool

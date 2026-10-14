@@ -7,6 +7,8 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QMessageBox, QWidget
 
 from src.applications.base.styled_message_box import (
+    ActionWarningDialog,
+    DialogAction,
     make_critical,
     make_info,
     make_warning,
@@ -17,6 +19,7 @@ from src.applications.base.styled_message_box import (
 from src.engine.core.i_messaging_service import IMessagingService
 from src.shared_contracts.events.notification_events import (
     DismissNotificationEvent,
+    NotificationActionEvent,
     NotificationSeverity,
     NotificationTopics,
     UserNotificationEvent,
@@ -48,13 +51,14 @@ class NotificationTextResolver:
             return template
 
 
-class UserNotificationPresenter:
+class UserNotificationPresenter(QObject):
     def __init__(
         self,
         parent: QWidget,
         messaging_service: IMessagingService,
         translate: Callable[[str], str] | None = None,
     ) -> None:
+        super().__init__()
         self._parent = parent
         self._messaging = messaging_service
         self._resolver = NotificationTextResolver(translate=translate)
@@ -63,7 +67,8 @@ class UserNotificationPresenter:
         self._bridge.dismiss.connect(self._dismiss_notification)
         self._active = False
         self._last_dedupe_key: str | None = None
-        self._active_dialogs: dict[str, QMessageBox] = {}
+        self._active_dialogs: dict[str, QWidget] = {}
+        self._action_dialog_events: dict[ActionWarningDialog, UserNotificationEvent] = {}
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def start(self) -> None:
@@ -84,6 +89,7 @@ class UserNotificationPresenter:
         for dialog in list(self._active_dialogs.values()):
             dialog.close()
         self._active_dialogs.clear()
+        self._action_dialog_events.clear()
         self._active = False
 
     def present(self, event: UserNotificationEvent) -> None:
@@ -132,6 +138,34 @@ class UserNotificationPresenter:
         if existing is not None:
             return
 
+        if event.actions:
+            actions = tuple(
+                DialogAction(
+                    key=action.key,
+                    text=self._resolver.resolve_text(
+                        action.title_key,
+                        action.fallback_title,
+                        event.params,
+                    ),
+                    primary=action.primary,
+                    close_dialog=action.close_dialog,
+                )
+                for action in event.actions
+            )
+            dialog = ActionWarningDialog(
+                self._parent,
+                title,
+                message,
+                heading=title,
+                actions=actions,
+            )
+            dialog.action_selected.connect(self._on_action_selected)
+            dialog.finished.connect(self._on_action_dialog_finished)
+            self._active_dialogs[event.dedupe_key] = dialog
+            self._action_dialog_events[dialog] = event
+            dialog.open()
+            return
+
         if event.severity == NotificationSeverity.INFO:
             dialog = make_info(self._parent, title, message)
         elif event.severity == NotificationSeverity.WARNING:
@@ -142,10 +176,34 @@ class UserNotificationPresenter:
         self._active_dialogs[event.dedupe_key] = dialog
         dialog.open()
 
+    def _on_action_selected(self, action_key: str) -> None:
+        dialog = self.sender()
+        event = self._action_dialog_events.get(dialog)
+        if event is None:
+            return
+        self._messaging.publish(
+            NotificationTopics.ACTION,
+            NotificationActionEvent(
+                source=event.source,
+                action_key=str(action_key),
+                dedupe_key=event.dedupe_key,
+            ),
+        )
+
+    def _on_action_dialog_finished(self, _result: int) -> None:
+        dialog = self.sender()
+        event = self._action_dialog_events.pop(dialog, None)
+        if event is None or event.dedupe_key is None:
+            return
+        self._active_dialogs.pop(event.dedupe_key, None)
+        if self._last_dedupe_key == event.dedupe_key:
+            self._last_dedupe_key = None
+
     def _dismiss_notification(self, event: DismissNotificationEvent | str) -> None:
         dedupe_key = event.dedupe_key if isinstance(event, DismissNotificationEvent) else str(event)
         dialog = self._active_dialogs.pop(dedupe_key, None)
         if dialog is not None:
+            self._action_dialog_events.pop(dialog, None)
             dialog.close()
         if self._last_dedupe_key == dedupe_key:
             self._last_dedupe_key = None

@@ -230,8 +230,9 @@ class TestCycleStartUnwind(unittest.TestCase):
         )
         ctx.production_service._clear_prepositioned_start_group.assert_not_called()
 
-    def test_skips_unwind_after_prepositioned_partial_segment_rotation(self):
+    def test_unwinds_after_prepositioned_partial_segment_rotation(self):
         robot_service = MagicMock()
+        robot_service.unwind_joint6.return_value = True
         executor = SimpleNamespace(
             _robot_service=robot_service,
             _last_process_start_rz=-30.0,
@@ -257,7 +258,12 @@ class TestCycleStartUnwind(unittest.TestCase):
         self.assertTrue(unwind_joint6_at_cycle_start(ctx))
 
         self.assertTrue(ctx.cycle_start_unwind_completed)
-        robot_service.unwind_joint6.assert_not_called()
+        robot_service.unwind_joint6.assert_called_once_with(
+            blocking=True,
+            queue_if_busy=True,
+            vel=24.0,
+            acc=18.0,
+        )
 
     def test_keeps_unwind_after_prepositioned_complete_turn(self):
         robot_service = MagicMock()
@@ -287,7 +293,6 @@ class TestCycleStartUnwind(unittest.TestCase):
         self.assertTrue(unwind_joint6_at_cycle_start(ctx))
 
         robot_service.unwind_joint6.assert_called_once()
-
 
 class TestCalibrationPickupTestMode(unittest.TestCase):
     def test_completes_after_pickup_without_building_ordered_paint_chain(self):

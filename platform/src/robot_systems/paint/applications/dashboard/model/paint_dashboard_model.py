@@ -48,6 +48,12 @@ class PaintDashboardModel(IApplicationModel):
         self._service.reset_errors()
         return self.load()
 
+    def acknowledge_collision(self) -> tuple[bool, str]:
+        return self._service.acknowledge_collision()
+
+    def collision_acknowledgement_required(self) -> bool:
+        return self._service.collision_acknowledgement_required()
+
     def retry_unmatched_workpiece(self) -> bool:
         return self._service.retry_unmatched_workpiece()
 
@@ -89,6 +95,9 @@ class PaintDashboardModel(IApplicationModel):
 
     def get_drying_mode(self) -> str:
         return self._service.get_drying_mode()
+
+    def is_dry_run_mode_enabled(self) -> bool:
+        return self._service.is_dry_run_mode_enabled() is True
 
     def set_drying_mode(self, mode: str):
         return self._service.set_drying_mode(mode)

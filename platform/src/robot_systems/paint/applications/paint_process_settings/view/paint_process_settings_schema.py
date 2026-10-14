@@ -134,6 +134,11 @@ def build_process_groups(
 ) -> list[SettingGroup]:
     return [
         SettingGroup(_t("General"), [
+            _toggle("enable_dry_run_mode", "Enable Dry Run Mode"),
+            _toggle(
+                "collect_collision_calibration_data",
+                "Collect Collision Calibration Data",
+            ),
             _toggle("enable_vacuum_pump", "Enable Vacuum Pump"),
             _toggle(
                 "stop_after_calibration_pickup",

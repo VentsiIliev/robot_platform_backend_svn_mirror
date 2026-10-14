@@ -318,6 +318,28 @@ class TestPaintDashboardController(unittest.TestCase):
         view.ask_production_start_confirmation.assert_not_called()
         view.apply_dashboard_state.assert_called_once_with(running)
 
+    def test_dry_run_requires_confirmation_before_start(self):
+        model = MagicMock()
+        model.is_dry_run_mode_enabled.return_value = True
+        model.get_drying_mode.return_value = "manual"
+        running = DashboardState(process_state="running")
+        model.start.return_value = running
+        view = self._make_view()
+        view.ask_production_start_confirmation.return_value = False
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(model, view, MagicMock())
+
+        controller._on_start()
+        model.start.assert_not_called()
+
+        view.ask_production_start_confirmation.return_value = True
+        controller._on_start()
+        model.start.assert_called_once_with()
+        view.apply_dashboard_state.assert_called_once_with(running)
+
     def test_auto_mode_selection_does_not_require_connected_dryer(self):
         model = MagicMock()
         model.get_dryer_state.return_value = {
@@ -537,6 +559,25 @@ class TestPaintDashboardController(unittest.TestCase):
                 unittest.mock.call(pause_state),
                 unittest.mock.call(reset_state),
             ],
+        )
+
+    def test_reset_reopens_collision_acknowledgement_instead_of_clearing_error(self) -> None:
+        model = MagicMock()
+        model.collision_acknowledgement_required.return_value = True
+        view = self._make_view()
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(model, view, MagicMock())
+        controller._on_collision_notice = MagicMock()
+
+        controller._on_reset()
+
+        model.reset_errors.assert_not_called()
+        controller._on_collision_notice.assert_called_once_with(
+            "Collision Detected",
+            "Confirm the obstruction has been removed before clearing the collision hold.",
         )
 
     def test_saved_unmatched_settings_are_reloaded_from_runtime_snapshot(self) -> None:

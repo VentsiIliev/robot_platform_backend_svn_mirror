@@ -682,6 +682,11 @@ class RobotJogWidget(QFrame):
         self.enable_frame_selector(False)
         return layout
 
+    def set_recovery_mode_checked(self, enabled: bool) -> None:
+        self._recovery_mode_btn.blockSignals(True)
+        self._recovery_mode_btn.setChecked(bool(enabled))
+        self._recovery_mode_btn.blockSignals(False)
+
     @staticmethod
     def _build_divider() -> QFrame:
         line = QFrame()

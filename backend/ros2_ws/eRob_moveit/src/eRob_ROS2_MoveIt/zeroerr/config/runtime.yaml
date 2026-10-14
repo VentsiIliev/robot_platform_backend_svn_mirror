@@ -28,7 +28,7 @@ MOVEIT_COLLISION_SCALE: 1.0
 # Enables the experimental sensorless joint-torque collision monitor. This is
 # independent of MoveIt/Servo geometric collision checking above. The monitor
 # is passive: it publishes diagnostics and warnings but does not stop motion.
-ENABLE_SENSORLESS_COLLISION_MONITOR: false
+ENABLE_SENSORLESS_COLLISION_MONITOR: true
 SENSORLESS_COLLISION_MONITOR_PERIOD_SEC: 0.01
 # Generalized-momentum observer from Chen et al. (2018), equations 3-15.
 # Uses the installed PyKDL with the local URDF-chain parser; no kdl_parser_py
@@ -51,7 +51,7 @@ SENSORLESS_COLLISION_GUI_ENABLED: false
 # varied sensorless-collision training set. The node starts idle and never
 # moves until its ~/start service is called. Keep dry-run true for the first
 # review; change it to false only with a clear, supervised robot workspace.
-COLLISION_CALIBRATION_RUNNER_ENABLED: false
+COLLISION_CALIBRATION_RUNNER_ENABLED: true
 COLLISION_CALIBRATION_DRY_RUN: false
 COLLISION_CALIBRATION_JOINT_SWEEP_AMPLITUDES_RAD: [0.15, 0.15, 0.15, 0.15, 0.15, 0.15]
 COLLISION_CALIBRATION_SWEEP_LEVELS: 2

@@ -5,6 +5,8 @@ from src.shared_contracts.events.glue_process_events import GlueProcessTopics
 from src.shared_contracts.events.localization_events import LanguageChangedEvent, LocalizationTopics
 from src.shared_contracts.events.notification_events import (
     DismissNotificationEvent,
+    NotificationAction,
+    NotificationActionEvent,
     NotificationSeverity,
     NotificationTopics,
     UserNotificationEvent,
@@ -116,12 +118,22 @@ class TestUiEvents(unittest.TestCase):
         first = UserNotificationEvent(source="ui", severity=NotificationSeverity.INFO)
         second = UserNotificationEvent(source="ui", severity=NotificationSeverity.WARNING)
         dismiss = DismissNotificationEvent(dedupe_key="robot-disconnected")
+        action = NotificationActionEvent(
+            source="paint_collision_interlock",
+            action_key="release_collision_hold",
+        )
 
         self.assertEqual(NotificationTopics.USER, "ui/notification")
         self.assertEqual(NotificationTopics.DISMISS, "ui/notification/dismiss")
+        self.assertEqual(NotificationTopics.ACTION, "ui/notification/action")
         self.assertEqual(first.params, {})
         self.assertEqual(second.params, {})
         self.assertIsNot(first.params, second.params)
         self.assertEqual(first.timestamp.tzinfo, timezone.utc)
         self.assertEqual(dismiss.dedupe_key, "robot-disconnected")
         self.assertEqual(dismiss.timestamp.tzinfo, timezone.utc)
+        self.assertEqual(action.timestamp.tzinfo, timezone.utc)
+        self.assertEqual(
+            NotificationAction(key="release", fallback_title="Release").fallback_title,
+            "Release",
+        )

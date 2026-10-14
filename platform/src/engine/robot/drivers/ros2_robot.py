@@ -145,6 +145,16 @@ class Ros2Robot(IRobot):
         logger.debug("stop_motion ← raw_ret=%s success=%s", ret, ret == 0)
         return ret
 
+    def acknowledge_collision_interlock(self) -> dict:
+        method = getattr(self._client, "acknowledge_collision_interlock", None)
+        return method() if callable(method) else {
+            "success": False, "error": "collision_acknowledgement_unsupported"}
+
+    def set_collision_detection_suppressed(self, suppressed: bool) -> dict:
+        method = getattr(self._client, "set_collision_detection_suppressed", None)
+        return method(suppressed) if callable(method) else {
+            "success": False, "error": "collision_suppression_unsupported"}
+
     def controlled_stop(self, expected_task_id, *, stop_duration_s=None) -> dict:
         method = getattr(self._client, "controlled_stop", None)
         if not callable(method):
@@ -438,6 +448,18 @@ class Ros2Robot(IRobot):
     def get_last_motion_error(self):
         getter = getattr(self._client, "get_last_motion_error", None)
         return getter() if callable(getter) else None
+
+    def start_collision_calibration_recording(self) -> dict:
+        method = getattr(self._client, "start_collision_calibration_recording", None)
+        return method() if callable(method) else {
+            "success": False, "error": "recording_not_supported",
+        }
+
+    def stop_collision_calibration_recording(self) -> dict:
+        method = getattr(self._client, "stop_collision_calibration_recording", None)
+        return method() if callable(method) else {
+            "success": False, "error": "recording_not_supported",
+        }
 
     def reset_all_errors(self) -> int:
         logger.info("reset_all_errors →")

@@ -140,6 +140,9 @@
     "Demo Alternate": "Demo Alternate"
   },
   "PaintDashboard": {
+    "Robot motion is held": "Robot motion is held",
+    "Keep Hold": "Keep Hold",
+    "Acknowledge and Clear Hold": "Acknowledge and Clear Hold",
     "Tray Readiness": "Tray Readiness",
     "Tray occupancy is unknown": "Tray occupancy is unknown",
     "Confirm that the tray is physically empty before starting.": "Confirm that the tray is physically empty before starting.",
@@ -443,6 +446,10 @@
     "Return near the reference position if needed, rotate around the desired paint rotation axis, then capture.": "Return near the reference position if needed, rotate around the desired paint rotation axis, then capture."
   },
   "PaintDashboardController": {
+    "Collision Detected": "Collision Detected",
+    "Collision Hold Not Cleared": "Collision Hold Not Cleared",
+    "The robot is not yet safe to acknowledge.": "The robot is not yet safe to acknowledge.",
+    "Confirm the obstruction has been removed before clearing the collision hold.": "Confirm the obstruction has been removed before clearing the collision hold.",
     "No Workpiece Found": "No Workpiece Found",
     "No workpiece was found in the camera view. Place a workpiece in the active area and start again.": "No workpiece was found in the camera view. Place a workpiece in the active area and start again.",
     "Process Blocked": "Process Blocked",
@@ -476,6 +483,10 @@
     "Capture Failed": "Capture Failed"
   },
   "Notifications": {
+    "notification.collision.title": "Collision Detected",
+    "notification.collision.message": "Robot motion is held. Remove the obstruction, then release the collision hold when it is safe to move again.",
+    "notification.collision.keep_held": "Keep Motion Held",
+    "notification.collision.release_hold": "Release Collision Hold",
     "notification.operator_lights.title": "Operator lights unavailable",
     "notification.operator_lights.failed": "Light indication may be stale. Retrying output writes."
   }

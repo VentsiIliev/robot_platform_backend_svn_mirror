@@ -150,6 +150,27 @@ class TestPaintProcessSettingsController(unittest.TestCase):
         restored = PaintProcessSettingsMapper.from_flat_dict(flat, base)
         self.assertTrue(restored.stop_after_calibration_pickup)
 
+    def test_dry_run_mode_round_trips(self):
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+        flat["enable_dry_run_mode"] = True
+
+        restored = PaintProcessSettingsMapper.from_flat_dict(
+            flat, base
+        )
+
+        self.assertTrue(restored.enable_dry_run_mode)
+
+    def test_collision_calibration_collection_round_trips(self):
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+
+        self.assertFalse(flat["collect_collision_calibration_data"])
+        flat["collect_collision_calibration_data"] = True
+
+        restored = PaintProcessSettingsMapper.from_flat_dict(flat, base)
+        self.assertTrue(restored.collect_collision_calibration_data)
+
     def test_legacy_servo_contact_mode_migrates_to_sensor_controlled_fast_lin(self):
         base = PaintProcessConfig()
         flat = PaintProcessSettingsMapper.to_flat_dict(base)
