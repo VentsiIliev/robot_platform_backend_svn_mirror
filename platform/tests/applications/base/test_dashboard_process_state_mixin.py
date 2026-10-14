@@ -52,6 +52,19 @@ class TestDashboardProcessStateMixin(unittest.TestCase):
             "No usable contour detected",
         )
 
+    def test_collision_stop_error_does_not_duplicate_global_collision_dialog(self):
+        controller = _Controller()
+        event = SimpleNamespace(
+            process_id="paint_process",
+            state=SimpleNamespace(value="error"),
+            message="Collision detected on Joint_1 by dynamics; robot motion was stopped",
+        )
+
+        controller._on_dashboard_process_state_raw(event)
+
+        controller._view.apply_dashboard_state.assert_called_with("state")
+        controller._view.show_warning.assert_not_called()
+
     def test_magazine_servo_failure_with_no_workpiece_text_is_not_downgraded(self):
         controller = _Controller()
         message = "Magazine servo contact pickup failed: no workpiece detected after retract"

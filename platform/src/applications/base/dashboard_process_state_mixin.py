@@ -81,6 +81,11 @@ class DashboardProcessStateMixin:
         # "no workpiece" as context, but they must not be downgraded to the
         # normal empty-camera/end-of-batch operator notice.
         if event_state == "error":
+            # The global collision interlock presenter owns this failure. It
+            # provides the actionable Keep Held / Release Hold controls, so a
+            # second generic Process Blocked dialog would only obscure it.
+            if cls._is_collision_stop_message(message):
+                return None
             return "Process Blocked", message
         if cls._is_no_workpiece_message(message):
             return (
@@ -96,4 +101,12 @@ class DashboardProcessStateMixin:
             "no workpiece" in lowered
             or "no usable contour detected" in lowered
             or "magazine empty" in lowered
+        )
+
+    @staticmethod
+    def _is_collision_stop_message(message: str) -> bool:
+        lowered = str(message or "").strip().lower()
+        return (
+            lowered.startswith("collision detected on ")
+            and "robot motion was stopped" in lowered
         )
