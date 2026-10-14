@@ -283,6 +283,7 @@ class RobotController(Node):
         self._collision_recovery_hold = False
         self._collision_monitor_ready = False
         self._collision_monitor_state_ts = 0.0
+        self._collision_detection_suppressed = False
         self._runtime_joint_input_period = (
             1.0 / float(RUNTIME_JOINT_STATE_INPUT_RATE_HZ)
             if float(RUNTIME_JOINT_STATE_INPUT_RATE_HZ) > 0.0
@@ -328,6 +329,12 @@ class RobotController(Node):
             DynamicJointState,
             '/zeroerr/collision_monitor/state',
             self._collision_monitor_state_callback,
+            10,
+        )
+        self.create_subscription(
+            String,
+            '/zeroerr/collision_monitor/config_state',
+            self._collision_monitor_config_callback,
             10,
         )
         self._collision_acknowledged_pub = self.create_publisher(
@@ -389,6 +396,23 @@ class RobotController(Node):
         with self._motion_interlock_lock:
             self._collision_monitor_ready = bool(readiness) and all(readiness)
             self._collision_monitor_state_ts = time.monotonic()
+
+    def _collision_monitor_config_callback(self, msg: String) -> None:
+        try:
+            payload = json.loads(msg.data)
+        except (json.JSONDecodeError, TypeError):
+            return
+        if not isinstance(payload, dict):
+            return
+        suppressed = bool(payload.get('collision_detection_suppressed', False))
+        with self._motion_interlock_lock:
+            changed = suppressed != self._collision_detection_suppressed
+            self._collision_detection_suppressed = suppressed
+        if changed:
+            self.get_logger().warning(
+                '[CollisionRecovery] Recovery-only motion mode %s',
+                'ENABLED' if suppressed else 'disabled',
+            )
 
     def _acknowledge_collision_callback(
         self, _request: Trigger.Request, response: Trigger.Response
@@ -1248,10 +1272,28 @@ class RobotController(Node):
     def is_hardware_ready_for_motion(self) -> bool:
         if self._fake_hardware:
             with self._motion_interlock_lock:
-                return not self._motion_interlock_active and not self._collision_recovery_hold
+                return (
+                    not self._motion_interlock_active
+                    and not self._collision_recovery_hold
+                    and not self._collision_detection_suppressed
+                )
         with self._motion_interlock_lock:
-            if self._motion_interlock_active or self._collision_recovery_hold:
+            if (
+                self._motion_interlock_active
+                or self._collision_recovery_hold
+                or self._collision_detection_suppressed
+            ):
                 return False
+        with self._ethercat_fault_lock:
+            return not self._ethercat_motion_fault
+
+    def is_hardware_ready_for_collision_recovery(self) -> bool:
+        """Permit only explicitly flagged recovery motion while suppression is active."""
+        with self._motion_interlock_lock:
+            if not self._collision_detection_suppressed:
+                return False
+        if self._fake_hardware:
+            return True
         with self._ethercat_fault_lock:
             return not self._ethercat_motion_fault
 
@@ -1259,9 +1301,12 @@ class RobotController(Node):
         """Allow drive recovery while retaining the collision motion hold."""
         if self._fake_hardware:
             with self._motion_interlock_lock:
-                return not self._motion_interlock_active
+                return (
+                    not self._motion_interlock_active
+                    or self._collision_detection_suppressed
+                )
         with self._motion_interlock_lock:
-            if self._motion_interlock_active:
+            if self._motion_interlock_active and not self._collision_detection_suppressed:
                 return False
         with self._ethercat_fault_lock:
             return not self._ethercat_motion_fault
@@ -1272,6 +1317,8 @@ class RobotController(Node):
                 return self._motion_interlock_reason or 'motion interlock active'
             if self._collision_recovery_hold:
                 return 'collision monitor is initializing; motion remains held'
+            if self._collision_detection_suppressed:
+                return 'collision recovery mode permits only explicitly flagged recovery jogs'
         if self._fake_hardware:
             return 'fake hardware mode'
         with self._ethercat_fault_lock:
@@ -1319,14 +1366,20 @@ class RobotController(Node):
                     "reset": False,
                     "error": enable_result.get('error') or 'failed to enable drives for collision monitor recovery',
                 }
+            acknowledged = String()
+            acknowledged.data = json.dumps({"timestamp": time.time()})
+            self._collision_acknowledged_pub.publish(acknowledged)
             deadline = time.monotonic() + 12.0
+            saw_monitor_not_ready = False
             while time.monotonic() < deadline:
                 with self._motion_interlock_lock:
                     monitor_ready = (
                         self._collision_monitor_ready
                         and time.monotonic() - self._collision_monitor_state_ts <= 0.5
                     )
-                if monitor_ready:
+                if not monitor_ready:
+                    saw_monitor_not_ready = True
+                if saw_monitor_not_ready and monitor_ready:
                     break
                 time.sleep(0.05)
             else:
@@ -1345,9 +1398,6 @@ class RobotController(Node):
             self.get_logger().warning(f'[MotionInterlock] Motion interlock reset by operator: {reason}')
             if isinstance(self.last_collision_event, dict):
                 self.last_collision_event = None
-                acknowledged = String()
-                acknowledged.data = json.dumps({"timestamp": time.time()})
-                self._collision_acknowledged_pub.publish(acknowledged)
         return {
             "success": True,
             "reset": bool(was_active),

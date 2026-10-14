@@ -6,5 +6,7 @@
 
 Snapshot and submission failures are converted to completed failure futures, so optional diagnostics cannot interrupt the motion caller. `INVALID_INPUT`, `FILESYSTEM` and executor `UNAVAILABLE` failures are warnings; unexpected `INTERNAL` failures retain error-level tracebacks. Failures are logged even when the motion caller ignores the future. Consumers that need to act on the result should observe completion without waiting in the motion thread. This policy applies to optional trajectory exports only; required production artifacts such as workpiece thumbnails retain their fail-on-error behavior. Process interrupts are not swallowed.
 
+`PaintCollisionInterlockMonitor` observes the backend's global collision interlock independently of whether the paint process is running. An active collision turns the vacuum pump off and presents the operator acknowledgement dialog. Keeping motion held closes the dialog without clearing the backend latch; releasing the hold calls the backend reset workflow. Recovery Jog is a separate, deliberately constrained operation: while it is enabled, ordinary paint motion stays interlocked and only explicitly marked recovery jog requests may move the robot.
+
 
 [Module reference](MODULES.md).

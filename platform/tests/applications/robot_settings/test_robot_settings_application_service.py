@@ -60,6 +60,32 @@ class TestGetCurrentPosition(unittest.TestCase):
         self.assertIsNone(_make_svc(robot=robot).get_current_position())
 
 
+class TestCollisionMonitorConfiguration(unittest.TestCase):
+
+    def test_load_delegates_to_robot(self):
+        robot = MagicMock()
+        robot.get_collision_monitor_config.return_value = {
+            "success": True, "config": {"detection_enabled": True}}
+
+        result = _make_svc(robot=robot).load_collision_monitor_config()
+
+        self.assertTrue(result["success"])
+        robot.get_collision_monitor_config.assert_called_once_with()
+
+    def test_save_delegates_to_robot(self):
+        robot = MagicMock()
+        robot.update_collision_monitor_config.return_value = {"success": True}
+        payload = {"collision_sensitivity_percent": 125.0}
+
+        result = _make_svc(robot=robot).save_collision_monitor_config(payload)
+
+        self.assertTrue(result["success"])
+        robot.update_collision_monitor_config.assert_called_once_with(payload)
+
+    def test_reports_unavailable_without_robot(self):
+        self.assertFalse(_make_svc().load_collision_monitor_config()["success"])
+
+
 class TestGetSlotInfo(unittest.TestCase):
 
     def test_returns_empty_when_no_tool_settings_key(self):

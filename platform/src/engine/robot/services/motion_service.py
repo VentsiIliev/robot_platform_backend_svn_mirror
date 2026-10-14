@@ -648,6 +648,16 @@ class MotionService(IMotionService):
         return method(suppressed) if callable(method) else {
             "success": False, "error": "collision_suppression_unsupported"}
 
+    def get_collision_monitor_config(self) -> dict:
+        method = getattr(self._robot, "get_collision_monitor_config", None)
+        return method() if callable(method) else {
+            "success": False, "error": "collision_monitor_config_unsupported"}
+
+    def update_collision_monitor_config(self, config: dict) -> dict:
+        method = getattr(self._robot, "update_collision_monitor_config", None)
+        return method(config) if callable(method) else {
+            "success": False, "error": "collision_monitor_config_unsupported"}
+
     def start_collision_calibration_recording(self) -> dict:
         method = getattr(self._robot, "start_collision_calibration_recording", None)
         return method() if callable(method) else {

@@ -383,11 +383,24 @@ While suppressed, the monitor clears active/cycle counters and reports
 use reduced speed, maintain supervision, and restore collision detection before
 returning to automatic motion.
 
+Suppression also places the runtime controller in **recovery-only motion mode**.
+Drive enable is permitted so the operator can recover from a stopped state, but
+the normal hardware-ready gate remains false. Only a linear request carrying
+the explicit `allow_collision_recovery` authorization is admitted. Paint
+process motion, ordered chains, PTP, fast-LIN, and all other unflagged requests
+remain rejected. This prevents an automatic process start from slipping through
+while the detector is suppressed. EtherCAT/drive faults are never bypassed.
+
 ## Main configuration fields
 
 `zeroerr/config/collision_monitor_config.json` contains the fitted model and
 operational settings:
 
+- `detection_enabled`: global runtime enable/disable switch for new detections;
+- `effort_following_error_detection_enabled`: enables the optional secondary
+  detector, which requires both measured effort and raw drive following error
+  to exceed their per-joint thresholds; when disabled, only the external-torque
+  observer detector runs;
 - `external_torque_thresholds`: per-joint static floors;
 - `dynamic_threshold_coefficients`: direction-aware envelope model;
 - `dynamic_threshold_training_limits`: maximum trained `|dq|` and `|ddq|`;

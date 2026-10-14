@@ -1352,7 +1352,8 @@ def _build_robot_settings_application(robot_app):
     jog_service = build_robot_system_jog_service(robot_app)
     return WidgetApplication(
         widget_factory=lambda ms: RobotSettingsFactory(
-            movement_group_definitions=robot_app.get_movement_group_definitions()
+            movement_group_definitions=robot_app.get_movement_group_definitions(),
+            show_sensorless_collision_tab=True,
         ).build(service, messaging=ms, jog_service=jog_service)
     )
 

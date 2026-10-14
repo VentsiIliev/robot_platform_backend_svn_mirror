@@ -95,10 +95,10 @@ class PaintCollisionInterlockMonitor:
         self._turn_vacuum_off_for_collision(event_key, now)
         if self._release_in_progress.is_set():
             return
-        if (
-            event_key == self._last_event_key
-            and now - self._last_publish_monotonic < 2.0
-        ):
+        # One actionable notice per backend collision event. Reopening the
+        # same modal every few seconds prevents the operator from reaching
+        # diagnostics/settings while motion remains safely interlocked.
+        if event_key == self._last_event_key:
             return
         self._last_event_key = event_key
         self._last_publish_monotonic = now
@@ -150,7 +150,7 @@ class PaintCollisionInterlockMonitor:
                         key=self.ACTION_KEEP_HELD,
                         title_key="notification.collision.keep_held",
                         fallback_title="Keep Motion Held",
-                        close_dialog=False,
+                        close_dialog=True,
                     ),
                     NotificationAction(
                         key=self.ACTION_RELEASE,

@@ -154,6 +154,8 @@ class ZeroErrCollisionMonitor(Node):
         self._current_external_torque_thresholds = dict(self._external_torque_thresholds)
         self._collision_sensitivity_percent = 100.0
         self._active_stop_enabled = False
+        self._detection_enabled = True
+        self._effort_following_error_detection_enabled = False
         self._detection_suppressed = False
         self._stop_request_armed = True
         self._friction_coulomb_nm = {
@@ -390,6 +392,9 @@ class ZeroErrCollisionMonitor(Node):
                             ],
                             "collision_sensitivity_percent": self._collision_sensitivity_percent,
                             "active_stop_enabled": self._active_stop_enabled,
+                            "detection_enabled": self._detection_enabled,
+                            "effort_following_error_detection_enabled":
+                                self._effort_following_error_detection_enabled,
                             "dynamic_threshold_enabled": self._dynamic_threshold_enabled,
                             "dynamic_threshold_feature_names": [
                                 "bias", "positive_velocity", "negative_velocity",
@@ -478,6 +483,16 @@ class ZeroErrCollisionMonitor(Node):
         active_stop_enabled = payload.get("active_stop_enabled")
         if active_stop_enabled is not None:
             self._active_stop_enabled = bool(active_stop_enabled)
+            updated = True
+        detection_enabled = payload.get("detection_enabled")
+        if detection_enabled is not None:
+            self._detection_enabled = bool(detection_enabled)
+            updated = True
+        secondary_enabled = payload.get(
+            "effort_following_error_detection_enabled")
+        if secondary_enabled is not None:
+            self._effort_following_error_detection_enabled = bool(
+                secondary_enabled)
             updated = True
         detection_suppressed = payload.get("collision_detection_suppressed")
         if detection_suppressed is not None:
@@ -584,9 +599,18 @@ class ZeroErrCollisionMonitor(Node):
             self._contact_cycles[joint_name] = 0
             self._contact_latched[joint_name] = False
             self._contact_active[joint_name] = False
-        self._stop_request_armed = True
+        # Do not immediately re-arm against the same residual that caused the
+        # stop. Restart bias learning and expose observer_ready=False while the
+        # runtime keeps its collision-recovery hold active.
+        self._stop_request_armed = False
+        self._all_drives_op_since = None
+        self._reset_estimator_after_drive_interruption()
+        for joint_name in JOINT_NAMES[: self._slave_count]:
+            self._external_torque_by_joint[joint_name] = None
+            self._expected_torque_by_joint[joint_name] = None
+            self._torque_difference_by_joint[joint_name] = None
         self.get_logger().warning(
-            "[ZeroErrCollisionMonitor] Collision latch cleared by operator acknowledgement")
+            "[ZeroErrCollisionMonitor] Collision latch cleared; observer warm-up restarted")
 
     def _load_persisted_config(self) -> None:
         path = self._collision_config_path
@@ -711,13 +735,18 @@ class ZeroErrCollisionMonitor(Node):
                 f"ext_tau {external_torque:.2f} > {dynamic_threshold:.2f} dynamic"
             )
 
-            if self._detection_suppressed:
+            if not self._detection_enabled or self._detection_suppressed:
                 self._dynamics_active[joint_name] = False
                 self._dynamics_cycles[joint_name] = 0
                 self._contact_active[joint_name] = False
                 self._contact_cycles[joint_name] = 0
-                self._dynamics_reason[joint_name] = "suppressed by recovery jog"
-                self._contact_reason[joint_name] = "suppressed by recovery jog"
+                reason = (
+                    "sensorless detection disabled"
+                    if not self._detection_enabled
+                    else "suppressed by recovery jog"
+                )
+                self._dynamics_reason[joint_name] = reason
+                self._contact_reason[joint_name] = reason
                 continue
 
             # The momentum observer must never assert a collision while the
@@ -742,10 +771,6 @@ class ZeroErrCollisionMonitor(Node):
             if self._external_torque_by_joint[joint_name] is not None:
                 dynamics_active = external_torque >= dynamic_threshold
                 self._dynamics_active[joint_name] = dynamics_active
-                self._contact_active[joint_name] = False
-                self._contact_cycles[joint_name] = 0
-                if not (self._active_stop_enabled and not self._stop_request_armed):
-                    self._contact_latched[joint_name] = False
                 if dynamics_active:
                     self._dynamics_cycles[joint_name] += 1
                 else:
@@ -764,36 +789,44 @@ class ZeroErrCollisionMonitor(Node):
                         f"{dynamic_threshold:.2f} (dynamic)"
                     )
                     self._request_motion_stop(joint_name, "dynamics")
-                continue
-
-            exceeds_contact_thresholds = (
-                effort >= self._effort_thresholds[joint_name]
-                and following_error >= self._following_error_thresholds[joint_name]
-            )
-            self._contact_active[joint_name] = exceeds_contact_thresholds
-            self._dynamics_active[joint_name] = False
-            self._dynamics_cycles[joint_name] = 0
-            if not (self._active_stop_enabled and not self._stop_request_armed):
-                self._dynamics_latched[joint_name] = False
-            if exceeds_contact_thresholds:
-                self._contact_cycles[joint_name] += 1
             else:
+                self._dynamics_active[joint_name] = False
+                self._dynamics_cycles[joint_name] = 0
+                if not (self._active_stop_enabled and not self._stop_request_armed):
+                    self._dynamics_latched[joint_name] = False
+
+            if self._effort_following_error_detection_enabled:
+                exceeds_contact_thresholds = (
+                    effort >= self._effort_thresholds[joint_name]
+                    and following_error >= self._following_error_thresholds[joint_name]
+                )
+                self._contact_active[joint_name] = exceeds_contact_thresholds
+                if exceeds_contact_thresholds:
+                    self._contact_cycles[joint_name] += 1
+                else:
+                    self._contact_cycles[joint_name] = 0
+                    if not (self._active_stop_enabled and not self._stop_request_armed):
+                        self._contact_latched[joint_name] = False
+
+                if (
+                    self._contact_cycles[joint_name] >= self._confirm_cycles
+                    and not self._contact_latched[joint_name]
+                ):
+                    self._contact_latched[joint_name] = True
+                    self.get_logger().warning(
+                        "[ZeroErrCollisionMonitor] secondary collision suspect on "
+                        f"{joint_name}: effort={effort:.1f} >= "
+                        f"{self._effort_thresholds[joint_name]:.1f}, "
+                        f"following_error={following_error:.1f} >= "
+                        f"{self._following_error_thresholds[joint_name]:.1f}"
+                    )
+                    self._request_motion_stop(joint_name, "effort/following-error")
+            else:
+                self._contact_active[joint_name] = False
                 self._contact_cycles[joint_name] = 0
                 if not (self._active_stop_enabled and not self._stop_request_armed):
                     self._contact_latched[joint_name] = False
-
-            if (
-                self._contact_cycles[joint_name] >= self._confirm_cycles
-                and not self._contact_latched[joint_name]
-            ):
-                self._contact_latched[joint_name] = True
-                self.get_logger().warning(
-                    "[ZeroErrCollisionMonitor] suspect collision on "
-                    f"{joint_name}: effort={effort:.1f} >= {self._effort_thresholds[joint_name]:.1f}, "
-                    f"following_error={following_error:.1f} >= "
-                    f"{self._following_error_thresholds[joint_name]:.1f}"
-                )
-                self._request_motion_stop(joint_name, "effort/following-error")
+                self._contact_reason[joint_name] = "secondary detector disabled"
 
         if not any(
             self._dynamics_active[name]
@@ -1405,6 +1438,9 @@ class ZeroErrCollisionMonitor(Node):
                 ],
                 "collision_sensitivity_percent": self._collision_sensitivity_percent,
                 "active_stop_enabled": self._active_stop_enabled,
+                "detection_enabled": self._detection_enabled,
+                "effort_following_error_detection_enabled":
+                    self._effort_following_error_detection_enabled,
                 "collision_detection_suppressed": self._detection_suppressed,
                 "dynamic_threshold_enabled": self._dynamic_threshold_enabled,
                 "dynamic_threshold_feature_names": [

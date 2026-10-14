@@ -1,9 +1,10 @@
 # `src/applications/robot_settings/` — Robot Settings Application
 
-The `robot_settings` application provides a GUI for editing robot configuration, declared movement groups, and calibration parameters. It now also exposes both:
+The `robot_settings` application provides a GUI for editing robot configuration, declared movement groups, calibration parameters, and the live ZeroErr sensorless-collision configuration. It now also exposes:
 - the standalone camera-TCP offset calibration routine settings
 - the optional camera-TCP offset capture settings used inside the main robot calibration pipeline
 - optional robot-system-specific targeting definitions such as named points and named frames
+- an optional `Sensorless Collision` tab when the injected robot service supports the ZeroErr collision-monitor REST contract
 
 This is intended to be the shared robot-settings application for any robot system that adopts the common platform contracts:
 - `CommonSettingsID.ROBOT_CONFIG`
@@ -14,6 +15,7 @@ This is intended to be the shared robot-settings application for any robot syste
 Optional integrations:
 - `CommonSettingsID.TOOL_CHANGER_CONFIG` for slot/tool display
 - robot-system-specific targeting load/save adapters for the `Targeting` tab
+- live collision-monitor configuration for ROS2/ZeroErr robots
 
 The shared `CameraSettings` application follows the same model:
 - `CommonServiceID.VISION`
@@ -50,7 +52,7 @@ IRobotSettingsService   ← load_config / save_config / load_movement_groups / s
 | `RobotSettingsModel` | Holds robot config, movement groups, calibration, and optional targeting-definition editor data; `save()` writes all active sections |
 | `RobotSettingsMapper` | `to_flat_dict / from_flat_dict` for `RobotSettings` |
 | `RobotCalibrationMapper` | `to_flat_dict / from_flat_dict` for `RobotCalibrationSettings` |
-| `RobotSettingsView` | schema-driven tabs + raw tabs for movement groups and targeting definitions; schema groups are collapsible and collapsed by default |
+| `RobotSettingsView` | schema-driven tabs + raw tabs for movement groups, targeting definitions, and optional sensorless-collision controls; schema groups are collapsible and collapsed by default |
 | `RobotSettingsController` | `save_requested` → reads view flat + movement groups + targeting definitions → `model.save()` |
 
 ---
@@ -94,6 +96,7 @@ User clicks Save
 | Safety | `SAFETY_LIMITS_GROUP` | x/y/z/rx/ry/rz min+max bounds |
 | Movement Groups | `MovementGroupsTab` (raw) | Named positions: name, position string, vel, acc |
 | Targeting | `TargetingDefinitionsTab` (raw) | Generic named points and frames supplied by the active robot system |
+| Sensorless Collision | `SensorlessCollisionTab` (optional raw tab) | Detection enable, active/passive response, primary sensitivity, confirmation cycles, dynamic threshold controls, per-joint observer thresholds, and optional secondary effort/following-error thresholds |
 
 The Targeting tab uses the shared `KeyboardNumberField` for editable camera-to-TCP X/Y offsets, including read-only inherited area values.
 | Calibration | `CALIBRATION_ADAPTIVE_GROUP`, `CALIBRATION_MARKER_GROUP`, `CALIBRATION_AXIS_MAPPING_GROUP`, `CALIBRATION_CAMERA_TCP_GROUP` | Adaptive movement params, marker/z settings, axis-mapping settings, standalone camera-TCP settings, and optional in-main-calibration TCP capture settings |
@@ -128,6 +131,8 @@ widget = RobotSettingsFactory().build(RobotSettingsApplicationService(settings_s
 - **Reusable app, robot-system adapters**: The application remains generic. Robot-system-specific targeting structures are converted to and from the editor payload in the wiring/service layer.
 - **Standard shared app**: If a robot system uses the shared `RobotSettings` and `RobotCalibrationSettings` engine models, it should reuse this application rather than creating a robot-system-specific copy.
 - **No broker subscriptions**: `RobotSettingsController.stop()` is a no-op. The application does not receive live data.
+- **Backend-confirmed collision settings**: the collision tab loads the live monitor configuration and saves through the robot service. The backend is authoritative and must echo the applied state; the UI does not treat a local field change as applied until the request succeeds.
+- **Primary and secondary detectors are separate**: the external-torque observer is the primary detector. The effort-plus-following-error detector is optional and has its own enable switch and per-joint thresholds.
 
 → Subpackages: [service/](service/README.md) · [model/](model/README.md) · [view/](view/README.md) · [controller/](controller/README.md)
 

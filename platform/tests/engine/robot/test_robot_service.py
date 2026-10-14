@@ -131,6 +131,22 @@ class TestRobotService(unittest.TestCase):
             {"success": True, "motion_allowed_by_drive_enable": False},
         )
 
+    def test_collision_monitor_config_delegates_to_driver(self):
+        expected = {"success": True, "config": {"detection_enabled": True}}
+        self.motion.get_collision_monitor_config.return_value = expected
+
+        self.assertEqual(self.service.get_collision_monitor_config(), expected)
+        self.motion.get_collision_monitor_config.assert_called_once_with()
+
+    def test_collision_monitor_update_delegates_to_driver(self):
+        values = {"collision_sensitivity_percent": 125.0}
+        expected = {"success": True, "config": values}
+        self.motion.update_collision_monitor_config.return_value = expected
+
+        self.assertEqual(
+            self.service.update_collision_monitor_config(values), expected)
+        self.motion.update_collision_monitor_config.assert_called_once_with(values)
+
     def test_get_state_topic_from_state(self):
         self.assertEqual(self.service.get_state_topic(), "robot/state")
 

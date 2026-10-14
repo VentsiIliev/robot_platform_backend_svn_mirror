@@ -24,6 +24,11 @@ OPENAPI_SPEC = {
         "/velocity/current": {"get": {"tags": ["state"], "summary": "Current TCP velocity"}},
         "/collision/calibration/recording/start": {"post": {"tags": ["calibration"], "summary": "Start passive collision-model training capture"}},
         "/collision/calibration/recording/stop": {"post": {"tags": ["calibration"], "summary": "Stop and finalize passive collision-model training capture"}},
+        "/collision/monitor/config": {
+            "get": {"tags": ["interlock"], "summary": "Read sensorless collision monitor configuration"},
+            "post": {"tags": ["interlock"], "summary": "Update and confirm sensorless collision monitor configuration"},
+        },
+        "/collision/monitor/suppression": {"post": {"tags": ["interlock"], "summary": "Temporarily suppress detection for Recovery Jog"}},
         "/move/linear": {"post": {"tags": ["motion"], "summary": "Queue or execute a linear move"}},
         "/move/fast_lin": {"post": {"tags": ["motion"], "summary": "Test a Pilz LIN move without compute_cartesian_path"}},
         "/move/ptp": {"post": {"tags": ["motion"], "summary": "Queue or execute a point-to-point move"}},

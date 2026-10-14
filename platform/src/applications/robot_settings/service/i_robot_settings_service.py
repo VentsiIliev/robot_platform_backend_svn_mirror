@@ -67,3 +67,9 @@ class IRobotSettingsService(ABC):
 
     @abstractmethod
     def stop_jog(self) -> None: ...
+
+    @abstractmethod
+    def load_collision_monitor_config(self) -> dict: ...
+
+    @abstractmethod
+    def save_collision_monitor_config(self, config: dict) -> dict: ...

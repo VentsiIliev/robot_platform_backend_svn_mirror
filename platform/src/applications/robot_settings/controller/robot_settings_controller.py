@@ -43,6 +43,10 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
         self._view.move_to_requested.connect(self._on_move_to)
         self._view.execute_requested.connect(self._on_execute)
         self._view.targeting_changed.connect(self._on_targeting_changed)
+        self._view.collision_config_refresh_requested.connect(
+            self._on_collision_config_refresh)
+        self._view.collision_config_save_requested.connect(
+            self._on_collision_config_save)
         self._view.destroyed.connect(self.stop)
         if self._messaging is not None:
             self._messaging.subscribe(
@@ -72,6 +76,13 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
 
     def stop(self) -> None:
         self._stop_threads()
+        try:
+            self._view.collision_config_refresh_requested.disconnect(
+                self._on_collision_config_refresh)
+            self._view.collision_config_save_requested.disconnect(
+                self._on_collision_config_save)
+        except (RuntimeError, TypeError):
+            pass
         if self._messaging is not None:
             try:
                 self._messaging.unsubscribe(
@@ -180,6 +191,53 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
             self._logger.debug("Auto-saved targeting definitions")
         except Exception:
             self._logger.exception("Auto-save targeting definitions failed")
+
+    def _on_collision_config_refresh(self) -> None:
+        self._view.set_collision_config_busy(True)
+        self._run_in_thread(
+            fn=self._model.load_collision_monitor_config,
+            on_done=self._on_collision_config_loaded,
+            on_error=self._on_collision_config_error,
+        )
+
+    def _on_collision_config_save(self, config: dict) -> None:
+        self._view.set_collision_config_busy(True)
+        self._run_in_thread(
+            fn=lambda: self._model.save_collision_monitor_config(config),
+            on_done=self._on_collision_config_saved,
+            on_error=self._on_collision_config_error,
+        )
+
+    def _on_collision_config_loaded(self, result) -> None:
+        if not isinstance(result, dict) or not result.get("success"):
+            self._on_collision_config_error(
+                str(result.get("error", "Collision monitor is unavailable"))
+                if isinstance(result, dict) else "Collision monitor is unavailable")
+            return
+        config = result.get("config")
+        if not isinstance(config, dict):
+            self._on_collision_config_error("Backend returned an invalid configuration")
+            return
+        self._view.load_collision_config(config)
+        self._view.set_collision_config_busy(False)
+
+    def _on_collision_config_saved(self, result) -> None:
+        if not isinstance(result, dict) or not result.get("success"):
+            self._on_collision_config_error(
+                str(result.get("error", "Collision settings were not applied"))
+                if isinstance(result, dict) else "Collision settings were not applied")
+            return
+        config = result.get("config")
+        if isinstance(config, dict):
+            self._view.load_collision_config(config)
+        self._view.set_collision_config_status(
+            self._t("Collision settings applied and confirmed"), True)
+
+    def _on_collision_config_error(self, message: str) -> None:
+        self._view.set_collision_config_status(
+            self._t("Collision monitor unavailable: {message}").format(message=message),
+            False,
+        )
 
     def _auto_save(self) -> None:
         """Flush current movement groups to disk before any motion — NavigationService reads from settings."""

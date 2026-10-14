@@ -52,6 +52,16 @@ class TestRobotSettingsFactory(unittest.TestCase):
         self.assertIsNot(v1, v2)
         self.assertIsNot(v1._controller, v2._controller)
 
+    def test_zeroerr_option_adds_sensorless_collision_tab(self):
+        view = RobotSettingsFactory(
+            show_sensorless_collision_tab=True).build(_make_service())
+
+        titles = [
+            view._settings_view._tabs.tabText(index)
+            for index in range(view._settings_view._tabs.count())
+        ]
+        self.assertIn("Sensorless Collision", titles)
+
 
 if __name__ == "__main__":
     unittest.main()

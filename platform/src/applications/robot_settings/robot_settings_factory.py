@@ -12,15 +12,20 @@ from src.shared_contracts.declarations import MovementGroupDefinition
 
 
 class RobotSettingsFactory(ApplicationFactory):
-    def __init__(self, movement_group_definitions: list[MovementGroupDefinition] | None = None):
+    def __init__(self, movement_group_definitions: list[MovementGroupDefinition] | None = None,
+                 show_sensorless_collision_tab: bool = False):
         self._messaging = None
         self._movement_group_definitions = list(movement_group_definitions or [])
+        self._show_sensorless_collision_tab = bool(show_sensorless_collision_tab)
 
     def _create_model(self, service: IRobotSettingsService) -> IApplicationModel:
         return RobotSettingsModel(service)
 
     def _create_view(self) -> IApplicationView:
-        return RobotSettingsView(movement_group_definitions=self._movement_group_definitions)
+        return RobotSettingsView(
+            movement_group_definitions=self._movement_group_definitions,
+            show_sensorless_collision_tab=self._show_sensorless_collision_tab,
+        )
 
     def _create_controller(self, model: IApplicationModel, view: IApplicationView) -> IApplicationController:
         return RobotSettingsController(model, view, self._messaging)

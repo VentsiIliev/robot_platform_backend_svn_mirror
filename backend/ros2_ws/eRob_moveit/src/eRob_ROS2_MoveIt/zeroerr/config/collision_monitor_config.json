@@ -2,6 +2,7 @@
   "active_stop_enabled": true,
   "collision_sensitivity_percent": 100.0,
   "confirm_cycles": 1,
+  "detection_enabled": true,
   "dynamic_threshold_coefficients": {
     "Joint_1": [
       6.359221334938916,
@@ -83,7 +84,7 @@
     "positive_acceleration_squared",
     "negative_acceleration_squared"
   ],
-  "dynamic_threshold_max_ratio": 2.5,
+  "dynamic_threshold_max_ratio": 3.5,
   "dynamic_threshold_training_limits": {
     "Joint_1": [
       1.508241549469076,
@@ -110,6 +111,7 @@
       8.139800573291016
     ]
   },
+  "effort_following_error_detection_enabled": false,
   "effort_thresholds": [
     20.0,
     20.0,
@@ -119,12 +121,12 @@
     4.0
   ],
   "external_torque_thresholds": [
-    4.647982242320747,
-    4.572712763192618,
-    2.7830745314574563,
-    1.5904402346564652,
-    1.2077806334521408,
-    5.905977007307129
+    4.65,
+    4.57,
+    2.78,
+    1.59,
+    5.01,
+    5.91
   ],
   "following_error_thresholds": [
     4000.0,

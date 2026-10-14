@@ -96,3 +96,9 @@ class RobotSettingsModel(IApplicationModel):
 
     def stop_jog(self) -> None:
         self._service.stop_jog()
+
+    def load_collision_monitor_config(self) -> dict:
+        return self._service.load_collision_monitor_config()
+
+    def save_collision_monitor_config(self, config: dict) -> dict:
+        return self._service.save_collision_monitor_config(config)

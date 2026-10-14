@@ -10,6 +10,8 @@
 
 Step jog computes a projected target for the safety preflight. X/Y/Z steps use the tool rotation matrix; angular steps modify the corresponding angle. Velocity and acceleration can be supplied per call, otherwise constructor defaults apply. Narrow subzero recovery paths, servo-floor supervision, motion-corridor checks and stop retries are implemented in the service; read the exact options in [MODULES.md](MODULES.md) before modifying these behaviors.
 
+`allow_collision_recovery` is a scoped transport authorization used by the operator Recovery Jog path. It is not a general collision-disable flag. The ZeroErr backend accepts it only while collision suppression/recovery mode is confirmed, and ordinary paint, sequence, PTP, fast-LIN, and unflagged linear requests remain blocked for the entire recovery interval. Platform workspace checks remain active unless the Recovery Jog caller separately requests its bounded safety override.
+
 Incomplete orientation samples in completion waits are a reproduced limitation recorded in [code issues](../../../CODE_ISSUES.md).
 
 ## State and publication

@@ -35,7 +35,12 @@ class TestPaintCollisionInterlockMonitor(unittest.TestCase):
             [action.key for action in event.actions],
             [monitor.ACTION_KEEP_HELD, monitor.ACTION_RELEASE],
         )
+        self.assertTrue(event.actions[0].close_dialog)
         vacuum_pump.turn_off_nonblocking.assert_called_once_with()
+
+        monitor._last_publish_monotonic = 0.0
+        monitor._poll_once()
+        messaging.publish.assert_called_once()
 
     def test_release_action_acknowledges_backend_interlock(self):
         robot = MagicMock()

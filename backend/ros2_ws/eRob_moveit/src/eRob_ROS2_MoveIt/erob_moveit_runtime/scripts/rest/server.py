@@ -386,17 +386,16 @@ def start_rest_server(
     )
     collision_config_channel = {"publisher": None, "subscription": None}
     collision_config_publisher_lock = threading.Lock()
-    collision_config_state = {"suppressed": None}
+    collision_config_state = {"payload": None}
     collision_config_state_changed = threading.Condition()
 
     def on_collision_config_state(message: String) -> None:
         try:
             state = json.loads(message.data)
-            suppressed = state.get("collision_detection_suppressed")
-            if not isinstance(suppressed, bool):
+            if not isinstance(state, dict):
                 return
             with collision_config_state_changed:
-                collision_config_state["suppressed"] = suppressed
+                collision_config_state["payload"] = state
                 collision_config_state_changed.notify_all()
         except (TypeError, ValueError, json.JSONDecodeError):
             logger.warning("Invalid collision monitor config-state payload")
@@ -438,6 +437,49 @@ def start_rest_server(
         finally:
             node.destroy_client(client)
 
+    def ensure_collision_config_channel():
+        with collision_config_publisher_lock:
+            publisher = collision_config_channel["publisher"]
+            if publisher is None:
+                publisher = node.create_publisher(
+                    String, "/zeroerr/collision_monitor/config", 10)
+                collision_config_channel["publisher"] = publisher
+                collision_config_channel["subscription"] = node.create_subscription(
+                    String,
+                    "/zeroerr/collision_monitor/config_state",
+                    on_collision_config_state,
+                    10,
+                )
+        discovery_deadline = time.monotonic() + 1.0
+        while publisher.get_subscription_count() < 1 and time.monotonic() < discovery_deadline:
+            time.sleep(0.02)
+        return publisher if publisher.get_subscription_count() >= 1 else None
+
+    def wait_for_collision_config(predicate, timeout_s: float = 2.0):
+        deadline = time.monotonic() + timeout_s
+        with collision_config_state_changed:
+            while time.monotonic() < deadline:
+                state = collision_config_state["payload"]
+                if isinstance(state, dict) and predicate(state):
+                    return dict(state)
+                collision_config_state_changed.wait(timeout=0.05)
+        return None
+
+    def publish_collision_config(payload: dict):
+        publisher = ensure_collision_config_channel()
+        if publisher is None:
+            return None, _response_error(
+                "collision monitor config subscriber is unavailable", 503)
+        message = String()
+        message.data = json.dumps(payload)
+        publisher.publish(message)
+        confirmed = wait_for_collision_config(
+            lambda state: all(state.get(key) == value for key, value in payload.items()))
+        if confirmed is None:
+            return None, _response_error(
+                "collision monitor did not confirm configuration update", 504)
+        return confirmed, None
+
     @app.route("/move/linear", methods=["POST"])
     def move_linear():
         return api_response(runtime_api.move_linear(request.json))
@@ -456,47 +498,46 @@ def start_rest_server(
         payload = request.get_json(silent=True) or {}
         if not isinstance(payload.get("suppressed"), bool):
             return _response_error("suppressed must be a boolean", 400)
-        message = String()
-        message.data = json.dumps({
-            "collision_detection_suppressed": payload["suppressed"],
-        })
-        with collision_config_publisher_lock:
-            publisher = collision_config_channel["publisher"]
-            if publisher is None:
-                publisher = node.create_publisher(
-                    String, "/zeroerr/collision_monitor/config", 10)
-                collision_config_channel["publisher"] = publisher
-                collision_config_channel["subscription"] = node.create_subscription(
-                    String,
-                    "/zeroerr/collision_monitor/config_state",
-                    on_collision_config_state,
-                    10,
-                )
-        discovery_deadline = time.monotonic() + 1.0
-        while (
-            publisher.get_subscription_count() < 1
-            and time.monotonic() < discovery_deadline
-        ):
-            time.sleep(0.02)
-        if publisher.get_subscription_count() < 1:
-            return _response_error(
-                "collision monitor config subscriber is unavailable", 503)
-        publisher.publish(message)
         requested = payload["suppressed"]
-        confirmation_deadline = time.monotonic() + 2.0
-        with collision_config_state_changed:
-            while (
-                collision_config_state["suppressed"] is not requested
-                and time.monotonic() < confirmation_deadline
-            ):
-                collision_config_state_changed.wait(timeout=0.05)
-            if collision_config_state["suppressed"] is not requested:
-                return _response_error(
-                    "collision monitor did not confirm suppression update", 504)
+        _state, error = publish_collision_config({
+            "collision_detection_suppressed": requested})
+        if error is not None:
+            return error
         return jsonify({
             "success": True,
             "suppressed": payload["suppressed"],
         })
+
+    @app.route("/collision/monitor/config", methods=["GET"])
+    def get_collision_monitor_config():
+        if ensure_collision_config_channel() is None:
+            return _response_error(
+                "collision monitor config subscriber is unavailable", 503)
+        state = wait_for_collision_config(lambda value: bool(value))
+        if state is None:
+            return _response_error(
+                "collision monitor configuration is unavailable", 504)
+        return jsonify({"success": True, "config": state})
+
+    @app.route("/collision/monitor/config", methods=["POST"])
+    def update_collision_monitor_config():
+        payload = request.get_json(silent=True) or {}
+        allowed = {
+            "detection_enabled", "active_stop_enabled",
+            "effort_following_error_detection_enabled",
+            "collision_sensitivity_percent", "confirm_cycles",
+            "dynamic_threshold_enabled", "dynamic_threshold_decay_sec",
+            "dynamic_threshold_max_ratio", "effort_thresholds",
+            "following_error_thresholds", "external_torque_thresholds",
+        }
+        unknown = sorted(set(payload) - allowed)
+        if not payload or unknown:
+            return _response_error(
+                f"unsupported collision configuration fields: {unknown}", 400)
+        state, error = publish_collision_config(payload)
+        if error is not None:
+            return error
+        return jsonify({"success": True, "config": state})
 
     @app.route("/move/fast_lin", methods=["POST"])
     def move_fast_lin():

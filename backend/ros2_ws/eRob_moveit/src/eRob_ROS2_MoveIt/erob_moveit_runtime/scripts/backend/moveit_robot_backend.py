@@ -169,7 +169,12 @@ class MoveItRobotBackend(IRobotBackend):
         drive_error = self._reject_if_drive_not_enabled("MOVE_LINER")
         if drive_error is not None:
             return drive_error
-        if self.node is not None and not self.node.is_hardware_ready_for_motion():
+        readiness_check = (
+            self.node.is_hardware_ready_for_collision_recovery
+            if self.node is not None and allow_collision_recovery
+            else self.node.is_hardware_ready_for_motion if self.node is not None else None
+        )
+        if readiness_check is not None and not readiness_check():
             self.node.get_logger().error(
                 f"[MOVE_LINER] Rejected: {self.node.get_hardware_fault_reason()}"
             )

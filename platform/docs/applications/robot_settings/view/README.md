@@ -13,7 +13,7 @@ class RobotSettingsView(IApplicationView):
     movement_changed = pyqtSignal(str, object)        # (key, value)
 ```
 
-Pure Qt widget. Builds a `SettingsView` with schema-driven tabs plus two raw tabs: `MovementGroupsTab` and `TargetingDefinitionsTab`. Contains zero business logic.
+Pure Qt widget. Builds a `SettingsView` with schema-driven tabs plus raw `MovementGroupsTab`, `TargetingDefinitionsTab`, and optional `SensorlessCollisionTab` widgets. Contains zero business logic.
 
 ### Outbound Signals
 
@@ -44,6 +44,7 @@ RobotSettingsView
        ├─ "Safety" tab          → SAFETY_LIMITS_GROUP
        ├─ "Movement Groups" tab → MovementGroupsTab (raw QWidget tab)
        ├─ "Targeting" tab       → TargetingDefinitionsTab (raw QWidget tab)
+       ├─ "Sensorless Collision" → SensorlessCollisionTab (optional raw QWidget tab)
        └─ "Calibration" tab     → CALIBRATION_ADAPTIVE_GROUP, CALIBRATION_MARKER_GROUP,
                                    CALIBRATION_AXIS_MAPPING_GROUP,
                                    CALIBRATION_CAMERA_TCP_GROUP
@@ -78,6 +79,16 @@ Defines the field group constants consumed by `RobotSettingsView.setup_ui()`:
 - named frames with optional source/target navigation groups and a height-correction toggle
 
 The tab itself is generic. Robot-system-specific protected rows and serialization are supplied by the application service layer.
+
+## `sensorless_collision_tab.py`
+
+`SensorlessCollisionTab` is present only when the application wiring supplies a collision configuration service. It separates the two detection paths:
+
+- primary sensorless detection: direction-aware external-torque observer, global sensitivity, consecutive-confirmation count, maximum dynamic/static threshold ratio, and per-joint static thresholds;
+- secondary detection: optional measured-effort plus following-error detector, with explicit enable control and per-joint thresholds;
+- response mode: passive reporting or active motion stop.
+
+Load and Apply are asynchronous controller operations so HTTP communication does not freeze the GUI. Values shown after a successful Apply are the backend-confirmed values, not merely the requested values.
 
 ---
 

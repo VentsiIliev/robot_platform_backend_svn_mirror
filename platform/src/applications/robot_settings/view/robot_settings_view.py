@@ -10,6 +10,7 @@ from src.applications.base.keyboard_settings_view import (
 from src.applications.robot_settings.model.mapper import RobotSettingsMapper
 from src.applications.robot_settings.view.movement_groups_tab import MovementGroupsTab
 from src.applications.robot_settings.view.targeting_definitions_tab import TargetingDefinitionsTab
+from src.applications.robot_settings.view.sensorless_collision_tab import SensorlessCollisionTab
 from pl_gui.settings.settings_view.settings_view import SettingsView
 from pl_gui.settings.settings_view.styles import TOUCH_SCROLL_AREA_STYLE
 
@@ -49,14 +50,19 @@ class RobotSettingsView(IApplicationView):
     set_current_requested = pyqtSignal(str)
     move_to_requested = pyqtSignal(str, object)  # group_name, point_str or None
     execute_requested  = pyqtSignal(str)   # group_name
+    collision_config_refresh_requested = pyqtSignal()
+    collision_config_save_requested = pyqtSignal(dict)
 
-    def __init__(self, movement_group_definitions: list[MovementGroupDefinition] | None = None, parent=None):
+    def __init__(self, movement_group_definitions: list[MovementGroupDefinition] | None = None,
+                 show_sensorless_collision_tab: bool = False, parent=None):
         self._movement_group_definitions = list(movement_group_definitions or [])
         self._cached_flat_config: dict = {}
         self._cached_movement_groups: dict = {}
         self._cached_targeting_definitions: dict | None = None
         self._movement_tab = None
         self._targeting_tab = None
+        self._show_sensorless_collision_tab = bool(show_sensorless_collision_tab)
+        self._collision_tab = None
         self._settings_view = None
         super().__init__("RobotSettings", parent)
 
@@ -77,6 +83,8 @@ class RobotSettingsView(IApplicationView):
         self._settings_view.add_tab("Safety", [POSITION_LIMITS_GROUP, ORIENTATION_LIMITS_GROUP])
         self._add_lazy_raw_tab("Movement Groups")
         self._add_lazy_raw_tab("Targeting")
+        if self._show_sensorless_collision_tab:
+            self._add_lazy_raw_tab("Sensorless Collision")
         if _SHOW_LEGACY_CALIBRATION_TAB:
             self._settings_view.add_tab(
                 "Calibration",
@@ -113,6 +121,8 @@ class RobotSettingsView(IApplicationView):
             self._build_movement_groups_tab()
         elif index == 3 and self._targeting_tab is None:
             self._build_targeting_tab()
+        elif index == 4 and self._show_sensorless_collision_tab and self._collision_tab is None:
+            self._build_collision_tab()
 
     def _build_movement_groups_tab(self) -> None:
         self._movement_tab = MovementGroupsTab()
@@ -132,6 +142,29 @@ class RobotSettingsView(IApplicationView):
         self._targeting_tab.definitions_changed.connect(self.targeting_changed)
         self._targeting_tab.load(self._cached_targeting_definitions)
         self._replace_tab_with_widget(index=3, title="Targeting", widget=self._targeting_tab)
+
+    def _build_collision_tab(self) -> None:
+        self._collision_tab = SensorlessCollisionTab()
+        self._collision_tab.refresh_requested.connect(
+            self.collision_config_refresh_requested)
+        self._collision_tab.save_requested.connect(
+            self.collision_config_save_requested)
+        self._replace_tab_with_widget(
+            index=4, title="Sensorless Collision", widget=self._collision_tab)
+        self.collision_config_refresh_requested.emit()
+
+    def load_collision_config(self, config: dict) -> None:
+        if self._collision_tab is not None:
+            self._collision_tab.load_config(config)
+
+    def set_collision_config_status(self, message: str, success: bool) -> None:
+        if self._collision_tab is not None:
+            self._collision_tab.set_status(message, success)
+            self._collision_tab.set_busy(False)
+
+    def set_collision_config_busy(self, busy: bool) -> None:
+        if self._collision_tab is not None:
+            self._collision_tab.set_busy(busy)
 
     def _replace_tab_with_widget(self, index: int, title: str, widget: QWidget) -> None:
         scroll = QScrollArea()

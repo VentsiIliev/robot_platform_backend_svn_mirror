@@ -1455,6 +1455,31 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             logger.error("Collision monitor suppression update failed: %s", exc)
             return {"success": False, "error": str(exc)}
 
+    def get_collision_monitor_config(self) -> dict:
+        try:
+            response = self._session.get(
+                f"{self.server_url}/collision/monitor/config", timeout=5)
+            raw = response.json()
+            return raw if isinstance(raw, dict) else {
+                "success": False, "error": "invalid_response"}
+        except Exception as exc:
+            logger.error("Collision monitor configuration read failed: %s", exc)
+            return {"success": False, "error": str(exc)}
+
+    def update_collision_monitor_config(self, config: dict) -> dict:
+        try:
+            response = self._session.post(
+                f"{self.server_url}/collision/monitor/config",
+                json=dict(config),
+                timeout=5,
+            )
+            raw = response.json()
+            return raw if isinstance(raw, dict) else {
+                "success": False, "error": "invalid_response"}
+        except Exception as exc:
+            logger.error("Collision monitor configuration update failed: %s", exc)
+            return {"success": False, "error": str(exc)}
+
     def start_collision_calibration_recording(self) -> dict:
         """Start a passive backend recording session for externally owned motion."""
         try:

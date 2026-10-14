@@ -85,6 +85,12 @@ class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
         """Temporarily suppress sensorless collision detection for recovery motion."""
         return {"success": False, "error": "collision_suppression_unsupported"}
 
+    def get_collision_monitor_config(self) -> dict:
+        return {"success": False, "error": "collision_monitor_config_unsupported"}
+
+    def update_collision_monitor_config(self, config: dict) -> dict:
+        return {"success": False, "error": "collision_monitor_config_unsupported"}
+
     def unwind_joint6(
         self,
         blocking: bool = True,
