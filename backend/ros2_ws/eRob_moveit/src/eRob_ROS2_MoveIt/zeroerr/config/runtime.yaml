@@ -30,6 +30,9 @@ MOVEIT_COLLISION_SCALE: 1.0
 # is passive: it publishes diagnostics and warnings but does not stop motion.
 ENABLE_SENSORLESS_COLLISION_MONITOR: true
 SENSORLESS_COLLISION_MONITOR_PERIOD_SEC: 0.01
+# Fail closed if either state stream stalls or complete samples drift apart.
+SENSORLESS_COLLISION_INPUT_TIMEOUT_SEC: 0.25
+SENSORLESS_COLLISION_INPUT_SYNC_TOLERANCE_SEC: 0.10
 # Generalized-momentum observer from Chen et al. (2018), equations 3-15.
 # Uses the installed PyKDL with the local URDF-chain parser; no kdl_parser_py
 # package or joint-acceleration measurement is required.
@@ -40,6 +43,7 @@ SENSORLESS_COLLISION_DRIVE_STABLE_SEC: 2.0
 # Keep the arm stationary after startup while the observer learns only the
 # drive/friction/model offset at the initial pose.
 SENSORLESS_COLLISION_WARMUP_SEC: 8.0
+SENSORLESS_COLLISION_WARMUP_MIN_SAMPLES: 20
 SENSORLESS_COLLISION_LOG_ENABLED: false
 SENSORLESS_COLLISION_LOG_PATH: /home/ilv/ros2_ws/eRob_moveit/zeroerr_data/collision_detection/collision_training.csv
 # Log at 20 Hz while collision detection itself continues at 100 Hz. Each

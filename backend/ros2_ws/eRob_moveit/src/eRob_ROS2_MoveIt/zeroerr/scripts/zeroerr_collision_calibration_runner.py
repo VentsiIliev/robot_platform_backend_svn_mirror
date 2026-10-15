@@ -588,7 +588,8 @@ class CalibrationRunner(Node):
             self._training_csv_writer.writerow([
                 'timestamp', 'joint', 'position_rad', 'velocity_rad_s',
                 'acceleration_rad_s2', 'torque_sensor_nm', 'measured_torque_nm',
-                'expected_torque_nm', 'external_torque_nm',
+                'expected_torque_nm', 'observer_auxiliary_torque_nm',
+                'external_torque_nm',
                 'following_error_actual',
             ])
         if self._run_type == 'false_positive_test':
@@ -790,19 +791,34 @@ class CalibrationRunner(Node):
         period = max(0.0, float(self.get_parameter('coverage_log_period_sec').value))
         if timestamp - self._last_training_write < period:
             return
-        positions = dict(zip(self.joint_names, self._positions or []))
-        velocities = dict(zip(self.joint_names, self._velocities or []))
-        accelerations = dict(zip(self.joint_names, self._accelerations or []))
-        for joint_name, values in zip(msg.joint_names, msg.interface_values):
-            fields = dict(zip(values.interface_names, values.values))
+        by_joint = {
+            joint_name: dict(zip(values.interface_names, values.values))
+            for joint_name, values in zip(msg.joint_names, msg.interface_values)
+        }
+        required = (
+            'position', 'velocity', 'acceleration', 'torque_sensor',
+            'measured_torque', 'expected_torque', 'observer_auxiliary_torque',
+            'external_torque', 'following_error_actual', 'observer_ready',
+        )
+        if any(joint_name not in by_joint for joint_name in self.joint_names):
+            return
+        if any(
+            fields.get('observer_ready', 0.0) < 0.5
+            or any(not math.isfinite(float(fields.get(name, math.nan))) for name in required)
+            for fields in (by_joint[joint_name] for joint_name in self.joint_names)
+        ):
+            return
+        for joint_name in self.joint_names:
+            fields = by_joint[joint_name]
             writer.writerow([
                 f'{timestamp:.9f}', joint_name,
-                positions.get(joint_name, fields.get('position', math.nan)),
-                velocities.get(joint_name, fields.get('velocity', math.nan)),
-                accelerations.get(joint_name, math.nan),
+                fields['position'],
+                fields['velocity'],
+                fields['acceleration'],
                 fields.get('torque_sensor', math.nan),
                 fields.get('measured_torque', math.nan),
                 fields.get('expected_torque', math.nan),
+                fields.get('observer_auxiliary_torque', math.nan),
                 fields.get('external_torque', math.nan),
                 fields.get('following_error_actual', math.nan),
             ])

@@ -126,6 +126,7 @@ class MomentumObserverEstimator:
         static_torque_bias_nm: Optional[np.ndarray] = None,
         warmup_sec: float = 8.0,
         warmup_vel_threshold_rad_s: float = 0.02,
+        warmup_min_samples: int = 20,
     ):
         self._model = model
         self._filter_alpha = filter_alpha
@@ -147,12 +148,14 @@ class MomentumObserverEstimator:
 
         self._warmup_sec = warmup_sec
         self._warmup_vel_threshold = warmup_vel_threshold_rad_s
+        self._warmup_min_samples = max(1, int(warmup_min_samples))
         self._warmup_samples: list = []
         self._warmup_offset = np.zeros(n)
         self._warmup_done = warmup_sec <= 0.0
         self._warmup_start: Optional[float] = None
 
         self.expected_torque_history = deque(maxlen=config.COLLISION_HISTORY_BUFFER)
+        self.observer_auxiliary_history = deque(maxlen=config.COLLISION_HISTORY_BUFFER)
         self.external_torque_history = deque(maxlen=config.COLLISION_HISTORY_BUFFER)
 
     @property
@@ -183,11 +186,33 @@ class MomentumObserverEstimator:
         velocities: np.ndarray,
         accelerations: np.ndarray
     ):
+        inputs = (measured, positions, velocities, accelerations)
+        if any(
+            np.asarray(values).shape != (self.num_joints,)
+            or not np.all(np.isfinite(values))
+            for values in inputs
+        ):
+            raise ValueError("momentum observer inputs must be finite joint vectors")
+
         mass_matrix = self._model.compute_mass_matrix(positions)
+        if (
+            np.asarray(mass_matrix).shape != (self.num_joints, self.num_joints)
+            or not np.all(np.isfinite(mass_matrix))
+        ):
+            raise ValueError("momentum observer mass matrix is invalid")
         momentum = mass_matrix @ velocities
         # Chen et al. (2018), Eq. (7): this auxiliary term allows the
         # generalized-momentum observer to avoid measured acceleration.
         auxiliary_torque = self._model.compute_observer_auxiliary(positions, velocities)
+        full_expected_torque = self._model.compute_expected_torque(
+            positions, velocities, accelerations
+        )
+        if not all(
+            np.asarray(values).shape == (self.num_joints,)
+            and np.all(np.isfinite(values))
+            for values in (momentum, auxiliary_torque, full_expected_torque)
+        ):
+            raise ValueError("momentum observer model output is invalid")
         now = time.monotonic()
 
         measured_corrected = measured - self._static_bias
@@ -201,16 +226,19 @@ class MomentumObserverEstimator:
                 self._warmup_samples.append(
                     (measured_corrected - auxiliary_torque).copy()
                 )
-            if (now - self._warmup_start) >= self._warmup_sec:
-                if len(self._warmup_samples) >= 20:
-                    self._warmup_offset = np.mean(self._warmup_samples, axis=0)
+            if (
+                (now - self._warmup_start) >= self._warmup_sec
+                and len(self._warmup_samples) >= self._warmup_min_samples
+            ):
+                self._warmup_offset = np.mean(self._warmup_samples, axis=0)
                 self._warmup_done = True
                 self._last_momentum = None
                 self._last_timestamp = None
             else:
                 # A residual before bias initialization is meaningless and can
                 # create startup false positives. Keep the public output zero.
-                self.expected_torque_history.append(auxiliary_torque.copy())
+                self.observer_auxiliary_history.append(auxiliary_torque.copy())
+                self.expected_torque_history.append(full_expected_torque.copy())
                 self.external_torque_history.append(self._filtered.copy())
                 self._last_momentum = momentum.copy()
                 self._last_timestamp = now
@@ -230,9 +258,17 @@ class MomentumObserverEstimator:
                 self._momentum_integral - momentum
             )
 
-        tau_expected = auxiliary_torque + self._warmup_offset + self._static_bias
+        observer_auxiliary = auxiliary_torque + self._warmup_offset + self._static_bias
+        tau_expected = full_expected_torque + self._warmup_offset + self._static_bias
         tau_external = self._observer_residual.copy()
 
+        if not all(
+            np.all(np.isfinite(values))
+            for values in (self._momentum_integral, self._observer_residual, tau_expected)
+        ):
+            raise ValueError("momentum observer state became non-finite")
+
+        self.observer_auxiliary_history.append(observer_auxiliary.copy())
         self.expected_torque_history.append(tau_expected.copy())
 
         self._previous = self._filtered.copy()
@@ -241,6 +277,8 @@ class MomentumObserverEstimator:
             + (1 - self._filter_alpha) * self._filtered
         )
         self._rate = np.abs(self._filtered - self._previous)
+        if not np.all(np.isfinite(self._filtered)):
+            raise ValueError("momentum observer filtered output became non-finite")
         self.external_torque_history.append(self._filtered.copy())
 
         self._last_momentum = momentum.copy()

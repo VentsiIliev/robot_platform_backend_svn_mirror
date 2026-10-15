@@ -125,7 +125,29 @@ At startup, and after drive recovery when initialization was interrupted, the
 observer learns stationary model/drive bias for `warmup_sec` while velocity is
 below `warmup_vel_threshold_rad_s`. External torque is reported as unavailable,
 not zero, during this interval. Collision protection must be treated as not
-active until all observer inputs are valid and warm-up has completed.
+active until all observer inputs are valid and warm-up has completed. Warm-up
+requires both the configured elapsed time and `warmup_min_samples` complete,
+finite stationary samples; continuous motion cannot make the observer ready.
+
+The monitor processes only complete six-joint samples. `/joint_states` and
+`/dynamic_joint_states` must both remain newer than `input_timeout_sec`, and
+their most recent complete samples must be within
+`input_sync_tolerance_sec`. Missing joints/interfaces, stale streams,
+non-finite inputs, or non-finite model/observer outputs invalidate readiness,
+clear published estimates, and restart stationary warm-up. Cached partial data
+is never combined with a newer message for collision decisions.
+
+Torque telemetry deliberately distinguishes two model quantities:
+
+- `observer_auxiliary_torque`: the Eq. (7) auxiliary term used internally by
+  the generalized-momentum observer;
+- `expected_torque`: full inverse-dynamics torque
+  `M(q)ddq + C(q,dq)dq + g(q)`, plus deployed bias/correction terms, used for
+  diagnostics and residual-model calibration.
+
+The auxiliary term must not be substituted with full inverse dynamics inside
+the observer equation. Conversely, calibration must not treat the auxiliary
+term as the full expected actuator torque.
 
 Changing payload, tooling, mounting, torque scaling, drivetrain behavior, URDF
 inertials, controller tuning, or the normal motion envelope invalidates some or
@@ -416,6 +438,7 @@ operational settings:
 - `motion_residual_correction_limits`: correction training envelope.
 
 `zeroerr/config/runtime.yaml` controls monitor launch, period, observer gain,
+input freshness/synchronization limits, minimum stationary warm-up samples,
 drive-stability gate, warm-up, raw logging, GUI launch and calibration-runner
 settings.
 

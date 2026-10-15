@@ -409,12 +409,18 @@ def generate_launch_description():
                 0.01,
             )),
             "input_sample_period_sec": 0.0,
+            "input_timeout_sec": float(runtime_value(
+                package_path, "SENSORLESS_COLLISION_INPUT_TIMEOUT_SEC", 0.25)),
+            "input_sync_tolerance_sec": float(runtime_value(
+                package_path, "SENSORLESS_COLLISION_INPUT_SYNC_TOLERANCE_SEC", 0.10)),
             "print_table": False,
             "include_gravity": True,
             "observer_gain": float(runtime_value(
                 package_path, "SENSORLESS_COLLISION_OBSERVER_GAIN", 10.0)),
             "warmup_sec": float(runtime_value(
                 package_path, "SENSORLESS_COLLISION_WARMUP_SEC", 8.0)),
+            "warmup_min_samples": int(runtime_value(
+                package_path, "SENSORLESS_COLLISION_WARMUP_MIN_SAMPLES", 20)),
             "drive_stable_sec": float(runtime_value(
                 package_path, "SENSORLESS_COLLISION_DRIVE_STABLE_SEC", 2.0)),
             "urdf_path": urdf_path,

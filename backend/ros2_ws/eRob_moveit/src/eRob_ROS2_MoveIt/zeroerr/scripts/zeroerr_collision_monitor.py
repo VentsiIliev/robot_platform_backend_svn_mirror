@@ -36,6 +36,7 @@ PLOT_METRICS = {
     "friction_torque": lambda self, slave: self._friction_torque_by_joint.get(str(slave["joint"])),
     "measured_torque": lambda self, slave: self._measured_torque_by_joint.get(str(slave["joint"])),
     "expected_torque": lambda self, slave: self._expected_torque_by_joint.get(str(slave["joint"])),
+    "observer_auxiliary_torque": lambda self, slave: self._observer_auxiliary_torque_by_joint.get(str(slave["joint"])),
     "torque_difference": lambda self, slave: self._torque_difference_by_joint.get(str(slave["joint"])),
     "external_torque": lambda self, slave: self._external_torque_by_joint.get(str(slave["joint"])),
     "external_torque_threshold": lambda self, slave: self._current_external_torque_thresholds.get(str(slave["joint"])),
@@ -59,6 +60,8 @@ class ZeroErrCollisionMonitor(Node):
         self.declare_parameter("slave_count", 6)
         self.declare_parameter("poll_period_sec", 2.0)
         self.declare_parameter("input_sample_period_sec", 0.0)
+        self.declare_parameter("input_timeout_sec", 0.25)
+        self.declare_parameter("input_sync_tolerance_sec", 0.10)
         self.declare_parameter("print_table", False)
         self.declare_parameter("confirm_cycles", 3)
         self.declare_parameter("dynamic_threshold_max_ratio", 5.0)
@@ -80,6 +83,7 @@ class ZeroErrCollisionMonitor(Node):
         self.declare_parameter("static_torque_bias_nm", [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
         self.declare_parameter("warmup_sec", 8.0)
         self.declare_parameter("warmup_vel_threshold_rad_s", 0.02)
+        self.declare_parameter("warmup_min_samples", 20)
         self.declare_parameter("observer_gain", 10.0)
         self.declare_parameter("drive_stable_sec", 2.0)
         self.declare_parameter("collision_config_path", DEFAULT_COLLISION_CONFIG_PATH)
@@ -110,6 +114,10 @@ class ZeroErrCollisionMonitor(Node):
         )
         self._last_joint_sample_time: Optional[float] = None
         self._last_dynamic_sample_time: Optional[float] = None
+        self._joint_sample_complete = False
+        self._dynamic_sample_complete = False
+        self._observer_inputs_valid = False
+        self._last_input_invalid_reason = ""
         self._all_drives_op_since: Optional[float] = None
         effort_thresholds = list(self.get_parameter("effort_thresholds").value)
         following_error_thresholds = list(
@@ -201,6 +209,9 @@ class ZeroErrCollisionMonitor(Node):
         self._contact_reason = {joint_name: "" for joint_name in JOINT_NAMES[: self._slave_count]}
         self._dynamics_reason = {joint_name: "" for joint_name in JOINT_NAMES[: self._slave_count]}
         self._expected_torque_by_joint = {
+            joint_name: None for joint_name in JOINT_NAMES[: self._slave_count]
+        }
+        self._observer_auxiliary_torque_by_joint = {
             joint_name: None for joint_name in JOINT_NAMES[: self._slave_count]
         }
         self._friction_torque_by_joint = {
@@ -327,19 +338,33 @@ class ZeroErrCollisionMonitor(Node):
             and now - self._last_joint_sample_time < self._input_sample_period_sec
         ):
             return
+        by_name = {name: index for index, name in enumerate(msg.name)}
+        updates = {}
+        for joint_name in JOINT_NAMES[: self._slave_count]:
+            index = by_name.get(joint_name)
+            if (
+                index is None
+                or index >= len(msg.position)
+                or index >= len(msg.velocity)
+                or not np.isfinite(msg.position[index])
+                or not np.isfinite(msg.velocity[index])
+            ):
+                self._joint_sample_complete = False
+                return
+            updates[joint_name] = {
+                "position": float(msg.position[index]),
+                "velocity": float(msg.velocity[index]),
+                "effort": (
+                    float(msg.effort[index])
+                    if index < len(msg.effort) and np.isfinite(msg.effort[index])
+                    else None
+                ),
+            }
+        for joint_name, values in updates.items():
+            self._latest_payload[joint_name].update(values)
         self._last_joint_sample_time = now
+        self._joint_sample_complete = True
         self._joint_state_seen = True
-        for index, joint_name in enumerate(msg.name):
-            if joint_name not in self._latest_payload:
-                continue
-
-            state = self._latest_payload[joint_name]
-            if index < len(msg.position):
-                state["position"] = msg.position[index]
-            if index < len(msg.velocity):
-                state["velocity"] = msg.velocity[index]
-            if index < len(msg.effort):
-                state["effort"] = msg.effort[index]
 
     def _on_dynamic_joint_states(self, msg: DynamicJointState) -> None:
         now = self.get_clock().now().nanoseconds * 1e-9
@@ -349,17 +374,36 @@ class ZeroErrCollisionMonitor(Node):
             and now - self._last_dynamic_sample_time < self._input_sample_period_sec
         ):
             return
-        self._last_dynamic_sample_time = now
-        self._dynamic_state_seen = True
-        for index, joint_name in enumerate(msg.joint_names):
-            if joint_name not in self._latest_payload or index >= len(msg.interface_values):
-                continue
-
+        by_name = {
+            joint_name: index for index, joint_name in enumerate(msg.joint_names)
+        }
+        required_interfaces = {"torque_sensor", "statusword", "error_code"}
+        if self._effort_following_error_detection_enabled:
+            required_interfaces.add("following_error_actual")
+        updates = {}
+        for joint_name in JOINT_NAMES[: self._slave_count]:
+            index = by_name.get(joint_name)
+            if index is None or index >= len(msg.interface_values):
+                self._dynamic_sample_complete = False
+                return
             interface_value = msg.interface_values[index]
-            state = self._latest_payload[joint_name]
-            for name, value in zip(interface_value.interface_names, interface_value.values):
-                if name in INTERFACE_DEFAULTS:
-                    state[name] = value
+            values = dict(zip(interface_value.interface_names, interface_value.values))
+            if any(
+                name not in values or not np.isfinite(values[name])
+                for name in required_interfaces
+            ):
+                self._dynamic_sample_complete = False
+                return
+            updates[joint_name] = {
+                name: float(value)
+                for name, value in values.items()
+                if name in INTERFACE_DEFAULTS and np.isfinite(value)
+            }
+        for joint_name, values in updates.items():
+            self._latest_payload[joint_name].update(values)
+        self._last_dynamic_sample_time = now
+        self._dynamic_sample_complete = True
+        self._dynamic_state_seen = True
 
     def _on_config(self, msg: String) -> None:
         try:
@@ -608,6 +652,7 @@ class ZeroErrCollisionMonitor(Node):
         for joint_name in JOINT_NAMES[: self._slave_count]:
             self._external_torque_by_joint[joint_name] = None
             self._expected_torque_by_joint[joint_name] = None
+            self._observer_auxiliary_torque_by_joint[joint_name] = None
             self._torque_difference_by_joint[joint_name] = None
         self.get_logger().warning(
             "[ZeroErrCollisionMonitor] Collision latch cleared; observer warm-up restarted")
@@ -666,6 +711,13 @@ class ZeroErrCollisionMonitor(Node):
             "slaves": [],
         }
 
+        inputs_valid, invalid_reason = self._input_validity()
+        if not inputs_valid:
+            self._invalidate_observer_inputs(invalid_reason)
+        else:
+            self._observer_inputs_valid = True
+            self._last_input_invalid_reason = ""
+
         for slave_index, joint_name in enumerate(JOINT_NAMES[: self._slave_count]):
             state = dict(self._latest_payload[joint_name])
             state["joint"] = joint_name
@@ -681,7 +733,8 @@ class ZeroErrCollisionMonitor(Node):
             self._measured_torque_by_joint[joint_name] = state["measured_torque"]
             payload["slaves"].append(state)
 
-        self._update_external_torque_estimate(payload["slaves"])
+        if inputs_valid:
+            self._update_external_torque_estimate(payload["slaves"])
         self._evaluate_collisions(payload["slaves"])
         self._inject_reasons(payload["slaves"])
 
@@ -701,6 +754,52 @@ class ZeroErrCollisionMonitor(Node):
 
         if self._torque_log_enabled:
             self._append_torque_log(payload["slaves"], stamp)
+
+    def _input_validity(self) -> tuple[bool, str]:
+        if not self._joint_sample_complete:
+            return False, "joint state sample is incomplete or non-finite"
+        if not self._dynamic_sample_complete:
+            return False, "dynamic joint state sample is incomplete or non-finite"
+        if self._last_joint_sample_time is None or self._last_dynamic_sample_time is None:
+            return False, "required input streams have not produced complete samples"
+        now = self.get_clock().now().nanoseconds * 1e-9
+        timeout = max(0.01, float(self.get_parameter("input_timeout_sec").value))
+        joint_age = now - self._last_joint_sample_time
+        dynamic_age = now - self._last_dynamic_sample_time
+        if joint_age > timeout or dynamic_age > timeout:
+            return False, (
+                f"input stream stale joint_age={joint_age:.3f}s "
+                f"dynamic_age={dynamic_age:.3f}s timeout={timeout:.3f}s"
+            )
+        sync_tolerance = max(
+            0.0, float(self.get_parameter("input_sync_tolerance_sec").value)
+        )
+        skew = abs(self._last_joint_sample_time - self._last_dynamic_sample_time)
+        if skew > sync_tolerance:
+            return False, (
+                f"input streams unsynchronized skew={skew:.3f}s "
+                f"tolerance={sync_tolerance:.3f}s"
+            )
+        return True, ""
+
+    def _invalidate_observer_inputs(self, reason: str) -> None:
+        if self._observer_inputs_valid or reason != self._last_input_invalid_reason:
+            self.get_logger().warning(
+                f"[ZeroErrCollisionMonitor] Observer unavailable: {reason}"
+            )
+        self._observer_inputs_valid = False
+        self._last_input_invalid_reason = reason
+        self._all_drives_op_since = None
+        self._last_velocity_vector = None
+        self._last_velocity_timestamp = None
+        restart = getattr(self._estimator, "restart_warmup", None)
+        if callable(restart):
+            restart()
+        for joint_name in JOINT_NAMES[: self._slave_count]:
+            self._expected_torque_by_joint[joint_name] = None
+            self._observer_auxiliary_torque_by_joint[joint_name] = None
+            self._torque_difference_by_joint[joint_name] = None
+            self._external_torque_by_joint[joint_name] = None
 
     def _evaluate_collisions(self, slaves: List[Dict[str, Optional[float]]]) -> None:
         observer_ready = (
@@ -875,6 +974,7 @@ class ZeroErrCollisionMonitor(Node):
         static_torque_bias_nm = list(self.get_parameter("static_torque_bias_nm").value)
         warmup_sec = float(self.get_parameter("warmup_sec").value)
         warmup_vel_threshold_rad_s = float(self.get_parameter("warmup_vel_threshold_rad_s").value)
+        warmup_min_samples = int(self.get_parameter("warmup_min_samples").value)
         observer_gain = float(self.get_parameter("observer_gain").value)
 
         if not urdf_path:
@@ -899,6 +999,7 @@ class ZeroErrCollisionMonitor(Node):
                 static_torque_bias_nm=np.array(static_torque_bias_nm, dtype=float),
                 warmup_sec=warmup_sec,
                 warmup_vel_threshold_rad_s=warmup_vel_threshold_rad_s,
+                warmup_min_samples=warmup_min_samples,
             )
             self._dynamics_enabled = True
             self.get_logger().info(
@@ -917,6 +1018,7 @@ class ZeroErrCollisionMonitor(Node):
         self._last_velocity_timestamp = None
         for joint_name in JOINT_NAMES[: self._slave_count]:
             self._expected_torque_by_joint[joint_name] = None
+            self._observer_auxiliary_torque_by_joint[joint_name] = None
             self._torque_difference_by_joint[joint_name] = None
             self._external_torque_by_joint[joint_name] = None
         self._init_inverse_dynamics_model()
@@ -981,6 +1083,7 @@ class ZeroErrCollisionMonitor(Node):
             self._reset_estimator_after_drive_interruption()
             for joint_name in JOINT_NAMES[: self._slave_count]:
                 self._expected_torque_by_joint[joint_name] = None
+                self._observer_auxiliary_torque_by_joint[joint_name] = None
                 self._torque_difference_by_joint[joint_name] = None
                 self._external_torque_by_joint[joint_name] = None
             return
@@ -991,6 +1094,7 @@ class ZeroErrCollisionMonitor(Node):
             self._reset_estimator_after_drive_interruption()
             for joint_name in JOINT_NAMES[: self._slave_count]:
                 self._expected_torque_by_joint[joint_name] = None
+                self._observer_auxiliary_torque_by_joint[joint_name] = None
                 self._torque_difference_by_joint[joint_name] = None
                 self._external_torque_by_joint[joint_name] = None
             return
@@ -1053,16 +1157,22 @@ class ZeroErrCollisionMonitor(Node):
             - position_corrections
             - motion_residual_corrections
         )
-        self._estimator.update(
-            compensated_measured_torques,
-            np.array(positions, dtype=float),
-            velocity_vector,
-            acceleration_vector,
-        )
+        try:
+            self._estimator.update(
+                compensated_measured_torques,
+                np.array(positions, dtype=float),
+                velocity_vector,
+                acceleration_vector,
+            )
+        except (ValueError, FloatingPointError, RuntimeError) as exc:
+            self._invalidate_observer_inputs(f"invalid observer data: {exc}")
+            return
 
         filtered = self._estimator.filtered
         observer_ready = bool(getattr(self._estimator, "ready", False))
         expected = self._estimator.expected_torque_history[-1] if self._estimator.expected_torque_history else None
+        auxiliary_history = getattr(self._estimator, "observer_auxiliary_history", ())
+        observer_auxiliary = auxiliary_history[-1] if auxiliary_history else None
         for index, joint_name in enumerate(JOINT_NAMES[: self._slave_count]):
             # Present expected torque in the original sensor domain. External
             # torque itself comes from the friction-compensated observer.
@@ -1074,6 +1184,13 @@ class ZeroErrCollisionMonitor(Node):
                 if expected is not None else None
             )
             self._expected_torque_by_joint[joint_name] = expected_torque
+            self._observer_auxiliary_torque_by_joint[joint_name] = (
+                float(observer_auxiliary[index])
+                + float(friction_torques[index])
+                + float(position_corrections[index])
+                + float(motion_residual_corrections[index])
+                if observer_auxiliary is not None else None
+            )
             self._torque_difference_by_joint[joint_name] = (
                 float(measured_torques[index]) - expected_torque if expected_torque is not None else None
             )
@@ -1233,6 +1350,7 @@ class ZeroErrCollisionMonitor(Node):
                         "torque_sensor_nm",
                         "measured_torque_nm",
                         "expected_torque_nm",
+                        "observer_auxiliary_torque_nm",
                         "external_torque_nm",
                         "following_error_actual",
                     ]
@@ -1264,6 +1382,7 @@ class ZeroErrCollisionMonitor(Node):
                         self._csv_value(torque_sensor),
                         self._csv_value(self._measured_torque_by_joint.get(joint_name)),
                         self._csv_value(self._expected_torque_by_joint.get(joint_name)),
+                        self._csv_value(self._observer_auxiliary_torque_by_joint.get(joint_name)),
                         self._csv_value(self._external_torque_by_joint.get(joint_name)),
                         self._csv_value(following_error),
                     ]
@@ -1358,10 +1477,12 @@ class ZeroErrCollisionMonitor(Node):
             interface_value.interface_names = [
                 "position",
                 "velocity",
+                "acceleration",
                 "torque_sensor",
                 "friction_torque",
                 "measured_torque",
                 "expected_torque",
+                "observer_auxiliary_torque",
                 "torque_difference",
                 "external_torque",
                 "external_torque_threshold",
@@ -1380,10 +1501,12 @@ class ZeroErrCollisionMonitor(Node):
             interface_value.values = [
                 self._state_value(slave.get("position")),
                 self._state_value(slave.get("velocity")),
+                self._state_value(self._acceleration_by_joint.get(str(slave["joint"]))),
                 self._state_value(slave.get("torque_sensor")),
                 self._state_value(self._friction_torque_by_joint.get(str(slave["joint"]))),
                 self._state_value(self._measured_torque_by_joint.get(str(slave["joint"]))),
                 self._state_value(self._expected_torque_by_joint.get(str(slave["joint"]))),
+                self._state_value(self._observer_auxiliary_torque_by_joint.get(str(slave["joint"]))),
                 self._state_value(self._torque_difference_by_joint.get(str(slave["joint"]))),
                 self._state_value(self._external_torque_by_joint.get(str(slave["joint"]))),
                 self._state_value(self._current_external_torque_thresholds.get(str(slave["joint"]))),

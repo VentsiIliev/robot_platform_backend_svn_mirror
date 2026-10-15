@@ -107,6 +107,12 @@ def generate_launch_description():
                 0.01,
             )),
             "input_sample_period_sec": 0.0,
+            "input_timeout_sec": float(runtime_value(
+                package_path, "SENSORLESS_COLLISION_INPUT_TIMEOUT_SEC", 0.25)),
+            "input_sync_tolerance_sec": float(runtime_value(
+                package_path, "SENSORLESS_COLLISION_INPUT_SYNC_TOLERANCE_SEC", 0.10)),
+            "warmup_min_samples": int(runtime_value(
+                package_path, "SENSORLESS_COLLISION_WARMUP_MIN_SAMPLES", 20)),
             "print_table": False,
             "urdf_path": urdf_path,
             "base_link": "base_link",

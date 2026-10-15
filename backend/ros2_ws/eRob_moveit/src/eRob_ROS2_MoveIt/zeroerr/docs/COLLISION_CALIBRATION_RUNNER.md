@@ -88,7 +88,11 @@ POST /collision/calibration/recording/stop
 
 External-motion runs additionally contain `collision_training.csv`. Samples are
 flushed to disk during capture; stopping closes the file and writes the final
-coverage summary.
+coverage summary. The recorder writes a six-joint batch only while the monitor
+reports `observer_ready` and every required field is finite. `expected_torque_nm`
+is the full inverse-dynamics expectation used by the residual fitter;
+`observer_auxiliary_torque_nm` is recorded separately for momentum-observer
+diagnostics and is not used as the full expected-torque calibration target.
 
 ## Data acceptance rules
 

@@ -84,6 +84,13 @@ residual correction and motion-conditioned thresholds distinguish positive and
 negative motion because collision-free torque behavior was found to be
 direction dependent.
 
+The monitor fails closed on incomplete, stale, unsynchronized or non-finite
+joint/drive samples. Such an input invalidates observer readiness and restarts
+stationary warm-up. Readiness requires both elapsed warm-up time and a minimum
+count of valid stationary samples. Telemetry exposes the observer auxiliary
+term separately from the full inverse-dynamics `expected_torque` used for
+calibration.
+
 The detector supports passive reporting and active stopping. In active mode a
 confirmed detection stops current motion, clears queued motion, latches the
 runtime motion interlock and blocks later motion/drive-enable requests until
