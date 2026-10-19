@@ -500,6 +500,11 @@ def _build_network_settings_application(robot_system):
     return build_network_settings_application(robot_system)
 
 
+def _build_platform_settings_application(robot_system):
+    from src.applications.platform_settings.build_application import build_platform_settings_application
+    return build_platform_settings_application(robot_system)
+
+
 def _build_software_update_application(robot_system):
     from src.applications.software_update.build_application import build_software_update_application
     from src.shared_contracts.events.process_events import ProcessState

@@ -133,6 +133,7 @@ class WeldingRobotSystem(BaseRobotSystem):
         protected_app_role_values={
             "user_management": ["Admin"],
             "softwareupdate": ["Admin"],
+            "platformsettings": ["Admin"],
         },
     )
 
@@ -152,6 +153,8 @@ class WeldingRobotSystem(BaseRobotSystem):
                             factory=application_wiring._build_robot_settings_application),
             ApplicationSpec(name="SoftwareUpdate", folder_id=3, icon="fa5s.download",
                             factory=application_wiring._build_software_update_application),
+            ApplicationSpec(name="PlatformSettings", folder_id=3, icon="fa5s.desktop",
+                            factory=application_wiring._build_platform_settings_application),
             ApplicationSpec(name="NetworkSettings", folder_id=2, icon="fa5s.wifi",
                             factory=application_wiring._build_network_settings_application),
             ApplicationSpec(name="WorkAreaSettings", folder_id=2, icon="fa5s-vector-square",

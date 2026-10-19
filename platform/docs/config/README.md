@@ -8,6 +8,14 @@
 
 Configuration is not a global mutable store: settings serializers and `SettingsSpec.storage_key` define runtime file ownership. Installed systems can relocate writable data with `ROBOT_PLATFORM_DATA_ROOT`. Do not copy a paint variant's data into another system merely because it shares implementation.
 
+The `ui.custom_virtual_keyboard_enabled` value is the factory/startup default
+for the shared virtual keyboard. Administrators can change it from
+**Administration → Platform Settings → Appearance** without restarting. On an
+installed system, the durable operator override is
+`$ROBOT_PLATFORM_DATA_ROOT/platform/ui.json`; source-tree development writes
+the same field in `config/platform.json`. The runtime policy uses the override
+when present and otherwise falls back to the packaged value.
+
 For startup field types/defaults and validation see [bootstrap](../bootstrap/README.md). For signed releases, OS/ROS requirements and installation see [platform packaging](../../packaging/platform/README.md).
 
 <!-- source-navigation:start -->

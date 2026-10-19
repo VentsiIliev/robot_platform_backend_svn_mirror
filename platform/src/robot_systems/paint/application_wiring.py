@@ -1615,6 +1615,11 @@ def _build_network_settings_application(robot_system):
     return build_network_settings_application(robot_system, show_remote_support=False)
 
 
+def _build_platform_settings_application(robot_system):
+    from src.applications.platform_settings.build_application import build_platform_settings_application
+    return build_platform_settings_application(robot_system)
+
+
 def _build_software_update_application(robot_system):
     from src.applications.software_update import SoftwareUpdateApplication
     from src.applications.software_update.service.software_update_service import SoftwareUpdateService

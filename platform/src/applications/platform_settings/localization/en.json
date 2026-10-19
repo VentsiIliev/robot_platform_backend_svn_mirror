@@ -1,0 +1,15 @@
+{
+  "__meta__": {
+    "display_name": "English"
+  },
+  "PlatformSettingsView": {
+    "Platform Settings": "Platform Settings",
+    "Appearance": "Appearance",
+    "Virtual keyboard": "Virtual keyboard",
+    "Show the on-screen keyboard when editing text or numbers.": "Show the on-screen keyboard when editing text or numbers.",
+    "Changes to the virtual keyboard apply immediately.": "Changes to the virtual keyboard apply immediately."
+  },
+  "PlatformSettingsController": {
+    "Saved. The change is active now.": "Saved. The change is active now."
+  }
+}

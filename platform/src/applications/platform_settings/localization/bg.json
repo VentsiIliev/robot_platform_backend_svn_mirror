@@ -1,0 +1,15 @@
+{
+  "__meta__": {
+    "display_name": "Български"
+  },
+  "PlatformSettingsView": {
+    "Platform Settings": "Настройки на платформата",
+    "Appearance": "Външен вид",
+    "Virtual keyboard": "Виртуална клавиатура",
+    "Show the on-screen keyboard when editing text or numbers.": "Показване на екранната клавиатура при редактиране на текст или числа.",
+    "Changes to the virtual keyboard apply immediately.": "Промените по виртуалната клавиатура се прилагат веднага."
+  },
+  "PlatformSettingsController": {
+    "Saved. The change is active now.": "Запазено. Промяната вече е активна."
+  }
+}

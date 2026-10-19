@@ -23,7 +23,8 @@ from PyQt6.QtWidgets import (
 )
 
 from src.applications.base.config.virtual_keyboard_config import (
-    ENABLE_CUSTOM_VIRTUAL_KEYBOARD,
+    is_custom_virtual_keyboard_enabled,
+    register_virtual_keyboard_policy_listener,
 )
 
 
@@ -38,6 +39,20 @@ _KEYBOARD_ACTION_HOVER = "#7E4C96"
 _DOCK_MARGIN = 8
 _FIELD_MARGIN = 12
 _ACTIVE_KEYBOARD_OWNER: Optional["_KeyboardMixin"] = None
+
+
+def _on_keyboard_policy_changed(enabled: bool) -> None:
+    global _ACTIVE_KEYBOARD_OWNER
+    if enabled or _ACTIVE_KEYBOARD_OWNER is None:
+        return
+    owner = _ACTIVE_KEYBOARD_OWNER
+    owner._restore_keyboard_adjustments()
+    if owner._keyboard_dialog is not None:
+        owner._keyboard_dialog.hide()
+    _ACTIVE_KEYBOARD_OWNER = None
+
+
+register_virtual_keyboard_policy_listener(_on_keyboard_policy_changed)
 
 
 def _keyboard_owner_for_widget(widget: Optional[QWidget]) -> Optional["_KeyboardMixin"]:
@@ -295,7 +310,7 @@ class _KeyboardMixin:
         self._install_trigger_hooks()
 
     def _keyboard_enabled(self) -> bool:
-        return bool(ENABLE_CUSTOM_VIRTUAL_KEYBOARD)
+        return is_custom_virtual_keyboard_enabled()
 
     def _install_trigger_hooks(self) -> None:
         if isinstance(self, QAbstractSpinBox):

@@ -220,6 +220,7 @@ class GlueRobotSystem(BaseRobotSystem):
         protected_app_role_values={
             "user_management": ["Admin"],
             "softwareupdate": ["Admin"],
+            "platformsettings": ["Admin"],
         },
     )
 
@@ -241,6 +242,8 @@ class GlueRobotSystem(BaseRobotSystem):
                             factory=application_wiring._build_modbus_settings_application),
             ApplicationSpec(name="SoftwareUpdate", folder_id=3, icon="fa5s.download",
                             factory=application_wiring._build_software_update_application),
+            ApplicationSpec(name="PlatformSettings", folder_id=3, icon="fa5s.desktop",
+                            factory=application_wiring._build_platform_settings_application),
             ApplicationSpec(name="NetworkSettings", folder_id=2, icon="fa5s.wifi",
                             factory=application_wiring._build_network_settings_application),
             ApplicationSpec(name="DispenseChannelSettings", folder_id=2, icon="fa5s.weight",

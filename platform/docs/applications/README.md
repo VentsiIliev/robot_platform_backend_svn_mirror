@@ -62,6 +62,7 @@ Live data    →  Broker sub   →  Bridge      →  View setter
 | `shaft_alignment/` | Camera/marker reference capture and alignment comparison |
 | `network_settings/` | Host network configuration |
 | `software_update/` | Signed product update UI |
+| `platform_settings/` | Admin-only platform UI preferences, currently the live virtual-keyboard switch |
 
 Robot-system-specific dashboards may expose process-owned quick settings while retaining the same MVC boundary. The paint dashboard's unmatched controls use a one/two-pass selector and pass tabs. Pass two defaults to an explicit “Use Pass 1 settings” mode; disabling inheritance enables independent velocity, acceleration, and press-offset fields. The service validates/saves the complete configuration; whether pass settings may change during a run depends on `allow_running_paint_settings_updates`. When enabled, the active workpiece retains its snapshot and the next cycle captures the update.
 
@@ -126,7 +127,7 @@ class YourRobotApp(BaseRobotSystem):
 - **Blocking service calls**: When a service call may block the GUI (e.g., serial port detection), controllers dispatch a `QThread + _Worker` pair and track them in `_active: List[Tuple[QThread, _Worker]]`. See `modbus_settings/controller/`.
 - **Localization**: Views should prefer `self.tr(...)` for static strings and implement `retranslateUi()` when they own localizable widget text. `IApplicationView` now handles `LanguageChange` by default and emits `language_changed` for controllers that need to refresh dynamic text via `QCoreApplication.translate(...)`.
 - **Shared view styling**: Use `pl_gui.settings.settings_view.styles` for titles, backgrounds, cards and action buttons. `src/applications/base/app_styles.py` provides additional shared application styling; avoid duplicating common patterns locally.
-- **Virtual keyboard**: Direct numeric fields use `KeyboardNumberField`, text fields use `KeyboardLineEdit`; schema tabs use keyboard settings handlers, and existing factory seams use `VirtualKeyboardWidgetFactory()`. Spin-box subclasses are reserved for contracts requiring an actual Qt spin box. The startup flag controls the shared keyboard; dialogs must restore spacing on hide.
+- **Virtual keyboard**: Direct numeric fields use `KeyboardNumberField`, text fields use `KeyboardLineEdit`; schema tabs use keyboard settings handlers, and existing factory seams use `VirtualKeyboardWidgetFactory()`. Spin-box subclasses are reserved for contracts requiring an actual Qt spin box. The Platform Settings switch updates the shared runtime policy immediately and persists it for later launches; dialogs restore spacing when the keyboard is hidden or disabled.
 
 <!-- source-navigation:start -->
 ## Source navigation
@@ -157,6 +158,7 @@ class YourRobotApp(BaseRobotSystem):
 | `network_settings/` | [network_settings](network_settings/README.md) |
 | `pick_and_place_visualizer/` | [pick_and_place_visualizer](pick_and_place_visualizer/README.md) |
 | `pick_target/` | [pick_target](pick_target/README.md) |
+| `platform_settings/` | [platform_settings](platform_settings/README.md) |
 | `robot_settings/` | [robot_settings](robot_settings/README.md) |
 | `shaft_alignment/` | [shaft_alignment](shaft_alignment/README.md) |
 | `software_update/` | [software_update](software_update/README.md) |
