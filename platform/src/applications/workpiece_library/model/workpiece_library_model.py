@@ -4,6 +4,8 @@ from src.applications.base.i_application_model import IApplicationModel
 from src.applications.workpiece_library.domain.workpiece_schema import WorkpieceSchema, WorkpieceRecord
 from src.applications.workpiece_library.service.i_workpiece_library_service import IWorkpieceLibraryService
 from src.applications.workpiece_library.service.i_workpiece_selection import IWorkpieceSelection
+from src.applications.workpiece_library.service.i_workpiece_duplicator import IWorkpieceDuplicator
+from src.applications.workpiece_library.domain.geometry_summary import summarize_geometry
 
 
 class WorkpieceLibraryModel(IApplicationModel):
@@ -40,6 +42,21 @@ class WorkpieceLibraryModel(IApplicationModel):
 
     def get_thumbnail(self, workpiece_id: str) -> Optional[bytes]:
         return self._service.get_thumbnail(workpiece_id)
+
+    def get_preview_stats(self, storage_id: str):
+        return summarize_geometry(self._service.load_raw(storage_id))
+
+    @property
+    def duplication_enabled(self) -> bool:
+        return isinstance(self._service, IWorkpieceDuplicator)
+
+    def duplicate(self, storage_id: str) -> tuple[bool, str]:
+        if not isinstance(self._service, IWorkpieceDuplicator):
+            return False, "Duplication unavailable"
+        ok, message = self._service.duplicate(storage_id)
+        if ok:
+            self._records = self._service.list_all()
+        return ok, message
 
     def update(self, storage_id: str, updates: dict) -> tuple[bool, str]:
         ok, msg = self._service.update(storage_id, updates)

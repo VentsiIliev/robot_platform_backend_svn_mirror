@@ -76,7 +76,7 @@ class TestMatchingSelectionView(unittest.TestCase):
             view._btn_clear_selection.click()
             self.assertEqual(PaintMatchingSelection(path).get_selected_ids(), ())
             view._table.item(0, 0).setCheckState(Qt.CheckState.Checked)
-            self.assertEqual(PaintMatchingSelection(path).get_selected_ids(), ("WP-001",))
+            self.assertEqual(PaintMatchingSelection(path).get_selected_ids(), ("WP-003",))
             view._btn_match_all.click()
             self.assertIsNone(PaintMatchingSelection(path).get_selected_ids())
 

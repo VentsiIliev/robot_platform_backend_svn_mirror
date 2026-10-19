@@ -12,6 +12,7 @@ import numpy as np
 from src.applications.workpiece_library.workpiece_thumbnail import (
     generate_thumbnail_bytes,
 )
+from src.applications.workpiece_library.domain.geometry_summary import summarize_geometry
 from src.robot_systems.paint.domain.workpieces.errors import WorkpieceReadError
 
 _logger = logging.getLogger(__name__)
@@ -143,6 +144,7 @@ class JsonPaintWorkpieceRepository:
                                 "workpieceId": raw.get("workpieceId", ""),
                                 "description": raw.get("description", ""),
                                 "height_mm": raw.get("height_mm", ""),
+                                "dimensions": (summarize_geometry(raw) or {}).get("dimensions", ""),
                                 "date": date_dir,
                                 "path": json_path,
                                 "thumbnail_path": thumb_path if os.path.exists(thumb_path) else None,

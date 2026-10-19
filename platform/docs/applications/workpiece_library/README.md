@@ -1,105 +1,43 @@
-# `src/applications/workpiece_library/` — Workpiece Library
+# Workpiece Library
 
-Browse, view, and manage saved workpiece definitions. Displays the catalogue of all stored workpieces, supports metadata editing, deletion, and opening a workpiece in the editor via a broker event.
+The shared library displays saved workpieces as list cards or a thumbnail grid, with an inspector on the right. Robot systems supply their own schema and storage service; the shell and its navigation stay unchanged.
 
-The library view uses the shared page-title palette, card and table colors, and touch-sized actions used across application screens.
+## Operator workflow
 
----
+- Search by name or storage ID. Recent sorts newest dates first; Name sorts alphabetically; Height sorts numerically from low to high.
+- Switch between list and grid without changing the selected record. Cards show available names, descriptions, dates, dimensions, and height; thumbnails load for visible records.
+- Select a card to inspect its preview, dimensions, business ID, point count, path length, and saved date. The date is the storage date, not a tracked last-edit timestamp.
+- Edit schema-owned fields in the inspector. Name and description use the shared virtual keyboard; height uses `KeyboardNumberField` with numeric entry and minus/plus controls. Save changes becomes available when values differ from the saved record. Sorting and language switching preserve unsaved values for the same selected record.
+- Open in Editor loads the selected record through the existing broker/navigation flow. Delete requires confirmation. These actions are disabled when no record is selected.
+- When a system supplies matching selection, Select reveals checkboxes, Select All, Clear Selection, and Show Selected. Changes persist immediately. Checked storage IDs survive search and view-mode changes; `None` represents all available workpieces.
+- Duplicate appears only for services implementing the optional `IWorkpieceDuplicator` capability. Paint currently implements this capability.
 
-## MVC Structure
+## Ownership and contracts
 
-```
-workpiece_library/
-├── service/
-│   ├── i_workpiece_library_service.py              ← IWorkpieceLibraryService (6 methods)
-│   ├── stub_workpiece_library_service.py           ← 3 hardcoded stub records
-│   └── (implementation in robot_systems/glue/domain/workpieces/)
-├── model/
-│   └── workpiece_library_model.py                  ← Delegation + refresh after mutating ops
-├── view/
-│   └── workpiece_library_view.py                   ← Table + detail panel + action buttons
-├── controller/
-│   └── workpiece_library_controller.py
-└── workpiece_library_factory.py
-```
+`WorkpieceLibraryView` renders schema-owned fields, card delegates, and the inspector. `LibraryCardDelegate` paints cards without allocating a widget for each record. The view emits user-action signals; it does not access storage or the broker.
 
----
+`IWorkpieceLibraryService` provides `get_schema`, `list_all`, `update`, `delete`, `get_thumbnail`, and `load_raw`. `IWorkpieceDuplicator` separately declares `duplicate(storage_id) -> (success, message)` so existing services need not implement unsupported copying.
 
-## `IWorkpieceLibraryService`
+`WorkpieceLibraryModel` delegates storage operations, refreshes its record cache after successful writes, and calculates read-only preview statistics from raw geometry. `WorkpieceLibraryController` maintains search/matching filters and thumbnail caching, handles confirmation and errors, and connects actions to the model. After metadata changes, it refreshes its search cache and reapplies the active filter.
 
-```python
-class IWorkpieceLibraryService(ABC):
-    def list_all(self)                                    -> List[WorkpieceEntry]: ...
-    def delete(self, storage_id: str)                     -> tuple[bool, str]: ...
-    def update_metadata(self, storage_id: str, data: dict) -> tuple[bool, str]: ...
-    def get_thumbnail(self, storage_id: str)              -> Optional[bytes]: ...
-    def load_raw(self, storage_id: str)                   -> Optional[dict]: ...
-    def open_in_editor(self, storage_id: str)             -> None: ...
-```
+`domain/geometry_summary.py` reads the stored outline and `sprayPattern.Contour` / `sprayPattern.Fill` polylines. It reports stored point count, bounding dimensions, and the sum of distances between consecutive path points without joining independent paths. If no process paths exist, length falls back to the closed outline (or the single open line for two points). These are stored-geometry measurements in the workpiece coordinate units displayed as millimeters, not robot timing or a post-interpolation path estimate. Missing geometry displays dashes.
 
-`open_in_editor` publishes `WorkpieceTopics.OPEN_IN_EDITOR` via the broker, which the `WorkpieceEditor` application is subscribed to.
+## Open-in-editor flow
 
----
+The controller loads the selected storage ID, publishes `WorkpieceTopics.OPEN_IN_EDITOR` with `{"raw": raw, "storage_id": storage_id}`, and publishes `ShellTopics.NAVIGATE` for `WorkpieceEditor`. A delayed repeat of the open event supports lazy editor creation. The system's editor loader handles conversion and arms saving as an update of the selected record.
 
-## `WorkpieceLibraryModel`
+## Localization and styling
 
-Adds one key behaviour on top of simple delegation: **refreshes the list after every mutating operation**:
+English and Bulgarian UI strings live under `src/applications/workpiece_library/localization/`, using `WorkpieceLibraryView` and `WorkpieceLibrary` contexts. Runtime retranslation preserves unsaved field values. Record names, descriptions, IDs, and combo options remain user data. Styling uses the shared platform palette and action styles.
 
-```python
-def delete(self, storage_id: str) -> tuple[bool, str]:
-    result = self._service.delete(storage_id)
-    if result[0]:
-        self._entries = self._service.list_all()   # ← refresh
-    return result
+## Verification
 
-def update_metadata(self, storage_id: str, data: dict) -> tuple[bool, str]:
-    result = self._service.update_metadata(storage_id, data)
-    if result[0]:
-        self._entries = self._service.list_all()   # ← refresh
-    return result
+```bash
+QT_QPA_PLATFORM=offscreen .venv/bin/python -m unittest discover -s tests/applications/workpiece_library -v
+QT_QPA_PLATFORM=offscreen .venv/bin/python -m unittest tests.robot_systems.paint.test_paint_workpiece_storage tests.robot_systems.glue.test_workpiece_library_plugin_integration -v
 ```
 
-This keeps the model's cached list consistent without the controller needing to call `load()` after every write.
-
----
-
-## `GlueWorkpieceLibraryService`
-
-The live implementation lives in `src/robot_systems/glue/domain/workpieces/glue_workpiece_library_service.py`. It wraps:
-
-- `WorkpieceService(JsonWorkpieceRepository(path))` — CRUD on JSON files in `storage/workpieces/`
-- `glue_types_fn` — callable that returns current glue type names (from `GlueCatalog`)
-- `tools_fn` — callable that returns current tool options (from `ToolChangerConfig`)
-
----
-
-## Wiring in `GlueRobotSystem`
-
-```python
-service = GlueWorkpieceLibraryService(
-    WorkpieceService(JsonWorkpieceRepository(robot_system.workpieces_storage_path())),
-    glue_types_fn = lambda: catalog.get_all_names(),
-    tools_fn      = lambda: _get_tools(robot_system),
-)
-return WidgetApplication(widget_factory=lambda _ms: WorkpieceLibraryFactory().build(service, _ms))
-```
-
-`ApplicationSpec`: `folder_id=1` (Production), icon `fa5s.book-open`.
-
----
-
-## Open-in-Editor Flow
-
-```
-User clicks "Open in Editor"
-  → controller._on_open_in_editor(storage_id)
-  → service.open_in_editor(storage_id)
-  → broker.publish(WorkpieceTopics.OPEN_IN_EDITOR, {"raw": {...}, "storage_id": "..."})
-
-WorkpieceEditor's _PendingLoader.on_open_requested() receives the payload
-  → stores raw + storage_id
-  → on next create_widget() call, auto-loads the workpiece into the editor canvas
-```
+The tests cover list/grid selection, numeric sorting and height edits, dirty-save state, filtering after writes, matching selection persistence, language switching, geometry measurements, and independent paint duplication.
 
 <!-- source-navigation:start -->
 ## Source navigation

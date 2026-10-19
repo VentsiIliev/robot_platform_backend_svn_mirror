@@ -1,5 +1,7 @@
 import logging
+from uuid import uuid4
 from typing import List, Optional
+from src.applications.workpiece_library.service.i_workpiece_duplicator import IWorkpieceDuplicator
 
 from src.applications.workpiece_library.domain.workpiece_schema import (
     WorkpieceFieldDescriptor,
@@ -24,7 +26,7 @@ def build_paint_workpiece_library_schema() -> WorkpieceSchema:
     )
 
 
-class PaintWorkpieceLibraryService:
+class PaintWorkpieceLibraryService(IWorkpieceDuplicator):
     def __init__(self, workpiece_service):
         self._service = workpiece_service
 
@@ -48,6 +50,7 @@ class PaintWorkpieceLibraryService:
                         "date": meta.get("date", ""),
                         "description": meta.get("description", raw.get("description", "")),
                         "height_mm": meta.get("height_mm", raw.get("height_mm", "")),
+                        "dimensions": meta.get("dimensions", ""),
                     }
                 )
             )
@@ -69,6 +72,17 @@ class PaintWorkpieceLibraryService:
 
     def delete(self, workpiece_id: str) -> tuple[bool, str]:
         return self._service.delete(workpiece_id)
+
+    def duplicate(self, storage_id: str) -> tuple[bool, str]:
+        """Save an independent copy with a new business ID and storage location."""
+        raw = self.load_raw(storage_id)
+        if raw is None:
+            return False, f"Workpiece '{storage_id}' not found"
+        raw = dict(raw)
+        raw["workpieceId"] = uuid4().hex
+        raw["name"] = f"{raw.get('name', '')} (copy)"
+        ok, message = self._service.save(raw)
+        return (True, "Workpiece duplicated") if ok else (False, message)
 
     def get_thumbnail(self, workpiece_id: str) -> Optional[bytes]:
         return self._service.get_thumbnail_bytes(workpiece_id)

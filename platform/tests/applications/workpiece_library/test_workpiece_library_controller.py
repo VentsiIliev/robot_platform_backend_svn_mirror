@@ -68,3 +68,20 @@ class TestWorkpieceLibraryController(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class TestLibraryEditFiltering(unittest.TestCase):
+    def test_edit_updates_search_cache_and_keeps_existing_filter(self):
+        model = MagicMock()
+        model.schema.id_key = 'id'
+        model.schema.name_key = 'name'
+        model.update.return_value = (True, 'Updated')
+        updated = WorkpieceRecord({'id': 'a', 'name': 'Renamed'})
+        model.get_all.return_value = [updated]
+        view = MagicMock()
+        controller = WorkpieceLibraryController(model, view, MagicMock())
+        controller._search_text = 'renamed'
+        controller._on_edit(WorkpieceRecord({'id': 'a', 'name': 'Old'}), {'name': 'Renamed'})
+        self.assertEqual(controller._all_records, [updated])
+        self.assertEqual(view.set_records.call_args.args[0], [updated])
+        controller._on_search('Old')
+        self.assertEqual(view.set_records.call_args.args[0], [])

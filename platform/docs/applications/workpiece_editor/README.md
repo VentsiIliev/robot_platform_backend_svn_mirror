@@ -137,6 +137,20 @@ service = WorkpieceEditorService(
 - **Injected custom actions**: robot systems may add toolbar actions through `ContourEditorUiConfig` and handle them through the factory's `custom_action_handler`. The handler receives the action ID and inner editor, keeping robot-system geometry operations outside the shared view.
 - **Vision optional**: contour overlay and `get_contours()` gracefully return empty lists when vision is unavailable.
 
+## Onboarding tour
+
+The shell Help action calls `WorkpieceEditorView.start_onboarding_tour()`. The editor owns its step definitions in `src/applications/workpiece_editor/onboarding/workpiece_editor_tour.py` and reuses `OnboardingTour` / `OnboardingStep` from `src/applications/base/onboarding/`.
+
+Steps cover capture, the contour canvas, each canvas toolbar button (point visibility, zoom out, reset zoom, zoom in, pan/select), layer expand/visibility/add/lock, segment expand/activation/visibility/delete/settings, point selection, Nudge, tools, path settings, Undo, Redo, preview, save, and execution. The segment-number step also explains press-and-hold layer selection. Nudge explains selecting a single point, expanding the panel, choosing 0.1 / 1 / 10 units, and moving with the directional arrows.
+
+Logical target IDs are resolved to live plugin widgets by the view. List-row targets are resolved again on each step because edits rebuild those rows; the list scrolls to the matching row. Hidden, unavailable, or unpopulated targets are skipped. To see segment and point instructions, load or capture a workpiece and expand the relevant rows before starting Help. The tour does not create geometry, expand rows, or issue robot commands.
+
+Leaving the view or cleaning it up stops the overlay. Changing the language closes an active tour; reopening Help displays the translated text. English and Bulgarian text uses the `WorkpieceEditorOnboarding` context in the app-local catalogs.
+
+```bash
+QT_QPA_PLATFORM=offscreen .venv/bin/python -m unittest tests.applications.workpiece_editor.test_workpiece_editor_onboarding -v
+```
+
 <!-- source-navigation:start -->
 ## Source navigation
 

@@ -11,7 +11,8 @@
     "Could not load workpiece '{storage_id}'": "Could not load workpiece '{storage_id}'",
     "Selection": "Selection",
     "All workpieces selected": "All workpieces selected",
-    "{count} workpiece(s) selected": "{count} workpiece(s) selected"
+    "{count} workpiece(s) selected": "{count} workpiece(s) selected",
+    "Duplicate Failed": "Duplicate Failed"
   },
   "WorkpieceLibraryView": {
     "Workpiece Library": "Workpiece Library",
@@ -20,6 +21,33 @@
     "Select All": "Select All",
     "Show Selected": "Show Selected",
     "Clear Selection": "Clear Selection",
-    "{count} selected": "{count} selected"
+    "{count} selected": "{count} selected",
+    "Date": "Date",
+    "ID {id}": "ID {id}",
+    "Search by name or ID…": "Search by name or ID…",
+    "Geometry statistics unavailable": "Geometry statistics unavailable",
+    "Grid view": "Grid view",
+    "Saved": "Saved",
+    "No preview": "No preview",
+    "Select a workpiece to view details": "Select a workpiece to view details",
+    "Open in Editor": "Open in Editor",
+    "Delete": "Delete",
+    "Gripper": "Gripper",
+    "Refresh": "Refresh",
+    "Name": "Name",
+    "Glue Type": "Glue Type",
+    "Height": "Height",
+    "ID": "ID",
+    "Duplicate": "Duplicate",
+    "Recent": "Recent",
+    "List view": "List view",
+    "Height (mm)": "Height (mm)",
+    "Description": "Description",
+    "{points} points · {length} mm path length": "{points} points · {length} mm path length",
+    "{count} workpieces": "{count} workpieces",
+    "Save changes": "Save changes",
+    "saved date": "saved date",
+    "points": "points",
+    "path length": "path length"
   }
 }

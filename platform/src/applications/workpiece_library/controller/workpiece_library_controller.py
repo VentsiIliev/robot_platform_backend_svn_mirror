@@ -44,10 +44,12 @@ class WorkpieceLibraryController(IApplicationController):
         self._view.selection_changed.connect(self._on_selection)
         self._view.edit_requested.connect(self._on_edit)
         self._view.open_in_editor_requested.connect(self._on_open_in_editor)
+        self._view.duplicate_requested.connect(self._on_duplicate)
+        self._view.set_duplicate_enabled(self._model.duplication_enabled)
+        self._view.visible_thumbnails_requested.connect(self._on_visible_thumbnails)
         if self._model.selection_enabled:
             self._view.selection_requested.connect(self._on_selection_applied)
             self._view.show_selected_changed.connect(self._on_show_selected_changed)
-            self._view.visible_thumbnails_requested.connect(self._on_visible_thumbnails)
 
     # ── Handlers ──────────────────────────────────────────────────────
 
@@ -116,10 +118,21 @@ class WorkpieceLibraryController(IApplicationController):
     def _on_selection(self, record) -> None:
         if record is None:
             self._view.set_thumbnail(None)
+            self._view.set_preview_stats(None)
             return
         workpiece_id = str(record.get_id(self._model.schema.id_key))
         thumbnail = self._model.get_thumbnail(workpiece_id)
         self._view.set_thumbnail(thumbnail)
+        self._view.set_preview_stats(self._model.get_preview_stats(workpiece_id))
+
+    def _on_duplicate(self, record) -> None:
+        storage_id = str(record.get_id(self._model.schema.id_key))
+        ok, message = self._model.duplicate(storage_id)
+        if ok:
+            self._refresh()
+        else:
+            show_warning(self._view, self._t("Duplicate Failed"), message)
+        self._view.set_status(message)
 
     def _on_delete(self, workpiece_id: str) -> None:
         if not ask_yes_no(
@@ -143,13 +156,9 @@ class WorkpieceLibraryController(IApplicationController):
         ok, msg = self._model.update(storage_id, updates)
         self._view.set_status(msg)
         if ok:
-            self._view.set_records(self._model.get_all())
-            updated = next(
-                (r for r in self._model.get_all()
-                 if str(r.get_id(self._model.schema.id_key)) == storage_id),
-                None,
-            )
-            self._view.set_detail(updated)
+            self._all_records = self._model.get_all()
+            self._thumbnail_cache.pop(storage_id, None)
+            self._apply_filter()
         else:
             show_warning(self._view, self._t("Save Failed"), msg)
         _logger.info("Edit %s: %s — %s", storage_id, ok, msg)

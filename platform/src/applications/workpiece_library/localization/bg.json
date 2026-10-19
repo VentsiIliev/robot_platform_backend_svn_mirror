@@ -11,7 +11,8 @@
     "Could not load workpiece '{storage_id}'": "Детайлът '{storage_id}' не може да бъде зареден",
     "Selection": "Избор",
     "All workpieces selected": "Избрани са всички детайли",
-    "{count} workpiece(s) selected": "Избрани {count} детайла"
+    "{count} workpiece(s) selected": "Избрани {count} детайла",
+    "Duplicate Failed": "Неуспешно дублиране"
   },
   "WorkpieceLibraryView": {
     "Workpiece Library": "Библиотека с детайли",
@@ -20,6 +21,33 @@
     "Select All": "Избери всички",
     "Show Selected": "Покажи избраните",
     "Clear Selection": "Изчисти избора",
-    "{count} selected": "Избрани {count}"
+    "{count} selected": "Избрани {count}",
+    "Date": "Дата",
+    "ID {id}": "Номер {id}",
+    "Search by name or ID…": "Търсене по име или номер…",
+    "Geometry statistics unavailable": "Няма статистика за геометрията",
+    "Grid view": "Изглед в мрежа",
+    "Saved": "Запазено",
+    "No preview": "Няма преглед",
+    "Select a workpiece to view details": "Изберете детайл за преглед на данните",
+    "Open in Editor": "Отвори в редактора",
+    "Delete": "Изтриване",
+    "Gripper": "Захват",
+    "Refresh": "Обновяване",
+    "Name": "Име",
+    "Glue Type": "Тип лепило",
+    "Height": "Височина",
+    "ID": "Номер",
+    "Duplicate": "Дублиране",
+    "Recent": "Последни",
+    "List view": "Изглед в списък",
+    "Height (mm)": "Височина (мм)",
+    "Description": "Описание",
+    "{points} points · {length} mm path length": "{points} точки · {length} мм дължина на траекторията",
+    "{count} workpieces": "{count} детайла",
+    "Save changes": "Запази промените",
+    "saved date": "дата на запис",
+    "points": "точки",
+    "path length": "траектория"
   }
 }

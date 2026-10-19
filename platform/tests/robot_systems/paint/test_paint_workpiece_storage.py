@@ -355,3 +355,29 @@ class TestPaintWorkpieceService(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class TestPaintLibraryDuplication(unittest.TestCase):
+    def test_duplicate_has_independent_storage_id_and_preserves_original_geometry(self):
+        from src.robot_systems.paint.domain.workpieces.paint_workpiece_library_service import PaintWorkpieceLibraryService
+        with tempfile.TemporaryDirectory() as directory:
+            repository = JsonPaintWorkpieceRepository(directory)
+            service = PaintWorkpieceService(repository)
+            original = {'workpieceId': 'original', 'name': 'Plate', 'height_mm': 5,
+                        'contour': [[0, 0], [10, 0], [10, 10]],
+                        'sprayPattern': {'Contour': [{'contour': [[0, 0], [10, 0]]}]}}
+            ok, path = service.save(original)
+            self.assertTrue(ok, path)
+            storage_id = Path(path).parent.name
+            library = PaintWorkpieceLibraryService(service)
+            ok, message = library.duplicate(storage_id)
+            self.assertTrue(ok, message)
+            records = repository.list_all()
+            self.assertEqual(len(records), 2)
+            copy_id = next(record['id'] for record in records if record['id'] != storage_id)
+            duplicate = service.load_raw(copy_id)
+            self.assertNotEqual(duplicate['workpieceId'], original['workpieceId'])
+            self.assertEqual(duplicate['name'], 'Plate (copy)')
+            self.assertEqual(duplicate['contour'], original['contour'])
+            self.assertEqual(duplicate['sprayPattern'], original['sprayPattern'])
+            self.assertEqual(service.load_raw(storage_id), original)
+            self.assertTrue(service.get_thumbnail_bytes(copy_id))
