@@ -10,6 +10,42 @@ collision checking. It estimates contact from actuator torque and a robot
 model; contacts that produce little observable joint torque can remain below
 threshold.
 
+## Current validation status and known limitation
+
+The current implementation is still under commissioning and is **not yet
+validated as a production safety function**. Active stopping works, but normal
+collision-free motion can still produce occasional false-positive detections.
+On 2026-10-19, for example, the C++ real-time detector latched Joint 3 during
+the collision-free transition from plate release into the blended plate-exit
+trajectory. The configured 25 ms confirmation interval was exceeded, so this
+was a sustained model/envelope miss rather than a single noisy sample.
+
+An important suspected cause is selection bias in the current fitted residual
+correction: peak-preserving samples were used during model fitting. Those
+samples are useful for calibrating and validating a worst-case threshold
+envelope, but they over-represent extreme residuals and are not an appropriate
+substitute for uniformly sampled data when estimating the centre of normal
+collision-free torque. Passing held-out peak sessions therefore does not prove
+that all normal start, stop, reversal, blend, plate-entry, and plate-exit
+regimes are covered.
+
+Until the residual model is retrained on representative uniformly sampled
+collision-free sessions and validated by holding out complete sessions and
+motion regimes:
+
+- treat active collision stopping as commissioning functionality;
+- use supervised contact tests and collision-free process validation before
+  enabling it on a deployment;
+- do not respond to new false positives solely by repeatedly increasing joint
+  thresholds, because that reduces sensitivity without correcting the model;
+- use peak-preserving recordings for envelope validation, not as the primary
+  residual-model training dataset.
+
+The production design should also retain a bounded automatic trigger snapshot
+containing residual, threshold, position, velocity, acceleration, and
+exceedance duration. An external recorder may assist commissioning, but daily
+manual recording must not be required for reliable operation or diagnosis.
+
 ## System overview
 
 The runtime pipeline is:
