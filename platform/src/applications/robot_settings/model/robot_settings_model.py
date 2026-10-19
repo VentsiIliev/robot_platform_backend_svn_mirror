@@ -102,3 +102,6 @@ class RobotSettingsModel(IApplicationModel):
 
     def save_collision_monitor_config(self, config: dict) -> dict:
         return self._service.save_collision_monitor_config(config)
+
+    def open_collision_monitor_diagnostics(self) -> dict:
+        return self._service.open_collision_monitor_diagnostics()

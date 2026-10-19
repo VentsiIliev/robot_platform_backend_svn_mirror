@@ -20,7 +20,7 @@ class DryRunDatasetExhausted(RuntimeError):
 
 
 class PaintDryRunSnapshotSource:
-    """Place reusable mm-sized contours randomly inside the active Paint area."""
+    """Place reusable mm-sized contours inside the active capture area."""
 
     def __init__(
         self,
@@ -89,12 +89,20 @@ class PaintDryRunSnapshotSource:
             [transformer.transform(float(x), float(y)) for x, y in boundary_px],
             dtype=np.float64,
         )
+        fixed_center_mm = None
+        if placement_key == "paint":
+            center_px = _polygon_center(boundary_px)
+            fixed_center_mm = np.asarray(
+                transformer.transform(float(center_px[0]), float(center_px[1])),
+                dtype=np.float64,
+            )
         contour_mm, angle_deg, center_mm = self._place_item(
             item,
             boundary_mm,
             index,
             placement_key=placement_key,
             work_area_id=active_work_area_id,
+            fixed_center_mm=fixed_center_mm,
         )
         placement_elapsed_s = perf_counter() - capture_started
         inverse_started = perf_counter()
@@ -139,6 +147,7 @@ class PaintDryRunSnapshotSource:
             "contour_px": contour_px.reshape(-1, 2).tolist(),
             "work_area_id": active_work_area_id,
             "placement_key": placement_key,
+            "placement_mode": "work_area_center" if fixed_center_mm is not None else "random",
             "placement_margin_mm": self._margin_mm,
         }
         return VisionCaptureSnapshot(
@@ -173,6 +182,7 @@ class PaintDryRunSnapshotSource:
         *,
         placement_key: str,
         work_area_id: str,
+        fixed_center_mm: np.ndarray | None = None,
     ):
         normalized = np.asarray(item["contour_normalized"], dtype=np.float64).reshape(-1, 2)
         local = normalized * np.array([float(item["width_mm"]), float(item["height_mm"])])
@@ -201,14 +211,17 @@ class PaintDryRunSnapshotSource:
             rotated = local @ rotation.T
             rotated_minimum = np.min(rotated, axis=0)
             rotated_maximum = np.max(rotated, axis=0)
-            center_minimum = minimum + self._margin_mm - rotated_minimum
-            center_maximum = maximum - self._margin_mm - rotated_maximum
-            if np.any(center_minimum > center_maximum):
-                continue
-            center = np.array([
-                rng.uniform(float(center_minimum[0]), float(center_maximum[0])),
-                rng.uniform(float(center_minimum[1]), float(center_maximum[1])),
-            ])
+            if fixed_center_mm is None:
+                center_minimum = minimum + self._margin_mm - rotated_minimum
+                center_maximum = maximum - self._margin_mm - rotated_maximum
+                if np.any(center_minimum > center_maximum):
+                    continue
+                center = np.array([
+                    rng.uniform(float(center_minimum[0]), float(center_maximum[0])),
+                    rng.uniform(float(center_minimum[1]), float(center_maximum[1])),
+                ])
+            else:
+                center = np.asarray(fixed_center_mm, dtype=np.float64).reshape(2)
             placed = rotated + center
             if self._footprint_is_inside(polygon, placed):
                 return placed, angle_deg, center
@@ -261,6 +274,21 @@ class PaintDryRunSnapshotSource:
             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (30, 30, 180), 2, cv2.LINE_AA,
         )
         return frame
+
+
+def _polygon_center(points: np.ndarray) -> tuple[float, float]:
+    """Match the magazine-release work-area centroid calculation."""
+    area = np.asarray(points, dtype=np.float64).reshape(-1, 2)
+    if len(area) < 3:
+        raise RuntimeError("Dry-run work area requires at least three points")
+    contour = area.astype(np.float32).reshape(-1, 1, 2)
+    moments = cv2.moments(contour)
+    if abs(float(moments.get("m00", 0.0))) > 1e-9:
+        return (
+            float(moments["m10"] / moments["m00"]),
+            float(moments["m01"] / moments["m00"]),
+        )
+    return float(np.mean(area[:, 0])), float(np.mean(area[:, 1]))
 
 
 def _segment_distance(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray) -> float:

@@ -658,6 +658,11 @@ class MotionService(IMotionService):
         return method(config) if callable(method) else {
             "success": False, "error": "collision_monitor_config_unsupported"}
 
+    def open_collision_monitor_diagnostics(self) -> dict:
+        method = getattr(self._robot, "open_collision_monitor_diagnostics", None)
+        return method() if callable(method) else {
+            "success": False, "error": "collision_monitor_diagnostics_unsupported"}
+
     def start_collision_calibration_recording(self) -> dict:
         method = getattr(self._robot, "start_collision_calibration_recording", None)
         return method() if callable(method) else {

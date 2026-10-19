@@ -11,13 +11,23 @@ _logger = logging.getLogger(__name__)
 class PaintVacuumControl:
     """Apply paint pickup/release policy to the platform vacuum controller."""
 
-    def __init__(self, pump: IVacuumPumpController | None, *, enabled_provider: Callable[[], bool]) -> None:
+    def __init__(
+        self,
+        pump: IVacuumPumpController | None,
+        *,
+        enabled_provider: Callable[[], bool],
+        dry_run_provider: Callable[[], bool] | None = None,
+    ) -> None:
         self._pump = pump
         self._enabled_provider = enabled_provider
+        self._dry_run_provider = dry_run_provider or (lambda: False)
 
     @timed_step(_logger, "vacuum_on")
     def turn_vacuum_on(self, *, required: bool = False) -> tuple[bool, str]:
         """Enable the vacuum pump before pickup if one is configured."""
+        if self._dry_run_provider():
+            _logger.info("[DRY_RUN] Vacuum pump ON skipped")
+            return True, ""
         if not self._enabled_provider():
             if required:
                 _logger.error("[PICKUP] Vacuum pump is required but disabled; refusing to start motion")
@@ -43,6 +53,9 @@ class PaintVacuumControl:
     @timed_step(_logger, "vacuum_off")
     def turn_vacuum_off(self, *, wait_for_blow_off: bool = True) -> tuple[bool, str]:
         """Disable the vacuum pump after staging if one is configured."""
+        if self._dry_run_provider():
+            _logger.info("[DRY_RUN] Vacuum pump OFF skipped")
+            return True, ""
         if not self._enabled_provider():
             _logger.info("[PICKUP] Vacuum pump OFF skipped: disabled by configuration")
             return True, ""

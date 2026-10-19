@@ -47,6 +47,8 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
             self._on_collision_config_refresh)
         self._view.collision_config_save_requested.connect(
             self._on_collision_config_save)
+        self._view.collision_diagnostics_open_requested.connect(
+            self._on_collision_diagnostics_open)
         self._view.destroyed.connect(self.stop)
         if self._messaging is not None:
             self._messaging.subscribe(
@@ -81,6 +83,8 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
                 self._on_collision_config_refresh)
             self._view.collision_config_save_requested.disconnect(
                 self._on_collision_config_save)
+            self._view.collision_diagnostics_open_requested.disconnect(
+                self._on_collision_diagnostics_open)
         except (RuntimeError, TypeError):
             pass
         if self._messaging is not None:
@@ -207,6 +211,26 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
             on_done=self._on_collision_config_saved,
             on_error=self._on_collision_config_error,
         )
+
+    def _on_collision_diagnostics_open(self) -> None:
+        self._view.set_collision_config_busy(True)
+        self._run_in_thread(
+            fn=self._model.open_collision_monitor_diagnostics,
+            on_done=self._on_collision_diagnostics_opened,
+            on_error=self._on_collision_config_error,
+        )
+
+    def _on_collision_diagnostics_opened(self, result) -> None:
+        if not isinstance(result, dict) or not result.get("success"):
+            self._on_collision_config_error(
+                str(result.get("error", "PlotJuggler could not be opened"))
+                if isinstance(result, dict) else "PlotJuggler could not be opened")
+            return
+        config = result.get("config")
+        if isinstance(config, dict):
+            self._view.load_collision_config(config)
+        self._view.set_collision_config_status(
+            self._t("PlotJuggler opened with live observer diagnostics"), True)
 
     def _on_collision_config_loaded(self, result) -> None:
         if not isinstance(result, dict) or not result.get("success"):

@@ -1480,6 +1480,19 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             logger.error("Collision monitor configuration update failed: %s", exc)
             return {"success": False, "error": str(exc)}
 
+    def open_collision_monitor_diagnostics(self) -> dict:
+        try:
+            response = self._session.post(
+                f"{self.server_url}/collision/monitor/diagnostics/open",
+                timeout=5,
+            )
+            raw = response.json()
+            return raw if isinstance(raw, dict) else {
+                "success": False, "error": "invalid_response"}
+        except Exception as exc:
+            logger.error("Collision diagnostics launch failed: %s", exc)
+            return {"success": False, "error": str(exc)}
+
     def start_collision_calibration_recording(self) -> dict:
         """Start a passive backend recording session for externally owned motion."""
         try:

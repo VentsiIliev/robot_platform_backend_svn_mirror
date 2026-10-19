@@ -96,7 +96,7 @@ User clicks Save
 | Safety | `SAFETY_LIMITS_GROUP` | x/y/z/rx/ry/rz min+max bounds |
 | Movement Groups | `MovementGroupsTab` (raw) | Named positions: name, position string, vel, acc |
 | Targeting | `TargetingDefinitionsTab` (raw) | Generic named points and frames supplied by the active robot system |
-| Sensorless Collision | `SensorlessCollisionTab` (optional raw tab) | Detection enable, active/passive response, primary sensitivity, confirmation cycles, dynamic threshold controls, per-joint observer thresholds, and optional secondary effort/following-error thresholds |
+| Sensorless Collision | `SensorlessCollisionTab` (optional raw tab) | C++ real-time detector enable, active/passive response, sensitivity, confirmation duration in milliseconds, dynamic threshold controls, and per-joint observer thresholds. The legacy Python secondary detector is deprecated and forced off by the backend. |
 
 The Targeting tab uses the shared `KeyboardNumberField` for editable camera-to-TCP X/Y offsets, including read-only inherited area values.
 | Calibration | `CALIBRATION_ADAPTIVE_GROUP`, `CALIBRATION_MARKER_GROUP`, `CALIBRATION_AXIS_MAPPING_GROUP`, `CALIBRATION_CAMERA_TCP_GROUP` | Adaptive movement params, marker/z settings, axis-mapping settings, standalone camera-TCP settings, and optional in-main-calibration TCP capture settings |
@@ -132,9 +132,26 @@ widget = RobotSettingsFactory().build(RobotSettingsApplicationService(settings_s
 - **Standard shared app**: If a robot system uses the shared `RobotSettings` and `RobotCalibrationSettings` engine models, it should reuse this application rather than creating a robot-system-specific copy.
 - **No broker subscriptions**: `RobotSettingsController.stop()` is a no-op. The application does not receive live data.
 - **Backend-confirmed collision settings**: the collision tab loads the live monitor configuration and saves through the robot service. The backend is authoritative and must echo the applied state; the UI does not treat a local field change as applied until the request succeeds.
-- **Primary and secondary detectors are separate**: the external-torque observer is the primary detector. The effort-plus-following-error detector is optional and has its own enable switch and per-joint thresholds.
+- **C++ observer is authoritative**: platform settings are acknowledged and
+  persisted by `zeroerr/RealtimeCollisionController`. The deprecated Python
+  observer is neither launched nor used as a fallback. The former
+  effort-plus-following-error secondary detector is forced off.
 
 → Subpackages: [service/](service/README.md) · [model/](model/README.md) · [view/](view/README.md) · [controller/](controller/README.md)
+
+## Sensorless collision diagnostics
+
+For ZeroErr ROS2 robots, the **Sensorless Collision** tab exposes an opt-in
+**Live observer diagnostics** switch. Applying it controls high-rate backend
+topics for C++ external torque and current dynamic thresholds. These
+diagnostics are observational only and do not disable collision protection.
+Publication is non-blocking and best-effort, so PlotJuggler may receive fewer
+samples than the 2 kHz observer update rate.
+
+**Open PlotJuggler** uses the robot-service contract to call the backend launch
+endpoint. The backend enables diagnostics and opens its packaged collision
+observer layout. If PlotJuggler or a graphical display is unavailable, the tab
+shows the backend error and leaves the application responsive.
 
 <!-- source-navigation:start -->
 ## Source navigation

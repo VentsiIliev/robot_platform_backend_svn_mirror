@@ -20,16 +20,19 @@ The runtime pipeline is:
    error, and repeatable direction-dependent motion residual.
 4. Run the generalized-momentum observer to estimate external joint torque.
 5. Compute a direction- and motion-conditioned threshold for every joint.
-6. Require the configured number of consecutive threshold exceedances.
+6. Require continuous threshold exceedance for `confirm_duration_ms`, measured
+   from the synchronous controller periods.
 7. In passive mode, report and latch the collision. In active mode, also stop
    motion and activate the backend motion interlock.
 8. Keep new motion and drive-enable requests blocked until the platform
    operator acknowledges the collision.
 
-The primary implementation is
-`zeroerr/scripts/zeroerr_collision_monitor.py`. The reusable dynamics classes
-are under
-`erob_moveit_runtime/scripts/safety/collision_detection/`.
+The production implementation is the C++ ros2_control plugin
+`zeroerr/RealtimeCollisionController` in
+`zeroerr/collision_detection/runtime/src/realtime_collision_controller.cpp`.
+The former Python node
+`zeroerr_collision_monitor.py` is deprecated, is not launched, and is retained
+only for offline comparison and legacy tests. It is not a runtime fallback.
 
 ## Why the model is direction dependent
 
@@ -104,14 +107,11 @@ where `x+ = max(x, 0)` and `x- = max(-x, 0)`. Velocity and acceleration are
 clipped to the range covered by training data. Extrapolation beyond measured
 motion is deliberately not allowed.
 
-Current tooling note: `zeroerr_residual_model_fit.py` fits Coulomb/viscous
-friction and pose correction. It does **not** generate
-`motion_residual_correction_coefficients`. Those coefficients are runtime-
-supported deployed calibration data, but this repository currently has no
-standalone reproducible fitter for them. Do not hand-tune or regenerate them
-without adding an equivalent session-held-out fitting and validation tool. The
-fully reproducible direction-aware fitter currently provided by the repository
-is the dynamic-threshold fitter described below.
+`zeroerr_motion_model_fit.py` reproducibly fits friction, pose, and
+`motion_residual_correction_coefficients` together and validates them by holding
+out each complete session. The older `zeroerr_residual_model_fit.py` is retained
+for comparison with historical symmetric-friction fits and should not be used
+for new deployments.
 
 ### Generalized-momentum observer
 
@@ -129,13 +129,18 @@ active until all observer inputs are valid and warm-up has completed. Warm-up
 requires both the configured elapsed time and `warmup_min_samples` complete,
 finite stationary samples; continuous motion cannot make the observer ready.
 
-The monitor processes only complete six-joint samples. `/joint_states` and
-`/dynamic_joint_states` must both remain newer than `input_timeout_sec`, and
-their most recent complete samples must be within
-`input_sync_tolerance_sec`. Missing joints/interfaces, stale streams,
-non-finite inputs, or non-finite model/observer outputs invalidate readiness,
-clear published estimates, and restart stationary warm-up. Cached partial data
-is never combined with a newer message for collision decisions.
+The controller reads position, velocity, torque sensor, statusword, and error
+code directly from the loaned ros2_control state interfaces during the same
+synchronous update. No DDS subscription or Python callback lies in the
+detection path, and values from independently delivered topics are never mixed.
+Observer integration, acceleration estimation, threshold evolution, and
+confirmation all use the ros2_control period. Invalid/non-finite state or drives
+that are not operation-enabled reset readiness and stationary warm-up.
+
+Changing the update rate changes the discrete observer filter and the sampled
+velocity/acceleration distribution. Refit and validate models using clean data
+captured under the deployed controller rate before raising sensitivity or
+enabling production stopping.
 
 Torque telemetry deliberately distinguishes two model quantities:
 
@@ -167,6 +172,10 @@ features:
 Positive and negative velocity and acceleration are independent features. A
 decaying peak envelope (`dynamic_threshold_decay_sec`) holds recent motion
 briefly so acceleration or reversal transients are not forgotten immediately.
+The fitter uses non-negative least squares with ridge regularization. All motion
+coefficients are therefore non-negative: increasing any directional velocity or
+acceleration feature cannot reduce the fitted threshold. The static floor and
+maximum-ratio clamp remain independent runtime safeguards.
 
 At runtime:
 
@@ -184,11 +193,66 @@ Thus:
 - above 100% is more sensitive and lowers thresholds;
 - below 100% is less sensitive and raises thresholds;
 - `dynamic_threshold_max_ratio` limits how much fast motion can mask contact;
-- `confirm_cycles` rejects isolated spikes at the cost of detection delay.
+- `confirm_duration_ms` requires continuous threshold exceedance for a fixed
+  controller-period duration. Its behavior is independent of ROS diagnostics;
+  increasing it rejects longer spikes at the cost of detection delay.
 
-Sensitivity and confirmation count are operational adjustments, not substitutes
+Sensitivity and confirmation duration are operational adjustments, not substitutes
 for representative clean data. Validate every change through the full production
 motion range and with supervised contact tests.
+
+## Runtime timing diagnostics
+
+`/zeroerr/collision_rt/timing` reports cumulative controller updates, update
+overruns, latest/max observer execution time, readiness, and the implementation
+identifier `cpp_realtime`. The controller update count—not the PlotJuggler topic
+rate—is the authoritative observer-rate measurement.
+
+Verified on 2026-10-16 at a 2 kHz ros2_control/EtherCAT rate:
+
+- controller active and Python observer absent;
+- 153,984 synchronous updates observed;
+- zero overruns;
+- latest measured update 55.629 us;
+- maximum measured update 81.801 us, below the 500 us cycle budget;
+- observer ready after stationary warm-up.
+
+## In-process 2 kHz controller
+
+`zeroerr/RealtimeCollisionController` runs inside the synchronous
+`controller_manager` update loop. It reads each joint's `position`, `velocity`,
+and `torque_sensor` loaned state interfaces directly after the EtherCAT hardware
+read, then runs the KDL momentum observer and time-based threshold decision.
+This controller is the sole production collision observer. The former
+`zeroerr_collision_monitor.py` implementation is deprecated, is not started by
+the launch files, and is retained only for offline comparison and legacy tests.
+ROS is used for the existing runtime control contracts and diagnostics:
+
+- `/zeroerr/collision_monitor/config` and `config_state` for live platform settings;
+- `/zeroerr/collision_monitor/acknowledged` for explicit latch reset and warm-up;
+- `/zeroerr/collision_monitor/stop_request` for active collision response;
+- `/zeroerr/collision_monitor/state` for observer readiness;
+- `/zeroerr/collision_monitor/plot/external_torque` and
+  `/zeroerr/collision_monitor/plot/external_torque_threshold`, attempted at the
+  configured plot period (0.5 ms / 2 kHz by default);
+- `/zeroerr/collision_rt/timing`
+
+`active_stop_enabled` is controlled live by the platform. When enabled, a
+confirmed threshold crossing remains latched until the operator acknowledgement
+is received; acknowledgement restarts observer warm-up before recovery motion is
+released. Confirm that `last_update_us` stays below the 500 us cycle budget and
+`overruns` remains zero. Plot publication is independent of the 100 Hz timing
+telemetry and may be disabled with `diagnostics_enabled` without disabling
+collision decisions.
+
+Plot topics are explicitly best-effort diagnostics. Their
+`RealtimePublisher::trylock()` calls never block the controller; a busy ROS
+transport may therefore skip diagnostic publications. In the 2026-10-16 test,
+`ros2 topic hz` received roughly 1.11-1.14 kHz even though the authoritative
+controller counter ran at 2 kHz with zero overruns. This is expected separation:
+the observer and decision execute at 2 kHz, while ROS/PlotJuggler delivery is
+not guaranteed at 2 kHz. Do not replace the non-blocking publisher with a
+blocking publish operation merely to improve graph density.
 
 ## Collision-free data collection
 
@@ -209,6 +273,84 @@ The best dataset contains multiple timestamp-separated sessions and covers:
 Do not collect only slow calibration sweeps if production runs faster. Do not
 fit deliberate collision samples as normal behavior. Keep raw sessions so a
 bad session can be removed and the model reproduced.
+
+### Peak-preserving C++ recorder
+
+The real-time controller examines every 2 kHz update and retains, independently
+for every joint, the sample with the largest absolute observer residual in each
+10 ms timing window. It publishes those compact snapshots on
+`/zeroerr/collision_rt/peak_samples`. This preserves short start/stop/reversal
+transients without performing disk I/O or blocking ROS publication in the
+control loop.
+
+Record one collision-free production session with:
+
+```bash
+ros2 run zeroerr zeroerr_peak_recorder.py
+```
+
+Stop with Ctrl-C. Each run creates a new directory under
+`~/zeroerr_data/collision_detection/peak_sessions/` containing
+`peak_samples.csv` and `metadata.json`. Use separate runs for training and
+held-out validation. Never include supervised contact tests in model-fitting
+inputs.
+
+The peak stream is intended for false-positive/tail modeling. Keep ordinary
+collision-free trajectory coverage as well, because peak-only samples do not
+represent the centre of the residual distribution.
+
+### Torque, timestamp, payload, and URDF audit
+
+Run the audit against every candidate session and the exact expanded URDF used
+at runtime:
+
+```bash
+ros2 run zeroerr zeroerr_collision_model_audit.py \
+  --input SESSION_1/peak_samples.csv \
+  --input SESSION_2/peak_samples.csv \
+  --urdf /path/to/runtime-expanded.urdf \
+  --output collision_model_audit.json
+```
+
+The report checks timestamp intervals, software torque-channel scale/sign
+agreement, observed joint ranges, URDF limits, and declared link mass. Matching
+`torque_sensor` and `measured_torque` proves only software consistency. Absolute
+Nm scaling still requires a traceable known-load test, and declared URDF mass
+must be checked against the physically installed tool/payload.
+
+An audit of the historical combined CSV on 2026-10-16 found exact internal
+torque-channel agreement, but also found an observed J5 range beyond the chosen
+URDF upper limit and implausible 1000 rad/s velocity limits in that URDF. These
+must be resolved against the actual runtime URDF before treating its limits as
+physical validation.
+
+### Reproducible motion-model fit
+
+The deployed model can be regenerated with session-held-out validation:
+
+```bash
+ros2 run zeroerr zeroerr_motion_model_fit.py \
+  --input SESSION_1/peak_samples.csv \
+  --input SESSION_2/peak_samples.csv \
+  --input SESSION_3/peak_samples.csv \
+  --config /path/to/collision_monitor_config.json
+```
+
+Preview mode writes `motion_model_fit_report.json`. Add `--apply` only after
+every joint improves both held-out RMSE and held-out p99 absolute residual in
+every session. Partial deployment is refused. The fitted model contains:
+
+- positive/negative Coulomb friction;
+- positive/negative static friction;
+- a smooth zero-velocity transition and Stribeck decay;
+- viscous friction;
+- pose-dependent trigonometric correction;
+- signed velocity and acceleration motion-residual correction.
+
+Acceleration is now derived at 2 kHz and passed through a deterministic
+first-order low-pass filter (`acceleration_filter_cutoff_hz`, default 40 Hz)
+before inverse dynamics, correction, and threshold features. Any change to this
+cutoff requires new sessions and a refit.
 
 ### External-motion recording
 
@@ -279,7 +421,7 @@ Preview the robust ridge/Huber fit:
 ```bash
 ros2 run zeroerr zeroerr_residual_model_fit.py \
   --input /path/to/combined_collision_training.csv \
-  --config /path/to/zeroerr/config/collision_monitor_config.json
+  --config /path/to/zeroerr/collision_detection/config/collision_monitor_config.json
 ```
 
 The fitted target is:
@@ -299,7 +441,7 @@ results are acceptable:
 ```bash
 ros2 run zeroerr zeroerr_residual_model_fit.py \
   --input /path/to/combined_collision_training.csv \
-  --config /path/to/zeroerr/config/collision_monitor_config.json \
+  --config /path/to/zeroerr/collision_detection/config/collision_monitor_config.json \
   --apply
 ```
 
@@ -315,13 +457,13 @@ ros2 run zeroerr zeroerr_dynamic_threshold_fit.py \
   --input /path/to/collision_training.csv \
   --run /path/to/calibration_runs/run_1 \
   --run /path/to/calibration_runs/run_2 \
-  --config /path/to/zeroerr/config/collision_monitor_config.json
+  --config /path/to/zeroerr/collision_detection/config/collision_monitor_config.json
 ```
 
-Defaults fit the 99.9th percentile and apply a 1.10 margin. Each joint requires
-at least 100 usable samples. The output reports sample count, calibration
-exceedance fraction, maximum covered velocity/acceleration and predicted
-threshold range.
+Defaults fit the 99.9th percentile and apply a 1.10 margin. The non-negative
+ridge fit guarantees a monotonic motion envelope. Each joint requires at least
+100 usable samples. The output reports sample count, calibration exceedance
+fraction, maximum covered velocity/acceleration and predicted threshold range.
 
 After reviewing the preview, repeat with `--apply`. The script writes:
 
@@ -415,32 +557,55 @@ while the detector is suppressed. EtherCAT/drive faults are never bypassed.
 
 ## Main configuration fields
 
-`zeroerr/config/collision_monitor_config.json` contains the fitted model and
+`zeroerr/collision_detection/config/collision_monitor_config.json` contains the fitted model and
 operational settings:
 
 - `detection_enabled`: global runtime enable/disable switch for new detections;
-- `effort_following_error_detection_enabled`: enables the optional secondary
-  detector, which requires both measured effort and raw drive following error
-  to exceed their per-joint thresholds; when disabled, only the external-torque
-  observer detector runs;
+- `effort_following_error_detection_enabled`: deprecated and forced off because
+  the C++ torque observer is the only production detector;
 - `external_torque_thresholds`: per-joint static floors;
 - `dynamic_threshold_coefficients`: direction-aware envelope model;
 - `dynamic_threshold_training_limits`: maximum trained `|dq|` and `|ddq|`;
 - `dynamic_threshold_decay_sec`: transient-envelope decay;
 - `dynamic_threshold_max_ratio`: upper cap relative to static floor;
 - `collision_sensitivity_percent`: global calibrated-threshold scale;
-- `confirm_cycles`: consecutive detections required to latch;
-- `active_stop_enabled`: report-only versus stop-motion behavior;
+- `confirm_duration_ms`: continuous measurement-time exceedance required to latch;
+- `active_stop_enabled`: publish a stop request after a confirmed collision;
+- `diagnostics_enabled`: opt-in publication of high-rate, per-joint PlotJuggler
+  topics under `/zeroerr/collision_monitor/plot/*`;
 - `friction_coulomb_nm`, `friction_viscous_nm_per_rad_s`: drivetrain model;
 - `position_correction_coefficients`: pose-dependent correction;
 - `motion_residual_correction_coefficients`: signed velocity/acceleration
   correction;
 - `motion_residual_correction_limits`: correction training envelope.
 
-`zeroerr/config/runtime.yaml` controls monitor launch, period, observer gain,
-input freshness/synchronization limits, minimum stationary warm-up samples,
-drive-stability gate, warm-up, raw logging, GUI launch and calibration-runner
-settings.
+`zeroerr/config/ros2_controllers.yaml` controls the C++ observer gain, plot and
+timing publication periods, stationary warm-up, drive-stability gate, links,
+and joint interfaces. `zeroerr/config/runtime.yaml` retains non-real-time GUI
+and calibration-runner settings; it no longer selects a Python production
+observer.
+
+## Live observer diagnostics
+
+Robot Settings → Sensorless Collision provides **Live observer diagnostics** and
+**Open PlotJuggler** controls. Diagnostics do not alter thresholds, latching, or
+the active/passive response. They attempt non-blocking publication at the
+configured plot period while enabled. The supplied layout compares all six
+joints for:
+
+- filtered external torque;
+- the current motion-dependent positive threshold.
+
+The threshold is symmetric, so its negative boundary is the negated published
+value. Plot delivery may be lower than 2 kHz and must not be used to infer the
+observer execution rate; use `/zeroerr/collision_rt/timing` instead.
+
+The backend endpoint `POST /collision/monitor/diagnostics/open` enables the
+streams and launches the installed layout
+`zeroerr/collision_detection/diagnostics/collision_observer_plotjuggler.xml`.
+The installed compatibility path remains `share/zeroerr/config/`. Install the optional GUI on
+the backend workstation with `sudo apt install ros-jazzy-plotjuggler-ros`.
+Disable the platform switch after testing to stop the additional plot traffic.
 
 ## Troubleshooting principles
 
@@ -461,11 +626,13 @@ settings.
 
 ## Related documents and tools
 
-- `zeroerr/docs/COLLISION_CALIBRATION_RUNNER.md`: operator runbook.
+- `zeroerr/collision_detection/docs/COLLISION_CALIBRATION_RUNNER.md`: operator runbook.
 - `zeroerr/docs/ACTUATOR_MASS_MODELING.md`: robot dynamics assumptions.
 - `zeroerr/docs/MOTOR_MASS_ASSUMPTIONS.md`: actuator mass assumptions.
-- `zeroerr/scripts/zeroerr_calibration_coverage_plot.py`: coverage plots.
-- `zeroerr/scripts/zeroerr_collision_status_gui.py`: diagnostic status GUI.
+- `zeroerr/collision_detection/calibration/data_collection/zeroerr_calibration_coverage_plot.py`:
+  coverage plots.
+- `zeroerr/collision_detection/diagnostics/zeroerr_collision_status_gui.py`:
+  diagnostic status GUI.
 - `docs/A_universal_algorithm_for_sensorless_collision_det.pdf`: background
   paper; the deployed implementation is the repository code and configuration
   documented here.

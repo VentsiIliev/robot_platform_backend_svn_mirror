@@ -52,6 +52,7 @@ class RobotSettingsView(IApplicationView):
     execute_requested  = pyqtSignal(str)   # group_name
     collision_config_refresh_requested = pyqtSignal()
     collision_config_save_requested = pyqtSignal(dict)
+    collision_diagnostics_open_requested = pyqtSignal()
 
     def __init__(self, movement_group_definitions: list[MovementGroupDefinition] | None = None,
                  show_sensorless_collision_tab: bool = False, parent=None):
@@ -149,6 +150,8 @@ class RobotSettingsView(IApplicationView):
             self.collision_config_refresh_requested)
         self._collision_tab.save_requested.connect(
             self.collision_config_save_requested)
+        self._collision_tab.open_diagnostics_requested.connect(
+            self.collision_diagnostics_open_requested)
         self._replace_tab_with_widget(
             index=4, title="Sensorless Collision", widget=self._collision_tab)
         self.collision_config_refresh_requested.emit()

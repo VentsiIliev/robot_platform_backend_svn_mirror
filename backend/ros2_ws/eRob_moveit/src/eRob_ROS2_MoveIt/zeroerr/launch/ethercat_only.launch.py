@@ -67,6 +67,10 @@ def generate_launch_description():
         cmd=["ros2", "run", "controller_manager", "spawner", "manipulator_controller"],
         output="screen",
     )
+    load_realtime_collision_controller = ExecuteProcess(
+        cmd=["ros2", "run", "controller_manager", "spawner", "realtime_collision_controller"],
+        output="screen",
+    )
     load_drive_enable_set_controller = ExecuteProcess(
         cmd=["ros2", "run", "controller_manager", "spawner", "drive_enable_set_controller", "--inactive"],
         output="screen",
@@ -91,47 +95,6 @@ def generate_launch_description():
         executable="ethercat_sdo_srv_server",
         name="ethercat_sdo_srv_server",
         output="screen",
-    )
-
-    sensorless_collision_monitor = Node(
-        package="zeroerr",
-        executable="zeroerr_collision_monitor.py",
-        output="screen",
-        emulate_tty=True,
-        condition=IfCondition(enable_sensorless_collision_monitor),
-        parameters=[{
-            "slave_count": 6,
-            "poll_period_sec": float(runtime_value(
-                package_path,
-                "SENSORLESS_COLLISION_MONITOR_PERIOD_SEC",
-                0.01,
-            )),
-            "input_sample_period_sec": 0.0,
-            "input_timeout_sec": float(runtime_value(
-                package_path, "SENSORLESS_COLLISION_INPUT_TIMEOUT_SEC", 0.25)),
-            "input_sync_tolerance_sec": float(runtime_value(
-                package_path, "SENSORLESS_COLLISION_INPUT_SYNC_TOLERANCE_SEC", 0.10)),
-            "warmup_min_samples": int(runtime_value(
-                package_path, "SENSORLESS_COLLISION_WARMUP_MIN_SAMPLES", 20)),
-            "print_table": False,
-            "urdf_path": urdf_path,
-            "base_link": "base_link",
-            "tip_link": runtime_value(package_path, "COLLISION_TIP_LINK", "tool0"),
-            "num_joints": int(runtime_value(package_path, "NUM_JOINTS", 6)),
-            "collision_config_path": os.path.join(
-                package_path, "config", "collision_monitor_config.json"
-            ),
-            "torque_log_enabled": bool(runtime_value(
-                package_path,
-                "SENSORLESS_COLLISION_LOG_ENABLED",
-                False,
-            )),
-            "torque_log_path": str(runtime_value(
-                package_path,
-                "SENSORLESS_COLLISION_LOG_PATH",
-                "/home/ilv/ros2_ws/eRob_moveit/zeroerr_data/collision_detection/collision_training.csv",
-            )),
-        }],
     )
 
     sensorless_collision_gui = Node(
@@ -212,10 +175,10 @@ def generate_launch_description():
         ros2_control_node,
         load_joint_state_broadcaster,
         load_manipulator_controller,
+        load_realtime_collision_controller,
         load_drive_enable_set_controller,
         load_drive_disable_set_controller,
         ethercat_sdo_server,
-        sensorless_collision_monitor,
         sensorless_collision_gui,
         ipp_helper_node,
         ruckig_helper_node,

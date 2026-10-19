@@ -85,6 +85,15 @@ class TestCollisionMonitorConfiguration(unittest.TestCase):
     def test_reports_unavailable_without_robot(self):
         self.assertFalse(_make_svc().load_collision_monitor_config()["success"])
 
+    def test_open_diagnostics_delegates_to_robot(self):
+        robot = MagicMock()
+        robot.open_collision_monitor_diagnostics.return_value = {"success": True}
+
+        result = _make_svc(robot=robot).open_collision_monitor_diagnostics()
+
+        self.assertTrue(result["success"])
+        robot.open_collision_monitor_diagnostics.assert_called_once_with()
+
 
 class TestGetSlotInfo(unittest.TestCase):
 

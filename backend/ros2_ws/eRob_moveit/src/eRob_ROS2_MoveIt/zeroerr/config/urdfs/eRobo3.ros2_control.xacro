@@ -12,7 +12,7 @@
                 <xacro:unless value="${use_fake_hardware}">
                     <plugin>ethercat_driver/EthercatDriver</plugin>
                     <param name="master_id">0</param>
-                    <param name="control_frequency">1000</param>
+                    <param name="control_frequency">2000</param>
                     <param name="freeze_on_slave_fault">true</param>
                     <param name="timeout">1000000000</param>
                 </xacro:unless>

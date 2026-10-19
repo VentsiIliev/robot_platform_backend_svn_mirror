@@ -161,7 +161,9 @@ class PaintExecutionRuntime:
             command_recorder=self._record_motion_command,
         )
         self._vacuum = PaintVacuumControl(
-            self._vacuum_pump, enabled_provider=self._is_vacuum_pump_enabled,
+            self._vacuum_pump,
+            enabled_provider=self._is_vacuum_pump_enabled,
+            dry_run_provider=self._is_dry_run_mode_enabled,
         )
         self._pickup_transfer_planner = PaintPickupTransferPlanner(self)
         self._active_contact_base_z_offset_mm: float = 0.0
@@ -197,6 +199,10 @@ class PaintExecutionRuntime:
         except Exception:
             _logger.exception("[PICKUP] Failed to read live vacuum-pump enabled state")
             return False
+
+    def _is_dry_run_mode_enabled(self) -> bool:
+        """Return the dry-run state frozen for the active workpiece cycle."""
+        return bool(self._paint_process_config_snapshot.enable_dry_run_mode)
 
     # -------------------------------------------------------------------------
     # Runtime Configuration And Plan Preparation

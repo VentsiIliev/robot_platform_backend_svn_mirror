@@ -147,6 +147,14 @@ class TestRobotService(unittest.TestCase):
             self.service.update_collision_monitor_config(values), expected)
         self.motion.update_collision_monitor_config.assert_called_once_with(values)
 
+    def test_collision_monitor_diagnostics_delegates_to_driver(self):
+        expected = {"success": True}
+        self.motion.open_collision_monitor_diagnostics.return_value = expected
+
+        self.assertEqual(
+            self.service.open_collision_monitor_diagnostics(), expected)
+        self.motion.open_collision_monitor_diagnostics.assert_called_once_with()
+
     def test_get_state_topic_from_state(self):
         self.assertEqual(self.service.get_state_topic(), "robot/state")
 

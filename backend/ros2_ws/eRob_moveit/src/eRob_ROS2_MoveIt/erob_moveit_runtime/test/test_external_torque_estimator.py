@@ -65,6 +65,27 @@ class MomentumObserverEstimatorTests(unittest.TestCase):
         self.assertEqual(1.0, estimator.expected_torque_history[-1][0])
         self.assertEqual(0.0, estimator.observer_auxiliary_history[-1][0])
 
+    def test_explicit_sample_timestamp_controls_observer_integration(self):
+        estimator = MomentumObserverEstimator(_UnitModel(), warmup_sec=0.0)
+        vector = np.zeros(1)
+
+        with patch(
+            "scripts.safety.collision_detection.external_torque_estimator.time.monotonic",
+            side_effect=AssertionError("arrival clock must not be used"),
+        ):
+            estimator.update(vector, vector, vector, vector, timestamp=10.0)
+            estimator.update(vector, vector, vector, vector, timestamp=10.001)
+
+        self.assertTrue(np.all(np.isfinite(estimator.filtered)))
+
+    def test_rejects_duplicate_or_out_of_order_sample_timestamp(self):
+        estimator = MomentumObserverEstimator(_UnitModel(), warmup_sec=0.0)
+        vector = np.zeros(1)
+        estimator.update(vector, vector, vector, vector, timestamp=10.0)
+
+        with self.assertRaisesRegex(ValueError, "increase monotonically"):
+            estimator.update(vector, vector, vector, vector, timestamp=10.0)
+
 
 if __name__ == "__main__":
     unittest.main()

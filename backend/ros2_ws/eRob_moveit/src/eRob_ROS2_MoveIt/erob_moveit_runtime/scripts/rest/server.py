@@ -6,6 +6,7 @@ import os
 import json
 import logging
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -17,6 +18,7 @@ from rclpy.executors import MultiThreadedExecutor
 from std_srvs.srv import Trigger
 from std_msgs.msg import String
 from werkzeug.exceptions import HTTPException
+from ament_index_python.packages import get_package_prefix, get_package_share_directory
 
 from robot_controller import RobotController
 from backend.backend_factory import create_robot_backend
@@ -388,6 +390,7 @@ def start_rest_server(
     collision_config_publisher_lock = threading.Lock()
     collision_config_state = {"payload": None}
     collision_config_state_changed = threading.Condition()
+    collision_diagnostics_process = {"process": None}
 
     def on_collision_config_state(message: String) -> None:
         try:
@@ -525,10 +528,11 @@ def start_rest_server(
         allowed = {
             "detection_enabled", "active_stop_enabled",
             "effort_following_error_detection_enabled",
-            "collision_sensitivity_percent", "confirm_cycles",
+            "collision_sensitivity_percent", "confirm_duration_ms",
             "dynamic_threshold_enabled", "dynamic_threshold_decay_sec",
             "dynamic_threshold_max_ratio", "effort_thresholds",
             "following_error_thresholds", "external_torque_thresholds",
+            "diagnostics_enabled",
         }
         unknown = sorted(set(payload) - allowed)
         if not payload or unknown:
@@ -538,6 +542,63 @@ def start_rest_server(
         if error is not None:
             return error
         return jsonify({"success": True, "config": state})
+
+    @app.route("/collision/monitor/diagnostics/open", methods=["POST"])
+    def open_collision_monitor_diagnostics():
+        process = collision_diagnostics_process["process"]
+        if process is not None and process.poll() is None:
+            state, error = publish_collision_config({"diagnostics_enabled": True})
+            if error is not None:
+                return error
+            return jsonify({
+                "success": True,
+                "already_running": True,
+                "config": state,
+            })
+
+        try:
+            prefix = get_package_prefix("plotjuggler")
+            executable = os.path.join(prefix, "lib", "plotjuggler", "plotjuggler")
+        except Exception:
+            return _response_error(
+                "PlotJuggler is not installed. Install ros-jazzy-plotjuggler-ros and retry.",
+                503,
+            )
+        if not os.path.isfile(executable) or not os.access(executable, os.X_OK):
+            return _response_error(
+                f"PlotJuggler executable is unavailable: {executable}", 503)
+        if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+            return _response_error(
+                "The backend has no graphical display available for PlotJuggler", 503)
+
+        state, error = publish_collision_config({"diagnostics_enabled": True})
+        if error is not None:
+            return error
+
+        layout = os.path.join(
+            get_package_share_directory("zeroerr"),
+            "config",
+            "collision_observer_plotjuggler.xml",
+        )
+        try:
+            collision_diagnostics_process["process"] = subprocess.Popen(
+                [
+                    executable,
+                    "-l", layout,
+                    "--start_streamer", "DataStreamROS2",
+                    "--buffer_size", "30",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except OSError as exc:
+            return _response_error(f"Could not start PlotJuggler: {exc}", 500)
+        return jsonify({
+            "success": True,
+            "already_running": False,
+            "config": state,
+        })
 
     @app.route("/move/fast_lin", methods=["POST"])
     def move_fast_lin():

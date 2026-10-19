@@ -73,3 +73,6 @@ class IRobotSettingsService(ABC):
 
     @abstractmethod
     def save_collision_monitor_config(self, config: dict) -> dict: ...
+
+    @abstractmethod
+    def open_collision_monitor_diagnostics(self) -> dict: ...

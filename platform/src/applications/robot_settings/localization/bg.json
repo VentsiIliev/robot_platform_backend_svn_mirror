@@ -64,7 +64,8 @@
     "A local calibration profile requires a work area.": "Локалният профил за калибрация изисква работна зона.",
     "A local calibration profile requires a reference frame and matrix path.": "Локалният профил за калибрация изисква референтна рамка и път до матрицата.",
     "Collision settings applied and confirmed": "Настройките за сблъсък са приложени и потвърдени",
-    "Collision monitor unavailable: {message}": "Мониторът за сблъсък не е достъпен: {message}"
+    "Collision monitor unavailable: {message}": "Мониторът за сблъсък не е достъпен: {message}",
+    "PlotJuggler opened with live observer diagnostics": "PlotJuggler е отворен с диагностика на наблюдателя в реално време"
   },
   "SensorlessCollisionTab": {
     "Configure the ZeroErr torque-based collision monitor. Changes are applied to the running ROS2 backend and persisted there.": "Конфигуриране на безсензорния монитор за сблъсък ZeroErr. Промените се прилагат към работещия ROS2 backend и се запазват там.",
@@ -72,12 +73,13 @@
     "Sensorless collision detection enabled": "Безсензорното откриване на сблъсък е включено",
     "Active response — stop robot motion": "Активна реакция — спиране на движението",
     "Direction-aware dynamic thresholds": "Динамични прагове според посоката",
+    "Live observer diagnostics — publish PlotJuggler topics": "Диагностика на наблюдателя в реално време — публикуване на теми за PlotJuggler",
     "Detection tuning": "Настройка на откриването",
     "Sensitivity": "Чувствителност",
-    "Consecutive detections": "Последователни откривания",
+    "Confirmation duration": "Продължителност за потвърждение",
     "Maximum dynamic threshold": "Максимален динамичен праг",
     "Dynamic envelope decay": "Затихване на динамичната обвивка",
-    "100% sensitivity uses calibrated thresholds. Higher values are more sensitive. More consecutive detections reject short spikes but delay stopping.": "Чувствителност 100% използва калибрираните прагове. По-високите стойности са по-чувствителни. Повече последователни откривания отхвърлят кратки пикове, но забавят спирането.",
+    "100% sensitivity uses calibrated thresholds. Higher values are more sensitive. A longer confirmation duration rejects short spikes but delays stopping. Duration is measured from robot-state timestamps, not callback count.": "Чувствителност 100% използва калибрираните прагове. По-високите стойности са по-чувствителни. По-дългото потвърждение отхвърля кратки пикове, но забавя спирането. Продължителността се измерва по timestamp-ите на състоянието на робота, а не по броя callback-и.",
     "Per-joint thresholds": "Прагове по стави",
     "Joint": "Става",
     "External torque (Nm)": "Външен момент (Nm)",
@@ -93,6 +95,7 @@
     "Following-error threshold (drive counts)": "Праг на грешката на следене (броячи на задвижването)",
     "Not loaded": "Не е заредено",
     "Refresh": "Опресняване",
+    "Open PlotJuggler": "Отваряне на PlotJuggler",
     "Apply settings": "Прилагане",
     "Configuration loaded": "Конфигурацията е заредена"
   }

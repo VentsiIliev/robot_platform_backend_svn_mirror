@@ -28,6 +28,14 @@ The factory accepts robot, messaging, settings-key/service and optional toolchan
 
 See [interfaces](../interfaces/README.md), [safety](../safety/README.md), [drivers](../drivers/README.md), and the source reference for all current methods and constructor signatures.
 
+## Collision monitor diagnostics
+
+`IRobotService.open_collision_monitor_diagnostics()` is an optional robot
+capability. ROS2/ZeroErr implementations delegate it through `RobotService`,
+`MotionService`, `Ros2Robot`, and the HTTP/WebSocket adapter to
+`POST /collision/monitor/diagnostics/open`. Unsupported drivers return a
+structured `collision_monitor_diagnostics_unsupported` result.
+
 <!-- source-navigation:start -->
 ## Source navigation
 

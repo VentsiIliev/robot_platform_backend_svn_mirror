@@ -112,9 +112,14 @@ class PaintDryRunRuntimeTests(unittest.TestCase):
             )
 
             first = source.capture_for_cycle(1)
+            first_center = list(source.last_metadata["center_mm"])
             second = source.capture_for_cycle(2)
+            second_center = list(source.last_metadata["center_mm"])
             self.assertEqual(first.source, "paint_dry_run")
             self.assertFalse(np.array_equal(first.contours[0], second.contours[0]))
+            self.assertEqual([500.0, 500.0], first_center)
+            self.assertEqual([500.0, 500.0], second_center)
+            self.assertEqual("work_area_center", source.last_metadata["placement_mode"])
             for snapshot in (first, second):
                 points = np.asarray(snapshot.contours[0]).reshape(-1, 2)
                 self.assertTrue(np.all(points >= 10.0))
@@ -127,6 +132,7 @@ class PaintDryRunRuntimeTests(unittest.TestCase):
             )
             self.assertEqual("magazine", magazine.work_area_id)
             self.assertEqual("magazine", source.last_metadata["placement_key"])
+            self.assertEqual("random", source.last_metadata["placement_mode"])
 
     def test_minimum_z_condition_latches_until_rearmed(self):
         robot = _Robot([0, 0, 50, 0, 0, 0])

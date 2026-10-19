@@ -13,6 +13,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
+from scipy.optimize import nnls
 
 
 JOINT_NAMES = [f"Joint_{index}" for index in range(1, 7)]
@@ -117,12 +118,15 @@ def fit_joint(
 ):
     design = design_matrix(values, decay_sec)
     residual = values[:, 3]
-    penalty = np.eye(design.shape[1]) * ridge
+    # A collision-free motion envelope must not become smaller when any
+    # directional speed or acceleration feature grows.  Non-negative least
+    # squares enforces that property.  Add the ridge rows to the least-squares
+    # system while leaving the bias unregularized.
+    penalty = np.eye(design.shape[1], dtype=float) * np.sqrt(max(0.0, ridge))
     penalty[0, 0] = 0.0
-    coefficients = np.linalg.solve(
-        design.T @ design + penalty,
-        design.T @ residual,
-    )
+    augmented_design = np.vstack((design, penalty))
+    augmented_residual = np.concatenate((residual, np.zeros(design.shape[1])))
+    coefficients, _ = nnls(augmented_design, augmented_residual)
     # Move the fitted centre to the requested one-sided residual percentile,
     # then retain an explicit safety margin. The fixed threshold remains the
     # lower floor at runtime.
@@ -139,6 +143,7 @@ def fit_joint(
         "calibration_exceedance_fraction": float(np.mean(residual > predicted)),
         "predicted_threshold_min_nm": float(np.min(predicted)),
         "predicted_threshold_max_nm": float(np.max(predicted)),
+        "minimum_coefficient": float(np.min(coefficients)),
     }
 
 

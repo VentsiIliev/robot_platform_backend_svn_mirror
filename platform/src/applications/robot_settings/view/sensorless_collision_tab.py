@@ -28,6 +28,7 @@ class SensorlessCollisionTab(QWidget):
 
     refresh_requested = pyqtSignal()
     save_requested = pyqtSignal(dict)
+    open_diagnostics_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -49,19 +50,26 @@ class SensorlessCollisionTab(QWidget):
         self._enabled = QCheckBox()
         self._active_stop = QCheckBox()
         self._dynamic_enabled = QCheckBox()
+        self._diagnostics_enabled = QCheckBox()
         mode_layout.addWidget(self._enabled, 0, 0, 1, 2)
         mode_layout.addWidget(self._active_stop, 1, 0, 1, 2)
         mode_layout.addWidget(self._dynamic_enabled, 2, 0, 1, 2)
+        mode_layout.addWidget(self._diagnostics_enabled, 3, 0, 1, 2)
         layout.addWidget(self._mode_group)
 
         self._tuning_group = QGroupBox()
         self._tuning_group.setStyleSheet(GROUP_STYLE)
         tuning_layout = QGridLayout(self._tuning_group)
         self._sensitivity = self._number(50, 200, 1, "%", decimals=0)
-        self._confirm_cycles = self._number(1, 50, 1, " samples", decimals=0)
+        self._confirm_duration_ms = self._number(0, 1000, 1, " ms", decimals=0)
         self._max_ratio = self._number(1, 20, 0.5, " × static", decimals=1)
         self._decay = self._number(0.01, 5, 0.05, " s", decimals=2)
-        fields = [self._sensitivity, self._confirm_cycles, self._max_ratio, self._decay]
+        fields = [
+            self._sensitivity,
+            self._confirm_duration_ms,
+            self._max_ratio,
+            self._decay,
+        ]
         self._tuning_labels = []
         for row, field in enumerate(fields):
             label = QLabel()
@@ -122,11 +130,16 @@ class SensorlessCollisionTab(QWidget):
         self._refresh.setStyleSheet(GHOST_BTN_STYLE)
         self._refresh.setCursor(Qt.CursorShape.PointingHandCursor)
         self._refresh.clicked.connect(self.refresh_requested)
+        self._open_diagnostics = QPushButton()
+        self._open_diagnostics.setStyleSheet(GHOST_BTN_STYLE)
+        self._open_diagnostics.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._open_diagnostics.clicked.connect(self.open_diagnostics_requested)
         self._save = QPushButton()
         self._save.setStyleSheet(ACTION_BTN_STYLE)
         self._save.setCursor(Qt.CursorShape.PointingHandCursor)
         self._save.clicked.connect(self._emit_save)
         actions.addWidget(self._refresh)
+        actions.addWidget(self._open_diagnostics)
         actions.addWidget(self._save)
         layout.addLayout(actions)
         layout.addStretch()
@@ -140,16 +153,19 @@ class SensorlessCollisionTab(QWidget):
         self._enabled.setText(self.tr("Sensorless collision detection enabled"))
         self._active_stop.setText(self.tr("Active response — stop robot motion"))
         self._dynamic_enabled.setText(self.tr("Direction-aware dynamic thresholds"))
+        self._diagnostics_enabled.setText(self.tr(
+            "Live observer diagnostics — publish PlotJuggler topics"))
         self._tuning_group.setTitle(self.tr("Detection tuning"))
         tuning_texts = [
-            "Sensitivity", "Consecutive detections",
+            "Sensitivity", "Confirmation duration",
             "Maximum dynamic threshold", "Dynamic envelope decay",
         ]
         for label, text in zip(self._tuning_labels, tuning_texts):
             label.setText(self.tr(text))
         self._hint.setText(self.tr(
             "100% sensitivity uses calibrated thresholds. Higher values are more sensitive. "
-            "More consecutive detections reject short spikes but delay stopping."))
+            "A longer confirmation duration rejects short spikes but delays stopping. "
+            "Duration is measured from robot-state timestamps, not callback count."))
         self._primary_group.setTitle(self.tr("Primary detector — torque observer"))
         self._primary_hint.setText(self.tr(
             "This is the main sensorless detector. It compares estimated external torque "
@@ -169,6 +185,7 @@ class SensorlessCollisionTab(QWidget):
         if not self._status.text():
             self._status.setText(self.tr("Not loaded"))
         self._refresh.setText(self.tr("Refresh"))
+        self._open_diagnostics.setText(self.tr("Open PlotJuggler"))
         self._save.setText(self.tr("Apply settings"))
 
     def changeEvent(self, event) -> None:
@@ -205,8 +222,9 @@ class SensorlessCollisionTab(QWidget):
             "active_stop_enabled": self._active_stop.isChecked(),
             "effort_following_error_detection_enabled": self._secondary_enabled.isChecked(),
             "dynamic_threshold_enabled": self._dynamic_enabled.isChecked(),
+            "diagnostics_enabled": self._diagnostics_enabled.isChecked(),
             "collision_sensitivity_percent": float(self._sensitivity.value()),
-            "confirm_cycles": int(self._confirm_cycles.value()),
+            "confirm_duration_ms": float(self._confirm_duration_ms.value()),
             "dynamic_threshold_max_ratio": float(self._max_ratio.value()),
             "dynamic_threshold_decay_sec": float(self._decay.value()),
             "external_torque_thresholds": external,
@@ -220,9 +238,11 @@ class SensorlessCollisionTab(QWidget):
         self._secondary_enabled.setChecked(bool(
             config.get("effort_following_error_detection_enabled", False)))
         self._dynamic_enabled.setChecked(bool(config.get("dynamic_threshold_enabled", False)))
+        self._diagnostics_enabled.setChecked(bool(config.get("diagnostics_enabled", False)))
         self._sensitivity.setValue(int(round(float(
             config.get("collision_sensitivity_percent", 100)))))
-        self._confirm_cycles.setValue(int(config.get("confirm_cycles", 3)))
+        self._confirm_duration_ms.setValue(int(round(float(
+            config.get("confirm_duration_ms", 25.0)))))
         self._max_ratio.setValue(float(config.get("dynamic_threshold_max_ratio", 5)))
         self._decay.setValue(float(config.get("dynamic_threshold_decay_sec", 0.35)))
         arrays = [

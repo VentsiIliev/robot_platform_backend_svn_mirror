@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<library path="zeroerr_realtime_collision_controller">
+  <class
+    name="zeroerr/RealtimeCollisionController"
+    type="zeroerr::RealtimeCollisionController"
+    base_class_type="controller_interface::ControllerInterface">
+    <description>2 kHz in-process sensorless collision observer and decision controller.</description>
+  </class>
+</library>

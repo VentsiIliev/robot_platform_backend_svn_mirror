@@ -175,7 +175,7 @@ applied values. Supported fields are:
 - `active_stop_enabled`
 - `effort_following_error_detection_enabled`
 - `collision_sensitivity_percent`
-- `confirm_cycles`
+- `confirm_duration_ms`
 - `dynamic_threshold_enabled`
 - `dynamic_threshold_decay_sec`
 - `dynamic_threshold_max_ratio`

@@ -29,6 +29,7 @@ OPENAPI_SPEC = {
             "post": {"tags": ["interlock"], "summary": "Update and confirm sensorless collision monitor configuration"},
         },
         "/collision/monitor/suppression": {"post": {"tags": ["interlock"], "summary": "Temporarily suppress detection for Recovery Jog"}},
+        "/collision/monitor/diagnostics/open": {"post": {"tags": ["interlock"], "summary": "Enable live observer topics and open PlotJuggler"}},
         "/move/linear": {"post": {"tags": ["motion"], "summary": "Queue or execute a linear move"}},
         "/move/fast_lin": {"post": {"tags": ["motion"], "summary": "Test a Pilz LIN move without compute_cartesian_path"}},
         "/move/ptp": {"post": {"tags": ["motion"], "summary": "Queue or execute a point-to-point move"}},

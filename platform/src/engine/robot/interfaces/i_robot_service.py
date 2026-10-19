@@ -91,6 +91,9 @@ class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
     def update_collision_monitor_config(self, config: dict) -> dict:
         return {"success": False, "error": "collision_monitor_config_unsupported"}
 
+    def open_collision_monitor_diagnostics(self) -> dict:
+        return {"success": False, "error": "collision_monitor_diagnostics_unsupported"}
+
     def unwind_joint6(
         self,
         blocking: bool = True,

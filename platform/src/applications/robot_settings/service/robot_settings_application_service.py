@@ -237,3 +237,11 @@ class RobotSettingsApplicationService(IRobotSettingsService):
         if not callable(method):
             return {"success": False, "error": "collision monitor unsupported"}
         return method(config)
+
+    def open_collision_monitor_diagnostics(self) -> dict:
+        if self._robot is None:
+            return {"success": False, "error": "robot service unavailable"}
+        method = getattr(self._robot, "open_collision_monitor_diagnostics", None)
+        if not callable(method):
+            return {"success": False, "error": "collision diagnostics unsupported"}
+        return method()

@@ -231,8 +231,8 @@
        established mounting transform is shared with the original paint arm. -->
   <link name="tool0">
     <visual>
-      <!-- Align the pointer's physical up orientation at the corrected encoder zero. -->
-      <origin xyz="0.028978 -0.007765 0.042" rpy="0 3.14159 4.45058959"/>
+      <!-- Mount the camera bracket vertically, matching the standard paint profile. -->
+      <origin xyz="0 -0.03 0.042" rpy="0 3.14159 3.14159"/>
       <geometry>
         <mesh filename="package://zeroerr/meshes/paint/ToolPointer.stl" scale="0.001 0.001 0.001"/>
       </geometry>
@@ -241,7 +241,7 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.028978 -0.007765 0.042" rpy="0 3.14159 4.45058959"/>
+      <origin xyz="0 -0.03 0.042" rpy="0 3.14159 3.14159"/>
       <geometry>
         <mesh filename="package://zeroerr/meshes/paint/ToolPointer.stl" scale="0.001 0.001 0.001"/>
       </geometry>

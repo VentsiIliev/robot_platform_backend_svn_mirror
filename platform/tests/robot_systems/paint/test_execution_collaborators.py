@@ -106,6 +106,20 @@ class TestMotionRecoveryComposition(unittest.TestCase):
 
 
 class TestVacuumControl(unittest.TestCase):
+    def test_dry_run_bypasses_required_on_and_off_without_hardware_commands(self):
+        pump = MagicMock()
+        vacuum = PaintVacuumControl(
+            pump,
+            enabled_provider=lambda: True,
+            dry_run_provider=lambda: True,
+        )
+
+        self.assertEqual((True, ""), vacuum.turn_vacuum_on(required=True))
+        self.assertEqual((True, ""), vacuum.turn_vacuum_off(wait_for_blow_off=False))
+        pump.turn_on.assert_not_called()
+        pump.turn_off.assert_not_called()
+        pump.turn_off_nonblocking.assert_not_called()
+
     def test_required_disabled_pump_fails_without_hardware_command(self):
         pump = MagicMock()
         vacuum = PaintVacuumControl(pump, enabled_provider=lambda: False)

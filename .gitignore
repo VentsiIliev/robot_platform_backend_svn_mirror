@@ -19,6 +19,7 @@ platform/  .git/
 
 # Machine data and backup archives
 backend/ros2_ws/eRob_moveit/zeroerr_data/
+backend/rosbag2_*/
 backend/ros2_ws/src/ethercat_driver_ros2_backup*.zip
 platform/src/robot_systems/**/storage/users/
 platform/src/robot_systems/**/storage/workpieces/

@@ -302,7 +302,15 @@ def generate_launch_description():
         arguments=["joint_state_broadcaster"],
         output="screen",
     )
+    realtime_collision_controller_spawner = Node(
+        package="controller_manager",
+        executable="spawner",
+        arguments=["realtime_collision_controller"],
+        output="screen",
+        condition=UnlessCondition(use_fake_hardware),
+    )
     demo_ld.add_action(joint_state_broadcaster_spawner)
+    demo_ld.add_action(realtime_collision_controller_spawner)
 
     wait_for_slaves_op = os.path.join(package_path, "scripts", "WaitForSlavesOp.sh")
     wait_for_ros = os.path.join(package_path, "scripts", "wait_for_ros.py")
@@ -391,63 +399,6 @@ def generate_launch_description():
         }],
     )
 
-    sensorless_collision_monitor = Node(
-        package="zeroerr",
-        executable="zeroerr_collision_monitor.py",
-        output="screen",
-        emulate_tty=True,
-        prefix=low_priority_non_rt_prefix,
-        condition=IfCondition(PythonExpression([
-            "'", enable_sensorless_collision_monitor,
-            "' == 'true' and '", use_fake_hardware, "' != 'true'",
-        ])),
-        parameters=[{
-            "slave_count": 6,
-            "poll_period_sec": float(runtime_value(
-                package_path,
-                "SENSORLESS_COLLISION_MONITOR_PERIOD_SEC",
-                0.01,
-            )),
-            "input_sample_period_sec": 0.0,
-            "input_timeout_sec": float(runtime_value(
-                package_path, "SENSORLESS_COLLISION_INPUT_TIMEOUT_SEC", 0.25)),
-            "input_sync_tolerance_sec": float(runtime_value(
-                package_path, "SENSORLESS_COLLISION_INPUT_SYNC_TOLERANCE_SEC", 0.10)),
-            "print_table": False,
-            "include_gravity": True,
-            "observer_gain": float(runtime_value(
-                package_path, "SENSORLESS_COLLISION_OBSERVER_GAIN", 10.0)),
-            "warmup_sec": float(runtime_value(
-                package_path, "SENSORLESS_COLLISION_WARMUP_SEC", 8.0)),
-            "warmup_min_samples": int(runtime_value(
-                package_path, "SENSORLESS_COLLISION_WARMUP_MIN_SAMPLES", 20)),
-            "drive_stable_sec": float(runtime_value(
-                package_path, "SENSORLESS_COLLISION_DRIVE_STABLE_SEC", 2.0)),
-            "urdf_path": urdf_path,
-            "base_link": "base_link",
-            "tip_link": runtime_value(package_path, "COLLISION_TIP_LINK", "tool0"),
-            "num_joints": int(runtime_value(package_path, "NUM_JOINTS", 6)),
-            "collision_config_path": os.path.join(
-                package_path, "config", "collision_monitor_config.json"
-            ),
-            "torque_log_enabled": bool(runtime_value(
-                package_path,
-                "SENSORLESS_COLLISION_LOG_ENABLED",
-                False,
-            )),
-            "torque_log_path": str(runtime_value(
-                package_path,
-                "SENSORLESS_COLLISION_LOG_PATH",
-                "/home/ilv/ros2_ws/eRob_moveit/zeroerr_data/collision_detection/collision_training.csv",
-            )),
-            "torque_log_period_sec": float(runtime_value(
-                package_path,
-                "SENSORLESS_COLLISION_LOG_PERIOD_SEC",
-                0.05,
-            )),
-        }],
-    )
-
     sensorless_collision_gui = Node(
         package="zeroerr",
         executable="zeroerr_collision_status_gui.py",
@@ -516,6 +467,10 @@ def generate_launch_description():
                 package_path, "COLLISION_CALIBRATION_SETTLE_TIME_SEC", 0.35)),
             "coverage_log_period_sec": float(runtime_value(
                 package_path, "COLLISION_CALIBRATION_COVERAGE_LOG_PERIOD_SEC", 0.05)),
+            "training_log_period_sec": float(runtime_value(
+                package_path, "COLLISION_CALIBRATION_TRAINING_LOG_PERIOD_SEC", 0.005)),
+            "training_flush_period_sec": float(runtime_value(
+                package_path, "COLLISION_CALIBRATION_TRAINING_FLUSH_PERIOD_SEC", 0.5)),
             "coverage_voxel_size_m": float(runtime_value(
                 package_path, "COLLISION_CALIBRATION_COVERAGE_VOXEL_SIZE_M", 0.05)),
             "output_directory": str(runtime_value(
@@ -655,7 +610,6 @@ def generate_launch_description():
         [
             zeroerr_state_publisher,
             servo_node,
-            sensorless_collision_monitor,
             sensorless_collision_gui,
         ],
     ))

@@ -64,7 +64,7 @@ class CollisionStatusNode(Node):
         self.thresholds: Dict[str, float] = {}
         self.estimator = "unknown"
         self.collision_sensitivity_percent = 100
-        self.confirm_cycles = 3
+        self.confirm_duration_ms = 25
         self.dynamic_threshold_max_ratio = 5.0
         self.active_stop_enabled = False
         self.last_state_time = 0.0
@@ -152,9 +152,10 @@ class CollisionStatusNode(Node):
             self.collision_sensitivity_percent = 100
         self.active_stop_enabled = bool(payload.get("active_stop_enabled", False))
         try:
-            self.confirm_cycles = max(1, int(payload.get("confirm_cycles", 3)))
+            self.confirm_duration_ms = max(
+                0, int(round(float(payload.get("confirm_duration_ms", 25.0)))))
         except (TypeError, ValueError):
-            self.confirm_cycles = 3
+            self.confirm_duration_ms = 25
         try:
             self.dynamic_threshold_max_ratio = max(
                 1.0,
@@ -174,9 +175,9 @@ class CollisionStatusNode(Node):
         msg.data = json.dumps({"active_stop_enabled": bool(enabled)})
         self.config_publisher.publish(msg)
 
-    def set_confirm_cycles(self, cycles: int) -> None:
+    def set_confirm_duration_ms(self, duration_ms: int) -> None:
         msg = String()
-        msg.data = json.dumps({"confirm_cycles": max(1, int(cycles))})
+        msg.data = json.dumps({"confirm_duration_ms": max(0, int(duration_ms))})
         self.config_publisher.publish(msg)
 
     def set_dynamic_threshold_max_ratio(self, ratio: float) -> None:
@@ -283,18 +284,18 @@ class CollisionStatusWindow(QMainWindow):
 
         confirmation_group = QGroupBox("Detection confirmation")
         confirmation_layout = QHBoxLayout(confirmation_group)
-        confirmation_layout.addWidget(QLabel("Consecutive detections before latching:"))
-        self.confirm_cycles_spin = QSpinBox()
-        self.confirm_cycles_spin.setRange(1, 50)
-        self.confirm_cycles_spin.setValue(3)
-        self.confirm_cycles_spin.setSuffix(" samples")
-        self.confirm_cycles_spin.setToolTip(
-            "A joint must exceed its collision threshold for this many consecutive "
-            "monitor samples before the detector latches. Applies to both dynamics "
-            "and effort/following-error detection."
+        confirmation_layout.addWidget(QLabel("Threshold exceedance before latching:"))
+        self.confirm_duration_spin = QSpinBox()
+        self.confirm_duration_spin.setRange(0, 1000)
+        self.confirm_duration_spin.setValue(25)
+        self.confirm_duration_spin.setSuffix(" ms")
+        self.confirm_duration_spin.setToolTip(
+            "A joint must continuously exceed its collision threshold for this "
+            "measurement-timestamp duration before the detector latches."
         )
-        self.confirm_cycles_spin.editingFinished.connect(self._apply_confirm_cycles)
-        confirmation_layout.addWidget(self.confirm_cycles_spin)
+        self.confirm_duration_spin.editingFinished.connect(
+            self._apply_confirm_duration)
+        confirmation_layout.addWidget(self.confirm_duration_spin)
         confirmation_layout.addStretch(1)
         confirmation_layout.addWidget(QLabel(
             "Higher values reject brief spikes but delay collision response."
@@ -447,10 +448,10 @@ class CollisionStatusWindow(QMainWindow):
             if self.sensitivity_slider.value() != configured:
                 self.sensitivity_slider.setValue(configured)
         self._refresh_active_mode_button()
-        if not self.confirm_cycles_spin.hasFocus():
-            configured_cycles = self.node.confirm_cycles
-            if self.confirm_cycles_spin.value() != configured_cycles:
-                self.confirm_cycles_spin.setValue(configured_cycles)
+        if not self.confirm_duration_spin.hasFocus():
+            configured_duration = self.node.confirm_duration_ms
+            if self.confirm_duration_spin.value() != configured_duration:
+                self.confirm_duration_spin.setValue(configured_duration)
         if not self.dynamic_threshold_max_ratio_spin.hasFocus():
             configured_ratio = self.node.dynamic_threshold_max_ratio
             if self.dynamic_threshold_max_ratio_spin.value() != configured_ratio:
@@ -480,8 +481,8 @@ class CollisionStatusWindow(QMainWindow):
                 return
         self.node.set_collision_sensitivity(value)
 
-    def _apply_confirm_cycles(self) -> None:
-        self.node.set_confirm_cycles(self.confirm_cycles_spin.value())
+    def _apply_confirm_duration(self) -> None:
+        self.node.set_confirm_duration_ms(self.confirm_duration_spin.value())
 
     def _apply_dynamic_threshold_max_ratio(self) -> None:
         ratio = self.dynamic_threshold_max_ratio_spin.value()

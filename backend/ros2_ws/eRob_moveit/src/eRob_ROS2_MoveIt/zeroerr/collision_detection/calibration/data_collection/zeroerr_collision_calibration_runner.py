@@ -72,6 +72,8 @@ class CalibrationRunner(Node):
         self.declare_parameter('service_timeout_sec', 10.0)
         self.declare_parameter('motion_timeout_sec', 90.0)
         self.declare_parameter('coverage_log_period_sec', 0.05)
+        self.declare_parameter('training_log_period_sec', 0.005)
+        self.declare_parameter('training_flush_period_sec', 0.5)
         self.declare_parameter('coverage_voxel_size_m', 0.05)
         self.declare_parameter(
             'output_directory',
@@ -110,6 +112,7 @@ class CalibrationRunner(Node):
         self._training_csv_file = None
         self._training_csv_writer = None
         self._last_training_write = 0.0
+        self._last_training_flush = 0.0
 
         self.validator = self.create_client(
             ValidateTrajectoryStates,
@@ -787,10 +790,15 @@ class CalibrationRunner(Node):
         handle = self._training_csv_file
         if writer is None or handle is None:
             return
-        timestamp = time.time()
-        period = max(0.0, float(self.get_parameter('coverage_log_period_sec').value))
-        if timestamp - self._last_training_write < period:
+        now = time.monotonic()
+        period = max(0.0, float(self.get_parameter('training_log_period_sec').value))
+        if now - self._last_training_write < period:
             return
+        timestamp = (
+            float(msg.header.stamp.sec) + float(msg.header.stamp.nanosec) / 1.0e9
+            if msg.header.stamp.sec or msg.header.stamp.nanosec
+            else time.time()
+        )
         by_joint = {
             joint_name: dict(zip(values.interface_names, values.values))
             for joint_name, values in zip(msg.joint_names, msg.interface_values)
@@ -822,8 +830,12 @@ class CalibrationRunner(Node):
                 fields.get('external_torque', math.nan),
                 fields.get('following_error_actual', math.nan),
             ])
-        handle.flush()
-        self._last_training_write = timestamp
+        flush_period = max(
+            0.0, float(self.get_parameter('training_flush_period_sec').value))
+        if flush_period == 0.0 or now - self._last_training_flush >= flush_period:
+            handle.flush()
+            self._last_training_flush = now
+        self._last_training_write = now
 
 
 def main(args=None):

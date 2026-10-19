@@ -64,7 +64,8 @@
     "A local calibration profile requires a work area.": "A local calibration profile requires a work area.",
     "A local calibration profile requires a reference frame and matrix path.": "A local calibration profile requires a reference frame and matrix path.",
     "Collision settings applied and confirmed": "Collision settings applied and confirmed",
-    "Collision monitor unavailable: {message}": "Collision monitor unavailable: {message}"
+    "Collision monitor unavailable: {message}": "Collision monitor unavailable: {message}",
+    "PlotJuggler opened with live observer diagnostics": "PlotJuggler opened with live observer diagnostics"
   },
   "SensorlessCollisionTab": {
     "Configure the ZeroErr torque-based collision monitor. Changes are applied to the running ROS2 backend and persisted there.": "Configure the ZeroErr torque-based collision monitor. Changes are applied to the running ROS2 backend and persisted there.",
@@ -72,12 +73,13 @@
     "Sensorless collision detection enabled": "Sensorless collision detection enabled",
     "Active response — stop robot motion": "Active response — stop robot motion",
     "Direction-aware dynamic thresholds": "Direction-aware dynamic thresholds",
+    "Live observer diagnostics — publish PlotJuggler topics": "Live observer diagnostics — publish PlotJuggler topics",
     "Detection tuning": "Detection tuning",
     "Sensitivity": "Sensitivity",
-    "Consecutive detections": "Consecutive detections",
+    "Confirmation duration": "Confirmation duration",
     "Maximum dynamic threshold": "Maximum dynamic threshold",
     "Dynamic envelope decay": "Dynamic envelope decay",
-    "100% sensitivity uses calibrated thresholds. Higher values are more sensitive. More consecutive detections reject short spikes but delay stopping.": "100% sensitivity uses calibrated thresholds. Higher values are more sensitive. More consecutive detections reject short spikes but delay stopping.",
+    "100% sensitivity uses calibrated thresholds. Higher values are more sensitive. A longer confirmation duration rejects short spikes but delays stopping. Duration is measured from robot-state timestamps, not callback count.": "100% sensitivity uses calibrated thresholds. Higher values are more sensitive. A longer confirmation duration rejects short spikes but delays stopping. Duration is measured from robot-state timestamps, not callback count.",
     "Per-joint thresholds": "Per-joint thresholds",
     "Joint": "Joint",
     "External torque (Nm)": "External torque (Nm)",
@@ -93,6 +95,7 @@
     "Following-error threshold (drive counts)": "Following-error threshold (drive counts)",
     "Not loaded": "Not loaded",
     "Refresh": "Refresh",
+    "Open PlotJuggler": "Open PlotJuggler",
     "Apply settings": "Apply settings",
     "Configuration loaded": "Configuration loaded"
   }

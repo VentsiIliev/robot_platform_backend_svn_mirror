@@ -145,6 +145,8 @@ class MomentumObserverEstimator:
         self._momentum_integral = np.zeros(n)
         self._last_momentum: Optional[np.ndarray] = None
         self._last_timestamp: Optional[float] = None
+        self.last_model_duration_sec = 0.0
+        self.last_update_duration_sec = 0.0
 
         self._warmup_sec = warmup_sec
         self._warmup_vel_threshold = warmup_vel_threshold_rad_s
@@ -184,8 +186,10 @@ class MomentumObserverEstimator:
         measured: np.ndarray,
         positions: np.ndarray,
         velocities: np.ndarray,
-        accelerations: np.ndarray
+        accelerations: np.ndarray,
+        timestamp: Optional[float] = None,
     ):
+        update_started = time.perf_counter()
         inputs = (measured, positions, velocities, accelerations)
         if any(
             np.asarray(values).shape != (self.num_joints,)
@@ -194,6 +198,7 @@ class MomentumObserverEstimator:
         ):
             raise ValueError("momentum observer inputs must be finite joint vectors")
 
+        model_started = time.perf_counter()
         mass_matrix = self._model.compute_mass_matrix(positions)
         if (
             np.asarray(mass_matrix).shape != (self.num_joints, self.num_joints)
@@ -207,13 +212,19 @@ class MomentumObserverEstimator:
         full_expected_torque = self._model.compute_expected_torque(
             positions, velocities, accelerations
         )
+        self.last_model_duration_sec = max(
+            0.0, time.perf_counter() - model_started)
         if not all(
             np.asarray(values).shape == (self.num_joints,)
             and np.all(np.isfinite(values))
             for values in (momentum, auxiliary_torque, full_expected_torque)
         ):
             raise ValueError("momentum observer model output is invalid")
-        now = time.monotonic()
+        now = time.monotonic() if timestamp is None else float(timestamp)
+        if not np.isfinite(now):
+            raise ValueError("momentum observer timestamp must be finite")
+        if self._last_timestamp is not None and now <= self._last_timestamp:
+            raise ValueError("momentum observer timestamp must increase monotonically")
 
         measured_corrected = measured - self._static_bias
 
@@ -242,6 +253,8 @@ class MomentumObserverEstimator:
                 self.external_torque_history.append(self._filtered.copy())
                 self._last_momentum = momentum.copy()
                 self._last_timestamp = now
+                self.last_update_duration_sec = max(
+                    0.0, time.perf_counter() - update_started)
                 return
 
         measured_final = measured_corrected - self._warmup_offset
@@ -283,6 +296,8 @@ class MomentumObserverEstimator:
 
         self._last_momentum = momentum.copy()
         self._last_timestamp = now
+        self.last_update_duration_sec = max(
+            0.0, time.perf_counter() - update_started)
 
     def reset(self):
         n = self._model.num_joints

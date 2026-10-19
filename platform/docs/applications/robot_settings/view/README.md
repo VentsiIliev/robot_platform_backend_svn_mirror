@@ -82,11 +82,14 @@ The tab itself is generic. Robot-system-specific protected rows and serializatio
 
 ## `sensorless_collision_tab.py`
 
-`SensorlessCollisionTab` is present only when the application wiring supplies a collision configuration service. It separates the two detection paths:
+`SensorlessCollisionTab` is present only when the application wiring supplies a collision configuration service. Its production controls target the C++ real-time detector:
 
-- primary sensorless detection: direction-aware external-torque observer, global sensitivity, consecutive-confirmation count, maximum dynamic/static threshold ratio, and per-joint static thresholds;
-- secondary detection: optional measured-effort plus following-error detector, with explicit enable control and per-joint thresholds;
+- primary sensorless detection: direction-aware external-torque observer, global sensitivity, measurement-time confirmation duration, maximum dynamic/static threshold ratio, and per-joint static thresholds;
 - response mode: passive reporting or active motion stop.
+
+The former Python measured-effort/following-error secondary detector is
+deprecated and the C++ backend forces it off. The Python observer is not a
+runtime fallback.
 
 Load and Apply are asynchronous controller operations so HTTP communication does not freeze the GUI. Values shown after a successful Apply are the backend-confirmed values, not merely the requested values.
 

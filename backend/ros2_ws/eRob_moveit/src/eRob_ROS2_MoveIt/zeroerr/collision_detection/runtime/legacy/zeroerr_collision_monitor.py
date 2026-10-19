@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+"""Deprecated Python observer retained only for offline comparison and tests.
+
+Production launch files use ``zeroerr/RealtimeCollisionController`` exclusively.
+Do not run both observers at the same time.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +11,7 @@ import csv
 import json
 import sys
 import time
+from collections import deque
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -29,6 +35,7 @@ INTERFACE_DEFAULTS = {
 }
 
 PLOT_METRICS = {
+    "zero_reference": lambda self, slave: 0.0,
     "position": lambda self, slave: slave.get("position"),
     "velocity": lambda self, slave: slave.get("velocity"),
     "following_error_actual": lambda self, slave: slave.get("following_error_actual"),
@@ -40,6 +47,9 @@ PLOT_METRICS = {
     "torque_difference": lambda self, slave: self._torque_difference_by_joint.get(str(slave["joint"])),
     "external_torque": lambda self, slave: self._external_torque_by_joint.get(str(slave["joint"])),
     "external_torque_threshold": lambda self, slave: self._current_external_torque_thresholds.get(str(slave["joint"])),
+    "negative_external_torque_threshold": lambda self, slave: -self._current_external_torque_thresholds.get(
+        str(slave["joint"]), 0.0
+    ),
     "contact_active": lambda self, slave: 1.0 if self._contact_active[str(slave["joint"])] else 0.0,
     "contact_latched": lambda self, slave: 1.0 if self._contact_latched[str(slave["joint"])] else 0.0,
     "dynamics_active": lambda self, slave: 1.0 if self._dynamics_active[str(slave["joint"])] else 0.0,
@@ -49,21 +59,27 @@ PLOT_METRICS = {
 DEFAULT_EFFORT_THRESHOLDS = [20.0, 20.0, 15.0, 8.0, 6.0, 4.0]
 DEFAULT_FOLLOWING_ERROR_THRESHOLDS = [4000.0, 4000.0, 3500.0, 2000.0, 1500.0, 1200.0]
 DEFAULT_COLLISION_CONFIG_PATH = str(
-    Path(__file__).resolve().parents[1] / "config" / "collision_monitor_config.json"
+    Path(__file__).resolve().parents[2] / "config" / "collision_monitor_config.json"
 )
 
 
 class ZeroErrCollisionMonitor(Node):
     def __init__(self) -> None:
         super().__init__("zeroerr_collision_monitor")
+        self.get_logger().warning(
+            "DEPRECATED: use zeroerr/RealtimeCollisionController; "
+            "the Python collision observer is not a production fallback"
+        )
 
         self.declare_parameter("slave_count", 6)
         self.declare_parameter("poll_period_sec", 2.0)
         self.declare_parameter("input_sample_period_sec", 0.0)
         self.declare_parameter("input_timeout_sec", 0.25)
-        self.declare_parameter("input_sync_tolerance_sec", 0.10)
         self.declare_parameter("print_table", False)
-        self.declare_parameter("confirm_cycles", 3)
+        self.declare_parameter("confirm_duration_ms", 25.0)
+        self.declare_parameter("expected_input_rate_hz", 2000.0)
+        self.declare_parameter("late_sample_threshold_ms", 2.0)
+        self.declare_parameter("confirmation_max_sample_gap_ms", 2.0)
         self.declare_parameter("dynamic_threshold_max_ratio", 5.0)
         self.declare_parameter("effort_thresholds", DEFAULT_EFFORT_THRESHOLDS)
         self.declare_parameter(
@@ -99,7 +115,22 @@ class ZeroErrCollisionMonitor(Node):
 
         self._slave_count = int(self.get_parameter("slave_count").value)
         self._print_table = bool(self.get_parameter("print_table").value)
-        self._confirm_cycles = int(self.get_parameter("confirm_cycles").value)
+        self._confirm_duration_sec = max(
+            0.0,
+            float(self.get_parameter("confirm_duration_ms").value) * 1.0e-3,
+        )
+        self._expected_input_rate_hz = max(
+            1.0, float(self.get_parameter("expected_input_rate_hz").value))
+        self._expected_input_period_sec = 1.0 / self._expected_input_rate_hz
+        self._late_sample_threshold_sec = max(
+            0.0,
+            float(self.get_parameter("late_sample_threshold_ms").value) * 1.0e-3,
+        )
+        self._confirmation_max_sample_gap_sec = max(
+            self._expected_input_period_sec,
+            float(self.get_parameter("confirmation_max_sample_gap_ms").value)
+            * 1.0e-3,
+        )
         friction_coulomb_nm = list(self.get_parameter("friction_coulomb_nm").value)
         friction_viscous_nm_per_rad_s = list(
             self.get_parameter("friction_viscous_nm_per_rad_s").value
@@ -112,10 +143,27 @@ class ZeroErrCollisionMonitor(Node):
             0.0,
             float(self.get_parameter("input_sample_period_sec").value),
         )
-        self._last_joint_sample_time: Optional[float] = None
         self._last_dynamic_sample_time: Optional[float] = None
-        self._joint_sample_complete = False
+        self._last_dynamic_source_timestamp: Optional[float] = None
         self._dynamic_sample_complete = False
+        self._timing_started_monotonic = time.monotonic()
+        self._received_sample_count = 0
+        self._processed_sample_count = 0
+        self._rejected_sample_count = 0
+        self._throttled_sample_count = 0
+        self._out_of_order_sample_count = 0
+        self._late_sample_count = 0
+        self._estimated_missing_sample_count = 0
+        self._last_callback_arrival_monotonic: Optional[float] = None
+        self._source_intervals_sec = deque(maxlen=20000)
+        self._arrival_intervals_sec = deque(maxlen=20000)
+        self._sample_ages_sec = deque(maxlen=20000)
+        self._observer_update_durations_sec = deque(maxlen=20000)
+        self._kdl_model_durations_sec = deque(maxlen=20000)
+        self._observer_non_model_durations_sec = deque(maxlen=20000)
+        self._callback_durations_sec = deque(maxlen=20000)
+        self._cached_timing_snapshot: Dict[str, object] = {}
+        self._last_timing_snapshot_monotonic: Optional[float] = None
         self._observer_inputs_valid = False
         self._last_input_invalid_reason = ""
         self._all_drives_op_since: Optional[float] = None
@@ -164,6 +212,7 @@ class ZeroErrCollisionMonitor(Node):
         self._active_stop_enabled = False
         self._detection_enabled = True
         self._effort_following_error_detection_enabled = False
+        self._diagnostics_enabled = False
         self._detection_suppressed = False
         self._stop_request_armed = True
         self._friction_coulomb_nm = {
@@ -196,13 +245,17 @@ class ZeroErrCollisionMonitor(Node):
             }
             for joint_name in JOINT_NAMES[: self._slave_count]
         }
-        self._joint_state_seen = False
         self._dynamic_state_seen = False
-        self._joint_state_warned = False
         self._dynamic_state_warned = False
         self._contact_cycles = {joint_name: 0 for joint_name in JOINT_NAMES[: self._slave_count]}
         self._contact_latched = {joint_name: False for joint_name in JOINT_NAMES[: self._slave_count]}
         self._dynamics_cycles = {joint_name: 0 for joint_name in JOINT_NAMES[: self._slave_count]}
+        self._contact_exceedance_since = {
+            joint_name: None for joint_name in JOINT_NAMES[: self._slave_count]
+        }
+        self._dynamics_exceedance_since = {
+            joint_name: None for joint_name in JOINT_NAMES[: self._slave_count]
+        }
         self._dynamics_latched = {joint_name: False for joint_name in JOINT_NAMES[: self._slave_count]}
         self._contact_active = {joint_name: False for joint_name in JOINT_NAMES[: self._slave_count]}
         self._dynamics_active = {joint_name: False for joint_name in JOINT_NAMES[: self._slave_count]}
@@ -291,12 +344,6 @@ class ZeroErrCollisionMonitor(Node):
         )
 
         self.create_subscription(
-            JointState,
-            "/joint_states",
-            self._on_joint_states,
-            qos_profile_sensor_data,
-        )
-        self.create_subscription(
             DynamicJointState,
             "/dynamic_joint_states",
             self._on_dynamic_joint_states,
@@ -317,8 +364,8 @@ class ZeroErrCollisionMonitor(Node):
         self.create_timer(period, self._publish_snapshot)
 
         self.get_logger().info(
-            "[ZeroErrCollisionMonitor] Watching PDO-backed ROS interfaces from "
-            "/joint_states and /dynamic_joint_states"
+            "[ZeroErrCollisionMonitor] Using atomic PDO-backed position, velocity, "
+            "and torque samples from /dynamic_joint_states"
         )
         if self._dynamics_enabled:
             self.get_logger().info(
@@ -330,54 +377,38 @@ class ZeroErrCollisionMonitor(Node):
                 f"{1.0 / self._input_sample_period_sec:.1f} Hz"
             )
 
-    def _on_joint_states(self, msg: JointState) -> None:
-        now = self.get_clock().now().nanoseconds * 1e-9
-        if (
-            self._input_sample_period_sec > 0.0
-            and self._last_joint_sample_time is not None
-            and now - self._last_joint_sample_time < self._input_sample_period_sec
-        ):
-            return
-        by_name = {name: index for index, name in enumerate(msg.name)}
-        updates = {}
-        for joint_name in JOINT_NAMES[: self._slave_count]:
-            index = by_name.get(joint_name)
-            if (
-                index is None
-                or index >= len(msg.position)
-                or index >= len(msg.velocity)
-                or not np.isfinite(msg.position[index])
-                or not np.isfinite(msg.velocity[index])
-            ):
-                self._joint_sample_complete = False
-                return
-            updates[joint_name] = {
-                "position": float(msg.position[index]),
-                "velocity": float(msg.velocity[index]),
-                "effort": (
-                    float(msg.effort[index])
-                    if index < len(msg.effort) and np.isfinite(msg.effort[index])
-                    else None
-                ),
-            }
-        for joint_name, values in updates.items():
-            self._latest_payload[joint_name].update(values)
-        self._last_joint_sample_time = now
-        self._joint_sample_complete = True
-        self._joint_state_seen = True
-
     def _on_dynamic_joint_states(self, msg: DynamicJointState) -> None:
+        callback_started = time.perf_counter()
+        arrival_monotonic = time.monotonic()
+        self._received_sample_count += 1
+        if self._last_callback_arrival_monotonic is not None:
+            self._arrival_intervals_sec.append(
+                max(0.0, arrival_monotonic - self._last_callback_arrival_monotonic))
+        self._last_callback_arrival_monotonic = arrival_monotonic
+        processed_before = self._processed_sample_count
+        try:
+            self._process_dynamic_joint_states(msg)
+        finally:
+            if self._processed_sample_count == processed_before:
+                self._rejected_sample_count += 1
+            self._callback_durations_sec.append(
+                max(0.0, time.perf_counter() - callback_started))
+
+    def _process_dynamic_joint_states(self, msg: DynamicJointState) -> None:
         now = self.get_clock().now().nanoseconds * 1e-9
         if (
             self._input_sample_period_sec > 0.0
             and self._last_dynamic_sample_time is not None
             and now - self._last_dynamic_sample_time < self._input_sample_period_sec
         ):
+            self._throttled_sample_count += 1
             return
         by_name = {
             joint_name: index for index, joint_name in enumerate(msg.joint_names)
         }
-        required_interfaces = {"torque_sensor", "statusword", "error_code"}
+        required_interfaces = {
+            "position", "velocity", "torque_sensor", "statusword", "error_code",
+        }
         if self._effort_following_error_detection_enabled:
             required_interfaces.add("following_error_actual")
         updates = {}
@@ -399,11 +430,106 @@ class ZeroErrCollisionMonitor(Node):
                 for name, value in values.items()
                 if name in INTERFACE_DEFAULTS and np.isfinite(value)
             }
+            updates[joint_name]["position"] = float(values["position"])
+            updates[joint_name]["velocity"] = float(values["velocity"])
+            updates[joint_name]["effort"] = (
+                float(values["effort"])
+                if "effort" in values and np.isfinite(values["effort"])
+                else None
+            )
+
+        try:
+            source_timestamp = self._message_timestamp(msg)
+        except ValueError as exc:
+            self._dynamic_sample_complete = False
+            self._invalidate_observer_inputs(str(exc))
+            return
+        previous_timestamp = self._last_dynamic_source_timestamp
+        if previous_timestamp is not None and source_timestamp <= previous_timestamp:
+            self._out_of_order_sample_count += 1
+            self.get_logger().warning(
+                "[ZeroErrCollisionMonitor] Ignoring duplicate/out-of-order dynamic "
+                f"sample timestamp={source_timestamp:.9f} previous={previous_timestamp:.9f}"
+            )
+            return
+
+        sample_age = now - source_timestamp
+        if np.isfinite(sample_age):
+            self._sample_ages_sec.append(sample_age)
+            if sample_age > self._late_sample_threshold_sec:
+                self._late_sample_count += 1
+        if previous_timestamp is not None:
+            source_interval = source_timestamp - previous_timestamp
+            self._source_intervals_sec.append(source_interval)
+            if source_interval > 1.5 * self._expected_input_period_sec:
+                self._estimated_missing_sample_count += max(
+                    0,
+                    int(round(source_interval / self._expected_input_period_sec)) - 1,
+                )
+            if source_interval > self._confirmation_max_sample_gap_sec:
+                self._reset_confirmation_windows()
+
+        timeout = max(0.01, float(self.get_parameter("input_timeout_sec").value))
+        if (
+            previous_timestamp is not None
+            and source_timestamp - previous_timestamp > timeout
+        ):
+            self._invalidate_observer_inputs(
+                "dynamic input source gap "
+                f"dt={source_timestamp - previous_timestamp:.6f}s "
+                f"limit={timeout:.6f}s"
+            )
         for joint_name, values in updates.items():
             self._latest_payload[joint_name].update(values)
         self._last_dynamic_sample_time = now
+        self._last_dynamic_source_timestamp = source_timestamp
         self._dynamic_sample_complete = True
         self._dynamic_state_seen = True
+
+        slaves = self._build_atomic_slaves()
+        self._observer_inputs_valid = True
+        self._last_input_invalid_reason = ""
+        observer_started = time.perf_counter()
+        if self._estimator is not None:
+            self._estimator.last_model_duration_sec = 0.0
+            self._estimator.last_update_duration_sec = 0.0
+        self._update_external_torque_estimate(slaves, source_timestamp)
+        self._observer_update_durations_sec.append(
+            max(0.0, time.perf_counter() - observer_started))
+        model_duration = float(getattr(
+            self._estimator, "last_model_duration_sec", 0.0))
+        update_duration = float(getattr(
+            self._estimator, "last_update_duration_sec", 0.0))
+        if update_duration > 0.0 and np.isfinite(model_duration):
+            self._kdl_model_durations_sec.append(max(0.0, model_duration))
+        if update_duration > 0.0 and np.isfinite(update_duration):
+            self._observer_non_model_durations_sec.append(
+                max(0.0, update_duration - model_duration))
+        self._evaluate_collisions(slaves, source_timestamp)
+        self._processed_sample_count += 1
+
+    @staticmethod
+    def _message_timestamp(msg: DynamicJointState) -> float:
+        stamp = msg.header.stamp
+        timestamp = float(stamp.sec) + float(stamp.nanosec) * 1e-9
+        if timestamp <= 0.0 or not np.isfinite(timestamp):
+            raise ValueError("dynamic input source timestamp is missing or non-finite")
+        return timestamp
+
+    def _build_atomic_slaves(self) -> List[Dict[str, Optional[float]]]:
+        slaves = []
+        for slave_index, joint_name in enumerate(JOINT_NAMES[: self._slave_count]):
+            state = dict(self._latest_payload[joint_name])
+            state["joint"] = joint_name
+            state["slave"] = slave_index
+            state["friction_torque"] = self._compute_friction_torque(
+                joint_name, state.get("velocity"))
+            self._friction_torque_by_joint[joint_name] = state["friction_torque"]
+            state["measured_torque"] = self._compute_measured_torque(
+                state.get("torque_sensor"))
+            self._measured_torque_by_joint[joint_name] = state["measured_torque"]
+            slaves.append(state)
+        return slaves
 
     def _on_config(self, msg: String) -> None:
         try:
@@ -421,7 +547,7 @@ class ZeroErrCollisionMonitor(Node):
                 self._collision_config_path.write_text(
                     json.dumps(
                         {
-                            "confirm_cycles": self._confirm_cycles,
+                            "confirm_duration_ms": self._confirm_duration_sec * 1000.0,
                             "effort_thresholds": [
                                 self._effort_thresholds[joint_name]
                                 for joint_name in JOINT_NAMES[: self._slave_count]
@@ -439,6 +565,7 @@ class ZeroErrCollisionMonitor(Node):
                             "detection_enabled": self._detection_enabled,
                             "effort_following_error_detection_enabled":
                                 self._effort_following_error_detection_enabled,
+                            "diagnostics_enabled": self._diagnostics_enabled,
                             "dynamic_threshold_enabled": self._dynamic_threshold_enabled,
                             "dynamic_threshold_feature_names": [
                                 "bias", "positive_velocity", "negative_velocity",
@@ -500,9 +627,21 @@ class ZeroErrCollisionMonitor(Node):
 
     def _apply_runtime_config(self, payload: Dict[str, object]) -> bool:
         updated = False
-        confirm_cycles = payload.get("confirm_cycles")
-        if confirm_cycles is not None:
-            self._confirm_cycles = max(1, int(confirm_cycles))
+        confirm_duration_ms = payload.get("confirm_duration_ms")
+        if confirm_duration_ms is not None:
+            value = float(confirm_duration_ms)
+            if np.isfinite(value):
+                self._confirm_duration_sec = float(np.clip(value, 0.0, 1000.0)) * 1.0e-3
+                updated = True
+        elif payload.get("confirm_cycles") is not None:
+            # Read-only migration for older persisted configurations. New API
+            # clients must send an explicit duration so behavior is independent
+            # of callback/update frequency. The old detector evaluated at
+            # 200 Hz, so preserve its historical 5 ms-per-cycle semantics.
+            self._confirm_duration_sec = (
+                max(1, int(payload["confirm_cycles"]))
+                * 0.005
+            )
             updated = True
 
         updated |= self._apply_threshold_update(
@@ -537,6 +676,16 @@ class ZeroErrCollisionMonitor(Node):
         if secondary_enabled is not None:
             self._effort_following_error_detection_enabled = bool(
                 secondary_enabled)
+            updated = True
+        diagnostics_enabled = payload.get("diagnostics_enabled")
+        if diagnostics_enabled is not None:
+            requested = bool(diagnostics_enabled)
+            if requested != self._diagnostics_enabled:
+                self._diagnostics_enabled = requested
+                self.get_logger().info(
+                    "[ZeroErrCollisionMonitor] Live observer diagnostics %s"
+                    % ("enabled" if requested else "disabled")
+                )
             updated = True
         detection_suppressed = payload.get("collision_detection_suppressed")
         if detection_suppressed is not None:
@@ -631,16 +780,26 @@ class ZeroErrCollisionMonitor(Node):
     def _clear_dynamics_collision_state(self) -> None:
         for joint_name in JOINT_NAMES[: self._slave_count]:
             self._dynamics_cycles[joint_name] = 0
+            self._dynamics_exceedance_since[joint_name] = None
             self._dynamics_latched[joint_name] = False
             self._dynamics_active[joint_name] = False
             self._dynamics_reason[joint_name] = ""
             self._dynamic_threshold_envelope[joint_name].fill(0.0)
             self._dynamic_threshold_last_timestamp[joint_name] = None
 
+    def _reset_confirmation_windows(self) -> None:
+        """Break continuity when source samples contain an unobserved gap."""
+        for joint_name in JOINT_NAMES[: self._slave_count]:
+            self._dynamics_cycles[joint_name] = 0
+            self._dynamics_exceedance_since[joint_name] = None
+            self._contact_cycles[joint_name] = 0
+            self._contact_exceedance_since[joint_name] = None
+
     def _on_collision_acknowledged(self, _msg: String) -> None:
         self._clear_dynamics_collision_state()
         for joint_name in JOINT_NAMES[: self._slave_count]:
             self._contact_cycles[joint_name] = 0
+            self._contact_exceedance_since[joint_name] = None
             self._contact_latched[joint_name] = False
             self._contact_active[joint_name] = False
         # Do not immediately re-arm against the same residual that caused the
@@ -648,7 +807,11 @@ class ZeroErrCollisionMonitor(Node):
         # runtime keeps its collision-recovery hold active.
         self._stop_request_armed = False
         self._all_drives_op_since = None
-        self._reset_estimator_after_drive_interruption()
+        self._last_velocity_vector = None
+        self._last_velocity_timestamp = None
+        restart = getattr(self._estimator, "restart_warmup", None)
+        if callable(restart):
+            restart()
         for joint_name in JOINT_NAMES[: self._slave_count]:
             self._external_torque_by_joint[joint_name] = None
             self._expected_torque_by_joint[joint_name] = None
@@ -692,9 +855,6 @@ class ZeroErrCollisionMonitor(Node):
         return changed
 
     def _publish_snapshot(self) -> None:
-        if not self._joint_state_seen and not self._joint_state_warned:
-            self.get_logger().warning("[ZeroErrCollisionMonitor] Waiting for /joint_states...")
-            self._joint_state_warned = True
         if not self._dynamic_state_seen and not self._dynamic_state_warned:
             self.get_logger().warning(
                 "[ZeroErrCollisionMonitor] Waiting for /dynamic_joint_states..."
@@ -708,6 +868,7 @@ class ZeroErrCollisionMonitor(Node):
                 "nanosec": stamp.nanosec,
                 "iso": datetime.now(UTC).isoformat(timespec="seconds"),
             },
+            "timing": self._timing_snapshot(),
             "slaves": [],
         }
 
@@ -718,24 +879,7 @@ class ZeroErrCollisionMonitor(Node):
             self._observer_inputs_valid = True
             self._last_input_invalid_reason = ""
 
-        for slave_index, joint_name in enumerate(JOINT_NAMES[: self._slave_count]):
-            state = dict(self._latest_payload[joint_name])
-            state["joint"] = joint_name
-            state["slave"] = slave_index
-            state["friction_torque"] = self._compute_friction_torque(
-                joint_name,
-                state.get("velocity"),
-            )
-            self._friction_torque_by_joint[joint_name] = state["friction_torque"]
-            state["measured_torque"] = self._compute_measured_torque(
-                state.get("torque_sensor"),
-            )
-            self._measured_torque_by_joint[joint_name] = state["measured_torque"]
-            payload["slaves"].append(state)
-
-        if inputs_valid:
-            self._update_external_torque_estimate(payload["slaves"])
-        self._evaluate_collisions(payload["slaves"])
+        payload["slaves"] = self._build_atomic_slaves()
         self._inject_reasons(payload["slaves"])
 
         json_msg = String()
@@ -746,7 +890,8 @@ class ZeroErrCollisionMonitor(Node):
         table_msg.data = self._format_table(payload["slaves"])
         self._table_pub.publish(table_msg)
         self._state_pub.publish(self._build_state_msg(payload["slaves"]))
-        self._publish_plot_topics(payload["slaves"], stamp)
+        if self._diagnostics_enabled:
+            self._publish_plot_topics(payload["slaves"], stamp)
         self._publish_config_state()
 
         if self._print_table:
@@ -755,35 +900,87 @@ class ZeroErrCollisionMonitor(Node):
         if self._torque_log_enabled:
             self._append_torque_log(payload["slaves"], stamp)
 
+    @staticmethod
+    def _distribution_ms(values) -> Dict[str, Optional[float]]:
+        if not values:
+            return {"max": None, "p99": None, "p99_9": None}
+        samples = np.asarray(values, dtype=float) * 1000.0
+        samples = samples[np.isfinite(samples)]
+        if samples.size == 0:
+            return {"max": None, "p99": None, "p99_9": None}
+        return {
+            "max": float(np.max(samples)),
+            "p99": float(np.percentile(samples, 99.0)),
+            "p99_9": float(np.percentile(samples, 99.9)),
+        }
+
+    def _timing_snapshot(self) -> Dict[str, object]:
+        now = time.monotonic()
+        if (
+            self._last_timing_snapshot_monotonic is not None
+            and now - self._last_timing_snapshot_monotonic < 1.0
+        ):
+            return dict(self._cached_timing_snapshot)
+        elapsed = max(1.0e-9, now - self._timing_started_monotonic)
+        source_intervals = list(self._source_intervals_sec)
+        median_source_interval = (
+            float(np.median(source_intervals)) if source_intervals else None
+        )
+        snapshot = {
+            "expected_input_rate_hz": self._expected_input_rate_hz,
+            "delivered_callback_rate_hz": self._received_sample_count / elapsed,
+            "processed_rate_hz": self._processed_sample_count / elapsed,
+            "received_samples": self._received_sample_count,
+            "processed_samples": self._processed_sample_count,
+            "rejected_samples": self._rejected_sample_count,
+            "throttled_samples": self._throttled_sample_count,
+            "out_of_order_samples": self._out_of_order_sample_count,
+            "late_samples": self._late_sample_count,
+            "estimated_missing_source_samples": self._estimated_missing_sample_count,
+            "source_rate_hz_from_median": (
+                None
+                if median_source_interval is None or median_source_interval <= 0.0
+                else 1.0 / median_source_interval
+            ),
+            "source_interval_ms": self._distribution_ms(source_intervals),
+            "arrival_interval_ms": self._distribution_ms(self._arrival_intervals_sec),
+            "sample_age_ms": self._distribution_ms(self._sample_ages_sec),
+            "observer_update_ms": self._distribution_ms(
+                self._observer_update_durations_sec),
+            "kdl_model_ms": self._distribution_ms(self._kdl_model_durations_sec),
+            "observer_non_model_ms": self._distribution_ms(
+                self._observer_non_model_durations_sec),
+            "callback_total_ms": self._distribution_ms(self._callback_durations_sec),
+        }
+        self._cached_timing_snapshot = snapshot
+        self._last_timing_snapshot_monotonic = now
+        return dict(snapshot)
+
     def _input_validity(self) -> tuple[bool, str]:
-        if not self._joint_sample_complete:
-            return False, "joint state sample is incomplete or non-finite"
         if not self._dynamic_sample_complete:
             return False, "dynamic joint state sample is incomplete or non-finite"
-        if self._last_joint_sample_time is None or self._last_dynamic_sample_time is None:
-            return False, "required input streams have not produced complete samples"
+        if self._last_dynamic_sample_time is None:
+            return False, "dynamic input stream has not produced a complete sample"
         now = self.get_clock().now().nanoseconds * 1e-9
         timeout = max(0.01, float(self.get_parameter("input_timeout_sec").value))
-        joint_age = now - self._last_joint_sample_time
         dynamic_age = now - self._last_dynamic_sample_time
-        if joint_age > timeout or dynamic_age > timeout:
+        if dynamic_age > timeout:
             return False, (
-                f"input stream stale joint_age={joint_age:.3f}s "
-                f"dynamic_age={dynamic_age:.3f}s timeout={timeout:.3f}s"
-            )
-        sync_tolerance = max(
-            0.0, float(self.get_parameter("input_sync_tolerance_sec").value)
-        )
-        skew = abs(self._last_joint_sample_time - self._last_dynamic_sample_time)
-        if skew > sync_tolerance:
-            return False, (
-                f"input streams unsynchronized skew={skew:.3f}s "
-                f"tolerance={sync_tolerance:.3f}s"
+                f"dynamic input stream stale age={dynamic_age:.3f}s "
+                f"timeout={timeout:.3f}s"
             )
         return True, ""
 
     def _invalidate_observer_inputs(self, reason: str) -> None:
-        if self._observer_inputs_valid or reason != self._last_input_invalid_reason:
+        previous_reason = self._last_input_invalid_reason
+        repeated_stale_stream = (
+            reason.startswith("dynamic input stream stale")
+            and previous_reason.startswith("dynamic input stream stale")
+        )
+        if (
+            self._observer_inputs_valid
+            or (reason != previous_reason and not repeated_stale_stream)
+        ):
             self.get_logger().warning(
                 f"[ZeroErrCollisionMonitor] Observer unavailable: {reason}"
             )
@@ -801,11 +998,19 @@ class ZeroErrCollisionMonitor(Node):
             self._torque_difference_by_joint[joint_name] = None
             self._external_torque_by_joint[joint_name] = None
 
-    def _evaluate_collisions(self, slaves: List[Dict[str, Optional[float]]]) -> None:
+    def _evaluate_collisions(
+        self,
+        slaves: List[Dict[str, Optional[float]]],
+        sample_timestamp: Optional[float] = None,
+    ) -> None:
         observer_ready = (
             self._dynamics_enabled
             and self._estimator is not None
             and bool(getattr(self._estimator, "ready", False))
+        )
+        timestamp = (
+            self.get_clock().now().nanoseconds * 1.0e-9
+            if sample_timestamp is None else float(sample_timestamp)
         )
         for slave in slaves:
             joint_name = slave["joint"]
@@ -824,6 +1029,7 @@ class ZeroErrCollisionMonitor(Node):
                 joint_name,
                 slave.get("velocity"),
                 self._acceleration_by_joint.get(joint_name),
+                sample_timestamp,
             )
             self._current_external_torque_thresholds[joint_name] = dynamic_threshold
             self._contact_reason[joint_name] = (
@@ -837,8 +1043,10 @@ class ZeroErrCollisionMonitor(Node):
             if not self._detection_enabled or self._detection_suppressed:
                 self._dynamics_active[joint_name] = False
                 self._dynamics_cycles[joint_name] = 0
+                self._dynamics_exceedance_since[joint_name] = None
                 self._contact_active[joint_name] = False
                 self._contact_cycles[joint_name] = 0
+                self._contact_exceedance_since[joint_name] = None
                 reason = (
                     "sensorless detection disabled"
                     if not self._detection_enabled
@@ -855,8 +1063,10 @@ class ZeroErrCollisionMonitor(Node):
             if not observer_ready:
                 self._dynamics_active[joint_name] = False
                 self._dynamics_cycles[joint_name] = 0
+                self._dynamics_exceedance_since[joint_name] = None
                 self._contact_active[joint_name] = False
                 self._contact_cycles[joint_name] = 0
+                self._contact_exceedance_since[joint_name] = None
                 if not (self._active_stop_enabled and not self._stop_request_armed):
                     self._dynamics_latched[joint_name] = False
                     self._contact_latched[joint_name] = False
@@ -872,25 +1082,33 @@ class ZeroErrCollisionMonitor(Node):
                 self._dynamics_active[joint_name] = dynamics_active
                 if dynamics_active:
                     self._dynamics_cycles[joint_name] += 1
+                    if self._dynamics_exceedance_since[joint_name] is None:
+                        self._dynamics_exceedance_since[joint_name] = timestamp
                 else:
                     self._dynamics_cycles[joint_name] = 0
+                    self._dynamics_exceedance_since[joint_name] = None
                     if not (self._active_stop_enabled and not self._stop_request_armed):
                         self._dynamics_latched[joint_name] = False
 
                 if (
-                    self._dynamics_cycles[joint_name] >= self._confirm_cycles
+                    dynamics_active
+                    and self._exceedance_duration_sec(
+                        self._dynamics_exceedance_since[joint_name], timestamp
+                    ) >= self._confirm_duration_sec
                     and not self._dynamics_latched[joint_name]
                 ):
                     self._dynamics_latched[joint_name] = True
                     self.get_logger().warning(
                         "[ZeroErrCollisionMonitor] dynamics collision suspect on "
                         f"{joint_name}: external_torque={external_torque:.2f} >= "
-                        f"{dynamic_threshold:.2f} (dynamic)"
+                        f"{dynamic_threshold:.2f} for "
+                        f"{self._exceedance_duration_sec(self._dynamics_exceedance_since[joint_name], timestamp) * 1000.0:.2f} ms"
                     )
                     self._request_motion_stop(joint_name, "dynamics")
             else:
                 self._dynamics_active[joint_name] = False
                 self._dynamics_cycles[joint_name] = 0
+                self._dynamics_exceedance_since[joint_name] = None
                 if not (self._active_stop_enabled and not self._stop_request_armed):
                     self._dynamics_latched[joint_name] = False
 
@@ -902,13 +1120,19 @@ class ZeroErrCollisionMonitor(Node):
                 self._contact_active[joint_name] = exceeds_contact_thresholds
                 if exceeds_contact_thresholds:
                     self._contact_cycles[joint_name] += 1
+                    if self._contact_exceedance_since[joint_name] is None:
+                        self._contact_exceedance_since[joint_name] = timestamp
                 else:
                     self._contact_cycles[joint_name] = 0
+                    self._contact_exceedance_since[joint_name] = None
                     if not (self._active_stop_enabled and not self._stop_request_armed):
                         self._contact_latched[joint_name] = False
 
                 if (
-                    self._contact_cycles[joint_name] >= self._confirm_cycles
+                    exceeds_contact_thresholds
+                    and self._exceedance_duration_sec(
+                        self._contact_exceedance_since[joint_name], timestamp
+                    ) >= self._confirm_duration_sec
                     and not self._contact_latched[joint_name]
                 ):
                     self._contact_latched[joint_name] = True
@@ -923,6 +1147,7 @@ class ZeroErrCollisionMonitor(Node):
             else:
                 self._contact_active[joint_name] = False
                 self._contact_cycles[joint_name] = 0
+                self._contact_exceedance_since[joint_name] = None
                 if not (self._active_stop_enabled and not self._stop_request_armed):
                     self._contact_latched[joint_name] = False
                 self._contact_reason[joint_name] = "secondary detector disabled"
@@ -935,6 +1160,12 @@ class ZeroErrCollisionMonitor(Node):
             for name in JOINT_NAMES[: self._slave_count]
         ):
             self._stop_request_armed = True
+
+    @staticmethod
+    def _exceedance_duration_sec(started_at: Optional[float], now: float) -> float:
+        if started_at is None:
+            return 0.0
+        return max(0.0, float(now) - float(started_at))
 
     def _request_motion_stop(self, joint_name: str, detector: str) -> None:
         if not self._active_stop_enabled or not self._stop_request_armed:
@@ -1063,7 +1294,11 @@ class ZeroErrCollisionMonitor(Node):
         )
         return None
 
-    def _update_external_torque_estimate(self, slaves: List[Dict[str, Optional[float]]]) -> None:
+    def _update_external_torque_estimate(
+        self,
+        slaves: List[Dict[str, Optional[float]]],
+        sample_timestamp: Optional[float] = None,
+    ) -> None:
         if not self._dynamics_enabled or self._estimator is None:
             return
 
@@ -1077,7 +1312,10 @@ class ZeroErrCollisionMonitor(Node):
             and int(slave["error_code"]) == 0
             for slave in slaves
         )
-        now_s = self.get_clock().now().nanoseconds / 1e9
+        now_s = (
+            self.get_clock().now().nanoseconds / 1e9
+            if sample_timestamp is None else float(sample_timestamp)
+        )
         if not drives_operational:
             self._all_drives_op_since = None
             self._reset_estimator_after_drive_interruption()
@@ -1108,9 +1346,8 @@ class ZeroErrCollisionMonitor(Node):
                 or slave.get("velocity") is None
             ):
                 return
-            measured_torque = self._compute_measured_torque(
-                slave.get("torque_sensor"),
-            )
+            measured_torque = self._measured_torque_by_joint.get(
+                str(slave["joint"]))
             if measured_torque is None:
                 return
             positions.append(float(slave["position"]))
@@ -1118,7 +1355,7 @@ class ZeroErrCollisionMonitor(Node):
             measured_torques.append(float(measured_torque))
 
         velocity_vector = np.array(velocities, dtype=float)
-        timestamp = self.get_clock().now().nanoseconds / 1e9
+        timestamp = now_s
         if self._last_velocity_vector is None or self._last_velocity_timestamp is None:
             acceleration_vector = np.zeros_like(velocity_vector)
         else:
@@ -1163,6 +1400,7 @@ class ZeroErrCollisionMonitor(Node):
                 np.array(positions, dtype=float),
                 velocity_vector,
                 acceleration_vector,
+                timestamp=timestamp,
             )
         except (ValueError, FloatingPointError, RuntimeError) as exc:
             self._invalidate_observer_inputs(f"invalid observer data: {exc}")
@@ -1223,6 +1461,7 @@ class ZeroErrCollisionMonitor(Node):
         joint_name: str,
         velocity: Optional[float],
         acceleration: Optional[float],
+        sample_timestamp: Optional[float] = None,
     ) -> float:
         """Return the motion-conditioned threshold, never below its static floor."""
         floor = float(self._external_torque_thresholds[joint_name])
@@ -1239,7 +1478,10 @@ class ZeroErrCollisionMonitor(Node):
         velocity_negative = max(-velocity_f, 0.0)
         acceleration_positive = max(acceleration_f, 0.0)
         acceleration_negative = max(-acceleration_f, 0.0)
-        now = self.get_clock().now().nanoseconds / 1e9
+        now = (
+            self.get_clock().now().nanoseconds / 1e9
+            if sample_timestamp is None else float(sample_timestamp)
+        )
         last = self._dynamic_threshold_last_timestamp[joint_name]
         dt = 0.0 if last is None else max(0.0, now - float(last))
         decay = float(np.exp(-dt / self._dynamic_threshold_decay_sec))
@@ -1542,7 +1784,8 @@ class ZeroErrCollisionMonitor(Node):
         msg = String()
         msg.data = json.dumps(
             {
-                "confirm_cycles": self._confirm_cycles,
+                "confirm_duration_ms": self._confirm_duration_sec * 1000.0,
+                "expected_input_rate_hz": self._expected_input_rate_hz,
                 "effort_thresholds": [
                     self._effort_thresholds[joint_name]
                     for joint_name in JOINT_NAMES[: self._slave_count]
@@ -1564,6 +1807,7 @@ class ZeroErrCollisionMonitor(Node):
                 "detection_enabled": self._detection_enabled,
                 "effort_following_error_detection_enabled":
                     self._effort_following_error_detection_enabled,
+                "diagnostics_enabled": self._diagnostics_enabled,
                 "collision_detection_suppressed": self._detection_suppressed,
                 "dynamic_threshold_enabled": self._dynamic_threshold_enabled,
                 "dynamic_threshold_feature_names": [
