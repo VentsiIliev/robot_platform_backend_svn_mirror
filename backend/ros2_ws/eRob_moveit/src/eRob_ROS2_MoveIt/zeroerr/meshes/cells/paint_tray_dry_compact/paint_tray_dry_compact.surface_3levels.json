@@ -1,0 +1,48 @@
+{
+  "units": "millimeters",
+  "origin": "unchanged four-hole center at upper mounting surface",
+  "main_surface": {
+    "z": 0,
+    "x": [
+      -299,
+      299
+    ],
+    "y": [
+      -153.60000610351562,
+      200.20001220703125
+    ]
+  },
+  "dryer_surface": {
+    "z": -26,
+    "x": [
+      -290,
+      290
+    ],
+    "y": [
+      200.20001220703125,
+      580.2000122070312
+    ]
+  },
+  "step": {
+    "y": 200.20001220703125,
+    "z": [
+      -26,
+      0
+    ]
+  },
+  "surface_triangles": 10,
+  "front_surface": {
+    "z": 9,
+    "y": [
+      -449.79998779296875,
+      -153.60000610351562
+    ]
+  },
+  "front_step_y": -153.60000610351562,
+  "surface_with_equipment_triangles": 262,
+  "notes": [
+    "Zero-thickness surfaces; mounting holes filled.",
+    "Main and dryer surfaces use nominal upper plate and housing levels. Grille recesses, edge lips, and the small 11 mm front rim are omitted; the broad front panel is at 9 mm.",
+    "Separate files; previous models unchanged."
+  ]
+}

@@ -1,0 +1,46 @@
+DEFAULT_WORKOBJECT:
+- 0
+- 0
+- 0
+- 0
+- 0
+- 72
+WORKOBJECT_REGISTRY:
+  WOBJ_0:
+  - 0
+  - 0
+  - 0
+  - 0
+  - 0
+  - 0
+  WOBJ_1:
+  - -280.642435642
+  - -59.2869787188
+  - 0.0616797868058
+  - 0
+  - 0
+  - 72.1797016725
+WORKOBJECT_ID_MAP:
+  0: WOBJ_0
+  1: WOBJ_1
+DEFAULT_WORKOBJECT_ID: 0
+TOOL_COLLISION_PROFILE_MAP:
+  TOOL_1: calibration_tool
+TOOL_REGISTRY:
+  TOOL_0:
+  - 0
+  - 0
+  - 0
+  - 0
+  - 0
+  - 0
+  TOOL_1:
+  - 0.0059329690067
+  - 0.273760275194
+  - 168.550614477
+  - 0
+  - 0
+  - 0
+TOOL_ID_MAP:
+  0: TOOL_0
+  1: TOOL_1

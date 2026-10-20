@@ -116,6 +116,21 @@ class TestTrayReadiness(unittest.TestCase):
         self.process.start.assert_called_once()
         self.assertIs(self.layout.readiness, TrayReadiness.UNKNOWN)
 
+    def test_dry_run_start_skips_confirmation_only_while_enabled(self):
+        for demo in (False, True):
+            with self.subTest(demo=demo):
+                config = replace(self.config,
+                    dropoff=replace(self.config.dropoff, alternate_drying_demo=demo))
+                self.settings.get_snapshot.return_value = replace(config, enable_dry_run_mode=True)
+                self.service.start()
+                self.production().ensure_tray_ready_for_start()
+                self.assertIs(self.layout.readiness, TrayReadiness.UNKNOWN)
+                self.settings.get_snapshot.return_value = config
+                with self.assertRaises(TrayConfirmationRequiredError):
+                    self.service.start()
+                with self.assertRaises(TrayConfirmationRequiredError):
+                    self.production().ensure_tray_ready_for_start()
+
     def test_success_cannot_contain_failure(self):
         with self.assertRaises(ValueError):
             DashboardCommandResult(True, "", failure=TrayBusyError().as_failure())

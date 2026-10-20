@@ -236,6 +236,9 @@ def execute_ordered_pickup_and_paint_contact_result(
     final_pose: list[float] | None = (
         list(second_pass_paths[-1][-1]) if second_pass_paths else list(paint_paths[-1][-1])
     )
+    final_jobs = second_pass_jobs or paint_jobs
+    if final_jobs and final_jobs[-1].retreat_pose is not None:
+        final_pose = list(final_jobs[-1].retreat_pose)
     planned_approach = executor._dropoff_strategy.plan_paint_approach(
         cleanup_pending=(executor._edge_cleanup.should_run_after_xz_ry()
                          or executor._edge_cleanup.should_run_after_xy_rz()),

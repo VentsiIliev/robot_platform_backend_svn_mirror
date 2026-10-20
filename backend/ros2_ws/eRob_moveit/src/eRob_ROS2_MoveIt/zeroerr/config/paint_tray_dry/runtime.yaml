@@ -1,0 +1,10 @@
+RUNTIME_INCLUDES:
+- ../shared/motion/paint.yaml
+- cell.yaml
+- tools.yaml
+- calibration.yaml
+URDF_PATH: urdfs/robot.urdf.xacro
+SRDF_PATH: eRobo3.srdf
+CARTESIAN_SOURCE_LINK: ee_link
+COLLISION_TIP_LINK: tool0
+CALIBRATION_PATH: calibration.yaml

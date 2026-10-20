@@ -5,6 +5,8 @@ from PyQt6.QtCore import Qt, QRect, pyqtProperty, QPropertyAnimation, QPoint, \
 from PyQt6.QtGui import QColor, QFontMetrics, QPainter, QPainterPath, QBrush, \
     QPen, QFont
 from PyQt6.QtWidgets import QApplication, QWidget, QCheckBox, QVBoxLayout
+from pl_gui.theme.palette import theme_palette
+from pl_gui.theme.runtime import install_theme
 
 
 class QToggle(QCheckBox):
@@ -36,6 +38,12 @@ class QToggle(QCheckBox):
         self._color_animation = None
         self.stateChanged.connect(self.start_transition)
         self._user_checked = False  # Introduced flag to check user-initiated changes
+        install_theme(QApplication.instance()).colors_changed.connect(self._refresh_theme)
+        self._refresh_theme()
+
+    def _refresh_theme(self):
+        self._active_color = QColor(theme_palette.colors()["primary"])
+        self.sync_visual_state(self.isChecked())
 
     circle_pos = pyqtProperty(
         float, lambda self: self._circle_pos,

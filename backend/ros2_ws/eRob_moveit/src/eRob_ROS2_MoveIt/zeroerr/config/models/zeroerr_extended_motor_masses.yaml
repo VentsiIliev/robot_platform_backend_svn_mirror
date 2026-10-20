@@ -1,0 +1,153 @@
+# Physical arm parameters; original joint limits and inertias preserved.
+Joint_1:
+  limit:
+    effort: '2.0'
+    velocity: '1000.0'
+Joint_2:
+  limit:
+    effort: '2.0'
+    velocity: '1000.0'
+Joint_3:
+  origin:
+    xyz: 0.00000 0.00050 0.36350
+  limit:
+    effort: '2.0'
+    lower: '-2.6'
+    upper: '0.1'
+    velocity: '1000.0'
+Joint_4:
+  origin:
+    xyz: 0.00000 -0.01400 0.31100
+  limit:
+    effort: '1.5'
+    velocity: '1000.0'
+Joint_5:
+  limit:
+    effort: '1.5'
+    velocity: '1000.0'
+Joint_6:
+  limit:
+    effort: '4.0'
+    velocity: '1000.0'
+Link_1:
+  collision:
+    name: null
+  inertial:
+    inertia:
+      ixx: '0.005693'
+      ixy: '0.000000'
+      ixz: '0.000000'
+      iyy: '0.005453'
+      iyz: '0.000620'
+      izz: '0.003096'
+    origin:
+      xyz: 0.00000 0.02165 0.08389
+    mass:
+      value: '2.44622'
+  visual:
+    name: null
+Link_2:
+  collision:
+    name: null
+    geometry:
+      mesh:
+        filename: package://zeroerr/meshes/robots/zeroerr/extended_links/Link_2.stl
+  inertial:
+    inertia:
+      ixx: '0.007864'
+      ixy: '0.000000'
+      ixz: '0.000000'
+      iyy: '0.006329'
+      iyz: '0.000247'
+      izz: '0.005072'
+    origin:
+      xyz: 0.00000 0.01913 0.17871
+    mass:
+      value: '3.53000'
+  visual:
+    name: null
+    geometry:
+      mesh:
+        filename: package://zeroerr/meshes/robots/zeroerr/extended_links/Link_2.stl
+Link_3:
+  collision:
+    name: null
+    geometry:
+      mesh:
+        filename: package://zeroerr/meshes/robots/zeroerr/extended_links/Link_3.stl
+  inertial:
+    inertia:
+      ixx: '0.006557'
+      ixy: '0.000000'
+      ixz: '0.000000'
+      iyy: '0.005079'
+      iyz: '-0.000664'
+      izz: '0.004494'
+    origin:
+      xyz: 0.00000 -0.02358 0.14840
+    mass:
+      value: '2.98000'
+  visual:
+    name: null
+    geometry:
+      mesh:
+        filename: package://zeroerr/meshes/robots/zeroerr/extended_links/Link_3.stl
+Link_4:
+  collision:
+    name: null
+  inertial:
+    inertia:
+      ixx: '0.001973'
+      ixy: '0.000000'
+      ixz: '0.000000'
+      iyy: '0.001885'
+      iyz: '0.000080'
+      izz: '0.001439'
+    origin:
+      xyz: 0.00000 0.02708 0.01584
+    mass:
+      value: '1.55668'
+  visual:
+    name: null
+Link_5:
+  collision:
+    name: null
+  inertial:
+    inertia:
+      ixx: '0.002102'
+      ixy: '0.000000'
+      ixz: '0.000000'
+      iyy: '0.001902'
+      iyz: '0.000128'
+      izz: '0.001552'
+    origin:
+      xyz: 0.00000 0.02452 0.02708
+    mass:
+      value: '1.55668'
+  visual:
+    name: null
+Link_6:
+  collision:
+    name: null
+  inertial:
+    inertia:
+      ixx: '0.001692'
+      ixy: '0.000000'
+      ixz: '0.000000'
+      iyy: '0.001655'
+      iyz: '0.000038'
+      izz: '0.001208'
+    origin:
+      xyz: 0.00000 0.01898 -0.01386
+    mass:
+      value: '1.34121'
+  visual:
+    name: null
+base_link_inertial:
+  collision:
+    name: null
+  inertial:
+    mass:
+      value: '0.47602'
+  visual:
+    name: null

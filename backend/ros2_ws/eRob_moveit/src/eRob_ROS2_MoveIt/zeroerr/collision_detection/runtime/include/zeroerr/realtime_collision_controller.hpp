@@ -17,6 +17,8 @@
 #include <realtime_tools/realtime_buffer.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <std_msgs/msg/string.hpp>
+#include "zeroerr/collision_event_diagnostics.hpp"
+#include "zeroerr/collision_observer_recovery.hpp"
 
 namespace zeroerr
 {
@@ -72,6 +74,14 @@ private:
     std::size_t index, double velocity, double acceleration, double dt_sec,
     const RuntimeConfig & config);
   void reset_observer();
+  void rearm_observer();
+  void capture_collision_diagnostics(
+    const rclcpp::Time & time, double dt_sec, const RuntimeConfig & config,
+    const JointVector & position, const JointVector & velocity,
+    const JointVector & acceleration, const JointVector & torque,
+    const JointVector & compensated_torque, int triggered_joint,
+    std::uint64_t event_id, bool stop_attempted, bool stop_published);
+  void drain_collision_diagnostics();
   void publish_diagnostics(
     const rclcpp::Time & time, std::chrono::nanoseconds elapsed, bool publish_plot);
 
@@ -84,6 +94,8 @@ private:
   double plot_period_sec_{0.0005};
   double timing_period_sec_{0.01};
   double warmup_sec_{8.0};
+  double rearm_settle_sec_{0.5};
+  double rearm_clear_ratio_{0.8};
   double drive_stable_sec_{2.0};
   double warmup_velocity_limit_{0.02};
   std::size_t warmup_min_samples_{20};
@@ -107,8 +119,10 @@ private:
   JointVector residual_{};
   JointVector filtered_residual_{};
   JointVector expected_torque_{};
-  JointVector warmup_sum_{};
-  JointVector warmup_offset_{};
+  JointVector friction_correction_{};
+  JointVector position_correction_{};
+  JointVector motion_correction_{};
+  CollisionObserverRecovery recovery_;
   JointVector static_floor_{};
   JointVector threshold_{};
   JointVector threshold_envelope_velocity_positive_{};
@@ -147,12 +161,20 @@ private:
   };
   std::array<PeakSample, kJointCount> peak_samples_{};
 
+  CollisionDiagnosticQueue<CollisionEventSnapshot, 16> collision_diagnostic_queue_;
+  std::array<CollisionTraceSample, 25> collision_history_{};
+  std::size_t collision_history_count_{0};
+  std::size_t collision_history_next_{0};
+  double collision_history_elapsed_sec_{0.0};
+  double observer_ready_age_sec_{0.0};
+  std::uint64_t collision_event_sequence_{0};
+  std::uint64_t observer_reset_count_{0};
+  std::uint64_t acknowledgement_count_{0};
   bool have_previous_sample_{false};
   bool observer_ready_{false};
+  bool observer_initialized_{false};
   bool stop_latched_{false};
-  double warmup_elapsed_sec_{0.0};
   double drives_operational_elapsed_sec_{0.0};
-  std::size_t warmup_samples_{0};
   double diagnostics_elapsed_sec_{0.0};
   double timing_elapsed_sec_{0.0};
   std::uint64_t update_count_{0};
@@ -175,11 +197,13 @@ private:
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr config_subscription_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr acknowledgement_subscription_;
   rclcpp::TimerBase::SharedPtr config_state_timer_;
+  rclcpp::TimerBase::SharedPtr collision_diagnostic_timer_;
   realtime_tools::RealtimeBuffer<RuntimeConfig> runtime_config_;
   RuntimeConfig non_rt_config_{};
   std::string config_state_json_;
   bool publish_timing_this_cycle_{false};
   std::atomic<bool> reset_requested_{false};
+  std::atomic<bool> recalibration_requested_{false};
   std::array<std::string, kJointCount> stop_payloads_{};
 };
 

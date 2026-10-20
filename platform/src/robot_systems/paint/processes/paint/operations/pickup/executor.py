@@ -1027,6 +1027,20 @@ def build_ordered_paint_contact_segments(
             metadata=metadata,
             limit_profile=OrderedMotionLimitProfile.PAINT_CONTACT,
         ))
+        if job.retreat_pose is not None:
+            # No execution/readiness group: plan as a standalone LIN and stop
+            # at both boundaries, rather than densifying it into contour IK.
+            segments.append(OrderedPositionCommand(
+                label=f"{label_prefix}_retreat_{path_index + 1}",
+                motion_type=OrderedMotionType.LINEAR,
+                position=job.retreat_pose,
+                profile=OrderedMotionProfile(
+                    velocity_percent=job.velocity_percent,
+                    acceleration_percent=job.acceleration_percent * float(acceleration_scale),
+                    blend_radius=0.0,
+                ),
+                metadata=OrderedMotionMetadata(protected=True),
+            ))
     return segments
 
 

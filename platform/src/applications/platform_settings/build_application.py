@@ -6,7 +6,7 @@ from .service.platform_settings_service import PlatformSettingsService
 
 
 def build_platform_settings_application(_robot_system):
-    service = PlatformSettingsService()
+    service = PlatformSettingsService(localization_service=_robot_system.localization_service)
     return WidgetApplication(
         widget_factory=lambda _messaging: PlatformSettingsFactory().build(service)
     )

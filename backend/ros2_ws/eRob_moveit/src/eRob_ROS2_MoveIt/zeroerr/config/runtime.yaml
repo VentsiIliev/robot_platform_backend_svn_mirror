@@ -2,7 +2,11 @@
 ROBOT_BACKEND: zeroerr
 
 # Active robot profile. Profile-specific overrides live under config/<profile>/.
-ACTIVE_PROFILE: paint_short_links
+#ACTIVE_PROFILE: paint_tray_dry
+#ACTIVE_PROFILE: paint_auto_dry
+ACTIVE_PROFILE: development_short_links
+#ACTIVE_PROFILE: development_extended_links
+#ACTIVE_PROFILE: paint_short_links
 #ACTIVE_PROFILE: paint
 #ACTIVE_PROFILE: welding
 

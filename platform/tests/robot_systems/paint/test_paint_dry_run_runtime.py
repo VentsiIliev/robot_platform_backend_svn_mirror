@@ -69,6 +69,73 @@ class _Robot:
 
 
 class PaintDryRunRuntimeTests(unittest.TestCase):
+    def test_fits_same_item_to_all_enabled_areas_and_usable_tray(self):
+        from src.robot_systems.paint.processes.paint.configuration.models import (
+            DropoffStrategy, PaintDropoffConfig, PaintMagazineLoadConfig, PaintProcessConfig,
+        )
+
+        class WorkAreas:
+            def get_work_area(self, area_id):
+                side = 0.3 if area_id == "paint" else 0.2
+                return [(0, 0), (side, 0), (side, side), (0, side)]
+
+        config = PaintProcessConfig(
+            magazine_load=PaintMagazineLoadConfig(enabled=True),
+            dropoff=PaintDropoffConfig(
+                strategy=DropoffStrategy.PLATE_LAYOUT,
+                plate_corners=[[0, 0, 10, 180, 0, 0], [160, 0, 10, 180, 0, 0],
+                               [160, 300, 10, 180, 0, 0], [0, 300, 10, 180, 0, 0]],
+                plate_margin_left_mm=10, plate_margin_right_mm=10,
+            ),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            source = PaintDryRunSnapshotSource(
+                manifest_path=self._manifest(Path(directory)),
+                transformer_getter=lambda: _IdentityTransformer(),
+                work_area_service=WorkAreas(), image_size_getter=lambda: (1000, 1000),
+                robot_service=_Robot(), process_config_getter=lambda: config,
+            )
+            original = source._get_manifest()["workpieces"][0].copy()
+            magazine = source.capture_for_cycle(1, placement_key="magazine", work_area_id="magazine")
+            magazine_item = source.last_metadata["workpiece"].copy()
+            paint = source.capture_for_cycle(1)
+            self.assertEqual(magazine_item, source.last_metadata["workpiece"])
+            self.assertLess(source.last_metadata["fit_scale"], 1.0)
+            self.assertEqual(original, source._get_manifest()["workpieces"][0])
+            for snapshot in (magazine, paint):
+                side = 200 if snapshot.work_area_id == "magazine" else 300
+                boundary = np.array([[0, 0], [side, 0], [side, side], [0, side]])
+                self.assertTrue(source._footprint_is_inside(boundary, snapshot.contours[0]))
+            fitted = source.last_metadata["workpiece"]
+            local = np.asarray(fitted["contour_normalized"]) * [fitted["width_mm"], fitted["height_mm"]]
+            self.assertLessEqual(2 * np.linalg.norm(local, axis=1).max(), 130.0 + 1e-6)
+
+    def test_synthetic_workpiece_is_scaled_to_small_capture_area(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = PaintDryRunSnapshotSource(
+                manifest_path=self._manifest(Path(directory)),
+                transformer_getter=lambda: _IdentityTransformer(),
+                work_area_service=_WorkArea(), image_size_getter=lambda: (100, 100),
+                robot_service=_Robot(),
+            )
+            snapshot = source.capture_for_cycle(1)
+            points = snapshot.contours[0].reshape(-1, 2)
+            self.assertTrue(np.all(points >= 15.0 - 1e-5))
+            self.assertTrue(np.all(points <= 85.0 + 1e-5))
+            self.assertLess(source.last_metadata["fit_scale"], 1.0)
+
+    def test_rejects_work_area_without_margin_clearance_before_rendering(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = PaintDryRunSnapshotSource(
+                manifest_path=self._manifest(Path(directory)),
+                transformer_getter=lambda: _IdentityTransformer(),
+                work_area_service=_WorkArea(), image_size_getter=lambda: (20, 20),
+                robot_service=_Robot(),
+            )
+            with self.assertRaisesRegex(RuntimeError, "no usable area"):
+                source.capture_for_cycle(1)
+            self.assertIsNone(source.last_metadata)
+
     def _manifest(self, root: Path) -> Path:
         path = root / "manifest.json"
         path.write_text(json.dumps({

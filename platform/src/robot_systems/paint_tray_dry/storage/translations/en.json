@@ -140,6 +140,7 @@
     "Demo Alternate": "Demo Alternate"
   },
   "PaintDashboard": {
+    "Consecutive completed cycles: {count}": "Consecutive completed cycles: {count}",
     "Robot motion is held": "Robot motion is held",
     "Keep Hold": "Keep Hold",
     "Acknowledge and Clear Hold": "Acknowledge and Clear Hold",

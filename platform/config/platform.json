@@ -23,13 +23,29 @@
     "kiosk_password_file": "/etc/robot-platform/kiosk-password.json",
     "fullscreen": false,
     "window_width": 1280,
-    "window_height": 1024
+    "window_height": 1024,
+    "colors": {
+      "primary": "#905BA9",
+      "primary_dark": "#5B3ED6",
+      "background": "#F8F9FA",
+      "surface": "#FFFFFF",
+      "text": "#1A1A2E",
+      "border": "#E0E0E0"
+    }
   },
   "robot_systems": {
     "paint_tray_dry": {
       "robot_driver": "zeroerr",
       "backend": "zeroerr",
-      "backend_profile": "paint_short_links",
+      "backend_profile": "paint_tray_dry",
+      "release_version": "1.0.13",
+      "platform_version": "1.0.13",
+      "backend_version": "1.0.1"
+    },
+    "paint_auto_dry": {
+      "robot_driver": "zeroerr",
+      "backend": "zeroerr",
+      "backend_profile": "paint_auto_dry",
       "release_version": "1.0.13",
       "platform_version": "1.0.13",
       "backend_version": "1.0.1"

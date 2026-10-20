@@ -18,6 +18,21 @@ def _parse_origin(origin_elem):
     return xyz, rpy
 
 
+def _origin_transform(origin_elem):
+    """URDF fixed transform: translation followed by Rz(yaw) Ry(pitch) Rx(roll)."""
+    xyz, (roll, pitch, yaw) = _parse_origin(origin_elem)
+    cr, cp, cy = np.cos([roll, pitch, yaw])
+    sr, sp, sy = np.sin([roll, pitch, yaw])
+    transform = np.eye(4)
+    transform[:3, :3] = [
+        [cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
+        [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
+        [-sp, cp * sr, cp * cr],
+    ]
+    transform[:3, 3] = xyz
+    return transform
+
+
 def _build_transform_to_base_link(root, link_name):
     joints = {}
     for joint in root.findall('.//joint'):
@@ -25,7 +40,7 @@ def _build_transform_to_base_link(root, link_name):
         if child_link is not None:
             joints[child_link.get('link')] = joint
 
-    cumulative_offset = np.array([0.0, 0.0, 0.0])
+    cumulative_transform = np.eye(4)
     current_link = link_name
     visited = set()
 
@@ -36,15 +51,14 @@ def _build_transform_to_base_link(root, link_name):
         if current_link not in joints:
             break
         joint = joints[current_link]
-        xyz, _ = _parse_origin(joint.find('origin'))
-        cumulative_offset += np.array(xyz)
+        cumulative_transform = _origin_transform(joint.find('origin')) @ cumulative_transform
         parent = joint.find('parent')
         current_link = parent.get('link') if parent is not None else None
 
-    return cumulative_offset
+    return cumulative_transform
 
 
-def _bounds_from_boxes(collision_elements, link_offset):
+def _bounds_from_boxes(collision_elements, link_transform):
     """Compute combined AABB from all <box> collision elements.
     Also returns plate_top_z: the z_max of the lowest box (= top of the base plate).
     """
@@ -60,21 +74,20 @@ def _bounds_from_boxes(collision_elements, link_offset):
         if not size_str:
             continue
         sx, sy, sz = [float(v) for v in size_str.split()]
-        ox, oy, oz = _parse_origin(coll.find('origin'))[0]
-        ox += link_offset[0]
-        oy += link_offset[1]
-        oz += link_offset[2]
-
-        box_z_min = oz - sz / 2
-        box_z_max = oz + sz / 2
-        if box_z_min < lowest_z_min:       # this is the base plate
+        transform = link_transform @ _origin_transform(coll.find('origin'))
+        local_corners = np.array([
+            [dx, dy, dz, 1.0]
+            for dx in (-sx / 2, sx / 2)
+            for dy in (-sy / 2, sy / 2)
+            for dz in (-sz / 2, sz / 2)
+        ])
+        transformed = (transform @ local_corners.T).T[:, :3]
+        box_z_min = transformed[:, 2].min()
+        box_z_max = transformed[:, 2].max()
+        if box_z_min < lowest_z_min:
             lowest_z_min = box_z_min
-            plate_top_z = box_z_max        # exact top surface of the plate
-
-        for dx in (-sx / 2, sx / 2):
-            for dy in (-sy / 2, sy / 2):
-                for dz in (-sz / 2, sz / 2):
-                    corners.append([ox + dx, oy + dy, oz + dz])
+            plate_top_z = box_z_max
+        corners.extend(transformed)
 
     if not corners:
         return None
@@ -135,7 +148,7 @@ def _extract_workspace_from_urdf(robot_controller, max_retries=3, retry_delay=0.
                     return SAFETY_WORKSPACE_FALLBACK.copy()
 
             root = ET.fromstring(robot_description)
-            link_to_base_offset = _build_transform_to_base_link(root, 'mounting_surface')
+            link_to_base_transform = _build_transform_to_base_link(root, 'mounting_surface')
 
             for link in root.findall('.//link[@name="mounting_surface"]'):
                 all_collisions = link.findall('collision')
@@ -158,15 +171,17 @@ def _extract_workspace_from_urdf(robot_controller, max_retries=3, retry_delay=0.
                             continue
                         import trimesh
                         mesh = trimesh.load(mesh_path)
+                        # URDF mesh units may differ from metres (e.g. mm CAD exports).
+                        scale = [float(value) for value in mesh_elem.get('scale', '1 1 1').split()]
+                        mesh.apply_scale(scale)
+                        mesh.apply_transform(link_to_base_transform @ _origin_transform(coll.find('origin')))
                         bounds = mesh.bounds
-                        coll_xyz, _ = _parse_origin(coll.find('origin'))
-                        total_offset = np.array(coll_xyz) + link_to_base_offset
                         workspace = {
-                            'x_min': float(bounds[0][0] + total_offset[0]),
-                            'x_max': float(bounds[1][0] + total_offset[0]),
-                            'y_min': float(bounds[0][1] + total_offset[1]),
-                            'y_max': float(bounds[1][1] + total_offset[1]),
-                            'z_min': float(bounds[0][2] + total_offset[2]) + surface_thickness,
+                            'x_min': float(bounds[0][0]),
+                            'x_max': float(bounds[1][0]),
+                            'y_min': float(bounds[0][1]),
+                            'y_max': float(bounds[1][1]),
+                            'z_min': float(bounds[0][2]) + surface_thickness,
                             'z_max': SAFETY_WORKSPACE_FALLBACK['z_max'],
                         }
                         robot_controller.get_logger().info(
@@ -179,7 +194,7 @@ def _extract_workspace_from_urdf(robot_controller, max_retries=3, retry_delay=0.
                         robot_controller.get_logger().debug(f"Mesh load failed: {e}")
 
                 # ── Strategy 2: box primitives ────────────────────────────────
-                box_bounds = _bounds_from_boxes(all_collisions, link_to_base_offset)
+                box_bounds = _bounds_from_boxes(all_collisions, link_to_base_transform)
                 if box_bounds is not None:
                     # Use the actual plate top surface + 5mm margin for the floor wall.
                     # surface_thickness was a hack for mesh-based extraction where only

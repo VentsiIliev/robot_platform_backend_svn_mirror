@@ -45,7 +45,10 @@ realtime_collision_controller:
     observer_gain: 10.0
     filter_alpha: 0.7
     acceleration_filter_cutoff_hz: 40.0
+    # Full baseline estimation is for startup or explicit recalibration; acknowledgement retains a valid baseline.
     warmup_sec: 8.0
+    rearm_settle_sec: 0.5
+    rearm_clear_ratio: 0.8
     drive_stable_sec: 2.0
     warmup_velocity_limit: 0.02
     warmup_min_samples: 20

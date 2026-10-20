@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!-- The corrected mesh is in mm, with the mounting-hole pattern centred at
+       XY=0 and the mounting surface at Z=0. Its saved transform is already baked in. -->
+  <xacro:macro name="paint_tray_dry_compact" params="mount_xyz mount_rpy">
+    <link name="mounting_surface">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0" />
+        <geometry>
+          <mesh filename="package://zeroerr/meshes/cells/paint_tray_dry_compact/paint_tray_dry_compact.stl" scale="0.001 0.001 0.001" />
+        </geometry>
+        <material name="compact_cell_material">
+          <color rgba="0.65 0.65 0.65 1.0" />
+        </material>
+      </visual>
+      <!-- Include the simplified fixtures and equipment above the stepped
+           surfaces; the surface-only mesh omits these collision obstacles. -->
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0" />
+        <geometry>
+          <mesh filename="package://zeroerr/meshes/cells/paint_tray_dry_compact/paint_tray_dry_compact.surface_3levels_above.stl" scale="0.001 0.001 0.001" />
+        </geometry>
+      </collision>
+    </link>
+    <joint name="mounting_surface_joint" type="fixed">
+      <parent link="base_link" />
+      <child link="mounting_surface" />
+      <origin xyz="${mount_xyz}" rpy="${mount_rpy}" />
+    </joint>
+  </xacro:macro>
+</robot>

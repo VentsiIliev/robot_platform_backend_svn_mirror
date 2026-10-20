@@ -7,9 +7,26 @@
     "Appearance": "Външен вид",
     "Virtual keyboard": "Виртуална клавиатура",
     "Show the on-screen keyboard when editing text or numbers.": "Показване на екранната клавиатура при редактиране на текст или числа.",
-    "Changes to the virtual keyboard apply immediately.": "Промените по виртуалната клавиатура се прилагат веднага."
+    "Changes to the virtual keyboard apply immediately.": "Промените по виртуалната клавиатура се прилагат веднага.",
+    "Colors": "Цветове",
+    "Accent": "Акцент",
+    "Accent hover / pressed": "Акцент при посочване / натискане",
+    "Page background": "Фон на страницата",
+    "Cards and input background": "Фон на панелите и полетата",
+    "Text": "Текст",
+    "Borders": "Рамки",
+    "Apply colors": "Прилагане на цветовете",
+    "Restore defaults": "Възстановяване по подразбиране",
+    "Language": "Език",
+    "Colors preview immediately. Apply to save; leaving this page discards unsaved changes.": "Цветовете се показват веднага. Приложете, за да запазите; напускането на страницата отменя незапазените промени.",
+    "Theme": "Тема",
+    "Light": "Светла",
+    "Dark": "Тъмна",
+    "Custom": "Персонализирана"
   },
   "PlatformSettingsController": {
-    "Saved. The change is active now.": "Запазено. Промяната вече е активна."
+    "Saved. The change is active now.": "Запазено. Промяната вече е активна.",
+    "Preview only. Apply colors to keep these changes.": "Само предварителен преглед. Приложете цветовете, за да запазите промените.",
+    "Unsaved color changes discarded.": "Незапазените промени по цветовете са отменени."
   }
 }

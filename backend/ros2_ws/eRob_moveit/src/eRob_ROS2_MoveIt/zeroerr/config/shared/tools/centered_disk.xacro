@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="centered_disk" params="mount_xyz mount_rpy">
+    <link name="tool0">
+      <visual>
+        <origin xyz="-0.000000 0.000877 0.019567" rpy="0.000000 0.000000 0.000000" />
+        <geometry>
+          <mesh filename="package://zeroerr/meshes/tools/disk_centered/00035513_disk_origin_centered.stl" scale="0.001 0.001 0.001" />
+        </geometry>
+        <material name="tool_material">
+          <color rgba="0.7 0.7 0.7 1" />
+        </material>
+      </visual>
+      <collision>
+        <origin xyz="-0.000000 0.000877 0.019567" rpy="0.000000 0.000000 0.000000" />
+        <geometry>
+          <mesh filename="package://zeroerr/meshes/tools/disk_centered/00035513_disk_origin_centered.stl" scale="0.001 0.001 0.001" />
+        </geometry>
+      </collision>
+    </link>
+    <joint name="tool0" type="fixed">
+      <parent link="ee_link" />
+      <child link="tool0" />
+      <origin xyz="${mount_xyz}" rpy="${mount_rpy}" />
+    </joint>
+    <link name="tcp">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0" />
+        <geometry>
+          <sphere radius="0.00050" />
+        </geometry>
+        <material name="tool_marker">
+          <color rgba="1 0 0 1" />
+        </material>
+      </visual>
+    </link>
+    <joint name="tcp_joint" type="fixed">
+      <parent link="tool0" />
+      <child link="tcp" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
+    </joint>
+    <material name="tool_marker">
+      <color rgba="1 0 0 1" />
+    </material>
+  </xacro:macro>
+</robot>

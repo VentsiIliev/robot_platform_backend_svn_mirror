@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 import re
 from typing import Dict, Iterable, List, Tuple
+from weakref import WeakSet
 
 from PyQt6.QtCore import QCoreApplication
 
@@ -37,6 +38,7 @@ class LocalizationService(ILocalizationService):
         self._current_translator: DictTranslator | None = None
         self._languages = self._discover_languages()
         self._logger = logging.getLogger(self.__class__.__name__)
+        self._selectors = WeakSet()
 
     def set_language(self, code: str) -> None:
         app = QCoreApplication.instance()
@@ -63,6 +65,12 @@ class LocalizationService(ILocalizationService):
 
         self._current_language = resolved_language
         self._persist_language(resolved_language)
+        for selector in tuple(self._selectors):
+            try:
+                self.sync_selector(selector)
+            except RuntimeError:
+                # A Qt wrapper can outlive its C++ widget during shell teardown.
+                self._selectors.discard(selector)
         if self._messaging is not None:
             self._messaging.publish(
                 LocalizationTopics.LANGUAGE_CHANGED,
@@ -82,12 +90,14 @@ class LocalizationService(ILocalizationService):
         return translated
 
     def sync_selector(self, selector) -> None:
+        """Synchronize and weakly track a selector for subsequent language changes."""
+        self._selectors.add(selector)
+        previous = selector.blockSignals(True)
         try:
-            selector.blockSignals(True)
             selector.current_language = self._current_language
             selector.updateSelectedLang()
         finally:
-            selector.blockSignals(False)
+            selector.blockSignals(previous)
 
     def _remove_installed_translator(self, app: QCoreApplication) -> None:
         if self._current_translator is not None:

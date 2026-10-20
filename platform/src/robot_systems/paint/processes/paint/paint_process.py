@@ -74,6 +74,11 @@ class PaintProcess(BaseProcess):
         return self._last_failure
 
     @property
+    def consecutive_completed_cycles(self) -> int:
+        """Expose the session cycle streak independently of dashboard lifetime."""
+        return self._production_service.consecutive_completed_cycles
+
+    @property
     def last_result(self) -> PaintOperationResult | None:
         """Typed outcome of the last finished production run."""
         return self._last_result
@@ -228,17 +233,27 @@ class PaintProcess(BaseProcess):
         try:
             self._production_service.stop_current_phase()
         finally:
+            self._production_service.reset_completed_cycle_streak()
             self._request_hardware_stop(release_vacuum=False)
 
     def set_error(self, message: str = "") -> None:
         """External faults use the same hardware-halt policy as cycle failures."""
+        record = None
         with self._lock:
             previous = self._state
+            if previous != ProcessState.ERROR:
+                record = self._production_service.prepare_failure_record(
+                    message=message,
+                    failure=PaintFailure(PaintFailureCode.INTERNAL, "external_fault", message),
+                    run_id=self._diagnostic_run_id,
+                )
             self._state = ProcessState.ERROR
             try:
                 self._on_fault()
             finally:
                 self._publish(ProcessState.ERROR, previous, message)
+        if record is not None:
+            self._production_service.write_failure_record(record)
 
     def shutdown(self, timeout: float = 5.0) -> None:
         """Cancel and join workers outside the state lock before dependencies close."""
@@ -447,6 +462,7 @@ class PaintProcess(BaseProcess):
 
         # Serialize completion with Stop/reset. A cancelled run cannot publish
         # a late success or error, even if reset has cleared the legacy flag.
+        failure_record = None
         with self._lock:
             if (
                 run_stop_event is not self._run_stop_event
@@ -483,7 +499,14 @@ class PaintProcess(BaseProcess):
                     self._production_service.publish_dashboard_message("warning", title, message)
             else:
                 self._logger.error("Paint process failed: %s", msg)
+                failure_record = self._production_service.prepare_failure_record(
+                    message=msg, failure=failure,
+                    run_id=self._diagnostic_run_id,
+                    collision_event=collision_event,
+                )
                 self._transition(ProcessState.ERROR, self._on_fault, msg)
+        if failure_record is not None:
+            self._production_service.write_failure_record(failure_record)
 
     def _collision_event_since(self, started_at: float) -> dict | None:
         if self._robot_service is None:

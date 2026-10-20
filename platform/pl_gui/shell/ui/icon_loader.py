@@ -3,6 +3,8 @@ import os
 import qtawesome as qta
 from PyQt6.QtCore import QSize
 from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap
+from pl_gui.theme.icon import themed_icon
+from pl_gui.theme.palette import SOURCE_ROLES
 
 
 _icon_cache = {}
@@ -70,6 +72,10 @@ def load_icon(source, color=None, size=None):
         try:
             if color:
                 icon = qta.icon(source, color=color)
+                if not icon.isNull() and SOURCE_ROLES.get(str(color).lower()) in ("primary", "primary_dark", "text"):
+                    def create_icon(resolved_color):
+                        return qta.icon(source, color=resolved_color)
+                    icon = themed_icon(create_icon, color)
             else:
                 icon = qta.icon(source)
             if icon.isNull():

@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="eRobo3" version="1.0">
+  <xacro:include filename="../../shared/urdf/zeroerr_arm.xacro" />
+  <xacro:include filename="../../shared/tools/pointer.xacro" />
+  <xacro:include filename="../../shared/cells/paint_tray_dry_compact.xacro" />
+  <xacro:property name="model" lazy_eval="false" value="${xacro.load_yaml('../../models/zeroerr_short.yaml')}" />
+  <xacro:zeroerr_arm model="${model}" />
+  <xacro:pointer mount_xyz="0 0 0" mount_rpy="0 0 0" />
+  <xacro:paint_tray_dry_compact mount_xyz="0 0 0" mount_rpy="0 0 1.5707963267948966" />
+</robot>

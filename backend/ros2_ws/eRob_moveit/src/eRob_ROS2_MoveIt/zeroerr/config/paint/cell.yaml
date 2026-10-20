@@ -1,0 +1,14 @@
+RUNTIME_INCLUDES:
+- ../shared/cells/paint_runtime.yaml
+MOTION_PASSAGES:
+- id: workpiece_drop_opening
+  object_id: motion_passage_lid_workpiece_drop_opening
+  frame: mounting_surface
+  box_size_m:
+  - 0.197
+  - 0.307
+  - 0.008
+  origin_m:
+  - 0.3175
+  - 0.0225
+  - -0.004

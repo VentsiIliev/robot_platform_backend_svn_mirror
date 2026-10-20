@@ -4,10 +4,12 @@ This module provides consistent styling constants and stylesheets
 for all widgets in the new_widgets directory.
 """
 # ================= COLOR CONSTANTS =================
-PRIMARY = "#905BA9"
+from pl_gui.theme.palette import DEFAULT_COLORS
+
+PRIMARY = DEFAULT_COLORS["primary"]
 PRIMARY_DARK = "#6D4ED6"
 BORDER = "#E4E6F0"
-ICON_COLOR = "#905BA9"
+ICON_COLOR = PRIMARY
 QTA_ICON_COLOR = "#FFFFFF"  # Color to use when creating qtawesome icons for mini previews
 BG_COLOR = "#F6F7FB"
 TOPBAR_BG = "#F6F7FB"
@@ -15,7 +17,7 @@ GROUP_BG = "rgba(122,90,248,0.05)"
 
 # Hover / interaction states
 PRIMARY_HOVER = "#8B6FF9"       # lighter primary for hover
-SURFACE = "#FFFFFF"             # main surface color
+SURFACE = DEFAULT_COLORS["surface"]  # main surface color
 TEXT_PRIMARY = "#1D1B20"        # dark text
 TEXT_DISABLED = "#9C9A9E"       # grayed-out text
 TEXT_ON_PRIMARY = "#FFFFFF"     # white text on primary buttons

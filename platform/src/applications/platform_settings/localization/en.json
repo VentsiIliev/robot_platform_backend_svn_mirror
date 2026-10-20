@@ -7,9 +7,26 @@
     "Appearance": "Appearance",
     "Virtual keyboard": "Virtual keyboard",
     "Show the on-screen keyboard when editing text or numbers.": "Show the on-screen keyboard when editing text or numbers.",
-    "Changes to the virtual keyboard apply immediately.": "Changes to the virtual keyboard apply immediately."
+    "Changes to the virtual keyboard apply immediately.": "Changes to the virtual keyboard apply immediately.",
+    "Colors": "Colors",
+    "Accent": "Accent",
+    "Accent hover / pressed": "Accent hover / pressed",
+    "Page background": "Page background",
+    "Cards and input background": "Cards and input background",
+    "Text": "Text",
+    "Borders": "Borders",
+    "Apply colors": "Apply colors",
+    "Restore defaults": "Restore defaults",
+    "Language": "Language",
+    "Colors preview immediately. Apply to save; leaving this page discards unsaved changes.": "Colors preview immediately. Apply to save; leaving this page discards unsaved changes.",
+    "Theme": "Theme",
+    "Light": "Light",
+    "Dark": "Dark",
+    "Custom": "Custom"
   },
   "PlatformSettingsController": {
-    "Saved. The change is active now.": "Saved. The change is active now."
+    "Saved. The change is active now.": "Saved. The change is active now.",
+    "Preview only. Apply colors to keep these changes.": "Preview only. Apply colors to keep these changes.",
+    "Unsaved color changes discarded.": "Unsaved color changes discarded."
   }
 }

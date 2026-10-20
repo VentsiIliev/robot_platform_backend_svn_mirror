@@ -51,11 +51,16 @@ class PlateLayoutDropoff(IDropoffStrategy):
         return _reserve_plate_dropoff(request, self._runtime)
 
     def painting_detach_pose(self, *, is_final_job: bool, paint_start_rz: float, paint_end_rz: float | None) -> list[float] | None:
+        dropoff = self._runtime._paint_process_config().dropoff
+        if dropoff.plate_retry_entry_after_unwind or dropoff.separate_paint_retreat:
+            return None
         return _plate_entry_detach_pose(self._runtime, is_final_job=is_final_job,
                                       paint_start_rz=paint_start_rz, paint_end_rz=paint_end_rz)
 
     def plan_paint_approach(self, *, cleanup_pending: bool) -> Ready[DropoffApproach] | Failed:
-        if not self._runtime._paint_process_config().dropoff.plate_use_entry_gate_as_detach_pose:
+        config = self._runtime._paint_process_config().dropoff
+        if (config.plate_retry_entry_after_unwind or config.separate_paint_retreat
+                or not config.plate_use_entry_gate_as_detach_pose):
             return Ready(DropoffApproach())
         segments, final_pose, error = build_plate_entry_segments_for_paint_chain(self._runtime)
         if error:
@@ -510,6 +515,7 @@ def _execute_plate_layout_ordered_release(
     executor: object,
     *,
     next_cycle_start: NextCycleTarget | None,
+    _after_unwind: bool = False,
 ) -> tuple[bool, str]:
     service = executor._plate_layout_service
     reservation = None if service is None else service.pending
@@ -584,7 +590,7 @@ def _execute_plate_layout_ordered_release(
             for offset in (-180.0, 0.0, 180.0)
         )
     )
-    if bool(dropoff.plate_distribute_unwind):
+    if bool(dropoff.plate_distribute_unwind) and not _after_unwind:
         try:
             route_poses = _plate_route_poses_with_distributed_unwind(
                 executor,
@@ -600,7 +606,7 @@ def _execute_plate_layout_ordered_release(
             _logger.exception("[PLATE_LAYOUT] Failed to build distributed-unwind route")
             return False, "Plate-layout distributed unwind route could not be built"
     rotation_index = int(executor._contact_motion_config.rotation_index)
-    if bool(dropoff.plate_distribute_unwind) and next_cycle_start is not None:
+    if bool(dropoff.plate_distribute_unwind) and not _after_unwind and next_cycle_start is not None:
         exit_route_poses = []
         if use_center_waypoint:
             exit_route_poses.append(route_poses["exit_center"])
@@ -690,7 +696,27 @@ def _execute_plate_layout_ordered_release(
         if not executor._motion.move_ordered_pickup_sequence(
             "Plate-layout ordered entry chain", entry_segments
         ):
-            return False, "Pivot paint finished, but plate-layout ordered entry chain failed before release"
+            original_error = getattr(executor._motion, "last_motion_error", None)
+            if dropoff.plate_retry_entry_after_unwind and not _after_unwind:
+                from .plate_entry_recovery import recover_plate_entry_unwind
+
+                recovered, recovery_message = recover_plate_entry_unwind(
+                    executor, original_error, idle_checker=_wait_for_motion_slot_idle,
+                )
+                if recovered:
+                    # Rebuild every route pose from the fresh post-unwind state.
+                    # This invocation owns release and exit; do not release twice.
+                    ok, message = _execute_plate_layout_ordered_release(
+                        executor, next_cycle_start=next_cycle_start, _after_unwind=True,
+                    )
+                    if not ok:
+                        return False, f"Tray entry rejected ({original_error}); retry after unwind failed: {message}"
+                    return True, message
+                return False, f"Tray entry rejected ({original_error}); {recovery_message}"
+            return False, (
+                "Pivot paint finished, but plate-layout ordered entry chain failed before release"
+                + (f": {original_error}" if original_error else "")
+            )
 
     # Start the plate exit as soon as vacuum and blow-off are activated.  The
     # controller closes the blow-off valve after its pulse in the background.
@@ -758,6 +784,10 @@ def _reserve_plate_dropoff(request: DropoffCycleRequest, executor) -> PaintOpera
         return PaintOperationResult.failed(PaintFailureCode.INVALID_CONFIGURATION, "tray_reservation", f"Plate-layout dropoff requires calibration movement group '{group_id}'")
 
     process_config = executor._paint_process_config()
+    if process_config.enable_dry_run_mode:
+        # No workpieces accumulate during dry run. Reuse an empty virtual tray
+        # each cycle, while still requiring the current footprint to fit.
+        executor._plate_layout_service.clear()
     result = executor._plate_layout_service.reserve_result(
         process_config.dropoff,
         width_mm=width_mm,
@@ -768,26 +798,6 @@ def _reserve_plate_dropoff(request: DropoffCycleRequest, executor) -> PaintOpera
         outlines_mm=outlines_mm,
         paint_passes=paint_passes,
     )
-    if (
-        isinstance(result, PaintOperationResult)
-        and result.outcome is PaintOutcome.TRAY_FULL
-        and bool(process_config.enable_dry_run_mode)
-    ):
-        _logger.warning(
-            "[DRY_RUN] Virtual drop-off plate is full; resetting its simulated "
-            "occupancy and reserving the current workpiece on a fresh plate"
-        )
-        executor._plate_layout_service.clear()
-        result = executor._plate_layout_service.reserve_result(
-            process_config.dropoff,
-            width_mm=width_mm,
-            height_mm=height_mm,
-            calibration_pose=list(calibration_pose),
-            workpiece_rz_at_calibration_deg=float(align_pose[5]),
-            pose_calculator=calculate_workpiece_dropoff_pose,
-            outlines_mm=outlines_mm,
-            paint_passes=paint_passes,
-        )
     if not isinstance(result, Ready):
         return result
     reservation = result.value

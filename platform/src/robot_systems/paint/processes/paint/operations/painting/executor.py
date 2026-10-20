@@ -362,6 +362,7 @@ class PaintingExecutor:
                     )
 
             with timed_block(_logger, "paint_contact_job_prepare", label=f"{job_label}:build_command_path"):
+                retreat_pose = None
                 command_pivot_path = owner._paint_contact_command_path(pivot_path)
                 command_pivot_path = _remove_projected_local_reversals(command_pivot_path)
                 paint_contact_end_rz = (
@@ -388,10 +389,17 @@ class PaintingExecutor:
                             [round(float(value), 3) for value in dropoff_detach],
                         )
                     else:
-                        command_pivot_path = self._append_retreat_opposite_to_staging(
+                        path_with_retreat = self._append_retreat_opposite_to_staging(
                             command_pivot_path,
                             additional_paint_axis_offset_mm=detach_clearance_mm,
                         )
+                        if (owner._paint_process_config().dropoff.separate_paint_retreat
+                                and len(path_with_retreat) > len(command_pivot_path)):
+                            retreat_pose = tuple(path_with_retreat[-1])
+                            _logger.info("[PAINT_RETREAT] Separate LIN after paint job=%d target=%s",
+                                         job_index, list(retreat_pose))
+                        else:
+                            command_pivot_path = path_with_retreat
             if job_index == len(execution_plan.execution_jobs):
                 owner._last_paint_contact_end_rz = paint_contact_end_rz
             if owner._last_process_start_rz is None and command_pivot_path:
@@ -460,11 +468,12 @@ class PaintingExecutor:
                     pattern_type=str(pattern_type),
                     velocity_percent=float(vel),
                     acceleration_percent=float(acc),
+                    retreat_pose=retreat_pose,
                 ))
 
             if not execute_robot:
                 total_waypoints += len(command_pivot_path)
-                owner._last_process_end_pose = list(command_pivot_path[-1])
+                owner._last_process_end_pose = list(retreat_pose or command_pivot_path[-1])
                 _logger.debug(
                     "[TIMING] paint_contact_job index=%d pattern=%s success=true input_pts=%d output_pts=%d execute_skipped=true total_elapsed_s=%.3f",
                     job_index,
@@ -521,7 +530,23 @@ class PaintingExecutor:
                                                    planned_waypoints=total_waypoints,
                                                    backend_code=result if type(result) is int else None)
             total_waypoints += len(command_pivot_path)
+            if retreat_pose is not None:
+                from src.engine.robot.motion_sequence import OrderedMotionType
+                if control is not None and not control.wait_if_paused():
+                    return PaintOperationResult(PaintOutcome.CANCELLED, "Paint process stopped", planned_waypoints=total_waypoints)
+                if not owner._motion.move_pickup_phase(
+                    f"Separate paint retreat job {job_index}", list(retreat_pose),
+                    velocity=float(vel), acceleration=float(acc),
+                    motion_type=OrderedMotionType.LINEAR, blendR=0.0,
+                ):
+                    return PaintOperationResult.failed(
+                        PaintFailureCode.MOTION, "paint_retreat_motion",
+                        "Painting completed, but separate LIN retreat failed",
+                        planned_waypoints=total_waypoints,
+                    )
             owner._last_process_end_pose = list(command_pivot_path[-1])
+            if retreat_pose is not None:
+                owner._last_process_end_pose = list(retreat_pose)
             _logger.debug(
                 "[TIMING] paint_contact_job index=%d pattern=%s success=true input_pts=%d output_pts=%d execute_elapsed_s=%.3f total_elapsed_s=%.3f",
                 job_index,

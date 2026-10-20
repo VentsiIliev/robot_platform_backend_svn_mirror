@@ -317,6 +317,13 @@ class PaintDashboardView(IApplicationView):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
+        self._cycle_streak_label = QLabel(self._translate_template(
+            "Consecutive completed cycles: {count}", count=0,
+        ))
+        self._cycle_streak_label.setStyleSheet(_MESSAGE_TITLE_STYLE)
+        self._cycle_streak_label.setContentsMargins(12, 6, 12, 6)
+        layout.addWidget(self._cycle_streak_label)
+
         self._dashboard = DashboardWidget(
             config=self._config,
             action_buttons=self._action_buttons,
@@ -1587,6 +1594,10 @@ class PaintDashboardView(IApplicationView):
         self.set_state(state.process_state)
         self.set_mode(state.mode_label)
         self.set_active_job(state.active_job_label)
+        self._cycle_streak_label.setText(self._translate_template(
+            "Consecutive completed cycles: {count}",
+            count=getattr(state, "consecutive_completed_cycles", 0),
+        ))
         self.set_notes(state.status_lines)
         self._apply_card_states(getattr(state, "card_states", {}))
         self.set_start_enabled(state.can_start)
@@ -1619,6 +1630,7 @@ class PaintDashboardView(IApplicationView):
             getattr(state, "process_state", None),
             getattr(state, "mode_label", None),
             getattr(state, "active_job_label", None),
+            getattr(state, "consecutive_completed_cycles", 0),
             tuple(getattr(state, "status_lines", []) or []),
             tuple(
                 sorted(
@@ -1660,6 +1672,10 @@ class PaintDashboardView(IApplicationView):
             self._last_card_states[card_id] = card_state
 
     def retranslateUi(self) -> None:
+        if hasattr(self, "_cycle_streak_label") and self._last_state is None:
+            self._cycle_streak_label.setText(self._translate_template(
+                "Consecutive completed cycles: {count}", count=0,
+            ))
         if hasattr(self, "_dashboard"):
             self._dashboard.retranslateUi()
             for action in self._action_buttons:

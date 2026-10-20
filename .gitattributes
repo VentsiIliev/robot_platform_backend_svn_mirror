@@ -1,0 +1,2 @@
+/backend/ros2_ws/eRob_moveit/src/eRob_ROS2_MoveIt/zeroerr/meshes/cells/paint_tray_dry_compact/paint_tray_dry_compact.original.stl filter=lfs diff=lfs merge=lfs -text
+/backend/ros2_ws/eRob_moveit/src/eRob_ROS2_MoveIt/zeroerr/meshes/cells/paint_tray_dry_compact/paint_tray_dry_compact.stl filter=lfs diff=lfs merge=lfs -text

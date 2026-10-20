@@ -307,6 +307,10 @@ class PaintDropoffConfig:
     plate_robot_user: int = -1
     plate_passage_gate_pose: list[float] = field(default_factory=list)  # [LIVE SETTINGS]
     plate_use_entry_gate_as_detach_pose: bool = False  # [LIVE SETTINGS]
+    # Keep tray entry separate from painting so a rejected transfer can be
+    # unwound and replanned once without replaying pickup or paint motion.
+    plate_retry_entry_after_unwind: bool = False
+    separate_paint_retreat: bool = False
     # Optional exit-only gate. An empty pose preserves the legacy behavior by
     # reusing plate_passage_gate_pose for both entry and exit.
     plate_exit_gate_pose: list[float] = field(default_factory=list)  # [LIVE SETTINGS]

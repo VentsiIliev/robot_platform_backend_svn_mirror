@@ -6,7 +6,8 @@ launch files do not duplicate the profile merging logic.
 
 import os
 
-import yaml
+
+from zeroerr_configuration import load_yaml_layers, resolve_robot_description
 
 from ament_index_python.packages import get_package_share_directory
 
@@ -59,10 +60,8 @@ def load_runtime_config(package_path: str) -> dict:
     rt_yaml = _runtime_yaml_path(package_path)
     defaults_yaml = _runtime_defaults_yaml_path(package_path)
     try:
-        with open(defaults_yaml) as f:
-            rt = yaml.safe_load(f) or {}
-        with open(rt_yaml) as f:
-            rt = _merge_config(rt, yaml.safe_load(f) or {})
+        rt = load_yaml_layers(defaults_yaml)
+        rt = _merge_config(rt, load_yaml_layers(rt_yaml))
     except Exception:
         raise RuntimeError(
             f"Failed to read runtime configuration: {defaults_yaml}, {rt_yaml}"
@@ -71,8 +70,7 @@ def load_runtime_config(package_path: str) -> dict:
     for config_yaml in _extra_runtime_yaml_paths(package_path):
         if not os.path.isfile(config_yaml):
             continue
-        with open(config_yaml) as f:
-            rt = _merge_config(rt, yaml.safe_load(f) or {})
+        rt = _merge_config(rt, load_yaml_layers(config_yaml))
 
     requested_profile = os.environ.get("ZEROERR_ACTIVE_PROFILE")
     if requested_profile is not None:
@@ -86,14 +84,12 @@ def load_runtime_config(package_path: str) -> dict:
             raise RuntimeError(
                 f"runtime.yaml requested ACTIVE_PROFILE '{profile}', but profile config was not found: {profile_yaml}"
             )
-        with open(profile_yaml) as f:
-            profile_rt = yaml.safe_load(f) or {}
+        profile_rt = load_yaml_layers(profile_yaml)
         merged = _merge_config(rt, profile_rt)
         for profile_config_yaml in _profile_extra_runtime_yaml_paths(package_path, profile):
             if not os.path.isfile(profile_config_yaml):
                 continue
-            with open(profile_config_yaml) as f:
-                merged = _merge_config(merged, yaml.safe_load(f) or {})
+            merged = _merge_config(merged, load_yaml_layers(profile_config_yaml))
         merged["_ACTIVE_RUNTIME_CONFIG_PATH"] = profile_yaml
         return merged
     rt["_ACTIVE_RUNTIME_CONFIG_PATH"] = rt_yaml
@@ -116,6 +112,8 @@ def resolve_config_path(config_yaml: str, value: str) -> str:
 
 def urdf_path_from_runtime(package_path: str) -> str:
     rt = load_runtime_config(package_path)
+    if str(rt.get("URDF_PATH", "")).endswith(".xacro"):
+        return resolve_robot_description(rt["_ACTIVE_RUNTIME_CONFIG_PATH"], rt)
     path = resolve_config_path(rt["_ACTIVE_RUNTIME_CONFIG_PATH"], rt.get("URDF_PATH", ""))
     if path and os.path.isfile(path):
         return path
@@ -165,8 +163,7 @@ def _extract_node_params(config: dict) -> dict:
 def load_state_publisher_params(package_path: str) -> dict:
     base_yaml = _state_publisher_yaml_path(package_path)
     try:
-        with open(base_yaml) as f:
-            params = _extract_node_params(yaml.safe_load(f) or {})
+        params = _extract_node_params(load_yaml_layers(base_yaml))
     except Exception as exc:
         raise RuntimeError(f"Failed to read state publisher config: {base_yaml}: {exc}")
 
@@ -180,8 +177,7 @@ def load_state_publisher_params(package_path: str) -> dict:
         return params
 
     try:
-        with open(profile_yaml) as f:
-            profile_params = _extract_node_params(yaml.safe_load(f) or {})
+        profile_params = _extract_node_params(load_yaml_layers(profile_yaml))
     except Exception as exc:
         raise RuntimeError(f"Failed to read profile state publisher config: {profile_yaml}: {exc}")
     return _deep_merge(params, profile_params)

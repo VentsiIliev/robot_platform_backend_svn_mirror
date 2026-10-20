@@ -713,3 +713,17 @@ This is intentionally a pilot slice to validate the full path before translating
 
 [Complete source index](../../SOURCE_INDEX.md).
 <!-- source-navigation:end -->
+
+### Appearance and header selectors
+
+Bootstrap exposes the same localization service through
+`robot_app.localization_service` before application loading. Platform Settings
+uses this service through its application-service contract; it does not create
+a separate translator or language preference file. The existing header control
+remains available.
+
+`sync_selector(selector)` now weakly tracks the selector and synchronizes it on
+every subsequent `set_language()` call. Synchronization preserves signal-blocking
+state and does not emit another language-change request. Deleted Qt selectors
+are discarded. App views use the existing `language_changed` notification to
+refresh their selected language and controller-owned translated status text.

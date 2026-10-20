@@ -63,7 +63,7 @@ class MountingSurfacePoseTuner(Node):
         self.declare_parameter("child_frame", "tuned_mounting_surface")
         self.declare_parameter(
             "mesh_resource",
-            "package://zeroerr/meshes/paint/latest_mounting.stl",
+            "package://zeroerr/meshes/cells/paint_mounting/latest_mounting.stl",
         )
         self.declare_parameter("mesh_scale", 0.001)
         self.declare_parameter("x", -0.015219)

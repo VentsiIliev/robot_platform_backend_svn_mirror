@@ -105,6 +105,7 @@ class PaintDashboardService(IPaintDashboardService):
         if is_stopping:
             process_card = replace(process_card, note=status_lines[0])
         return DashboardState(
+            consecutive_completed_cycles=self._process.consecutive_completed_cycles,
             process_state=process_state,
             is_stopping=is_stopping,
             mode_label="Paint Mode",
@@ -125,7 +126,7 @@ class PaintDashboardService(IPaintDashboardService):
         )
 
     def start(self) -> None:
-        if self.get_drying_mode() in {"manual", "demo"}:
+        if self.get_drying_mode() in {"manual", "demo"} and not self.is_dry_run_mode_enabled():
             if self._plate_layout_service is None:
                 raise TrayUnavailableError()
             config = self._paint_process_config_service.get_snapshot().dropoff

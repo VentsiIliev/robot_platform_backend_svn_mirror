@@ -283,7 +283,10 @@ class RobotController(Node):
         self._collision_recovery_hold = False
         self._collision_monitor_ready = False
         self._collision_monitor_state_ts = 0.0
+        self._collision_monitor_acknowledgements = None
+        self._collision_monitor_baseline_valid = False
         self._collision_detection_suppressed = False
+        self._collision_last_reset_completed_monotonic_ns = None
         self._runtime_joint_input_period = (
             1.0 / float(RUNTIME_JOINT_STATE_INPUT_RATE_HZ)
             if float(RUNTIME_JOINT_STATE_INPUT_RATE_HZ) > 0.0
@@ -347,6 +350,11 @@ class RobotController(Node):
             '/zeroerr/collision_monitor/acknowledge',
             self._acknowledge_collision_callback,
         )
+        self.create_service(
+            Trigger,
+            '/zeroerr/collision_monitor/recalibrate',
+            self._recalibrate_collision_callback,
+        )
 
         self.get_logger().info(f'[Init] RobotController ready ({time.time() - start_time:.2f}s total)')
 
@@ -364,6 +372,31 @@ class RobotController(Node):
     def is_executing(self):
         return self._motion.is_executing
 
+    def _collision_runtime_context(self) -> dict:
+        """Capture cached state only; do not issue hardware I/O on the stop path."""
+        now_ns = time.monotonic_ns()
+        with self._motion_interlock_lock:
+            reset_ns = self._collision_last_reset_completed_monotonic_ns
+            return {
+                "received_at_wall_s": time.time(),
+                "received_at_monotonic_ns": now_ns,
+                "is_executing": bool(self.is_executing),
+                "last_submitted_task_id": self.last_submitted_task_id,
+                "interlock_active_before_event": self._motion_interlock_active,
+                "recovery_hold": self._collision_recovery_hold,
+                "detection_suppressed": self._collision_detection_suppressed,
+                "monitor_ready": self._collision_monitor_ready,
+                "monitor_acknowledgements": self._collision_monitor_acknowledgements,
+                "baseline_valid": self._collision_monitor_baseline_valid,
+                "monitor_state_age_ms": (
+                    (time.monotonic() - self._collision_monitor_state_ts) * 1000.0
+                    if self._collision_monitor_state_ts else None
+                ),
+                "since_reset_complete_ms": (
+                    (now_ns - reset_ns) / 1.0e6 if reset_ns is not None else None
+                ),
+            }
+
     def _collision_monitor_stop_callback(self, msg: String) -> None:
         try:
             event = json.loads(msg.data)
@@ -371,6 +404,10 @@ class RobotController(Node):
             event = {"timestamp": time.time(), "detail": str(msg.data)}
         if not isinstance(event, dict):
             event = {"timestamp": time.time(), "detail": str(event)}
+        try:
+            event["runtime_context"] = self._collision_runtime_context()
+        except Exception as exc:
+            event["runtime_context_error"] = str(exc)
         event["stop_requested"] = True
         self.last_collision_event = event
         joint = str(event.get('joint') or 'unknown')
@@ -380,22 +417,52 @@ class RobotController(Node):
         self.get_logger().error(
             f'[CollisionMonitor] Active collision response requested motion stop: {event}')
         try:
+            stop_started_ns = time.monotonic_ns()
             result = self.stop_motion()
             self.get_logger().warning(
                 f'[CollisionMonitor] Motion stop result: {result}')
+            self.get_logger().warning(
+                '[CollisionStopDiagnostics] ' + json.dumps({
+                    "diagnostic_event_id": event.get("diagnostic_event_id"),
+                    "wall_time_s": time.time(),
+                    "stop_call_elapsed_ms": (time.monotonic_ns() - stop_started_ns) / 1.0e6,
+                    "result": result,
+                }))
         except Exception as exc:
             self.get_logger().error(
                 f'[CollisionMonitor] Motion stop request failed: {exc}')
 
     def _collision_monitor_state_callback(self, msg: DynamicJointState) -> None:
         readiness = []
+        acknowledgements = []
+        baselines = []
         for interfaces in msg.interface_values:
             values = dict(zip(interfaces.interface_names, interfaces.values))
             if 'observer_ready' in values:
                 readiness.append(float(values['observer_ready']) >= 0.5)
+            if 'acknowledgement_count' in values:
+                acknowledgements.append(int(values['acknowledgement_count']))
+            if 'baseline_valid' in values:
+                baselines.append(float(values['baseline_valid']) >= 0.5)
         with self._motion_interlock_lock:
+            previous_ready = self._collision_monitor_ready
             self._collision_monitor_ready = bool(readiness) and all(readiness)
+            current_ready = self._collision_monitor_ready
+            self._collision_monitor_acknowledgements = (
+                acknowledgements[0]
+                if readiness and len(acknowledgements) == len(readiness)
+                and len(set(acknowledgements)) == 1 else None
+            )
+            self._collision_monitor_baseline_valid = (
+                bool(readiness) and len(baselines) == len(readiness) and all(baselines)
+            )
             self._collision_monitor_state_ts = time.monotonic()
+        if previous_ready != current_ready:
+            self.get_logger().warning(
+                '[CollisionRecoveryDiagnostics] ' + json.dumps({
+                    "phase": "observer_readiness_changed", "ready": current_ready,
+                    "wall_time_s": time.time(), "monotonic_ns": time.monotonic_ns(),
+                }))
 
     def _collision_monitor_config_callback(self, msg: String) -> None:
         try:
@@ -423,6 +490,14 @@ class RobotController(Node):
             result.get('message')
             or result.get('error')
             or 'Collision interlock acknowledged')
+        return response
+
+    def _recalibrate_collision_callback(
+        self, _request: Trigger.Request, response: Trigger.Response
+    ) -> Trigger.Response:
+        result = self.reset_motion_interlock(require_safe_state=True, recalibrate=True)
+        response.success = bool(result.get('success', False))
+        response.message = str(result.get('message') or result.get('error') or 'Recalibration failed')
         return response
 
     @is_executing.setter
@@ -1194,7 +1269,9 @@ class RobotController(Node):
                 self.get_logger().info('[DriveEnable] Startup auto-enable skipped: drives already operation_enabled')
                 return
 
-            if not self.is_hardware_ready_for_motion():
+            # The observer needs enabled drives to calibrate. Motion readiness
+            # remains false until calibration completes, so it cannot gate enable.
+            if not self.is_hardware_ready_for_drive_enable():
                 last_reason = self.get_hardware_fault_reason()
                 self.get_logger().info(f'[DriveEnable] Startup auto-enable waiting: {last_reason}')
                 time.sleep(retry_period_s)
@@ -1282,6 +1359,8 @@ class RobotController(Node):
                 self._motion_interlock_active
                 or self._collision_recovery_hold
                 or self._collision_detection_suppressed
+                or not self._collision_monitor_ready
+                or time.monotonic() - self._collision_monitor_state_ts > 0.5
             ):
                 return False
         with self._ethercat_fault_lock:
@@ -1319,6 +1398,11 @@ class RobotController(Node):
                 return 'collision monitor is initializing; motion remains held'
             if self._collision_detection_suppressed:
                 return 'collision recovery mode permits only explicitly flagged recovery jogs'
+            if not self._fake_hardware and (
+                not self._collision_monitor_ready
+                or time.monotonic() - self._collision_monitor_state_ts > 0.5
+            ):
+                return 'collision monitor is not ready or its state is stale'
         if self._fake_hardware:
             return 'fake hardware mode'
         with self._ethercat_fault_lock:
@@ -1337,72 +1421,108 @@ class RobotController(Node):
             self.runtime_adapter.reset_drive_operation_request(self)
         self.get_logger().error(f'[MotionInterlock] Motion interlock active: {reason}')
 
-    def reset_motion_interlock(self, *, require_safe_state: bool = True) -> dict:
+    def reset_motion_interlock(self, *, require_safe_state: bool = True, recalibrate: bool = False) -> dict:
+        reset_started_ns = time.monotonic_ns()
+        self.get_logger().warning(
+            '[CollisionRecoveryDiagnostics] ' + json.dumps({
+                "phase": "reset_requested", "wall_time_s": time.time(),
+                "recalibrate": recalibrate,
+                "runtime_context": self._collision_runtime_context(),
+                "previous_event_id": (self.last_collision_event or {}).get("diagnostic_event_id"),
+            }))
         if require_safe_state:
             unsafe_reason = self._interlock_reset_unsafe_reason()
             if unsafe_reason:
                 return {
-                    "success": False,
-                    "reset": False,
-                    "error": unsafe_reason,
+                    "success": False, "reset": False, "error": unsafe_reason,
                     "message": f"Interlock reset refused: {unsafe_reason}",
                 }
         with self._motion_interlock_lock:
+            # The first reset owns the recovery hold until it succeeds or fails.
+            # A second caller must never clear that hold or publish another acknowledgement.
+            if self._collision_recovery_hold:
+                return {
+                    "success": False, "reset": False, "in_progress": True,
+                    "error": "collision recovery is already in progress",
+                }
             was_active = self._motion_interlock_active
             reason = self._motion_interlock_reason
+            previous_event = self.last_collision_event
+            collision_reset = recalibrate or (was_active and isinstance(previous_event, dict))
+            previous_acknowledgements = self._collision_monitor_acknowledgements
+            baseline_retained = self._collision_monitor_baseline_valid and not recalibrate
+            if collision_reset and previous_acknowledgements is None:
+                return {
+                    "success": False, "reset": False,
+                    "error": "collision monitor acknowledgement telemetry is unavailable; rebuild/update zeroerr",
+                }
             self._motion_interlock_active = False
             self._motion_interlock_reason = ""
-            collision_reset = was_active and isinstance(self.last_collision_event, dict)
             self._collision_recovery_hold = collision_reset
+
         if collision_reset:
-            enable_result = self.runtime_adapter.set_drive_operation_enabled(self, True)
-            if not bool(enable_result.get('success', False)):
+            def fail_recovery(error):
                 with self._motion_interlock_lock:
-                    self._motion_interlock_active = True
-                    self._motion_interlock_reason = reason
+                    # Preserve a newer collision if one arrived during recovery.
+                    if not self._motion_interlock_active:
+                        self._motion_interlock_active = True
+                        self._motion_interlock_reason = reason or str(error)
                     self._collision_recovery_hold = False
-                return {
-                    "success": False,
-                    "reset": False,
-                    "error": enable_result.get('error') or 'failed to enable drives for collision monitor recovery',
-                }
-            acknowledged = String()
-            acknowledged.data = json.dumps({"timestamp": time.time()})
-            self._collision_acknowledged_pub.publish(acknowledged)
-            deadline = time.monotonic() + 12.0
-            saw_monitor_not_ready = False
-            while time.monotonic() < deadline:
-                with self._motion_interlock_lock:
-                    monitor_ready = (
-                        self._collision_monitor_ready
-                        and time.monotonic() - self._collision_monitor_state_ts <= 0.5
-                    )
-                if not monitor_ready:
-                    saw_monitor_not_ready = True
-                if saw_monitor_not_ready and monitor_ready:
-                    break
-                time.sleep(0.05)
-            else:
-                with self._motion_interlock_lock:
-                    self._motion_interlock_active = True
-                    self._motion_interlock_reason = reason
-                    self._collision_recovery_hold = False
-                return {
-                    "success": False,
-                    "reset": False,
-                    "error": "collision monitor did not become ready within 12 seconds",
-                }
+                self.get_logger().warning(
+                    '[CollisionRecoveryDiagnostics] ' + json.dumps({
+                        "phase": "reset_failed", "wall_time_s": time.time(), "error": str(error),
+                    }))
+                return {"success": False, "reset": False, "error": str(error)}
+
+            try:
+                enable_result = self.runtime_adapter.set_drive_operation_enabled(self, True)
+                if not bool(enable_result.get('success', False)):
+                    return fail_recovery(enable_result.get('error') or 'failed to enable drives for collision monitor recovery')
+                acknowledged = String()
+                acknowledged.data = json.dumps({"timestamp": time.time(), "recalibrate": recalibrate})
+                self._collision_acknowledged_pub.publish(acknowledged)
+                expected_acknowledgements = previous_acknowledgements + 1
+                deadline = time.monotonic() + 12.0
+                while time.monotonic() < deadline:
+                    with self._motion_interlock_lock:
+                        monitor_ready = (
+                            self._collision_monitor_ready
+                            and time.monotonic() - self._collision_monitor_state_ts <= 0.5
+                            and self._collision_monitor_acknowledgements is not None
+                            and self._collision_monitor_acknowledgements >= expected_acknowledgements
+                        )
+                        interrupted = self._motion_interlock_active or self.last_collision_event is not previous_event
+                    if interrupted:
+                        return fail_recovery('a new collision interrupted recovery')
+                    if monitor_ready:
+                        break
+                    time.sleep(0.05)
+                else:
+                    return fail_recovery('collision monitor did not become stationary and clear within 12 seconds')
+            except Exception as exc:
+                return fail_recovery(f'collision observer rearm failed: {exc}')
+
             with self._motion_interlock_lock:
-                self._collision_recovery_hold = False
+                interrupted = self._motion_interlock_active or self.last_collision_event is not previous_event
+                if not interrupted:
+                    self._collision_recovery_hold = False
+                    self._collision_last_reset_completed_monotonic_ns = time.monotonic_ns()
+                    self.last_collision_event = None
+            if interrupted:
+                return fail_recovery('a new collision interrupted recovery')
+            self.get_logger().warning(
+                '[CollisionRecoveryDiagnostics] ' + json.dumps({
+                    "phase": "reset_completed", "wall_time_s": time.time(),
+                    "duration_ms": (time.monotonic_ns() - reset_started_ns) / 1.0e6,
+                    "baseline_retained": baseline_retained,
+                    "runtime_context": self._collision_runtime_context(),
+                }))
         if was_active:
             self.get_logger().warning(f'[MotionInterlock] Motion interlock reset by operator: {reason}')
-            if isinstance(self.last_collision_event, dict):
-                self.last_collision_event = None
         return {
-            "success": True,
-            "reset": bool(was_active),
-            "previous_reason": reason,
-            "message": "Collision interlock acknowledged" if was_active else "No motion interlock was active",
+            "success": True, "reset": bool(was_active or recalibrate), "previous_reason": reason,
+            "message": ("Collision monitor recalibrated" if recalibrate else
+                        "Collision interlock acknowledged" if was_active else "No motion interlock was active"),
         }
 
     def _interlock_reset_unsafe_reason(self) -> str | None:

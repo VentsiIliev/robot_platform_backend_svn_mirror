@@ -13,6 +13,7 @@ import numpy as np
 from src.engine.vision.i_capture_snapshot_service import VisionCaptureSnapshot
 
 _logger = logging.getLogger(__name__)
+_PREPARATION_CLEARANCE_MM = 5.0
 
 
 class DryRunDatasetExhausted(RuntimeError):
@@ -33,6 +34,7 @@ class PaintDryRunSnapshotSource:
         work_area_id: str = "paint",
         margin_mm: float = 10.0,
         placement_attempts: int = 200,
+        process_config_getter=None,
     ) -> None:
         self._manifest_path = Path(manifest_path)
         self._transformer_getter = transformer_getter
@@ -42,6 +44,7 @@ class PaintDryRunSnapshotSource:
         self._work_area_id = str(work_area_id)
         self._margin_mm = max(0.0, float(margin_mm))
         self._placement_attempts = max(1, int(placement_attempts))
+        self._process_config_getter = process_config_getter
         self._manifest: dict | None = None
         self.last_metadata: dict | None = None
         self._next_dataset_index = 0
@@ -78,6 +81,10 @@ class PaintDryRunSnapshotSource:
             raise RuntimeError("Dry-run mode requires an available camera calibration")
 
         active_work_area_id = str(work_area_id or self._work_area_id)
+        original_item = item
+        item, fit_scale = self._fit_item(
+            item, transformer, width_px, height_px, active_work_area_id,
+        )
         normalized_boundary = self._work_area_service.get_work_area(active_work_area_id)
         if not normalized_boundary:
             raise RuntimeError(f"Dry-run work area '{active_work_area_id}' is not configured")
@@ -141,6 +148,8 @@ class PaintDryRunSnapshotSource:
             "dataset_manifest": str(self._manifest_path),
             "dataset_index": index,
             "workpiece": dict(item),
+            "original_size_mm": [float(original_item["width_mm"]), float(original_item["height_mm"])],
+            "fit_scale": fit_scale,
             "angle_deg": float(angle_deg),
             "center_mm": [float(center_mm[0]), float(center_mm[1])],
             "contour_mm": contour_mm.tolist(),
@@ -173,6 +182,66 @@ class PaintDryRunSnapshotSource:
         if self._manifest is None:
             self._manifest = self._load_manifest()
         return self._manifest
+
+    def _fit_item(self, item, transformer, width_px, height_px, active_area_id):
+        """Uniformly size synthetic geometry for every enabled capture area/tray.
+
+        An inscribed circle makes the size independent of the independently
+        sampled magazine/paint orientations. Reserve another 5 mm for subsequent
+        contour preparation; final placement and tray reservation remain strict.
+        The reusable manifest is never changed.
+        """
+        config = self._process_config_getter() if self._process_config_getter else None
+        area_ids = {self._work_area_id, active_area_id}
+        if config is not None and config.magazine_load.enabled:
+            area_ids.add("magazine")
+        available_radius = float("inf")
+        for area_id in sorted(area_ids):
+            normalized = self._work_area_service.get_work_area(area_id)
+            if not normalized or len(normalized) < 3:
+                raise RuntimeError(f"Dry-run work area '{area_id}' is not configured")
+            pixels = np.asarray(normalized, dtype=np.float64) * [width_px, height_px]
+            boundary = np.asarray([transformer.transform(float(x), float(y)) for x, y in pixels])
+            center_px = _polygon_center(pixels)
+            center = np.asarray(transformer.transform(*center_px), dtype=np.float64)
+            if not np.isfinite(boundary).all() or not np.isfinite(center).all():
+                raise RuntimeError(f"Dry-run work area '{area_id}' has invalid calibration")
+            if cv2.pointPolygonTest(boundary.astype(np.float32), tuple(center), False) <= 0:
+                raise RuntimeError(f"Dry-run work area '{area_id}' has no usable central region")
+            radius = min(_point_segment_distance(center, start, end)
+                         for start, end in zip(boundary, np.roll(boundary, -1, axis=0)))
+            available_radius = min(available_radius, radius - self._margin_mm)
+        if config is not None:
+            from src.robot_systems.paint.processes.paint.configuration.models import DropoffStrategy
+            from src.robot_systems.paint.processes.paint.tray_dry.plate_layout import validate_plate_corners
+
+            dropoff = config.dropoff
+            if dropoff.strategy is DropoffStrategy.PLATE_LAYOUT or dropoff.alternate_drying_demo:
+                corners, error = validate_plate_corners(dropoff.plate_corners)
+                if error:
+                    raise RuntimeError(error)
+                corners = np.asarray(corners, dtype=np.float64)[:, :2]
+                width = min(np.linalg.norm(corners[1] - corners[0]), np.linalg.norm(corners[2] - corners[3]))
+                height = min(np.linalg.norm(corners[3] - corners[0]), np.linalg.norm(corners[2] - corners[1]))
+                usable_width = width - float(dropoff.plate_margin_left_mm) - float(dropoff.plate_margin_right_mm)
+                usable_height = height - float(dropoff.plate_margin_bottom_mm) - float(dropoff.plate_margin_top_mm)
+                available_radius = min(available_radius, usable_width / 2, usable_height / 2)
+        available_radius -= _PREPARATION_CLEARANCE_MM
+        if not np.isfinite(available_radius) or available_radius <= 0:
+            raise RuntimeError("Dry-run configuration leaves no usable area after margins and preparation clearance")
+        size = np.array([float(item["width_mm"]), float(item["height_mm"])])
+        points = np.asarray(item["contour_normalized"], dtype=np.float64).reshape(-1, 2) * size
+        if not np.isfinite(points).all() or not np.isfinite(size).all() or np.any(size <= 0):
+            raise RuntimeError(f"Dry-run workpiece '{item['id']}' has invalid geometry")
+        radius = float(np.linalg.norm(points, axis=1).max())
+        if radius <= 0:
+            raise RuntimeError(f"Dry-run workpiece '{item['id']}' has no usable contour")
+        scale = float(min(1.0, available_radius / radius))
+        fitted = {**item, "width_mm": float(size[0] * scale), "height_mm": float(size[1] * scale)}
+        if scale < 1.0:
+            _logger.info("[DRY_RUN] Fit item=%s scale=%.4f original_mm=(%.3f, %.3f) fitted_mm=(%.3f, %.3f)",
+                         item["id"], scale, *size, fitted["width_mm"], fitted["height_mm"])
+        return fitted, scale
 
     def _place_item(
         self,
@@ -234,7 +303,8 @@ class PaintDryRunSnapshotSource:
         """Require the complete polygon footprint and clearance inside the area."""
         workpiece = np.asarray(contour, dtype=np.float64).reshape(-1, 2)
         area = np.asarray(boundary, dtype=np.float64).reshape(-1, 2)
-        if len(workpiece) < 3 or len(area) < 3:
+        if (len(workpiece) < 3 or len(area) < 3
+                or not np.isfinite(workpiece).all() or not np.isfinite(area).all()):
             return False
         area_cv = area.astype(np.float32).reshape(-1, 1, 2)
         for point in workpiece:

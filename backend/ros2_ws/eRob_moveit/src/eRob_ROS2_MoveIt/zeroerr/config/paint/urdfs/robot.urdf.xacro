@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="eRobo3" version="1.0">
+  <xacro:include filename="../../shared/urdf/zeroerr_arm.xacro" />
+  <xacro:include filename="../../shared/tools/centered_disk.xacro" />
+  <xacro:include filename="../../shared/cells/paint_mounting.xacro" />
+  <xacro:property name="model" lazy_eval="false" value="${xacro.load_yaml('../../models/zeroerr_extended.yaml')}" />
+  <xacro:zeroerr_arm model="${model}" />
+  <xacro:centered_disk mount_xyz="0 0 0" mount_rpy="0 0 0" />
+  <xacro:paint_mounting mount_xyz="-0.015219 0.015023 0.000000" mount_rpy="0.000000 0.000000 2.856873" />
+</robot>

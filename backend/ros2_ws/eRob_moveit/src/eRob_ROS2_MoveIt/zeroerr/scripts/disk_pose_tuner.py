@@ -63,7 +63,7 @@ class DiskPoseTuner(Node):
         self.declare_parameter("child_frame", "tuned_paint_disk")
         self.declare_parameter(
             "mesh_resource",
-            "package://zeroerr/meshes/paint/00035513_disk_origin_centered.stl",
+            "package://zeroerr/meshes/tools/disk_centered/00035513_disk_origin_centered.stl",
         )
         self.declare_parameter("mesh_scale", 0.001)
         self.declare_parameter("x", 0.0)

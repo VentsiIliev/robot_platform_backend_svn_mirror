@@ -3,7 +3,9 @@
 
 Robot-specific values live in <robot_config_package>/config/runtime.yaml and
 dedicated motion configuration files beside it. Active-profile overrides live
-under config/<profile>/. This module preserves the cfg.CONSTANT access pattern.
+under config/<profile>/. ZeroErr profiles explicitly compose component files,
+expand a profile-owned Xacro and persist calibration separately. This module
+preserves the cfg.CONSTANT access pattern.
 """
 
 from __future__ import annotations
@@ -135,6 +137,9 @@ def apply_limit_profiles(segments, logger=None):
         if logger:
             logger.info(f"[OrderedLimits] segment={index + 1} profile={name} limits={limits}")
 def _load_yaml_file(path: Path) -> dict[str, Any]:
+    if _config_package() == 'zeroerr':
+        from zeroerr_configuration import load_yaml_layers
+        return load_yaml_layers(path)
     with path.open('r', encoding='utf-8') as handle:
         return yaml.safe_load(handle) or {}
 
@@ -198,6 +203,11 @@ def _load_runtime_config() -> dict[str, Any]:
         if config_path and config_path.exists():
             config = _merge(config, _load_yaml_file(config_path))
 
+    if _config_package() == 'zeroerr' and 'ZEROERR_ACTIVE_PROFILE' in os.environ:
+        requested = os.environ['ZEROERR_ACTIVE_PROFILE']
+        if not requested or '/' in requested or '..' in requested:
+            raise RuntimeError('Invalid ZEROERR_ACTIVE_PROFILE')
+        config['ACTIVE_PROFILE'] = requested
     profile = str(config.get('ACTIVE_PROFILE', '')).strip()
     if profile:
         profile_path = _profile_runtime_yaml_path(profile)
@@ -222,6 +232,12 @@ def _load_runtime_config() -> dict[str, Any]:
     for key in PATH_KEYS:
         if key in config and config[key]:
             config[key] = _resolve_config_path(active_path, config[key])
+
+    if str(config.get('URDF_PATH', '')).endswith('.xacro'):
+        from zeroerr_configuration import resolve_robot_description
+        config['URDF_PATH'] = resolve_robot_description(active_path, config)
+    if config.get('CALIBRATION_PATH'):
+        config['_CALIBRATION_CONFIG_PATH'] = _resolve_config_path(active_path, config['CALIBRATION_PATH'])
 
     missing = sorted(key for key in REQUIRED_KEYS if key not in config or config[key] in (None, ''))
     if missing:
@@ -281,6 +297,7 @@ def get_tool_registry_snapshot() -> dict[str, Any]:
             _CONFIG.get('TOOL_COLLISION_PROFILES', {}) or {}
         ),
         'active_runtime_config_path': _CONFIG.get('_ACTIVE_RUNTIME_CONFIG_PATH'),
+        'calibration_config_path': _CONFIG.get('_CALIBRATION_CONFIG_PATH') or _CONFIG.get('_ACTIVE_RUNTIME_CONFIG_PATH'),
     }
 
 
@@ -371,6 +388,7 @@ def get_workobject_registry_snapshot() -> dict[str, Any]:
         },
         'default_workobject_id': int(_CONFIG.get('DEFAULT_WORKOBJECT_ID', 0) or 0),
         'active_runtime_config_path': _CONFIG.get('_ACTIVE_RUNTIME_CONFIG_PATH'),
+        'calibration_config_path': _CONFIG.get('_CALIBRATION_CONFIG_PATH') or _CONFIG.get('_ACTIVE_RUNTIME_CONFIG_PATH'),
     }
 
 
@@ -424,7 +442,7 @@ def update_workobject_registry(user_id: int, name: str | None, transform, persis
 
 
 def _persist_tool_registry() -> None:
-    path_value = _CONFIG.get('_ACTIVE_RUNTIME_CONFIG_PATH')
+    path_value = _CONFIG.get('_CALIBRATION_CONFIG_PATH') or _CONFIG.get('_ACTIVE_RUNTIME_CONFIG_PATH')
     if not path_value:
         raise RuntimeError('active runtime config path is unavailable')
     path = Path(path_value)
@@ -438,7 +456,7 @@ def _persist_tool_registry() -> None:
 
 
 def _persist_workobject_registry() -> None:
-    path_value = _CONFIG.get('_ACTIVE_RUNTIME_CONFIG_PATH')
+    path_value = _CONFIG.get('_CALIBRATION_CONFIG_PATH') or _CONFIG.get('_ACTIVE_RUNTIME_CONFIG_PATH')
     if not path_value:
         raise RuntimeError('active runtime config path is unavailable')
     path = Path(path_value)

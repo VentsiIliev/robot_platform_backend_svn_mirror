@@ -140,6 +140,7 @@
     "Demo Alternate": "Demo Alternate"
   },
   "PaintDashboard": {
+    "Consecutive completed cycles: {count}": "Consecutive completed cycles: {count}",
     "Tray Readiness": "Tray Readiness",
     "Tray occupancy is unknown": "Tray occupancy is unknown",
     "Confirm that the tray is physically empty before starting.": "Confirm that the tray is physically empty before starting.",

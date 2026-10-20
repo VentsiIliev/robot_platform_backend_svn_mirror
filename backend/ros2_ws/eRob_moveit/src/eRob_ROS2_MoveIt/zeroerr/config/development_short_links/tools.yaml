@@ -1,0 +1,3 @@
+RUNTIME_INCLUDES:
+- ../shared/tools/paint_runtime.yaml
+ACTIVE_TOOL_COLLISION_ENABLED: false

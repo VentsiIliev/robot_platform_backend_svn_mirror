@@ -367,3 +367,7 @@ robot motion. A missing execution snapshot during backend initialization is not
 treated as motion and still permits shutdown. This check runs before kiosk password
 authentication and must never issue stop commands; the operator stops the process
 and robot explicitly, then requests exit again.
+
+Shared runtime localization is assigned to `BaseRobotSystem.localization_service`
+by bootstrap after QApplication initialization and before application loading.
+Platform Settings receives that same instance for its Appearance language control.

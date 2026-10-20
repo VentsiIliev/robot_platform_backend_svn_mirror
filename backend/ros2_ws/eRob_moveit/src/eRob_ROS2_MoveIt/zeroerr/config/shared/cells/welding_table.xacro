@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="welding_table" params="mount_xyz mount_rpy">
+    <link name="table">
+      <visual>
+        <origin xyz="0 0 -0.015" rpy="0 0 0" />
+        <geometry>
+          <box size="2.0 2.0 0.03" />
+        </geometry>
+        <material name="table_material">
+          <color rgba="0.6 0.4 0.2 0.8" />
+        </material>
+      </visual>
+      <collision>
+        <origin xyz="0 0 -0.015" rpy="0 0 0" />
+        <geometry>
+          <box size="2.0 2.0 0.03" />
+        </geometry>
+      </collision>
+    </link>
+    <joint name="table_joint" type="fixed">
+      <parent link="base_link" />
+      <child link="table" />
+      <origin xyz="${mount_xyz}" rpy="${mount_rpy}" />
+    </joint>
+    <material name="table_material">
+      <color rgba="1 1 1 1" />
+    </material>
+  </xacro:macro>
+</robot>

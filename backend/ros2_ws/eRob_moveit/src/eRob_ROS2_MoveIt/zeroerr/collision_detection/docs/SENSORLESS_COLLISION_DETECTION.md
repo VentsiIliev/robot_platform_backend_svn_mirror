@@ -163,7 +163,8 @@ below `warmup_vel_threshold_rad_s`. External torque is reported as unavailable,
 not zero, during this interval. Collision protection must be treated as not
 active until all observer inputs are valid and warm-up has completed. Warm-up
 requires both the configured elapsed time and `warmup_min_samples` complete,
-finite stationary samples; continuous motion cannot make the observer ready.
+finite stationary samples in one continuous stationary window; motion restarts
+that window. Continuous motion cannot make the observer ready.
 
 The controller reads position, velocity, torque sensor, statusword, and error
 code directly from the loaned ros2_control state interfaces during the same
@@ -171,7 +172,8 @@ synchronous update. No DDS subscription or Python callback lies in the
 detection path, and values from independently delivered topics are never mixed.
 Observer integration, acceleration estimation, threshold evolution, and
 confirmation all use the ros2_control period. Invalid/non-finite state or drives
-that are not operation-enabled reset readiness and stationary warm-up.
+that are not operation-enabled reset readiness and partial stationary warm-up,
+but retain an already valid baseline.
 
 Changing the update rate changes the discrete observer filter and the sampled
 velocity/acceleration distribution. Refit and validate models using clean data
@@ -559,6 +561,49 @@ GET  /motion/interlock/status
 POST /motion/interlock/reset
 ```
 
+### Baseline-preserving recovery
+
+Ordinary acknowledgement retains the calibrated baseline in memory. It resets
+momentum integration from the current measured momentum, filters, threshold
+envelopes and confirmation counters. It does not learn a new offset from contact
+forces present during reset. Startup, controller reactivation, model failure,
+and explicit recalibration invalidate the baseline and require full estimation.
+
+After the existing `drive_stable_sec` interval (default 2 seconds), readiness
+requires all joints below `warmup_vel_threshold_rad_s` and all residuals below
+`rearm_clear_ratio` times their current thresholds, continuously for
+`rearm_settle_sec`. Defaults are 0.8 and 0.5 seconds respectively. Movement or an
+unclear residual restarts that settling window. Normal acknowledgement therefore
+avoids the 8-second baseline estimation when a valid baseline exists; it can
+still take longer or fail if the stationary/clear conditions are not satisfied.
+Initial calibration also requires this clear settling window.
+
+The runtime holds motion throughout recovery. Duplicate reset requests return
+`in_progress` without clearing the hold or sending another acknowledgement.
+Release requires fresh ready telemetry carrying the acknowledgement generation
+for this reset; an old ready sample cannot release motion. A new collision,
+drive-enable failure or the 12-second recovery timeout leaves motion interlocked.
+Real-hardware motion also requires fresh ready telemetry outside reset. Startup drive enable
+uses the separate drive-enable readiness gate, which checks the motion interlock
+and EtherCAT fault state without requiring observer readiness. Enabled drives
+are needed for stationary observer calibration; automatic motion remains blocked
+until calibration and the clear settling window complete.
+
+When the physical load or model changes and a new stationary baseline is needed,
+explicitly request full recalibration with the robot stationary and free of
+external contact:
+
+```bash
+ros2 service call /zeroerr/collision_monitor/recalibrate std_srvs/srv/Trigger '{}'
+```
+
+This holds motion and relearns the baseline using the configured `warmup_sec`
+(default 8 seconds). The baseline is not persisted across controller restarts.
+Both `zeroerr` and `erob_moveit_runtime` must be rebuilt and restarted together;
+a controller missing acknowledgement-generation telemetry cannot complete the
+new reset workflow. Software regression tests cover recovery state transitions;
+physical collision response still requires validation on the deployed robot.
+
 ## Recovery Jog suppression
 
 Recovery Jog intentionally suppresses sensorless detection so an operator can
@@ -672,3 +717,53 @@ Disable the platform switch after testing to stop the additional plot traffic.
 - `docs/A_universal_algorithm_for_sensorless_collision_det.pdf`: background
   paper; the deployed implementation is the repository code and configuration
   documented here.
+
+
+## Collision event logging
+
+The controller emits one `[CollisionDiagnostics]` JSON snapshot for each latched
+collision and each observer-ready transition. Collision snapshots have an
+`event_id` matching `diagnostic_event_id` in the backend's `[CollisionMonitor]`
+stop-request log. The snapshot's ROS timestamp is captured in the control loop;
+the console timestamp is later because formatting/logging runs on a non-RT timer.
+`event=observer_ready` describes initial calibration or baseline-preserving
+rearm completion, rather than a contact detection.
+
+Each snapshot records all six joints' positions, measured velocities and filtered
+accelerations, measured/compensated/expected torques, friction/pose/motion
+corrections, calibration offsets, raw/filtered residuals, effective thresholds,
+base floors, threshold envelopes, and continuous exceedance durations. Flags and
+settings include detection/suppression/active-stop state, dynamic-threshold
+settings, sensitivity, confirmation duration and observer/filter parameters.
+Readiness age, warmup elapsed/sample count, acknowledgement/reset counts, update
+period and overrun count describe recovery and observer timing.
+`baseline_valid`, `observer_initialized`, and `rearm_settled_ms` distinguish
+retained calibration from observer initialization and the stationary clear gate.
+
+A rolling history contains up to 25 residual/threshold samples at approximately
+10 ms intervals before the event. Array order is specified by `joint_order`;
+`age_ms` is relative to the captured event timestamp. The history is cleared on
+observer reset and may therefore be shorter than 250 ms immediately after
+calibration. It is event evidence, not a continuous recording of missed contacts.
+
+The stop request is published before diagnostic capture. Capture uses fixed-size
+copies into a bounded single-producer/single-consumer queue, without waiting or
+formatting JSON in the control loop. A full queue drops diagnostics only; later
+snapshots expose the cumulative `dropped_diagnostic_events` count. The
+`stop_publish_attempted` and `stop_published` fields distinguish detector trips
+from publication to the stop-request topic; they do not certify a physical stop.
+
+Backend logs add cached motion/interlock/readiness/suppression context and time
+since reset completion to the collision event. `[CollisionStopDiagnostics]`
+records the matching event ID, stop-call latency and returned stop result.
+`[CollisionRecoveryDiagnostics]` records reset requests, successful reset
+completion and observed readiness transitions. `[CollisionObserverReset]`
+marks receipt of the observer acknowledgement and its recovery mode. Thresholds,
+confirmation and suppression settings remain independently configured.
+The detailed C++ snapshot appears in ROS console/launch logs; the backend context
+also travels with `collision_event` into the platform failure register when that
+failure is captured.
+
+After updating these sources, rebuild `zeroerr` and `erob_moveit_runtime`, then
+restart the robot backend/controller to load the new C++ plugin and Python files.
+Do not infer that compiling the sources updates an already-running controller.

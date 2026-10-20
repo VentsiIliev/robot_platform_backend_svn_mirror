@@ -22,3 +22,4 @@ class DashboardState:
     can_pause: bool = False
     pause_label: str = "Pause"
     is_stopping: bool = False
+    consecutive_completed_cycles: int = 0

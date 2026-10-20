@@ -140,6 +140,7 @@
     "Demo Alternate": "Демо редуване"
   },
   "PaintDashboard": {
+    "Consecutive completed cycles: {count}": "Последователни завършени цикли: {count}",
     "Tray Readiness": "Готовност на тавата",
     "Tray occupancy is unknown": "Заетостта на тавата е неизвестна",
     "Confirm that the tray is physically empty before starting.": "Потвърдете, че тавата е физически празна, преди да стартирате.",

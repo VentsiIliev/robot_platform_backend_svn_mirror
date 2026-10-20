@@ -140,6 +140,7 @@
     "Demo Alternate": "Демо редуване"
   },
   "PaintDashboard": {
+    "Consecutive completed cycles: {count}": "Последователни завършени цикли: {count}",
     "Robot motion is held": "Движението на робота е блокирано",
     "Keep Hold": "Запази блокировката",
     "Acknowledge and Clear Hold": "Потвърди и изчисти блокировката",

@@ -161,8 +161,17 @@ def main() -> None:
 
     # 4 — Qt app + localization
     qt_app = QApplication(sys.argv)
+    from pl_gui.theme.palette import theme_palette
+    from pl_gui.theme.runtime import install_theme
+    from src.applications.platform_settings.service.platform_settings_service import PlatformSettingsService
+    try:
+        theme_palette.set_colors(PlatformSettingsService().get_colors())
+    except (OSError, ValueError):
+        logging.getLogger(__name__).exception("Could not load appearance preferences; using defaults")
+    install_theme(qt_app)
     _install_terminal_signal_handlers(qt_app)
     localization_svc = _build_localization_service(robot_app, ctx.messaging_service)
+    robot_app.localization_service = localization_svc
     localization_svc.set_language(localization_svc.get_language())
 
     kiosk_exit_guard = None

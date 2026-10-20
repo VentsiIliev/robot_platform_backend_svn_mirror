@@ -87,11 +87,74 @@ class PaintProductionService:
         self._brightness_locked = False
         self._paint_control = PaintExecutionControl()
         self._active_context_lock = threading.Lock()
+        self._consecutive_completed_cycles = 0
         self._active_execution_context: PaintExecutionContext | None = None
         self._last_execution_context: PaintExecutionContext | None = None
         self._prepositioned_start_group: str | None = None
         self._dry_run_snapshot_source = dry_run_snapshot_source
         self._failure_artifact_root = failure_artifact_root
+        self._failure_register_context = None
+        self._failure_register_streak: int | None = None
+        self._failure_bundle_path = None
+
+    def prepare_failure_record(
+        self, *, message: str, failure: TrayFailure | PaintFailure | None = None,
+        run_id: str | None = None, collision_event: dict | None = None,
+    ) -> dict:
+        """Snapshot failure evidence and the pre-reset streak without performing file I/O."""
+        from dataclasses import asdict
+        from datetime import datetime, timezone
+        from src.robot_systems.paint.diagnostics.failure_register import summarize_failure_workpiece
+
+        with self._active_context_lock:
+            context = self._failure_register_context
+            streak = self._failure_register_streak
+            return {
+                "schema_version": 1,
+                "recorded_at_utc": datetime.now(timezone.utc).isoformat(),
+                "run_id": run_id,
+                "cycle_id": context.diagnostic_cycle_id if context is not None else None,
+                "cycle_index": context.cycle_index if context is not None else None,
+                "consecutive_completed_cycles": (
+                    self._consecutive_completed_cycles if streak is None else streak
+                ),
+                "message": message,
+                "workpiece": (
+                    summarize_failure_workpiece(
+                        context.workpiece_description, context.raw_workpiece, context.dry_run_metadata,
+                    )
+                    if context is not None else None
+                ),
+                "failure": asdict(failure) if failure is not None else None,
+                "cycle_failure": (
+                    asdict(context.operation_failure)
+                    if context is not None and context.operation_failure is not None else None
+                ),
+                "collision_event": dict(collision_event) if collision_event is not None else None,
+                "failure_bundle": (
+                    str(self._failure_bundle_path) if self._failure_bundle_path is not None else None
+                ),
+            }
+
+    def write_failure_record(self, record: dict) -> None:
+        """Persist a prepared failure snapshot outside process/state locks."""
+        if self._failure_artifact_root is None:
+            return
+        from pathlib import Path
+        from src.robot_systems.paint.diagnostics.failure_register import append_paint_failure_record
+
+        append_paint_failure_record(Path(self._failure_artifact_root).parent, record)
+
+    @property
+    def consecutive_completed_cycles(self) -> int:
+        """Session-only count of full paint cycles completed since the last failure."""
+        with self._active_context_lock:
+            return self._consecutive_completed_cycles
+
+    def reset_completed_cycle_streak(self) -> None:
+        """Clear the diagnostic streak after a process fault."""
+        with self._active_context_lock:
+            self._consecutive_completed_cycles = 0
 
     def ensure_tray_ready_for_start(self, config: PaintProcessConfig | None = None) -> None:
         """Enforce tray readiness for UI, physical buttons and direct production."""
@@ -101,6 +164,8 @@ class PaintProductionService:
                 if self._paint_process_config_service is not None
                 else PAINT_PROCESS_CONFIG
             )
+        if config.enable_dry_run_mode:
+            return
         dropoff = config.dropoff
         if dropoff.strategy is DropoffStrategy.PLATE_LAYOUT or dropoff.alternate_drying_demo:
             if self._plate_layout_service is None:
@@ -180,6 +245,10 @@ class PaintProductionService:
     ) -> PaintOperationResult:
         """Run production, optionally forcing one calibration-table cycle without magazine load."""
         self.last_failure = None
+        with self._active_context_lock:
+            self._failure_register_context = None
+            self._failure_register_streak = None
+            self._failure_bundle_path = None
         self.ensure_tray_ready_for_start()
         self._clear_prepositioned_start_group()
         should_stop = stop_requested or (lambda: False)
@@ -720,6 +789,7 @@ class PaintProductionService:
             ]
         with self._active_context_lock:
             self._active_execution_context = context
+            self._failure_register_context = context
         raised_exception = None
         execution = None
         try:
@@ -732,15 +802,29 @@ class PaintProductionService:
         finally:
             self._last_execution_context = context
             self._log_execution_state_timing(context)
-            with self._active_context_lock:
-                if self._active_execution_context is context:
-                    self._active_execution_context = None
             has_failure = bool(
                 context.operation_failure is not None
                 or context.tray_failure is not None
                 or raised_exception is not None
                 or (execution is not None and execution.result.failure is not None)
             )
+            completed_cycle = bool(
+                execution is not None
+                and execution.result.completed
+                and not magazine_stage_only
+                and not process_config.stop_after_calibration_pickup
+                and not should_stop()
+            )
+            with self._active_context_lock:
+                if has_failure:
+                    self._failure_register_streak = self._consecutive_completed_cycles
+                    self._consecutive_completed_cycles = 0
+                # stop_machine() sets context.stop_event on successful completion
+                # too; only the production control represents a cancellation here.
+                elif completed_cycle and not self._paint_control.should_stop():
+                    self._consecutive_completed_cycles += 1
+                if self._active_execution_context is context:
+                    self._active_execution_context = None
             if has_failure:
                 self._store_failure_bundle(context, raised_exception)
             self._path_executor.set_cycle_dropoff_strategy(None)
@@ -756,12 +840,14 @@ class PaintProductionService:
         if self._failure_artifact_root is None:
             return
         from src.robot_systems.paint.diagnostics.failure_bundle import write_paint_failure_bundle
-        write_paint_failure_bundle(
+        destination = write_paint_failure_bundle(
             context,
             self._path_executor,
             self._failure_artifact_root,
             raised_exception=raised_exception,
         )
+        with self._active_context_lock:
+            self._failure_bundle_path = destination / "failure_bundle.json" if destination is not None else None
 
     @staticmethod
     def _effective_dropoff_strategy(process_config, cycle_index: int) -> str | None:

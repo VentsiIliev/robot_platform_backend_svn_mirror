@@ -74,7 +74,7 @@
     <collision>
       <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
       <geometry>
-        <mesh filename="package://zeroerr/meshes/welding/Link_1.stl" scale="1.00000 1.00000 1.00000"/>
+        <mesh filename="package://zeroerr/meshes/robots/zeroerr/common/Link_1.stl" scale="1.00000 1.00000 1.00000"/>
       </geometry>
     </collision>
     <inertial>
@@ -86,7 +86,7 @@
       <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
       <material name="#ffffffff"/>
       <geometry>
-        <mesh filename="package://zeroerr/meshes/welding/Link_1.stl" scale="1.00000 1.00000 1.00000"/>
+        <mesh filename="package://zeroerr/meshes/robots/zeroerr/common/Link_1.stl" scale="1.00000 1.00000 1.00000"/>
       </geometry>
     </visual>
   </link>
@@ -94,7 +94,7 @@
     <collision>
       <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
       <geometry>
-        <mesh filename="package://zeroerr/meshes/welding/Link_2_extended.stl" scale="1.00000 1.00000 1.00000"/>
+        <mesh filename="package://zeroerr/meshes/robots/zeroerr/extended_links/Link_2.stl" scale="1.00000 1.00000 1.00000"/>
       </geometry>
     </collision>
     <inertial>
@@ -106,7 +106,7 @@
       <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
       <material name="#ffffffff"/>
       <geometry>
-        <mesh filename="package://zeroerr/meshes/welding/Link_2_extended.stl" scale="1.00000 1.00000 1.00000"/>
+        <mesh filename="package://zeroerr/meshes/robots/zeroerr/extended_links/Link_2.stl" scale="1.00000 1.00000 1.00000"/>
       </geometry>
     </visual>
   </link>
@@ -114,7 +114,7 @@
     <collision>
       <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
       <geometry>
-        <mesh filename="package://zeroerr/meshes/welding/Link_3_extended.stl" scale="1.00000 1.00000 1.00000"/>
+        <mesh filename="package://zeroerr/meshes/robots/zeroerr/extended_links/Link_3.stl" scale="1.00000 1.00000 1.00000"/>
       </geometry>
     </collision>
     <inertial>
@@ -126,7 +126,7 @@
       <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
       <material name="#ffffffff"/>
       <geometry>
-        <mesh filename="package://zeroerr/meshes/welding/Link_3_extended.stl" scale="1.00000 1.00000 1.00000"/>
+        <mesh filename="package://zeroerr/meshes/robots/zeroerr/extended_links/Link_3.stl" scale="1.00000 1.00000 1.00000"/>
       </geometry>
     </visual>
   </link>
@@ -134,7 +134,7 @@
     <collision>
       <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
       <geometry>
-        <mesh filename="package://zeroerr/meshes/welding/Link_4.stl" scale="1.00000 1.00000 1.00000"/>
+        <mesh filename="package://zeroerr/meshes/robots/zeroerr/common/Link_4.stl" scale="1.00000 1.00000 1.00000"/>
       </geometry>
     </collision>
     <inertial>
@@ -146,7 +146,7 @@
       <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
       <material name="#ffffffff"/>
       <geometry>
-        <mesh filename="package://zeroerr/meshes/welding/Link_4.stl" scale="1.00000 1.00000 1.00000"/>
+        <mesh filename="package://zeroerr/meshes/robots/zeroerr/common/Link_4.stl" scale="1.00000 1.00000 1.00000"/>
       </geometry>
     </visual>
   </link>
@@ -154,7 +154,7 @@
     <collision>
       <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
       <geometry>
-        <mesh filename="package://zeroerr/meshes/welding/Link_5.stl" scale="1.00000 1.00000 1.00000"/>
+        <mesh filename="package://zeroerr/meshes/robots/zeroerr/common/Link_5.stl" scale="1.00000 1.00000 1.00000"/>
       </geometry>
     </collision>
     <inertial>
@@ -166,7 +166,7 @@
       <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
       <material name="#ffffffff"/>
       <geometry>
-        <mesh filename="package://zeroerr/meshes/welding/Link_5.stl" scale="1.00000 1.00000 1.00000"/>
+        <mesh filename="package://zeroerr/meshes/robots/zeroerr/common/Link_5.stl" scale="1.00000 1.00000 1.00000"/>
       </geometry>
     </visual>
   </link>
@@ -174,7 +174,7 @@
     <collision>
       <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
       <geometry>
-        <mesh filename="package://zeroerr/meshes/welding/Link_6.stl" scale="1.00000 1.00000 1.00000"/>
+        <mesh filename="package://zeroerr/meshes/robots/zeroerr/common/Link_6.stl" scale="1.00000 1.00000 1.00000"/>
       </geometry>
     </collision>
     <inertial>
@@ -186,7 +186,7 @@
       <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
       <material name="#ffffffff"/>
       <geometry>
-        <mesh filename="package://zeroerr/meshes/welding/Link_6.stl" scale="1.00000 1.00000 1.00000"/>
+        <mesh filename="package://zeroerr/meshes/robots/zeroerr/common/Link_6.stl" scale="1.00000 1.00000 1.00000"/>
       </geometry>
     </visual>
   </link>
@@ -199,7 +199,7 @@
     <collision>
       <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
       <geometry>
-        <mesh filename="package://zeroerr/meshes/welding/base_link.stl" scale="1.00000 1.00000 1.00000"/>
+        <mesh filename="package://zeroerr/meshes/robots/zeroerr/common/base_link.stl" scale="1.00000 1.00000 1.00000"/>
       </geometry>
     </collision>
     <inertial>
@@ -211,7 +211,7 @@
       <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
       <material name="base"/>
       <geometry>
-        <mesh filename="package://zeroerr/meshes/welding/base_link.stl" scale="1.00000 1.00000 1.00000"/>
+        <mesh filename="package://zeroerr/meshes/robots/zeroerr/common/base_link.stl" scale="1.00000 1.00000 1.00000"/>
       </geometry>
     </visual>
   </link>
@@ -257,7 +257,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://zeroerr/meshes/welding/disk.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://zeroerr/meshes/tools/welding_disk/disk.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="tool_material">
         <color rgba="0.7 0.7 0.7 1"/>
@@ -266,7 +266,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://zeroerr/meshes/welding/disk.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://zeroerr/meshes/tools/welding_disk/disk.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>

@@ -9,6 +9,9 @@ class PlatformSettingsFactory(ApplicationFactory):
         return PlatformSettingsModel(service)
 
     def _create_view(self):
+        from PyQt6.QtWidgets import QApplication
+        from pl_gui.theme.runtime import install_theme
+        install_theme(QApplication.instance())
         return PlatformSettingsView()
 
     def _create_controller(self, model, view):

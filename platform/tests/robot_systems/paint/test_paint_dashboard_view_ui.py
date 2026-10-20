@@ -86,6 +86,9 @@ class _FakeDashboardWidget(QWidget):
         self.calls = []
         self.layout_manager = SimpleNamespace(main_layout=None)
 
+    def retranslateUi(self) -> None:
+        """Honor the dashboard interface when queued language events arrive."""
+
     def set_trajectory_image(self, image) -> None:
         self.calls.append(("trajectory", image))
 
@@ -850,6 +853,35 @@ class TestPaintDashboardUi(unittest.TestCase):
 
         self.assertEqual(view._dashboard.calls, calls_after_first_apply)
         self.assertIsNone(view.clean_up())
+
+    def test_cycle_streak_updates_without_process_state_change_and_retranslates(self) -> None:
+        from PyQt6.QtCore import QEvent
+        import json
+        from pathlib import Path
+
+        with patch(
+            "src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view.DashboardWidget",
+            _FakeDashboardWidget,
+        ):
+            view = PaintDashboardView(config=SimpleNamespace(), action_buttons=[], cards=[])
+        self.assertEqual(view._cycle_streak_label.text(), "Consecutive completed cycles: 0")
+        view.apply_dashboard_state(DashboardState(consecutive_completed_cycles=12))
+        self.assertEqual(view._cycle_streak_label.text(), "Consecutive completed cycles: 12")
+        view.apply_dashboard_state(DashboardState(consecutive_completed_cycles=13))
+        self.assertEqual(view._cycle_streak_label.text(), "Consecutive completed cycles: 13")
+        catalog = json.loads(Path(
+            "src/robot_systems/paint_tray_dry/storage/translations/bg.json"
+        ).read_text())["PaintDashboard"]
+        view._dashboard.retranslateUi = MagicMock()
+        with patch(
+            "src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view.QCoreApplication.translate",
+            side_effect=lambda context, text: catalog.get(text, text),
+        ):
+            QApplication.sendEvent(view, QEvent(QEvent.Type.LanguageChange))
+            self.assertEqual(view._cycle_streak_label.text(), "Последователни завършени цикли: 13")
+            view.apply_dashboard_state(DashboardState(consecutive_completed_cycles=0))
+            self.assertEqual(view._cycle_streak_label.text(), "Последователни завършени цикли: 0")
+        view.clean_up()
 
     def test_dashboard_view_updates_status_cards_from_state(self) -> None:
         robot_card = MagicMock()

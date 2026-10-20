@@ -34,6 +34,7 @@ from src.shared_contracts.declarations import (
 )
 if TYPE_CHECKING:
     from src.engine.process.service_health_registry import ServiceHealthRegistry
+    from src.engine.localization.i_localization_service import ILocalizationService
 
 # ---------------------------------------------------------------------------
 # Base vision_service
@@ -69,6 +70,8 @@ class BaseRobotSystem(ABC):
     role_policy: ClassVar[RolePolicy] = RolePolicy()
 
     def __init__(self) -> None:
+        # Supplied after QApplication exists, before applications are loaded.
+        self.localization_service: Optional[ILocalizationService] = None
         self._logger = logging.getLogger(self.__class__.__name__)
         self._resolved: Dict[Enum, Any] = {}
         self._settings_service:  Optional[ISettingsService] = None

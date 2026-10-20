@@ -50,7 +50,10 @@ def run_prepared_paint_cycle(
     from src.robot_systems.paint.processes.paint.workflow.state import PaintExecutionState
 
     raw_config = runtime._refresh_paint_process_config_snapshot()
-    if raw_config.dropoff.strategy is DropoffStrategy.PLATE_LAYOUT or raw_config.dropoff.alternate_drying_demo:
+    if not raw_config.enable_dry_run_mode and (
+        raw_config.dropoff.strategy is DropoffStrategy.PLATE_LAYOUT
+        or raw_config.dropoff.alternate_drying_demo
+    ):
         runtime._plate_layout_service.ensure_ready(raw_config.dropoff)
     runtime._refresh_runtime_config()
     control = control or PaintExecutionControl()

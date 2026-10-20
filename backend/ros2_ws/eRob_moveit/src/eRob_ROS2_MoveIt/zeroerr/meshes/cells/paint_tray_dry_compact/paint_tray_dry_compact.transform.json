@@ -1,0 +1,52 @@
+{
+  "units": "unchanged; dimensions interpreted as millimeters",
+  "original_backup": "paint_tray_dry_compact.original.stl",
+  "rotation_about_original_x_degrees": 90,
+  "origin_in_original_coordinates": [
+    0.0,
+    947.7000122070312,
+    -130.0
+  ],
+  "coordinate_mapping": {
+    "x_new": "x_old",
+    "y_new": "-z_old - 130",
+    "z_new": "y_old - 947.7000122070312"
+  },
+  "mounting_surface_z": 0,
+  "plate_underside_z": -6,
+  "mounting_hole_centers_xy": [
+    [
+      -38.89087296,
+      -38.89087296
+    ],
+    [
+      -38.89087296,
+      38.89087296
+    ],
+    [
+      38.89087296,
+      -38.89087296
+    ],
+    [
+      38.89087296,
+      38.89087296
+    ]
+  ],
+  "mounting_hole_diameter_approx": 4.917,
+  "triangle_count": 2198286,
+  "new_bounds": [
+    [
+      -306.3701171875,
+      -449.79998779296875,
+      -106.72003173828125
+    ],
+    [
+      351.74456787109375,
+      580.2000122070312,
+      335.14996337890625
+    ]
+  ],
+  "maximum_round_trip_error": 1.52587890625e-05,
+  "original_sha256": "41daa3bb12464adc588078dd91f470dfd53c5e7e1147598dd69326bc2996f93f",
+  "corrected_sha256": "49be33cb7321cda6f48645b411765ba432efb7c961c065b1600e21d0dfa6402f"
+}

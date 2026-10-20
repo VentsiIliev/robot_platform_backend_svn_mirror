@@ -58,11 +58,11 @@ class Header(QFrame):
 
         # Menu Button
         self.menu_button: QPushButton = QPushButton()
-        self.menu_button.setIcon(load_icon(MENU_ICON_PATH))
+        self.menu_button.setIcon(load_icon("fa5s.bars", color="white"))
         self.menu_button.clicked.connect(
             toggle_menu_callback if toggle_menu_callback else lambda: print("toggle_menu_callback is none")
         )
-        self.menu_button.setStyleSheet("border: none; background: transparent; padding: 0px;")
+        self.menu_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.header_layout.addWidget(self.menu_button)
 
         # Left stretch
@@ -247,7 +247,13 @@ class Header(QFrame):
         new_width: int = self.width()
         icon_size: int = int(new_width * 0.05)
 
-        self.menu_button.setIconSize(QSize(icon_size, icon_size))
+        diameter = max(48, icon_size + 16)
+        self.menu_button.setFixedSize(diameter, diameter)
+        self.menu_button.setIconSize(QSize(diameter // 3, diameter // 3))
+        self.menu_button.setStyleSheet(f"""
+            QPushButton {{ background: {PRIMARY}; border: none; border-radius: {diameter // 2}px; }}
+            QPushButton:hover {{ background: {PRIMARY_DARK}; }}
+        """)
         self.power_toggle_button.setIconSize(QSize(26, 26))
         self.help_button.setIconSize(QSize(26, 26))
         self.dashboardButton.setIconSize(QSize(icon_size, icon_size))

@@ -11,3 +11,4 @@ class PaintContactCommandJob:
     pattern_type: str
     velocity_percent: float
     acceleration_percent: float
+    retreat_pose: tuple[float, ...] | None = None

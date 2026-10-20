@@ -16,6 +16,7 @@ from src.robot_systems.paint.processes.paint.workflow.context import PaintExecut
 from src.robot_systems.paint.processes.paint.workflow.state import PaintExecutionState
 from src.robot_systems.paint.processes.paint.workflow.handlers.dropoff.prepare_dropoff_handler import handle_prepare_dropoff
 from src.robot_systems.paint.processes.paint.workflow.handlers.dropoff.dropoff_handler import handle_dropoff
+from src.robot_systems.paint.processes.paint.tray_dry.plate_layout import PlateLayoutService
 
 
 from src.robot_systems.paint.processes.paint.results import PaintOperationResult, PaintOutcome, Ready, Failed, PaintFailureCode
@@ -208,20 +209,18 @@ class TestDropoffCycleLifecycle(unittest.TestCase):
         request = self.request()
         result = PlateLayoutDropoff(owner).begin_cycle(request)
         self.assertIs(full, result)
+        layout.clear.assert_not_called()
         request.calibration_source.assert_called_once_with()
         self.assertEqual(5.0, layout.reserve_result.call_args.kwargs['workpiece_rz_at_calibration_deg'])
         self.assertEqual([], robot.mock_calls)
 
-    def test_dry_run_full_plate_resets_virtual_layout_and_retries(self):
+    def test_dry_run_resets_virtual_layout_before_every_reservation(self):
         layout = MagicMock()
         reservation = SimpleNamespace(
             release_pose=[1, 2, 3, 180, 0, 0],
             has_space_for_same_footprint=False,
         )
-        layout.reserve_result.side_effect = [
-            PaintOperationResult(PaintOutcome.TRAY_FULL, 'No remaining capacity'),
-            Ready(reservation),
-        ]
+        layout.reserve_result.return_value = Ready(reservation)
         config = replace(
             PaintProcessConfig(
                 dropoff=PaintDropoffConfig(strategy=DropoffStrategy.PLATE_LAYOUT)
@@ -238,6 +237,10 @@ class TestDropoffCycleLifecycle(unittest.TestCase):
 
         self.assertTrue(result.completed)
         layout.clear.assert_called_once_with()
+        self.assertEqual('clear', layout.mock_calls[0][0])
+        result = PlateLayoutDropoff(owner).begin_cycle(self.request())
+        self.assertTrue(result.completed)
+        self.assertEqual(2, layout.clear.call_count)
         self.assertEqual(2, layout.reserve_result.call_count)
 
     def test_plate_reservation_rejects_missing_calibration_without_reserving(self):
@@ -250,6 +253,31 @@ class TestDropoffCycleLifecycle(unittest.TestCase):
         self.assertIs(PaintFailureCode.INVALID_CONFIGURATION, result.failure.code)
         layout.reserve_result.assert_not_called()
 
+    def test_dry_run_reuses_single_slot_tray_continuously(self):
+        layout = PlateLayoutService()
+        config = PaintProcessConfig(enable_dry_run_mode=True, dropoff=PaintDropoffConfig(
+            strategy=DropoffStrategy.PLATE_LAYOUT,
+            plate_corners=[[0, 0, 10, 180, 0, 0], [40, 0, 10, 180, 0, 0],
+                           [40, 30, 10, 180, 0, 0], [0, 30, 10, 180, 0, 0]],
+            plate_passage_gate_pose=[0, 0, 100, 180, 0, 0],
+        ))
+        owner = SimpleNamespace(
+            _plate_layout_service=layout,
+            _paint_process_config=lambda: config,
+            _resolve_pivot_offset_mm=lambda *args: 0.0,
+        )
+        strategy = PlateLayoutDropoff(owner)
+        for _ in range(5):
+            result = strategy.begin_cycle(self.request())
+            self.assertTrue(result.completed, result.message)
+            self.assertFalse(layout.pending.has_space_for_same_footprint)
+            layout.commit(config.dropoff)
+            self.assertEqual(1, len(layout.snapshot(config.dropoff)['placements']))
+
+        config = replace(config, enable_dry_run_mode=False)
+        result = strategy.begin_cycle(self.request())
+        self.assertIs(PaintOutcome.TRAY_FULL, result.outcome)
+
     def test_plate_finalization_cancels_on_failure_and_preserves_success(self):
         layout = MagicMock()
         strategy = PlateLayoutDropoff(SimpleNamespace(_plate_layout_service=layout))
@@ -257,6 +285,43 @@ class TestDropoffCycleLifecycle(unittest.TestCase):
         layout.cancel.assert_not_called()
         strategy.finish_cycle(PaintOperationResult(PaintOutcome.CANCELLED, 'Stopped'))
         layout.cancel.assert_called_once_with()
+
+    def test_oversized_workpiece_is_rejected_in_dry_run_and_production(self):
+        layout = PlateLayoutService()
+        config = PaintProcessConfig(enable_dry_run_mode=True, dropoff=PaintDropoffConfig(
+            strategy=DropoffStrategy.PLATE_LAYOUT,
+            plate_corners=[[0, 0, 10, 180, 0, 0], [40, 0, 10, 180, 0, 0],
+                           [40, 30, 10, 180, 0, 0], [0, 30, 10, 180, 0, 0]],
+            plate_margin_left_mm=11.0, plate_margin_right_mm=11.0,
+            plate_passage_gate_pose=[0, 0, 100, 180, 0, 0],
+        ))
+        owner = SimpleNamespace(
+            _plate_layout_service=layout,
+            _paint_process_config=lambda: config,
+            _resolve_pivot_offset_mm=lambda *args: 0.0,
+        )
+        strategy = PlateLayoutDropoff(owner)
+        for dry_run in (True, False):
+            config = replace(config, enable_dry_run_mode=dry_run)
+            layout.clear()
+            result = strategy.begin_cycle(self.request())
+            self.assertIs(PaintOutcome.TRAY_FULL, result.outcome)
+            self.assertIsNone(layout.pending)
+
+    def test_dry_run_rejects_invalid_tray_geometry(self):
+        layout = PlateLayoutService()
+        config = PaintProcessConfig(enable_dry_run_mode=True, dropoff=PaintDropoffConfig(
+            strategy=DropoffStrategy.PLATE_LAYOUT,
+            plate_corners=[],
+        ))
+        owner = SimpleNamespace(
+            _plate_layout_service=layout,
+            _paint_process_config=lambda: config,
+            _resolve_pivot_offset_mm=lambda *args: 0.0,
+        )
+        result = PlateLayoutDropoff(owner).begin_cycle(self.request())
+        self.assertIs(PaintFailureCode.INVALID_CONFIGURATION, result.failure.code)
+        self.assertIsNone(layout.pending)
 
     def test_approach_receipt_records_only_the_steps_that_completed(self):
         owner = SimpleNamespace(_dropoff_unwind_prepared=False, _plate_entry_completed_in_paint_chain=False)

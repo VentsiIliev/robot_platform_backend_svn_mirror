@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.22)
 project(zeroerr)
 
 find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_python REQUIRED)
+ament_python_install_package(zeroerr_configuration)
 find_package(ament_index_cpp REQUIRED)
 find_package(control_msgs REQUIRED)
 find_package(controller_interface REQUIRED)
@@ -106,5 +108,11 @@ install(FILES
 )
 install(DIRECTORY meshes DESTINATION share/${PROJECT_NAME})
 install(FILES .setup_assistant DESTINATION share/${PROJECT_NAME})
+
+if(BUILD_TESTING)
+  find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(profile_composition test/test_profile_composition.py
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR})
+endif()
 
 ament_package()

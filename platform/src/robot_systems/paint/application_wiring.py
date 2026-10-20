@@ -312,6 +312,7 @@ def _build_paint_dry_run_snapshot_source(robot_system):
         image_size_getter=lambda: _paint_camera_image_size(robot_system),
         robot_service=robot_system._robot,
         work_area_id="paint",
+        process_config_getter=robot_system._paint_process_config_service.get_snapshot,
     )
 
 

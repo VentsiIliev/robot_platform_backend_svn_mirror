@@ -7,6 +7,7 @@ from pl_gui.shell.app_descriptor import AppDescriptor
 from pl_gui.shell.ui.Header import Header
 from pl_gui.shell.FolderLauncher import FolderLauncher, FolderConfig
 from pl_gui.shell.shell_config import ShellConfig
+from pl_gui.settings.settings_view.styles import BG_COLOR
 
 
 class AppShell(QWidget):
@@ -214,13 +215,8 @@ class AppShell(QWidget):
         self.resize(self._default_window_size())
         # Center the window on screen
         self.center_on_screen()
-        self.setStyleSheet("""
-            QWidget {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 rgba(248, 250, 252, 1),
-                    stop:1 rgba(241, 245, 249, 1));
-            }
-        """)
+        self.setObjectName("appShell")
+        self.setStyleSheet(f"QWidget#appShell {{ background-color: {BG_COLOR}; }}")
 
         # Create main layout for the window
         main_layout = QVBoxLayout(self)

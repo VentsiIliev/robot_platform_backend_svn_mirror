@@ -31,6 +31,7 @@ packages = [
     "pl_gui.shell.ui",
     "pl_gui.shell.ui.material",
     "pl_gui.shell.ui.material.managers",
+    "pl_gui.theme",
     "pl_gui.utils",
     "pl_gui.utils.utils_widgets",
 ]

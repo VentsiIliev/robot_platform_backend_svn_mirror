@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="welding_disk" params="mount_xyz mount_rpy">
+    <link name="disk_mount" />
+    <joint name="ee_to_disk_mount" type="fixed">
+      <parent link="ee_link" />
+      <child link="disk_mount" />
+      <origin xyz="${mount_xyz}" rpy="${mount_rpy}" />
+    </joint>
+    <link name="disk_link">
+      <inertial>
+        <mass value="2.5" />
+        <origin xyz="0 0 0" rpy="0 0 0" />
+        <inertia ixx="0.001693" ixy="0" ixz="0" iyy="0.001693" iyz="0" izz="0.003125" />
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0" />
+        <geometry>
+          <mesh filename="package://zeroerr/meshes/tools/welding_disk/disk.stl" scale="0.001 0.001 0.001" />
+        </geometry>
+        <material name="tool_material">
+          <color rgba="0.7 0.7 0.7 1" />
+        </material>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0" />
+        <geometry>
+          <mesh filename="package://zeroerr/meshes/tools/welding_disk/disk.stl" scale="0.001 0.001 0.001" />
+        </geometry>
+      </collision>
+    </link>
+    <joint name="disk_mount_to_disk" type="fixed">
+      <parent link="disk_mount" />
+      <child link="disk_link" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
+    </joint>
+  </xacro:macro>
+</robot>
