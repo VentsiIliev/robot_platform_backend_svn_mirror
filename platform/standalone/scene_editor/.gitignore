@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+.venv/
+*.scene.json
+*.assets/
+!examples/*.scene.json
