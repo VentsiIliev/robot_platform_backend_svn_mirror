@@ -105,3 +105,9 @@ class RobotSettingsModel(IApplicationModel):
 
     def open_collision_monitor_diagnostics(self) -> dict:
         return self._service.open_collision_monitor_diagnostics()
+
+    def get_rviz_status(self) -> dict:
+        return self._service.get_rviz_status()
+
+    def set_rviz_enabled(self, enabled: bool) -> dict:
+        return self._service.set_rviz_enabled(enabled)

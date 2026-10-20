@@ -3,6 +3,7 @@
 ROS2 Bridge Server - Exposes the shared MoveIt robot backend via REST API.
 """
 import os
+import atexit
 import json
 import logging
 import socket
@@ -30,6 +31,7 @@ from runtime_websockets.state_server import start_state_websocket_server
 from runtime_websockets.sensor_server import start_sensor_websocket_server
 from motion.servo.conditional_servo import ConditionalServoSupervisor
 from rest.openapi import OPENAPI_SPEC, SWAGGER_HTML
+from rest.rviz_process import RvizProcessManager
 import config
 
 
@@ -143,6 +145,19 @@ def start_rest_server(
     """
 
     app = Flask(__name__)
+    def update_rviz_markers(running):
+        if node is not None and rclpy.ok():
+            node.set_rviz_visualization_enabled(running)
+
+    rviz_manager = RvizProcessManager(on_state_changed=update_rviz_markers)
+    atexit.register(rviz_manager.close)
+
+    def start_initial_rviz():
+        if os.environ.get("ZEROERR_USE_RVIZ", "false").strip().lower() in {"1", "true", "yes", "on"}:
+            result = rviz_manager.set_enabled(True)
+            if not result.get("success"):
+                logger.warning("RViz startup failed: %s", result.get("error"))
+
     startup_lock = threading.Lock()
     startup_state = {
         "phase": "initializing_http",
@@ -296,6 +311,7 @@ def start_rest_server(
                     robot, node = initialized
                 if robot is None or node is None:
                     raise RuntimeError("runtime initializer did not return a robot and node")
+                start_initial_rviz()
                 update_startup_status(
                     "runtime_initialized",
                     "Robot runtime is initialized; waiting for motion stack",
@@ -316,6 +332,9 @@ def start_rest_server(
             daemon=True,
             name="RuntimeInitializer",
         ).start()
+
+    if runtime_initializer is None and node is not None:
+        start_initial_rviz()
 
     if robot is None and runtime_initializer is None and not allow_starting_without_robot:
         raise RuntimeError("REST server started without a robot instance")
@@ -542,6 +561,18 @@ def start_rest_server(
         if error is not None:
             return error
         return jsonify({"success": True, "config": state})
+
+    @app.route("/visualization/rviz", methods=["GET", "POST"])
+    def control_rviz():
+        if request.method == "GET":
+            return jsonify(rviz_manager.status())
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict) or not isinstance(payload.get("enabled"), bool):
+            return _response_error("enabled must be a boolean", 400)
+        if payload["enabled"] and node is None:
+            return _response_error("Robot runtime is still initializing", 503)
+        result = rviz_manager.set_enabled(payload["enabled"])
+        return jsonify(result), 200 if result.get("success") else 503
 
     @app.route("/collision/monitor/diagnostics/open", methods=["POST"])
     def open_collision_monitor_diagnostics():
@@ -861,4 +892,7 @@ def start_rest_server(
     with open(LOG_FILE, "a") as f:
         sys.stdout = f
         sys.stderr = f
-        app.run(host=host, port=port, threaded=True, use_reloader=False)
+        try:
+            app.run(host=host, port=port, threaded=True, use_reloader=False)
+        finally:
+            rviz_manager.close()

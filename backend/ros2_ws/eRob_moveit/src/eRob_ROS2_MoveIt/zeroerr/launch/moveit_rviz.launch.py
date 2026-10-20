@@ -19,7 +19,7 @@ def generate_launch_description():
     package_path = get_package_share_directory("zeroerr")
     moveit_config = build_moveit_config("zeroerr", package_path)
 
-    non_rt_prefix = load_cpu_policy().non_rt_prefix
+    non_rt_prefix = load_cpu_policy().low_priority_prefix
 
     ld = LaunchDescription()
     ld.add_action(DeclareBooleanLaunchArg("debug", default_value=False))
@@ -36,9 +36,13 @@ def generate_launch_description():
             executable="rviz2",
             output="log",
             respawn=False,
+            sigterm_timeout="1",
+            sigkill_timeout="1",
             prefix=non_rt_prefix,
             arguments=["-d", LaunchConfiguration("rviz_config")],
             parameters=[
+                moveit_config.robot_description,
+                moveit_config.robot_description_semantic,
                 moveit_config.planning_pipelines,
                 moveit_config.robot_description_kinematics,
                 moveit_config.joint_limits,

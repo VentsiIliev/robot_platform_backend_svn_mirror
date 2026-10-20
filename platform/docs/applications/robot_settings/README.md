@@ -168,3 +168,18 @@ shows the backend error and leaves the application responsive.
 
 [Complete source index](../../SOURCE_INDEX.md).
 <!-- source-navigation:end -->
+
+## RViz visualization
+
+The Visualization tab has Start RViz, Stop RViz, and Refresh status controls.
+It is lazy-loaded independently of the Sensorless Collision tab. Status refreshes
+every three seconds while the tab is visible; pending requests disable the
+controls and suppress overlapping refreshes. Backend HTTP operations use the
+shared BackgroundWorker so the GUI stays responsive.
+
+The controller delegates through the model and IRobotSettingsService. RViz runs
+on the backend host with its current robot/workcell configuration. Stopping the
+viewer does not stop robot control or MoveIt. Unsupported/older backends show
+an explanatory message. Updated backend packages require one rebuild and restart
+before the controls can be used. No platform restart is needed for subsequent
+RViz on/off requests. English and Bulgarian catalogs cover the tab and status.

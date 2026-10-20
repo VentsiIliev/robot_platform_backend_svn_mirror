@@ -98,5 +98,20 @@
     "Open PlotJuggler": "Open PlotJuggler",
     "Apply settings": "Apply settings",
     "Configuration loaded": "Configuration loaded"
+  },
+  "RobotSettingsView": {
+    "Visualization": "Visualization"
+  },
+  "RobotVisualizationTab": {
+    "RViz": "RViz",
+    "Start RViz": "Start RViz",
+    "Stop RViz": "Stop RViz",
+    "Refresh status": "Refresh status",
+    "Open the robot and workcell visualization on the backend computer. Stopping RViz leaves robot control and MoveIt running.": "Open the robot and workcell visualization on the backend computer. Stopping RViz leaves robot control and MoveIt running.",
+    "RViz unavailable: {message}": "RViz unavailable: {message}",
+    "RViz status is unknown.": "RViz status is unknown.",
+    "RViz is running.": "RViz is running.",
+    "RViz is stopped.": "RViz is stopped.",
+    "This backend does not support RViz controls. Update the backend to enable them.": "This backend does not support RViz controls. Update the backend to enable them."
   }
 }

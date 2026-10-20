@@ -218,3 +218,25 @@ Common result codes returned by the bridge:
   - planning or reachability failure
 
 See `MOTION_ERROR_DESCRIPTIONS` in `rest/api_support.py` for the current full mapping.
+
+
+### RViz process control
+
+`GET /visualization/rviz` returns `{ "success": true, "running": false }` (with
+an optional `error` describing the last launch failure). `POST` to the same path
+with `{ "enabled": true }` starts RViz; `false` stops it. Only JSON booleans are
+accepted. Start requests are idempotent and serialized. Failed starts include
+`running: false` so clients can retry. A graphical display and installed RViz
+are required on the backend host.
+
+The backend owns a separate launch session using `zeroerr moveit_rviz.launch.py`,
+with the current runtime URDF/SRDF and existing non-RT/low-priority CPU policy.
+Stop signals only that session, with bounded graceful shutdown and escalation.
+Robot control, collision monitoring, and MoveIt remain running. Optional active
+TCP visualization publishing follows RViz state. Backend shutdown closes RViz.
+
+The full stack's existing `use_rviz` startup option now starts this same managed
+session, enabling the Platform Robot Settings → Visualization controls to stop
+and restart it. RViz windows launched manually outside this manager are not
+controlled by these endpoints. Rebuild/install both `erob_moveit_runtime` and
+`zeroerr`, then restart the backend once to load this API and startup wiring.

@@ -111,6 +111,9 @@ class RobotController(Node):
         return cached
 
     def __init__(self):
+        self.active_tool_marker_timer = None
+        self._visualization_lock = threading.Lock()
+        self._visualization_shutdown = False
         import time
         start_time = time.time()
 
@@ -141,22 +144,10 @@ class RobotController(Node):
             self.active_tool_collision_pub,
             getattr(config, "MOTION_PASSAGES", []),
         )
-        self.active_tool_marker_timer = None
         rviz_enabled = os.environ.get("ZEROERR_USE_RVIZ", "false").strip().lower() in {
             "1", "true", "yes", "on",
         }
-        active_tool_marker_hz = float(getattr(config, "ACTIVE_TOOL_MARKER_PUBLISH_HZ", 1.0) or 0.0)
-        if rviz_enabled and active_tool_marker_hz > 0.0:
-            self.active_tool_marker_timer = self.create_timer(
-                1.0 / active_tool_marker_hz,
-                self._publish_active_tool_visualization,
-            )
-            self.get_logger().info(
-                f'[ActiveTCP] Visualization marker publishing at {active_tool_marker_hz:.1f} Hz'
-            )
-        else:
-            reason = "RViz disabled" if not rviz_enabled else "configured rate <= 0"
-            self.get_logger().info(f'[ActiveTCP] Visualization marker publishing disabled ({reason})')
+        self.set_rviz_visualization_enabled(rviz_enabled)
 
         # Motion queue for sequential execution
         self.motion_queue = MotionQueue(max_size=MOTION_QUEUE_MAX_SIZE)
@@ -724,6 +715,20 @@ class RobotController(Node):
             )
         except Exception as exc:
             self.get_logger().warning(f"[ActiveToolCollision] Failed to remove attached cylinder: {exc}")
+
+    def set_rviz_visualization_enabled(self, enabled):
+        """Toggle only optional visualization publishing; never change motion."""
+        with self._visualization_lock:
+            if self._visualization_shutdown:
+                return
+            rate = float(getattr(config, "ACTIVE_TOOL_MARKER_PUBLISH_HZ", 1.0) or 0.0)
+            if enabled and rate > 0.0 and self.active_tool_marker_timer is None:
+                self.active_tool_marker_timer = self.create_timer(
+                    1.0 / rate, self._publish_active_tool_visualization)
+            elif not enabled and self.active_tool_marker_timer is not None:
+                self.active_tool_marker_timer.cancel()
+                self.destroy_timer(self.active_tool_marker_timer)
+                self.active_tool_marker_timer = None
 
     def _publish_active_tool_visualization(self):
         if self.monitor is None:
@@ -1645,6 +1650,12 @@ class RobotController(Node):
         return self._motion.has_pending_motion()
 
     def destroy_node(self):
+        with self._visualization_lock:
+            self._visualization_shutdown = True
+            if self.active_tool_marker_timer is not None:
+                self.active_tool_marker_timer.cancel()
+                self.destroy_timer(self.active_tool_marker_timer)
+                self.active_tool_marker_timer = None
         backend = getattr(self, 'robot', None)
         servo = getattr(backend, 'cartesian_servo', None)
         if servo is not None and hasattr(servo, 'shutdown'):

@@ -29,6 +29,13 @@ OPENAPI_SPEC = {
             "post": {"tags": ["interlock"], "summary": "Update and confirm sensorless collision monitor configuration"},
         },
         "/collision/monitor/suppression": {"post": {"tags": ["interlock"], "summary": "Temporarily suppress detection for Recovery Jog"}},
+        "/visualization/rviz": {
+            "get": {"tags": ["visualization"], "summary": "Read backend-owned RViz process state"},
+            "post": {"tags": ["visualization"], "summary": "Start or stop RViz without stopping robot control",
+                     "requestBody": {"required": True, "content": {"application/json": {"schema": {
+                         "type": "object", "required": ["enabled"], "properties": {"enabled": {"type": "boolean"}}
+                     }}}}},
+        },
         "/collision/monitor/diagnostics/open": {"post": {"tags": ["interlock"], "summary": "Enable live observer topics and open PlotJuggler"}},
         "/move/linear": {"post": {"tags": ["motion"], "summary": "Queue or execute a linear move"}},
         "/move/fast_lin": {"post": {"tags": ["motion"], "summary": "Test a Pilz LIN move without compute_cartesian_path"}},

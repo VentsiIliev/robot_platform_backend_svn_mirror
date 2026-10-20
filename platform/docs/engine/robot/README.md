@@ -287,3 +287,11 @@ The Calibration application uses `validate_pose(...)` only for precheck simulati
 `IRobot`, `IRobotService`, and their trajectory/sequence implementations return integer motion codes, excluding booleans and `None`. Blocking calls return `0` only for successful completion and negative values for failures. Nonblocking calls return `0` for immediate acceptance or a positive queue position; callers must observe execution status to establish completion. Higher-level `IMotionService` methods retain their boolean contracts.
 
 `Ros2Robot` validates trajectory and sequence transport results. The HTTP client normalizes legacy wire booleans to integer codes, rejects malformed codes and contradictory HTTP/error responses, and rejects positive or non-final blocking outcomes. The direct Fairino SDK adapter does not support trajectory execution and returns `-1` without issuing motion; its test wrapper returns `0` for simulated success.
+
+## Optional backend RViz control
+
+`IRobotService.get_rviz_status()` and `set_rviz_enabled(bool)` expose optional
+visualization process control. RobotService, MotionService, and Ros2Robot forward
+to the HTTP client, which uses `GET/POST /visualization/rviz`. Unsupported drivers
+return `rviz_control_unsupported`. These methods never issue robot motion or
+change safety settings; the backend owns the visualization-only process session.

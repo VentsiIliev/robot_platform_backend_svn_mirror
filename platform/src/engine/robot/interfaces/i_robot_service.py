@@ -91,6 +91,14 @@ class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
     def update_collision_monitor_config(self, config: dict) -> dict:
         return {"success": False, "error": "collision_monitor_config_unsupported"}
 
+    def get_rviz_status(self) -> dict:
+        """Read the backend-owned RViz process state without changing robot motion."""
+        return {"success": False, "error": "rviz_control_unsupported"}
+
+    def set_rviz_enabled(self, enabled: bool) -> dict:
+        """Start or stop only the backend-owned visualization process."""
+        return {"success": False, "error": "rviz_control_unsupported"}
+
     def open_collision_monitor_diagnostics(self) -> dict:
         return {"success": False, "error": "collision_monitor_diagnostics_unsupported"}
 

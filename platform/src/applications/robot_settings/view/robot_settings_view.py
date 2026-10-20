@@ -1,4 +1,4 @@
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import QSignalBlocker, pyqtSignal
 from PyQt6.QtWidgets import QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from src.applications.base.i_application_view import IApplicationView
@@ -11,6 +11,7 @@ from src.applications.robot_settings.model.mapper import RobotSettingsMapper
 from src.applications.robot_settings.view.movement_groups_tab import MovementGroupsTab
 from src.applications.robot_settings.view.targeting_definitions_tab import TargetingDefinitionsTab
 from src.applications.robot_settings.view.sensorless_collision_tab import SensorlessCollisionTab
+from src.applications.robot_settings.view.robot_visualization_tab import RobotVisualizationTab
 from pl_gui.settings.settings_view.settings_view import SettingsView
 from pl_gui.settings.settings_view.styles import TOUCH_SCROLL_AREA_STYLE
 
@@ -53,6 +54,8 @@ class RobotSettingsView(IApplicationView):
     collision_config_refresh_requested = pyqtSignal()
     collision_config_save_requested = pyqtSignal(dict)
     collision_diagnostics_open_requested = pyqtSignal()
+    rviz_status_refresh_requested = pyqtSignal()
+    rviz_enabled_requested = pyqtSignal(bool)
 
     def __init__(self, movement_group_definitions: list[MovementGroupDefinition] | None = None,
                  show_sensorless_collision_tab: bool = False, parent=None):
@@ -64,6 +67,7 @@ class RobotSettingsView(IApplicationView):
         self._targeting_tab = None
         self._show_sensorless_collision_tab = bool(show_sensorless_collision_tab)
         self._collision_tab = None
+        self._visualization_tab = None
         self._settings_view = None
         super().__init__("RobotSettings", parent)
 
@@ -97,6 +101,8 @@ class RobotSettingsView(IApplicationView):
                 ],
             )
         layout.addWidget(self._settings_view)
+        self._visualization_tab_index = self._settings_view._tabs.count()
+        self._settings_view._tabs.addTab(QWidget(), self.tr("Visualization"))
 
         self._settings_view.save_requested.connect(self._on_inner_save)
         self._settings_view.discard_requested.connect(self._on_inner_discard)
@@ -124,6 +130,32 @@ class RobotSettingsView(IApplicationView):
             self._build_targeting_tab()
         elif index == 4 and self._show_sensorless_collision_tab and self._collision_tab is None:
             self._build_collision_tab()
+        elif index == self._visualization_tab_index and self._visualization_tab is None:
+            self._build_visualization_tab()
+
+    def _build_visualization_tab(self) -> None:
+        self._visualization_tab = RobotVisualizationTab()
+        self._visualization_tab.refresh_requested.connect(self._on_rviz_refresh)
+        self._visualization_tab.rviz_enabled_requested.connect(self._on_rviz_enabled)
+        self._replace_tab_with_widget(self._visualization_tab_index, self.tr("Visualization"), self._visualization_tab)
+
+    def _on_rviz_refresh(self) -> None:
+        self.rviz_status_refresh_requested.emit()
+
+    def _on_rviz_enabled(self, enabled: bool) -> None:
+        self.rviz_enabled_requested.emit(enabled)
+
+    def set_rviz_busy(self, busy: bool) -> None:
+        if self._visualization_tab is not None:
+            self._visualization_tab.set_busy(busy)
+
+    def set_rviz_state(self, running: bool | None, error: str | None = None) -> None:
+        if self._visualization_tab is not None:
+            self._visualization_tab.set_state(running, error)
+
+    def retranslateUi(self) -> None:
+        if self._settings_view is not None and hasattr(self, "_visualization_tab_index"):
+            self._settings_view._tabs.setTabText(self._visualization_tab_index, self.tr("Visualization"))
 
     def _build_movement_groups_tab(self) -> None:
         self._movement_tab = MovementGroupsTab()
@@ -174,9 +206,10 @@ class RobotSettingsView(IApplicationView):
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet(TOUCH_SCROLL_AREA_STYLE)
         scroll.setWidget(widget)
-        self._settings_view._tabs.removeTab(index)
-        self._settings_view._tabs.insertTab(index, scroll, title)
-        self._settings_view._tabs.setCurrentIndex(index)
+        with QSignalBlocker(self._settings_view._tabs):
+            self._settings_view._tabs.removeTab(index)
+            self._settings_view._tabs.insertTab(index, scroll, title)
+            self._settings_view._tabs.setCurrentIndex(index)
 
     def _on_inner_save(self, values: dict) -> None:
         self.save_requested.emit(values)

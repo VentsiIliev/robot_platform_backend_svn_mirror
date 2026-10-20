@@ -1480,6 +1480,28 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             logger.error("Collision monitor configuration update failed: %s", exc)
             return {"success": False, "error": str(exc)}
 
+    def get_rviz_status(self) -> dict:
+        return self._rviz_request()
+
+    def set_rviz_enabled(self, enabled: bool) -> dict:
+        if not isinstance(enabled, bool):
+            raise ValueError("RViz enabled must be boolean")
+        return self._rviz_request(enabled)
+
+    def _rviz_request(self, enabled: bool | None = None) -> dict:
+        try:
+            url = f"{self.server_url}/visualization/rviz"
+            response = (self._session.get(url, timeout=8) if enabled is None else
+                        self._session.post(url, json={"enabled": enabled}, timeout=8))
+            if response.status_code == 404:
+                return {"success": False, "error": "rviz_control_unsupported"}
+            raw = response.json()
+            return raw if isinstance(raw, dict) else {
+                "success": False, "error": "invalid_response"}
+        except Exception as exc:
+            logger.error("RViz control request failed: %s", exc)
+            return {"success": False, "error": str(exc)}
+
     def open_collision_monitor_diagnostics(self) -> dict:
         try:
             response = self._session.post(

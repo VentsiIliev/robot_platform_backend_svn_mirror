@@ -165,6 +165,16 @@ class Ros2Robot(IRobot):
         return method(config) if callable(method) else {
             "success": False, "error": "collision_monitor_config_unsupported"}
 
+    def get_rviz_status(self) -> dict:
+        method = getattr(self._client, "get_rviz_status", None)
+        return method() if callable(method) else {
+            "success": False, "error": "rviz_control_unsupported"}
+
+    def set_rviz_enabled(self, enabled: bool) -> dict:
+        method = getattr(self._client, "set_rviz_enabled", None)
+        return method(enabled) if callable(method) else {
+            "success": False, "error": "rviz_control_unsupported"}
+
     def open_collision_monitor_diagnostics(self) -> dict:
         method = getattr(self._client, "open_collision_monitor_diagnostics", None)
         return method() if callable(method) else {

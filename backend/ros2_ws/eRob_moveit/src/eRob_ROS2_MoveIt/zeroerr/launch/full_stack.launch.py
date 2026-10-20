@@ -246,23 +246,6 @@ def generate_launch_description():
         ],
     )
 
-    rviz_config = os.path.join(package_path, "config", "moveit.rviz")
-    rviz = Node(
-        package="rviz2",
-        executable="rviz2",
-        # name="rviz",
-        output="log",
-        prefix=low_priority_non_rt_prefix,
-        arguments=["-d", rviz_config],
-        parameters=[
-            moveit_config.robot_description,
-            moveit_config.robot_description_semantic,
-            moveit_config.robot_description_kinematics,
-            moveit_config.planning_pipelines,
-            moveit_config.joint_limits,
-        ],
-        condition=IfCondition(LaunchConfiguration("use_rviz")),
-    )
     config_dir = os.path.join(package_path, "config")
     fake_controllers_yaml = os.path.join(config_dir, "ros2_controllers_fake.yaml")
     real_controllers_yaml = os.path.join(config_dir, "ros2_controllers.yaml")
@@ -602,7 +585,7 @@ def generate_launch_description():
     demo_ld.add_action(_after_success(
         joint_state_broadcaster_spawner,
         "joint_state_broadcaster spawner",
-        [manipulator_controller_spawner, rviz],
+        [manipulator_controller_spawner],
     ))
     demo_ld.add_action(_after_success(
         manipulator_controller_spawner,

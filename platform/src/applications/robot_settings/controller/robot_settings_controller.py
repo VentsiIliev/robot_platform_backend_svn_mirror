@@ -49,6 +49,10 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
             self._on_collision_config_save)
         self._view.collision_diagnostics_open_requested.connect(
             self._on_collision_diagnostics_open)
+        self._rviz_busy = False
+        self._stopped = False
+        self._view.rviz_status_refresh_requested.connect(self._on_rviz_refresh)
+        self._view.rviz_enabled_requested.connect(self._on_rviz_enabled)
         self._view.destroyed.connect(self.stop)
         if self._messaging is not None:
             self._messaging.subscribe(
@@ -77,8 +81,13 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
         self.load()
 
     def stop(self) -> None:
+        if self._stopped:
+            return
+        self._stopped = True
         self._stop_threads()
         try:
+            self._view.rviz_status_refresh_requested.disconnect(self._on_rviz_refresh)
+            self._view.rviz_enabled_requested.disconnect(self._on_rviz_enabled)
             self._view.collision_config_refresh_requested.disconnect(
                 self._on_collision_config_refresh)
             self._view.collision_config_save_requested.disconnect(
@@ -203,6 +212,37 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
             on_done=self._on_collision_config_loaded,
             on_error=self._on_collision_config_error,
         )
+
+    def _on_rviz_refresh(self) -> None:
+        if self._rviz_busy or self._stopped:
+            return
+        self._rviz_busy = True
+        self._view.set_rviz_busy(True)
+        self._run_in_thread(self._model.get_rviz_status, self._on_rviz_result, self._on_rviz_error)
+
+    def _on_rviz_enabled(self, enabled: bool) -> None:
+        if self._rviz_busy or self._stopped:
+            return
+        self._rviz_busy = True
+        self._view.set_rviz_busy(True)
+        self._run_in_thread(lambda: self._model.set_rviz_enabled(enabled), self._on_rviz_result, self._on_rviz_error)
+
+    def _on_rviz_result(self, result) -> None:
+        if self._stopped:
+            return
+        if not isinstance(result, dict) or not isinstance(result.get("running"), bool):
+            message = result.get("error", "invalid_response") if isinstance(result, dict) else "invalid_response"
+            self._on_rviz_error(str(message))
+            return
+        self._rviz_busy = False
+        error = result.get("error")
+        self._view.set_rviz_state(result["running"], str(error) if error else None)
+
+    def _on_rviz_error(self, message: str) -> None:
+        if self._stopped:
+            return
+        self._rviz_busy = False
+        self._view.set_rviz_state(None, message)
 
     def _on_collision_config_save(self, config: dict) -> None:
         self._view.set_collision_config_busy(True)

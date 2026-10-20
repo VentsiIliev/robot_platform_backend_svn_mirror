@@ -98,5 +98,20 @@
     "Open PlotJuggler": "Отваряне на PlotJuggler",
     "Apply settings": "Прилагане",
     "Configuration loaded": "Конфигурацията е заредена"
+  },
+  "RobotSettingsView": {
+    "Visualization": "Визуализация"
+  },
+  "RobotVisualizationTab": {
+    "RViz": "RViz",
+    "Start RViz": "Стартиране на RViz",
+    "Stop RViz": "Спиране на RViz",
+    "Refresh status": "Обновяване на състоянието",
+    "Open the robot and workcell visualization on the backend computer. Stopping RViz leaves robot control and MoveIt running.": "Отваряне на визуализацията на робота и работната клетка на компютъра на сървъра. Спирането на RViz не спира управлението на робота и MoveIt.",
+    "RViz unavailable: {message}": "RViz не е наличен: {message}",
+    "RViz status is unknown.": "Състоянието на RViz е неизвестно.",
+    "RViz is running.": "RViz работи.",
+    "RViz is stopped.": "RViz е спрян.",
+    "This backend does not support RViz controls. Update the backend to enable them.": "Този сървър не поддържа управление на RViz. Обновете сървъра, за да го активирате."
   }
 }

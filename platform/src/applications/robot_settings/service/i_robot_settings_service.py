@@ -76,3 +76,9 @@ class IRobotSettingsService(ABC):
 
     @abstractmethod
     def open_collision_monitor_diagnostics(self) -> dict: ...
+
+    def get_rviz_status(self) -> dict:
+        return {"success": False, "error": "rviz_control_unsupported"}
+
+    def set_rviz_enabled(self, enabled: bool) -> dict:
+        return {"success": False, "error": "rviz_control_unsupported"}
