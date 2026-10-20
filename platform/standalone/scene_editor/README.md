@@ -20,6 +20,101 @@ The second example assumes this directory is the working directory. Requires a d
 
 ## Appearance
 
+### Mate two surfaces
+
+Choose **Edit → Mate surfaces…** (also available on the viewport tool strip),
+then hover over a face on the object to move and click it, followed by a face on
+the target object. Hover highlights the connected flat surface in amber; selected
+source and target surfaces are purple and green. Internal STL triangle edges are
+hidden so a tessellated flat face behaves as one selectable region. Sharp edges
+and disconnected coplanar patches remain separate.
+The moving object must be unlocked; the target may remain locked. Left- or
+right-drag to orbit and middle-drag to pan while picking or viewing the preview.
+A click selects a face; dragging preserves the faces already selected and never
+moves the objects. Clicking the source again before
+choosing the target replaces the source face.
+
+Click **Move**, **Select** or **Rotate** (or use G/Q/R with the viewport focused)
+to leave face picking and return to normal editing. This also works when the
+same tool was selected before mating. The mate tool stays highlighted while
+face picking is active.
+
+The preview aligns the selected surface area centers and makes their normals oppose each
+other. In **General → Mate surfaces**, adjust **Gap / offset** in millimeters,
+**Rotate on face**, or **Flip** for same-facing normals. Positive offset follows
+the target surface's normal. Highlighted surfaces and normal arrows identify
+the selections. Click **Apply surface mate** to commit one undoable local pose
+change. **Pick faces again** restarts; **Cancel** or Escape discards the preview.
+Changing selection or making another scene edit also discards it. No ROS scene
+update or robot command is sent.
+
+This is a one-time placement operation on a mesh, not a persistent CAD assembly
+constraint. Flat regions are recognized through shared edges, with a 0.1-degree
+normal tolerance and a small mesh-relative plane tolerance. Normals and distances
+are compared to the starting face, so selection cannot gradually wrap around a
+curve. On curved meshes it uses the local facet region; it does not infer cylinder
+axes, hole centers or the original CAD face definitions. Face centers are weighted
+by triangle area and may lie in a hole or outside a concave region. STL winding
+determines normal direction; Flip corrects the desired facing. The operation does
+not check the rest of the mesh for collisions.
+Mesh size, mounting origin and source files are preserved.
+
+The workspace has one main toolbar, a searchable scene explorer with source filters,
+floating viewport tools, General / Visual / Collision / ROS 2 property tabs, and
+a bottom local/live/snapshot bar with explicit ROS actions. Search and filters
+only affect the explorer; the eye checkboxes control scene visibility.
+
+Use **View** or the clickable orientation cube for perspective and orthographic
+camera presets. Double-click the cube to return to perspective. Grid and transform
+handles can be toggled independently. In Move mode, drag a colored axis handle
+to constrain the selected object or group along that world axis; each drag is one
+undo operation. Object origin/pivot controls expand inside General properties.
+The Visual tab provides color and opacity controls.
+
+The selected object's mounting origin is marked by a labeled circle/cross,
+including when the object is locked or in live view. Toggle it under
+**View → Show selected object origin**. This marker is independent of the transform
+handles, which appear at the editable pivot. An STL initially uses its source
+coordinate origin, which may lie outside its geometry.
+
+To align an STL by its mounting point:
+
+1. Select and unlock the local STL. Confirm its source units first.
+2. In **General → Mounting origin**, click **Pick mounting point on object**,
+   then click a visible surface of the selected STL. Right-drag to orbit or
+   middle-drag to pan while picking. Other objects and empty space are ignored.
+   A temporary **New origin** marker shows the chosen point; the scene is
+   unchanged until confirmation. Pick again to replace it, or press Escape /
+   **Cancel** to discard the preview. Selection changes also cancel it.
+3. Optional: expand **Fine adjustment (local mm)** for exact X/Y/Z coordinates,
+   measured before the object's rotation or scene translation. **Use preset**
+   previews the mesh bounding-box center, bottom/top center along local Z,
+   current pivot, or original STL origin. Surface picking does not automatically
+   find hole centers, vertices or other mechanical features.
+4. Click **Confirm mounting point** to keep it, or **Confirm and align to another
+   object…** to immediately choose the target robot visual or other object in
+   the view/list. The mounting point moves to the target's origin. Rotation is
+   preserved, so adjust orientation separately if needed. Setting the mounting
+   point keeps geometry in place and sets the rotation pivot; confirming and
+   snapping are separate undoable changes.
+
+The mounting origin is saved with the scene, independently for each object,
+without changing the original STL. It follows source-unit corrections. The
+normal transformed-STL export still bakes the geometry into scene coordinates;
+use the scene JSON to retain the editable origin. For robot visuals, the snap
+target is the selected visual's origin, which can differ from the link's TF frame
+when the URDF contains a visual offset. Setting an STL origin does not change
+URDF or ROS configuration.
+
+For a local imported STL, **General → STL source units** changes its interpretation
+between millimeters, centimeters and meters without reimporting. This preserves
+the current pose in millimeters, reframes the object, supports Undo/Redo, and is
+saved with the scene. The source file is unchanged. Locked objects and live ROS
+geometry cannot be rescaled through this control.
+
+This is the first layout pass toward the supplied design references. A hierarchical
+scene tree, material library, measurement tools, and rotation rings are future work.
+
 The editor follows the platform's light/dark palette, purple accent, typography, rounded settings cards, outlined secondary actions and 44-pixel buttons. **Appearance → Light / Dark** switches immediately and remembers the editor's choice. The 3D background, grid, selection outline, row padlocks, dialogs and native Qt palette follow the same theme; scene object colors are unchanged.
 
 Presentation tokens live in the editor's own `scene_editor/styles.py`, matching the platform presets and common control dimensions without importing platform modules. Appearance preferences are local to this standalone app; changing them does not change platform settings or scene data.
@@ -96,7 +191,18 @@ Only authored box/cylinder/sphere definitions have write actions; imported STL o
 
 **Export selected STL** writes a transformed binary STL copy in millimeters, baking its position and rotation. Original meshes cannot be overwritten. Export contains geometry only; STL has no colors or transform metadata. Scene files and exports are written atomically.
 
-**Import resolved URDF** optionally loads local visual geometry at zero joint positions. Supports STL, box, cylinder, and sphere visuals, visual origins, joint origins, mesh scales, and RGBA materials. `package://` references can resolve from a selected package directory or nearby source directories. Expand xacro separately before import; the editor does not run xacro, ROS, drivers, controllers, or launch files. Import adds independent visual objects; it does not retain robot kinematics, collision models, or editable joint relationships.
+**Add / Load → Load resolved URDF** reads the running robot's resolved
+`robot_description` automatically, using the domain, description topic, ROS Python
+and setup paths in **ROS 2 → Connection settings…**. This is a one-shot,
+read-only load of static visual geometry at zero joint positions; use Live view
+for the current joint poses and planning scene. The description wait is bounded
+to five seconds and runs outside the GUI thread. Reloading replaces the robot
+from the previous automatic load while keeping other objects, with Undo support.
+If ROS or its description publisher is unavailable, the editor explains that
+automatic resolution failed and opens a URDF file picker for manual selection.
+Invalid descriptions and missing mesh resources report their specific errors.
+
+**Import URDF file…** always opens a file picker. It supports STL, box, cylinder, and sphere visuals, visual origins, joint origins, mesh scales, and RGBA materials. For `package://` references, the mesh-folder picker accepts the package directory, a ROS install directory (merged or isolated), or a workspace root containing `install/`. The selection is remembered. Cancel that folder picker to use automatic lookup: nearby source packages, the remembered folder, the workspace setup directory in ROS connection settings, and inherited `AMENT_PREFIX_PATH` / `COLCON_PREFIX_PATH`. This also supports resolved URDFs stored separately in cache directories. Offline package lookup reads local files without starting ROS. Expand xacro separately before import; unexpanded definitions produce an explicit error. The editor does not run xacro, ROS, drivers, controllers, or launch files. Import adds independent visual objects; it does not retain robot kinematics, collision models, or editable joint relationships.
 
 Full-resolution meshes stay on the GPU while transforms change. Large meshes can still require substantial RAM and GPU memory. Loading and exporting run in background workers; closing waits for active file operations to finish. Saving a snapshot with new inline ROS geometry writes companion STL assets as well as JSON. Transparent surfaces are sorted per object, so intersecting translucent meshes can have visual sorting artifacts.
 

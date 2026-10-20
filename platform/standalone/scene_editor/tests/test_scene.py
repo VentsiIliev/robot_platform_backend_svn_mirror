@@ -5,6 +5,7 @@ import struct
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
@@ -15,6 +16,92 @@ from scene_editor.urdf import load_urdf, resolve_mesh
 
 
 class SceneTests(unittest.TestCase):
+    def test_cached_urdf_finds_merged_isolated_and_workspace_packages(self):
+        cached = self.root/'cache'/'resolved.urdf'
+        cached.parent.mkdir()
+        cached.write_text('<robot name="test"><link name="fixture"><visual><geometry>'
+                          '<mesh filename="package://description/meshes/mount%20plate.stl"/>'
+                          '</geometry></visual></link></robot>')
+        for layout in ('share/description','description/share/description','install/description/share/description'):
+            prefix = self.root/layout.replace('/','_')
+            package = prefix/layout
+            mesh = package/'meshes'/'mount plate.stl'
+            mesh.parent.mkdir(parents=True)
+            export_stl(make_box((1,2,3)),np.eye(4),mesh)
+            with self.subTest(layout=layout), patch.dict('os.environ',{'AMENT_PREFIX_PATH':'','COLCON_PREFIX_PATH':''}):
+                self.assertEqual(load_urdf(cached,search_roots=[prefix]).objects[0].mesh.source,mesh)
+                self.assertEqual(load_urdf(cached,package_root=prefix).objects[0].mesh.source,mesh)
+                with patch.dict('os.environ',{'AMENT_PREFIX_PATH':str(prefix)}):
+                    self.assertEqual(load_urdf(cached).objects[0].mesh.source,mesh)
+        with patch.dict('os.environ',{'AMENT_PREFIX_PATH':'','COLCON_PREFIX_PATH':''}):
+            with self.assertRaisesRegex(FileNotFoundError,'ROS install directory'):
+                load_urdf(cached)
+
+    def test_selected_package_overrides_environment(self):
+        urdf = self.root/'cached.urdf'
+        urdf.write_text('<robot name="test"><link name="a"><visual><geometry>'
+                        '<mesh filename="package://description/part.stl"/>'
+                        '</geometry></visual></link></robot>')
+        selected,environment = self.root/'selected',self.root/'environment'/'share'/'description'
+        for directory in (selected,environment):
+            directory.mkdir(parents=True)
+            export_stl(make_box((1,2,3)),np.eye(4),directory/'part.stl')
+        with patch.dict('os.environ',{'AMENT_PREFIX_PATH':str(environment.parent.parent)}):
+            self.assertEqual(load_urdf(urdf,selected).objects[0].mesh.source,selected/'part.stl')
+
+    def test_unexpanded_xacro_has_actionable_error(self):
+        path = self.root/'robot.urdf.xacro'
+        path.write_text('<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="test">'
+                        '<xacro:include filename="robot.xacro"/></robot>')
+        with self.assertRaisesRegex(ValueError,'still contains Xacro'):
+            load_urdf(path)
+
+    def test_mounting_origin_preserves_geometry_and_snaps_selected_point(self):
+        obj = SceneObject('Fixture',make_box((2,3,4)),Pose((12,34,56),(20,30,40),(5,6,7)),(1000,)*3)
+        before = obj.matrix().copy()
+        vertices = obj.mesh.vertices.copy()
+        point = (100,200,-300)
+        updated = obj.with_origin_mm(point)
+        np.testing.assert_allclose(updated.matrix(),before,atol=1e-10)
+        np.testing.assert_array_equal(updated.mesh.vertices,vertices)
+        self.assertIs(updated.mesh,obj.mesh)
+        self.assertEqual(updated.pose.pivot,point)
+        np.testing.assert_allclose(updated.origin_source,(.1,.2,-.3))
+        np.testing.assert_allclose(updated.world_origin(),(before @ np.array([.1,.2,-.3,1]))[:3])
+        target = SceneObject('Robot flange',make_box((10,10,10)),Pose((800,900,1000),(0,0,60)))
+        snapped = SceneObject('Fixture',updated.mesh,updated.pose_snapped_to(target),updated.unit_scale,
+                              origin_source=updated.origin_source)
+        np.testing.assert_allclose(snapped.world_origin(),target.world_origin(),atol=1e-10)
+        np.testing.assert_allclose(snapped.matrix()[:3,:3],before[:3,:3])
+        self.assertEqual(obj.origin_source,(0.,0.,0.))
+
+    def test_mounting_origin_roundtrip_and_legacy_scene_default(self):
+        source = self.root/'mounting.stl'
+        export_stl(make_box((10,20,30)),np.eye(4),source)
+        source_bytes = source.read_bytes()
+        obj = SceneObject('Fixture',read_stl(source),Pose((10,20,30),(30,40,50)))
+        obj = obj.with_origin_mm((1,2,3))
+        destination = self.root/'mounting.scene.json'
+        save_scene(Scene([obj]),destination)
+        loaded = load_scene(destination).objects[0]
+        self.assertEqual(loaded.origin_source,(1.,2.,3.))
+        np.testing.assert_allclose(loaded.matrix(),obj.matrix())
+        np.testing.assert_allclose(loaded.world_origin(),obj.world_origin())
+        self.assertEqual(source.read_bytes(),source_bytes)
+        payload = json.loads(destination.read_text())
+        del payload['objects'][0]['origin_source']
+        destination.write_text(json.dumps(payload))
+        self.assertEqual(load_scene(destination).objects[0].origin_source,(0.,0.,0.))
+
+    def test_mounting_origin_rejects_locked_and_invalid_points(self):
+        obj = SceneObject('Fixture',make_box((1,2,3)),locked=True)
+        with self.assertRaises(ValueError):
+            obj.with_origin_mm((1,2,3))
+        obj.locked = False
+        for point in ((1,2),(1,2,float('nan'))):
+            with self.assertRaises(ValueError):
+                obj.with_origin_mm(point)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

@@ -74,6 +74,50 @@ def collision_operation(options, request):
     raise RuntimeError('ROS helper failed: '+completed.stdout[-1800:])
 
 
+class RobotDescriptionUnavailable(RuntimeError):
+    """No running description publisher or usable ROS environment was found."""
+
+
+def resolved_robot_snapshot(options):
+    """Read the running resolved URDF once and load static zero-joint visuals."""
+    from .urdf import load_urdf
+    command = ros_command(options,'description_helper.py',
+                          ['--description-topic',options.description_topic,'--timeout','5'])
+    try:
+        completed = subprocess.run(command,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+                                   text=True,encoding='utf-8',errors='replace',
+                                   env=ros_environment(options),timeout=12)
+    except (subprocess.TimeoutExpired,OSError) as exc:
+        raise RobotDescriptionUnavailable('Cannot read robot_description: '+str(exc)) from exc
+    packet = None
+    for line in reversed(completed.stdout.splitlines()):
+        try:
+            candidate = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(candidate,dict) and candidate.get('protocol') == 'scene-editor-description-v1':
+            packet = candidate
+            break
+    if packet is None:
+        raise RobotDescriptionUnavailable('ROS description helper unavailable: '+completed.stdout[-1500:])
+    if not packet.get('success'):
+        error = RobotDescriptionUnavailable if packet.get('unavailable') else RuntimeError
+        raise error(packet.get('message','Cannot resolve the running robot description.'))
+    packages = packet.get('packages',{})
+    def package(name):
+        if name not in packages:
+            raise LookupError(name)
+        return packages[name]
+    roots = [str(Path(options.workspace_setup).expanduser().parent)] if options.workspace_setup else []
+    with tempfile.TemporaryDirectory(prefix='scene-editor-description-') as directory:
+        path = Path(directory)/'robot.urdf'
+        path.write_text(packet['xml'],encoding='utf-8')
+        scene = load_urdf(path,package_resolver=package,search_roots=roots)
+    for index,obj in enumerate(scene.objects):
+        obj.id = f'robot/resolved/{index}'
+    return scene
+
+
 class SceneDecoder:
     def __init__(self, cache_directory):
         self.directory = Path(cache_directory).resolve()

@@ -42,11 +42,17 @@ def main():
         rectangle = window.objects.visualItemRect(window.objects.item(row))
         QTest.mouseClick(window.objects.viewport(),Qt.MouseButton.LeftButton,modifiers,pos=QPoint(80,rectangle.center().y()))
 
-    def drag(obj,delta=QPoint(40,20)):
+    def drag(obj,delta=QPoint(40,20),expect_move=True):
         position = point(obj)
         QTest.mousePress(viewport,Qt.MouseButton.LeftButton,pos=position)
         QTest.mouseMove(viewport,position+delta/2,20)
+        if expect_move:
+            assert viewport._drag is not None,'Group drag was cleared before release'
+        halfway = {item.id:item.world_origin().copy() for item in window.selected_objects()}
         QTest.mouseMove(viewport,position+delta,20)
+        if expect_move:
+            for item in window.selected_objects():
+                assert not np.allclose(item.world_origin(),halfway[item.id]),'Group stopped following the held mouse'
         QTest.mouseRelease(viewport,Qt.MouseButton.LeftButton,pos=position+delta)
 
     try:
@@ -103,7 +109,7 @@ def main():
         assert viewport.selection_ids() == {first.id,second.id}
         assert not window.group_move_button.isEnabled()
         matrices = [obj.matrix().copy() for obj in window.scene.objects]
-        drag(window.scene.objects[0])
+        drag(window.scene.objects[0],expect_move=False)
         for obj,matrix in zip(window.scene.objects,matrices):
             np.testing.assert_array_equal(obj.matrix(),matrix)
         QTest.mouseClick(window.objects.viewport(),Qt.MouseButton.LeftButton,pos=lock_rect.center())
@@ -129,7 +135,7 @@ def main():
         window._busy_actions()
         window._refresh()
         matrices = [obj.matrix().copy() for obj in window.scene.objects]
-        drag(window.scene.objects[0])
+        drag(window.scene.objects[0],expect_move=False)
         for obj,matrix in zip(window.scene.objects,matrices):
             np.testing.assert_array_equal(obj.matrix(),matrix)
         window._live = False

@@ -76,8 +76,10 @@ class SceneObject:
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
     collision: dict | None = None
     locked: bool = False
+    origin_source: tuple = (0.,0.,0.)
 
     def __post_init__(self):
+        self.origin_source = vector(self.origin_source,'object origin')
         self.unit_scale = vector(self.unit_scale,'mesh unit scale')
         if min(self.unit_scale) <= 0: raise ValueError('Mesh unit scales must be positive.')
         self.color = vector(self.color,'color',4)
@@ -112,8 +114,16 @@ class SceneObject:
         return np.array([corners.min(axis=0),corners.max(axis=0)])
 
     def world_origin(self):
-        """Source geometry's local (0, 0, 0), distinct from its editing pivot."""
-        return self.matrix()[:3,3].copy()
+        """Editable mounting origin, stored in source mesh coordinates."""
+        return (self.matrix() @ np.array([*self.origin_source,1.]))[:3]
+
+    def with_origin_mm(self, point):
+        """Set a mounting origin and rotation pivot without moving geometry."""
+        if self.locked:
+            raise ValueError('Unlock the object before changing its origin.')
+        point = np.asarray(vector(point,'mounting origin'))
+        return replace(self,origin_source=tuple(point/np.asarray(self.unit_scale)),
+                       pose=self.pose.with_pivot(point))
 
     def pose_snapped_to(self, target):
         """Translate source origin onto target origin, retaining orientation."""
@@ -172,7 +182,8 @@ def save_scene(scene, destination):
             geometry = {'stl': os.path.relpath(asset, destination.parent)}
         objects.append({'id':obj.id,'name':obj.name,'geometry':geometry,'unit_scale_to_mm':obj.unit_scale,
                         'translation_mm':obj.pose.translation,'rotation_deg':obj.pose.rotation,'pivot_mm':obj.pose.pivot,
-                        'color':obj.color,'visible':obj.visible, 'collision':obj.collision, 'locked':obj.locked})
+                        'color':obj.color,'visible':obj.visible, 'collision':obj.collision, 'locked':obj.locked,
+                        'origin_source':obj.origin_source})
     payload = {'format':'standalone-scene-editor','version':1,'units':'mm','rotation_order':'Rz Ry Rx','objects':objects, 'reference_frame':scene.reference_frame}
     descriptor, temporary = tempfile.mkstemp(prefix='.scene-',dir=destination.parent)
     try:
@@ -206,7 +217,8 @@ def load_scene(path):
             mesh = mesh_from_primitive(geometry['primitive'])
         obj = SceneObject(name=row['name'],mesh=mesh,id=row['id'],
             pose=Pose(row['translation_mm'],row['rotation_deg'],row['pivot_mm']),
-            unit_scale=row['unit_scale_to_mm'],color=row['color'],visible=row['visible'], collision=row.get('collision'), locked=row.get('locked',False))
+            unit_scale=row['unit_scale_to_mm'],color=row['color'],visible=row['visible'], collision=row.get('collision'), locked=row.get('locked',False),
+            origin_source=row.get('origin_source',(0.,0.,0.)))
         if obj.id in ids: raise ValueError('Scene object IDs must be unique.')
         ids.add(obj.id);scene.objects.append(obj)
     return scene

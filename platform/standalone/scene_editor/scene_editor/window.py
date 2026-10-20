@@ -1,5 +1,6 @@
 """Standalone desktop editor with an optional read-only ROS scene connection."""
 from dataclasses import replace
+from math import isclose
 from pathlib import Path
 import uuid
 
@@ -14,16 +15,18 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
 )
 
-from .geometry import read_stl, make_box, make_cylinder, mesh_from_primitive, export_stl
+from .geometry import STL_UNITS, read_stl, make_box, make_cylinder, mesh_from_primitive, export_stl
 from .model import Scene, SceneObject, Pose, load_scene, save_scene, translated_poses
 from .urdf import load_urdf
 from .viewport import Viewport
-from .ros_connection import RosConnection, collision_operation
+from .ros_connection import RosConnection, collision_operation, resolved_robot_snapshot, RobotDescriptionUnavailable
 from .ros_dialog import RosDialog, load_ros_options
 from .collision import make_draft, request_for
 from .collision_dialog import CollisionDialog
 from .object_list import ObjectList, LOCKED_ROLE, LOCK_ENABLED_ROLE
 from .styles import PALETTES, qt_palette, stylesheet, viewport_colors
+from .surface_mating import mate_pose
+
 
 
 class _Result(QObject):
@@ -33,7 +36,6 @@ class _Result(QObject):
 class _Job(QRunnable):
     def __init__(self, job_id, function):
         super().__init__()
-        QApplication.instance().setStyle('Fusion')
         self.job_id, self.function, self.signals = job_id, function, _Result()
 
     def run(self):
@@ -74,9 +76,12 @@ class _Edit(QUndoCommand):
 class EditorWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        QApplication.instance().setStyle('Fusion')
         self.resize(1400, 900)
         self.scene, self.project_path = Scene(), None
         self._refreshing, self._edit_session = False, 0
+        self._origin_edit = None
+        self._surface_mate = None
         self._jobs, self._job_counter, self._generation = {}, 0, 0
         self._closing = False
         self._ros = None
@@ -103,7 +108,11 @@ class EditorWindow(QMainWindow):
         self.viewport.group_dragged.connect(self._drag_group)
         self.viewport.error.connect(self._render_error)
         self.viewport.cancel_requested.connect(self.cancel_snap)
+        self.viewport.mounting_point_picked.connect(self._mounting_point_picked)
+        self.viewport.surface_picked.connect(self._surface_mate_picked)
         self._build_ui()
+        from .workspace import Workspace
+        self._workspace = Workspace(self)
         theme = QSettings('Standalone Scene Editor','Scene Editor').value('appearance/theme','light')
         self.set_theme(theme if theme in PALETTES else 'light', persist=False)
         self._busy_actions()
@@ -126,8 +135,10 @@ class EditorWindow(QMainWindow):
         file_menu.addActions([self.new_action, self.open_action, self.save_action, self.save_as_action])
         file_menu.addSeparator()
         self.import_action = self._action('Add STL…', self.import_stl)
-        self.urdf_action = self._action('Import resolved URDF…', self.import_urdf)
-        file_menu.addActions([self.import_action, self.urdf_action,
+        self.resolved_urdf_action = self._action('Load resolved URDF',self.load_resolved_urdf)
+        self.resolved_urdf_action.setToolTip('Read the current robot_description from ROS once. Load static visuals at zero joint positions.')
+        self.urdf_action = self._action('Import URDF file…', self.import_urdf)
+        file_menu.addActions([self.import_action,self.resolved_urdf_action,self.urdf_action,
             self._action('Export selected STL…', self.export_selected)])
         file_menu.addSeparator()
         self.example_action = self._action('Example scene', self.example_scene)
@@ -142,8 +153,10 @@ class EditorWindow(QMainWindow):
                          self._action('Delete selected', self.delete)])
         self.lock_action = self._action('Lock selected', self.toggle_lock)
         self.snap_action = self._action('Snap origin to another object', self.begin_snap)
+        self.surface_mate_action = self._action('Mate surfaces…',self.begin_surface_mate)
+        self.surface_mate_action.setCheckable(True)
         self.cancel_snap_action = self._action('Cancel snap', self.cancel_snap, 'Escape')
-        edit.addActions([self.lock_action, self.snap_action, self.cancel_snap_action])
+        edit.addActions([self.lock_action,self.snap_action,self.surface_mate_action,self.cancel_snap_action])
         appearance = self.menuBar().addMenu('Appearance')
         self._theme_group = QActionGroup(self)
         self._theme_actions = {}
@@ -362,6 +375,8 @@ class EditorWindow(QMainWindow):
         self.viewport.set_theme(viewport_colors(colors))
         self._theme_actions[name].setChecked(True)
         self.objects.viewport().update()
+        if hasattr(self,'_workspace'):
+            self._workspace.set_theme(colors)
         if persist:
             QSettings('Standalone Scene Editor','Scene Editor').setValue('appearance/theme',name)
 
@@ -396,6 +411,10 @@ class EditorWindow(QMainWindow):
         self._select_many({object_id} if object_id else set(),object_id)
 
     def _select_many(self, object_ids, primary=None):
+        if self._surface_mate is not None:
+            self.cancel_surface_mate()
+        if self._origin_edit is not None and (set(object_ids) != {self._origin_edit['id']}):
+            self.cancel_mounting_origin()
         if self._snap_source is not None:
             self._snap_target(primary)
             return
@@ -479,7 +498,9 @@ class EditorWindow(QMainWindow):
             for button in self._inspector_buttons:
                 button.setEnabled(not read_only)
             if selected:
-                self._pose_boxes['translation'].setTitle('Position in '+selected.collision['frame'] if selected.collision else 'Position offset')
+                self._pose_boxes['translation'].setTitle('Position (mm) · '+selected.collision['frame'] if selected.collision else 'Position (mm)')
+                self._pose_boxes['rotation'].setTitle('Rotation (°)')
+                self._pose_boxes['pivot'].setTitle('Origin offset (mm)')
                 self.pose_note.setText('Pose values use the collision reference frame; preview uses the captured frame transform. Rotations use Rz × Ry × Rx. Pivot changes preserve the pose.' if selected.collision else 'Pivot changes preserve the current pose.\nRotations use Rz × Ry × Rx.\nPosition is an offset from the source coordinates.')
                 if self.name.text() != selected.name:
                     self.name.setText(selected.name)
@@ -503,6 +524,8 @@ class EditorWindow(QMainWindow):
             self._collision_actions()
         finally:
             self._refreshing = False
+        if hasattr(self,'_workspace'):
+            self._workspace.sync()
 
     def _restore(self, objects, selection):
         self.cancel_snap()
@@ -515,6 +538,8 @@ class EditorWindow(QMainWindow):
     def _edit(self, label, after, selection=None, merge_key=None):
         if self._live:
             return
+        if self._surface_mate is not None:
+            self.cancel_surface_mate()
         state = (selection,(selection,)) if selection else (self.viewport.selected_id,tuple(self.viewport.selection_ids()))
         self.history.push(_Edit(self, label, _snapshot(self.scene), after,
                                state, merge_key))
@@ -553,6 +578,100 @@ class EditorWindow(QMainWindow):
         spec = primitive_spec(kind, [control.value() for control in self.size_fields[:count]])
         if spec != obj.mesh.primitive:
             self._change('Resize primitive', ('size', obj.id, self._edit_session), mesh=mesh_from_primitive(spec))
+
+    @staticmethod
+    def has_editable_stl_units(obj):
+        """Source-unit correction applies to local STL meshes, not ROS geometry."""
+        return bool(obj and obj.mesh.source and obj.mesh.source.suffix.lower() == '.stl'
+                    and obj.mesh.primitive is None and obj.collision is None
+                    and not obj.id.startswith(('robot/','world/','attached/','marker/')))
+
+    def change_stl_units(self, unit):
+        obj = self.selected()
+        if (self._refreshing or self._live or self._jobs or self._closing
+                or not self.has_editable_stl_units(obj) or obj.locked
+                or len(self.selected_objects()) != 1 or unit not in STL_UNITS):
+            return
+        scale = (STL_UNITS[unit],)*3
+        if obj.unit_scale != scale:
+            origin_mm = tuple(a*b for a,b in zip(obj.origin_source,obj.unit_scale))
+            pose = obj.pose
+            if all(isclose(a,b,rel_tol=1e-12,abs_tol=1e-9) for a,b in zip(pose.pivot,origin_mm)):
+                pose = pose.with_pivot(tuple(a*b for a,b in zip(obj.origin_source,scale)))
+            self._change('Change STL source units',unit_scale=scale,pose=pose)
+            self.viewport.fit(selected=True)
+
+    def set_mounting_origin(self, point):
+        obj = self.selected()
+        if (self._refreshing or self._live or self._jobs or self._closing
+                or not self.has_editable_stl_units(obj) or obj.locked
+                or len(self.selected_objects()) != 1):
+            return
+        updated = obj.with_origin_mm(point)
+        if updated.origin_source == obj.origin_source and updated.pose == obj.pose:
+            self.cancel_mounting_origin()
+            return
+        after = [updated if item.id == obj.id else replace(item) for item in self.scene.objects]
+        self._edit('Set mounting origin',after)
+        self.statusBar().showMessage('Mounting origin changed. Geometry kept in place. Snap origin to… aligns this mounting point.',7000)
+
+    def begin_mounting_origin_pick(self):
+        obj = self.selected()
+        if (self._live or self._jobs or self._closing or not self.has_editable_stl_units(obj)
+                or obj.locked or not obj.visible or len(self.selected_objects()) != 1):
+            return
+        self.cancel_snap()
+        self._origin_edit = dict(id=obj.id,point=tuple(a*b for a,b in zip(obj.origin_source,obj.unit_scale)),picked=False)
+        self.viewport.origin_pick_id = obj.id
+        self.viewport._drag = None
+        self.viewport.setFocus()
+        self.statusBar().showMessage('Click the mounting point on the selected mesh. Right-drag to orbit; Escape cancels.')
+        self._workspace.sync()
+
+    def _mounting_point_picked(self, world):
+        obj = self.selected()
+        if self.viewport.origin_pick_id is None or obj is None:
+            return
+        import numpy as np
+        local = np.linalg.solve(obj.matrix(),np.r_[world,1.])[:3]*obj.unit_scale
+        self.preview_mounting_origin(tuple(local))
+
+    def preview_mounting_origin(self, point):
+        obj = self.selected()
+        if (self._refreshing or self._live or self._jobs or self._closing or not self.has_editable_stl_units(obj)
+                or obj.locked or len(self.selected_objects()) != 1):
+            return
+        # Validate through the same model operation used at confirmation.
+        candidate = obj.with_origin_mm(point)
+        self.cancel_surface_mate()
+        self._origin_edit = dict(id=obj.id,point=tuple(point),picked=True)
+        self.viewport.origin_preview = candidate.world_origin()
+        self.viewport.update()
+        self._workspace.sync()
+
+    def cancel_mounting_origin(self):
+        self._origin_edit = None
+        self.viewport.origin_preview = None
+        self.viewport.origin_pick_id = None
+        self.viewport.update()
+        if hasattr(self,'_workspace'):
+            self._workspace.sync()
+
+    def mounting_origin_preset(self, name):
+        obj = self.selected()
+        if obj is None:
+            return (0.,0.,0.)
+        if name == 'STL origin':
+            return (0.,0.,0.)
+        if name == 'Current pivot':
+            return obj.pose.pivot
+        low,high = obj.mesh.bounds*obj.unit_scale
+        center = (low+high)/2
+        if name == 'Bottom center':
+            center[2] = low[2]
+        elif name == 'Top center':
+            center[2] = high[2]
+        return tuple(center)
 
     def _finish_edit(self):
         self._edit_session += 1
@@ -623,7 +742,14 @@ class EditorWindow(QMainWindow):
             self._change('Change opacity', ('opacity', obj.id, self._edit_session), color=(*obj.color[:3], value))
 
     def _mode_changed(self, index):
+        self.cancel_snap()
         self.viewport.mode = 'view' if self._live else ('view', 'move', 'rotate')[index]
+
+    def activate_edit_tool(self,index):
+        """Exit pending picks even when activating the already-selected tool."""
+        self.cancel_snap()
+        self.mode.setCurrentIndex(index)
+        self.viewport.setFocus()
 
     def _axis_changed(self, axis):
         self.viewport.axis = axis
@@ -672,6 +798,8 @@ class EditorWindow(QMainWindow):
                 self._error(str(exc))
 
     def _submit(self, label, function, callback, changes_scene=False):
+        if self._surface_mate is not None:
+            self.cancel_surface_mate()
         self._job_counter += 1
         job = _Job(self._job_counter, function)
         self._jobs[self._job_counter] = (job, callback, self._generation, changes_scene)
@@ -683,7 +811,7 @@ class EditorWindow(QMainWindow):
     def _busy_actions(self):
         self.viewport.editable = not self._live
         loading = any(row[3] for row in self._jobs.values())
-        for action in (self.import_action, self.urdf_action, self.open_action, self.new_action, self.example_action):
+        for action in (self.import_action,self.urdf_action,self.resolved_urdf_action,self.open_action,self.new_action,self.example_action):
             action.setEnabled(not loading and not self._live)
         self.centralWidget().setEnabled(not loading)
         self.scene_toolbar.setEnabled(not loading)
@@ -695,11 +823,14 @@ class EditorWindow(QMainWindow):
         self.snapshot_action.setEnabled(self._live and self._live_received)
         self.disconnect_ros_action.setEnabled(self._ros is not None)
         self._collision_actions()
+        if hasattr(self,'_workspace'):
+            self._workspace.sync()
 
     def _collision_actions(self):
         if not hasattr(self, 'new_collision_action'):
             return
         available = not self._jobs and not self._collision_busy and not self._closing
+        self.surface_mate_action.setEnabled(available and not self._live and sum(obj.visible for obj in self.scene.objects) >= 2)
         selected = self.selected()
         single = len(self.selected_objects()) == 1
         editable = available and not self._live and selected is not None and not selected.locked and single
@@ -739,6 +870,8 @@ class EditorWindow(QMainWindow):
         self._edit('Unlock object' if obj.locked else 'Lock object', after)
 
     def begin_snap(self):
+        self.cancel_surface_mate()
+        self.cancel_mounting_origin()
         if self._snap_source is not None:
             self.cancel_snap()
             return
@@ -751,12 +884,102 @@ class EditorWindow(QMainWindow):
         self._collision_actions()
 
     def cancel_snap(self):
+        self.cancel_surface_mate()
+        self.cancel_mounting_origin()
         active = self._snap_source is not None
         self._snap_source = None
         self.viewport.selection_only = False
         if active:
             self.statusBar().showMessage('Origin snap cancelled.', 4000)
         self._collision_actions()
+
+    def begin_surface_mate(self):
+        if self._live or self._jobs or self._closing or sum(obj.visible for obj in self.scene.objects) < 2:
+            return
+        self.cancel_snap()
+        self._surface_mate = dict(source=None,target=None,pose=None,offset=0.,flip=False,twist=0.)
+        self.viewport.surface_pick_enabled = True
+        self.viewport._drag = None
+        self.viewport.setFocus()
+        self.statusBar().showMessage('Mate surfaces: click a face on the object to move. Escape cancels.')
+        self._workspace.show_surface_mate()
+        self._workspace.sync()
+
+    def cancel_surface_mate(self):
+        active = self._surface_mate is not None or self.viewport.surface_pick_enabled or self.viewport._surface_press is not None
+        self._surface_mate = None
+        self.viewport.surface_pick_enabled = False
+        self.viewport._surface_press = None
+        if active:
+            self.viewport._drag = None
+        self.viewport.surface_hits = []
+        self.viewport.surface_hover = None
+        self.viewport._surface_hover_timer.stop()
+        self.viewport.pose_preview = {}
+        self.viewport.update()
+        if hasattr(self,'_workspace'):
+            self._workspace.sync()
+
+    def _surface_mate_picked(self,hit):
+        state = self._surface_mate
+        if state is None or self._live or self._jobs or state['pose'] is not None:
+            return
+        obj = next((obj for obj in self.scene.objects if obj.id == hit.object_id),None)
+        if obj is None or not obj.visible:
+            return
+        if state['source'] is None or state['source'].object_id == hit.object_id:
+            if obj.locked:
+                self.statusBar().showMessage('Unlock the moving object first. The target object may stay locked.')
+                return
+            state['source'] = hit
+            self.viewport.set_selected(obj.id)
+            self.viewport.surface_hits = [hit]
+            self.statusBar().showMessage('Source face selected. Drag to orbit, then click the target face. Middle-drag pans; Escape cancels.')
+            self._refresh()
+            self._workspace.show_surface_mate()
+        else:
+            state['target'] = hit
+            self.update_surface_mate(state['offset'],state['flip'],state['twist'])
+        self.viewport.update()
+        self._workspace.sync()
+
+    def update_surface_mate(self,offset,flip,twist):
+        state = self._surface_mate
+        if state is None:
+            return
+        state.update(offset=offset,flip=flip,twist=twist)
+        if state['source'] is None or state['target'] is None:
+            return
+        source = next((obj for obj in self.scene.objects if obj.id == state['source'].object_id),None)
+        target = next((obj for obj in self.scene.objects if obj.id == state['target'].object_id),None)
+        if source is None or target is None or source.locked or self._live or self._jobs:
+            self.cancel_surface_mate()
+            return
+        try:
+            state['pose'] = mate_pose(source,state['source'],target,state['target'],offset,flip,twist)
+        except ValueError as exc:
+            self.cancel_surface_mate()
+            self.statusBar().showMessage(str(exc),7000)
+            return
+        self.viewport.pose_preview = {source.id:state['pose']}
+        self.viewport.surface_hits = [state['source'],state['target']]
+        self.statusBar().showMessage('Surface mate preview. Adjust offset / flip / rotation, then Apply. Escape cancels.')
+        self.viewport.update()
+        self._workspace.sync()
+
+    def apply_surface_mate(self):
+        state = self._surface_mate
+        if state is None or state['pose'] is None or self._live or self._jobs:
+            return
+        source = next((obj for obj in self.scene.objects if obj.id == state['source'].object_id),None)
+        if source is None or source.locked:
+            self.cancel_surface_mate()
+            return
+        pose = state['pose']
+        self.viewport.set_selected(source.id)
+        self.cancel_surface_mate()
+        self._change('Mate surfaces',pose=pose)
+        self.statusBar().showMessage('Surfaces mated locally. Undo restores the original placement.',7000)
 
     def _snap_target(self, object_id):
         source = next((obj for obj in self.scene.objects if obj.id == self._snap_source), None)
@@ -781,11 +1004,13 @@ class EditorWindow(QMainWindow):
         if dialog.exec():
             self._ros_options = dialog.selected_options()
 
-    def new_collision(self):
+    def new_collision(self, *, shape=None):
         if self._live or self._jobs:
             return
         editor_frame = self.scene.reference_frame or self._ros_options.fixed_frame
         dialog = CollisionDialog(editor_frame, parent=self)
+        if shape in ('box','cylinder','sphere'):
+            dialog.kind.setCurrentText(shape)
         if not dialog.exec():
             return
         identifier, frame, spec, pose = dialog.values()
@@ -941,6 +1166,8 @@ class EditorWindow(QMainWindow):
             self._ros_details = packet.get('message', 'ROS connection error')
             self.ros_status.setText('ROS: '+self._ros_details[:110])
         self.ros_status.setToolTip(self._ros_details)
+        if hasattr(self,'_workspace'):
+            self._workspace.sync()
 
     def editable_snapshot(self):
         if not self._live or not self._live_received:
@@ -988,20 +1215,54 @@ class EditorWindow(QMainWindow):
         paths, _ = QFileDialog.getOpenFileNames(self, 'Add STL meshes', '', 'STL meshes (*.stl *.STL)')
         if not paths:
             return
-        unit, ok = QInputDialog.getItem(self, 'STL units', 'Source units (STL files do not store units):', ['Millimeters', 'Meters', 'Centimeters'], 0, False)
+        unit, ok = QInputDialog.getItem(self, 'STL units', 'Source units (STL files do not store units):', list(STL_UNITS), 0, False)
         if not ok:
             return
-        scale = {'Millimeters': 1., 'Meters': 1000., 'Centimeters': 10.}[unit]
+        scale = STL_UNITS[unit]
         def read():
             return [SceneObject(Path(path).stem, read_stl(path), unit_scale=(scale,)*3) for path in paths]
         self._submit('Loading meshes…', read, self._add, True)
 
-    def import_urdf(self):
-        path, _ = QFileDialog.getOpenFileName(self, 'Import resolved URDF', '', 'URDF files (*.urdf);;All files (*)')
+    def load_resolved_urdf(self):
+        if self._live or self._jobs or self._closing:
+            return
+        self.cancel_snap()
+        options = self._ros_options
+        def resolve():
+            try:
+                return resolved_robot_snapshot(options),None
+            except RobotDescriptionUnavailable as exc:
+                return None,str(exc)
+        self._submit('Resolving the current robot URDF from ROS 2…',resolve,self._resolved_urdf_loaded,True)
+
+    def _resolved_urdf_loaded(self,result):
+        scene,unavailable = result
+        if scene is None:
+            self.statusBar().setToolTip(unavailable)
+            self.statusBar().showMessage('ROS 2 is not running or robot_description is unavailable. Cannot resolve URDF; select it manually.')
+            self.import_urdf(fallback=True)
+            return
+        after = [obj for obj in _snapshot(self.scene) if not obj.id.startswith('robot/resolved/')]+scene.objects
+        self._edit('Load resolved robot URDF',after,selection=scene.objects[0].id)
+        self.viewport.fit()
+
+    def import_urdf(self, *, fallback=False):
+        title = ('ROS 2 unavailable: cannot resolve URDF. Select a URDF file manually.' if fallback else 'Import URDF file')
+        path, _ = QFileDialog.getOpenFileName(self,title,'','URDF files (*.urdf);;All files (*)')
         if not path:
             return
-        package = QFileDialog.getExistingDirectory(self, 'Optional package directory for package:// meshes (Cancel to auto-resolve)')
-        self._submit('Loading static URDF visuals…', lambda: load_urdf(path, package or None).objects, self._add, True)
+        settings = QSettings('Standalone Scene Editor','Scene Editor')
+        package = QFileDialog.getExistingDirectory(self,
+                    'Mesh package / ROS workspace folder (Cancel: automatic lookup)',
+                    str(settings.value('urdf/mesh_root','')))
+        if package:
+            settings.setValue('urdf/mesh_root',package)
+        remembered = str(settings.value('urdf/mesh_root',''))
+        roots = [remembered] if remembered else []
+        if self._ros_options.workspace_setup:
+            roots.append(str(Path(self._ros_options.workspace_setup).expanduser().parent))
+        self._submit('Loading static URDF visuals…',
+                     lambda: load_urdf(path, package or None,search_roots=roots).objects,self._add,True)
 
     def _confirm_discard(self):
         if self.history.isClean():

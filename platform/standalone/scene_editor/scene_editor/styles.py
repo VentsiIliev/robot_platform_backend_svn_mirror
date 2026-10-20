@@ -96,6 +96,37 @@ def stylesheet(colors):
         QToolTip {{ background: {surface}; color: {text}; border: 1px solid {border}; padding: 6px; }}
         QStatusBar {{ background: {surface}; color: {text}; border-top: 1px solid {border}; padding: 6px; }}
         QStatusBar::item {{ border: none; }}
+        QWidget#editorWorkspace {{ font-size: 10pt; }}
+        QFrame#workspaceCard, QFrame#viewportTools, QFrame#workspaceFooter {{
+            background: {surface}; border: 1px solid {border}; border-radius: 8px; }}
+        QFrame#viewportCard {{ border: 1px solid {border}; border-radius: 8px; }}
+        QToolButton#primaryTool {{ background: {p}; color: white; border-color: {p}; }}
+        QToolButton#primaryTool:hover {{ background: {hover}; }}
+        QToolButton#filterChip {{ min-height: 22px; padding: 2px 6px; font-size: 9pt;
+            font-weight: normal; border-radius: 5px; }}
+        QFrame#viewportTools QToolButton {{ min-height: 30px; padding: 4px 7px; font-size: 9pt; }}
+        QTabWidget::pane {{ background: {surface}; border: none; }}
+        QTabBar::tab {{ background: {surface}; color: {muted}; padding: 8px 10px;
+            border-bottom: 2px solid {border}; font-size: 10pt; }}
+        QTabBar::tab:selected {{ color: {p}; border-bottom-color: {p}; background: {tint}; }}
+        QFrame#workspaceCard QGroupBox {{ font-size: 10pt; border-width: 1px;
+            padding: 8px 6px 6px; margin-top: 12px; }}
+        QFrame#workspaceCard QGroupBox::title {{ background: {surface}; left: 8px; padding: 0 4px; }}
+        QFrame#workspaceCard QDoubleSpinBox {{ font-size: 10pt; padding: 4px 23px 4px 5px;
+            min-height: 24px; }}
+        QFrame#workspaceCard QDoubleSpinBox::up-button,
+        QFrame#workspaceCard QDoubleSpinBox::down-button {{ width: 20px; }}
+        QFrame#workspaceCard QDoubleSpinBox QLineEdit {{ border: none; padding: 0;
+            min-height: 0; border-radius: 0; font-size: 10pt; }}
+        QFrame#workspaceCard QDoubleSpinBox#poseValue {{ padding: 4px 5px; }}
+        QFrame#workspaceCard QDoubleSpinBox#poseValue::up-button,
+        QFrame#workspaceCard QDoubleSpinBox#poseValue::down-button {{ width: 0; }}
+        QFrame#workspaceCard QDoubleSpinBox#poseValue QLineEdit {{ font-size: 9pt; }}
+        QPushButton#compactButton {{ min-height: 30px; padding: 0 8px; font-size: 10pt; border-radius: 6px; }}
+        QToolButton#sectionToggle {{ background: transparent; border: none;
+            padding: 4px; min-height: 25px; text-align: left; }}
+        QLabel#mutedText {{ color: {muted}; font-size: 9pt; }}
+        QStatusBar {{ font-size: 9pt; padding: 2px; }}
     '''
 
 

@@ -7,6 +7,8 @@ import tempfile
 
 import numpy as np
 
+STL_UNITS = {'Millimeters': 1., 'Meters': 1000., 'Centimeters': 10.}
+
 _STL_RECORD = np.dtype([('normal', '<f4', (3,)), ('vertices', '<f4', (3, 3)), ('attribute', '<u2')])
 
 
