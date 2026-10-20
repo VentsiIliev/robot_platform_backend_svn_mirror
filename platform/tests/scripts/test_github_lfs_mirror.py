@@ -98,6 +98,15 @@ class GithubLfsMirrorTests(unittest.TestCase):
             self.publish()
         self.assertEqual(git(self.remote, 'rev-parse', 'master'), other)
 
+    def test_shared_source_with_nested_alternates_can_be_migrated(self):
+        shared = self.source.parent/'shared-publication'
+        git(self.source.parent, 'clone', '--shared', str(self.source), str(shared))
+        git(shared, 'update-ref', 'refs/remotes/git-svn', git(shared, 'rev-parse', 'HEAD'))
+        git(shared, 'remote', 'add', 'github-svn-mirror', str(self.remote))
+        self.source = shared
+        self.publish()
+        self.assertIn('version https://git-lfs.github.com/spec/v1', git(self.remote, 'show', 'master:fixture.stl'))
+
     def test_unpublished_source_commit_is_rejected_before_upload(self):
         (self.source/'code.py').write_text('not in svn\n')
         git(self.source, 'add', 'code.py')

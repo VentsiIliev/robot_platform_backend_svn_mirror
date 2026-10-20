@@ -78,8 +78,13 @@ def publish_github_mirror(source: Path, remote: str, *, limit: int = GITHUB_BLOB
     cache.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="svn-github-lfs-") as directory:
         mirror = Path(directory) / "mirror"
-        command(source, "clone", "--shared", "--no-checkout", "--single-branch", "--branch", "master",
+        # LFS 3.4 does not resolve nested Git alternates. A self-contained clone
+        # also remains valid if the SVN publication checkout is itself shared.
+        command(source, "-c", "pack.threads=2", "-c", "pack.window=0", "-c", "pack.compression=1",
+                "clone", "--shared", "--dissociate", "--no-checkout", "--single-branch", "--branch", "master",
                 "--", str(source), str(mirror))
+        command(mirror, "config", "pack.threads", "2")
+        command(mirror, "config", "pack.window", "0")
         command(mirror, "config", "lfs.storage", str(cache))
         command(mirror, "config", "lfs.dialtimeout", "15")
         command(mirror, "config", "lfs.activitytimeout", "60")
