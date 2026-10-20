@@ -2,7 +2,7 @@
 
 This directory contains calibration migration, machine probes, dependency/package checks, asset/configuration tools and the paint shaft-alignment proving runner. These are explicit development/maintenance entry points, not automatically loaded GUI applications.
 
-[Publish changes to SVN and GitHub](publish_changes.md) documents `publish_changes.py`, which stages/commits on `master`, runs `git svn dcommit`, then pushes the SVN-generated history to the GitHub SVN mirror. It supports dry runs and publication retries without another commit.
+[Publish changes to SVN and GitHub](publish_changes.md) documents `publish_changes.py`, which stages/commits on `master`, runs `git svn dcommit`, then publishes an LFS projection of SVN history to GitHub without rewriting the git-svn checkout. It supports dry runs and publication retries without another commit.
 
 The [module reference](MODULES.md) records every directly contained Python tool, arguments represented by functions/classes, imports and source descriptions. Subdirectory guides cover shared helpers and multi-file runners. Also see the source-owned [servo pickup runner guide](../../scripts/test_servo_pickup_procedure.md) and [shaft alignment runner guide](../../scripts/paint_shaft_alignment/README.md).
 

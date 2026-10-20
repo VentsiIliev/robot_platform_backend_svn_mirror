@@ -40,6 +40,10 @@ class SimulatedPublicationGit(Git):
             return
         self.local(*args)
 
+    def publish_remote(self, remote):
+        # Mirror integration (including real LFS migration) is exercised separately.
+        self.run("push", remote, "master")
+
     def local(self, *args):
         subprocess.run(["git", *args], cwd=self.root, check=True, capture_output=True, text=True)
 
@@ -140,8 +144,26 @@ class PublishChangesTests(unittest.TestCase):
         with contextlib.redirect_stdout(output):
             publish(self.git, parse_args(["--resume", "--dry-run", "--remote", "github-svn-mirror", "--remote", "secondary-test"]), [])
         plan = output.getvalue()
-        self.assertLess(plan.index("git svn dcommit"), plan.index("git push github-svn-mirror master"))
-        self.assertLess(plan.index("git push github-svn-mirror master"), plan.index("git push secondary-test master"))
+        self.assertLess(plan.index("git svn dcommit"), plan.index("GitHub LFS projection:"))
+        self.assertLess(plan.index("GitHub LFS projection:"), plan.index("git push secondary-test master"))
+        self.assertEqual(self.git.commands, [])
+
+    def test_github_only_allows_unrelated_edits_without_committing_or_touching_svn(self):
+        (self.root / "a.txt").write_text("unrelated edit\n")
+        before = self.git.read("rev-parse", "HEAD")
+        with contextlib.redirect_stdout(io.StringIO()):
+            publish(self.git, parse_args(["--resume", "--github-only"]), [])
+        self.assertEqual(self.git.commands, [("push", "github-svn-mirror", "master")])
+        self.assertEqual(self.git.read("rev-parse", "HEAD"), before)
+        self.assertEqual((self.root / "a.txt").read_text(), "unrelated edit\n")
+
+    def test_github_only_refuses_a_commit_not_yet_published_to_svn(self):
+        (self.root / "a.txt").write_text("new commit\n")
+        self.git.local("add", "a.txt")
+        self.git.local("commit", "-m", "Not in SVN")
+        with self.assertRaisesRegex(PublicationError, "remain unpublished"):
+            with contextlib.redirect_stdout(io.StringIO()):
+                publish(self.git, parse_args(["--resume", "--github-only"]), [])
         self.assertEqual(self.git.commands, [])
 
     def test_unsynced_head_is_not_pushed_even_if_svn_returns_success(self):

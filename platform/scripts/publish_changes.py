@@ -16,6 +16,11 @@ import shlex
 import subprocess
 import sys
 
+if __package__:
+    from .github_lfs_mirror import MirrorError, publish_github_mirror
+else:
+    from github_lfs_mirror import MirrorError, publish_github_mirror
+
 
 class PublicationError(RuntimeError):
     """A precondition or publication step failed."""
@@ -41,6 +46,17 @@ class Git:
         result = subprocess.run(["git", *args], cwd=self.root)
         if result.returncode:
             raise PublicationError(f"git {shlex.join(args)} failed (exit {result.returncode})")
+
+    def publish_remote(self, remote: str) -> None:
+        if remote == "github-svn-mirror":
+            try:
+                result = publish_github_mirror(self.root, remote)
+            except MirrorError as exc:
+                raise PublicationError(str(exc)) from exc
+            print(f"Published GitHub LFS mirror: {result.mirror_head} "
+                  f"(SVN source {result.source_head})", flush=True)
+        else:
+            self.run("push", remote, "master")
 
 
 def resolve_paths(root: Path, paths: list[str]) -> list[str]:
@@ -88,7 +104,8 @@ def publish(git: Git, args: argparse.Namespace, paths: list[str]) -> None:
     print("\nPending SVN commits (all will be published):\n" + (pending or "(none)"), flush=True)
 
     if args.resume:
-        ensure_clean(git)
+        if not args.github_only:
+            ensure_clean(git)
         commit_args = None
         stage_args = None
     else:
@@ -107,10 +124,15 @@ def publish(git: Git, args: argparse.Namespace, paths: list[str]) -> None:
 
     if args.dry_run:
         print("\nDry run: no files or repositories changed.")
-        for command in (stage_args, commit_args, ["svn", "dcommit"],
-                        *(["push", remote, "master"] for remote in args.remote)):
+        for command in (stage_args, commit_args, None if args.github_only else ["svn", "dcommit"]):
             if command:
                 print("git " + shlex.join(command))
+        for remote in args.remote:
+            if remote == "github-svn-mirror":
+                print("GitHub LFS projection: migrate >100 MiB in a disposable clone, "
+                      "upload LFS objects, then git push github master:refs/heads/master (fast-forward only)")
+            else:
+                print("git " + shlex.join(["push", remote, "master"]))
         return
 
     if stage_args:
@@ -124,9 +146,10 @@ def publish(git: Git, args: argparse.Namespace, paths: list[str]) -> None:
             raise PublicationError("Nothing staged to commit. Use --resume to publish an existing commit.")
         git.run("diff", "--cached", "--check")
         git.run(*commit_args)
-    ensure_clean(git)
-    git.run("svn", "dcommit")
-    ensure_clean(git)
+    if not args.github_only:
+        ensure_clean(git)
+        git.run("svn", "dcommit")
+        ensure_clean(git)
     if git.read("rev-list", "--count", "refs/remotes/git-svn..HEAD") != "0":
         raise PublicationError("Local commits remain unpublished to SVN; Git push was skipped.")
     head = git.read("rev-parse", "HEAD")
@@ -134,8 +157,8 @@ def publish(git: Git, args: argparse.Namespace, paths: list[str]) -> None:
     if head != svn_head or "git-svn-id:" not in git.read("log", "-1", "--format=%B"):
         raise PublicationError("HEAD does not match the SVN-generated commit; Git push was skipped.")
     for remote in args.remote:
-        git.run("push", remote, "master")
-    print(f"\nPublished to SVN and {', '.join(args.remote)}: {head}")
+        git.publish_remote(remote)
+    print(f"\nPublished SVN source {head} to {', '.join(args.remote)}")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -143,10 +166,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("-m", "--message", help="Commit message; required unless --resume")
     parser.add_argument("--all", action="store_true", help="Stage all tracked/untracked changes across the repository")
     parser.add_argument("--resume", action="store_true", help="Publish existing commits; do not stage or create a commit")
+    parser.add_argument("--github-only", action="store_true",
+                        help="With --resume, mirror the already-published SVN HEAD without touching working changes or SVN")
     parser.add_argument("--dry-run", action="store_true", help="Display changes/commands without modifying any repository")
     parser.add_argument("--remote", action="append", help="Git push remote; repeat for multiple (default: github-svn-mirror)")
     parser.add_argument("paths", nargs="*", help="Files/directories to stage, relative to the current directory")
     args = parser.parse_args(argv)
+    if args.github_only and (not args.resume or (args.remote and args.remote != ["github-svn-mirror"])):
+        parser.error("--github-only requires --resume and the github-svn-mirror destination")
     if args.resume and (args.message or args.all or args.paths):
         parser.error("--resume cannot be combined with a message, --all or paths")
     if not args.resume and (not args.message or not args.message.strip()):

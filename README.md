@@ -2,7 +2,7 @@
 
 Robot control and operator applications for the ZeroErr edge-painting cell. This repository contains the Qt platform, ROS 2 backend, deployment tooling, and earlier application sources.
 
-**SVN is the authoritative source; GitHub (`VentsiIliev/robot_platform_backend_svn_mirror`) mirrors its published history.** Platform, backend and PL PROJECT remote control are maintained together here. The former standalone remote-support repository is historical only. A future move to separate GitLab projects is not configured.
+**SVN is the authoritative source; GitHub (`VentsiIliev/robot_platform_backend_svn_mirror`) mirrors its published history with oversized assets stored in Git LFS.** Platform, backend and PL PROJECT remote control are maintained together here. The former standalone remote-support repository is historical only. A future move to separate GitLab projects is not configured.
 
 ## Repository layout
 
@@ -21,12 +21,14 @@ The platform separates shared infrastructure, robot-system composition, and MVC 
 ## Clone and prepare a test checkout
 
 ```bash
+sudo apt-get install git-lfs  # Ubuntu/Debian
+git lfs install
 git clone https://github.com/VentsiIliev/robot_platform_backend_svn_mirror.git
 cd robot_platform_backend_svn_mirror/platform
 ./launch_robot_app.sh --setup-only
 ```
 
-This GitHub clone is for browsing and development. SVN publication uses the existing git-svn checkout.
+This GitHub clone is for browsing and development. Git LFS downloads the large STL assets during clone; for an existing clone, install Git LFS and run `git lfs pull`. SVN publication uses the existing git-svn checkout.
 
 The current deployment target is Ubuntu 24.04 with Python 3.12 and ROS 2 Jazzy. The source launcher creates `platform/.venv`, installs `requirements.txt`, and verifies Python/native imports. On Ubuntu/Debian it installs missing `libzbar0` and `libxcb-cursor0` system libraries using `sudo` when required. If Python environment creation fails, install `python3-venv` and retry.
 
@@ -77,10 +79,27 @@ python3 platform/scripts/publish_changes.py -m "Describe the completed change" p
 python3 platform/scripts/publish_changes.py --resume
 ```
 
-The script commits, runs `git svn dcommit`, and pushes the SVN-generated history
-to `github-svn-mirror`. Do not push pre-dcommit history or merge duplicated SVN
-history into the publication branch. The `run_main.py` branch is protected.
-A rejected push requires inspecting the histories; do not blindly force-push.
+The script commits and runs `git svn dcommit`, then creates a disposable GitHub
+mirror checkout and converts Git blobs larger than 100 MiB to Git LFS throughout
+its `master` history. It uploads the LFS data before fast-forwarding GitHub.
+The source git-svn checkout and SVN keep the original files and commit IDs;
+GitHub commits after the first conversion have different IDs but retain the
+same `git-svn-id` revision metadata. No force-push is used.
+
+To retry only the GitHub mirror after SVN succeeded, including when unrelated
+working edits remain, run:
+
+```bash
+python3 platform/scripts/publish_changes.py --resume --github-only
+```
+
+Do not directly push canonical git-svn `master` to GitHub: its oversized blobs
+are intentionally preserved for SVN. Do not merge the converted GitHub history
+into the SVN publication branch. Use the publish script for subsequent updates.
+The `run_main.py` branch is protected. See the [publication guide](platform/docs/scripts/publish_changes.md)
+for prerequisites and verification. Release-tag publication must also reference
+GitHub's corresponding LFS-projected commits; raw SVN-history tags may reintroduce
+oversized Git blobs.
 
 Git release tags are separate from SVN tags. Publish intended release tags to
 GitHub explicitly after source publication. Remote-control build instructions
