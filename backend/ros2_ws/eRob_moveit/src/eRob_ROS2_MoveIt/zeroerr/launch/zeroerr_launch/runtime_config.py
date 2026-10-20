@@ -91,6 +91,12 @@ def load_runtime_config(package_path: str) -> dict:
                 continue
             merged = _merge_config(merged, load_yaml_layers(profile_config_yaml))
         merged["_ACTIVE_RUNTIME_CONFIG_PATH"] = profile_yaml
+        from zeroerr_configuration.sensorless_collision import runtime_settings
+        collision = runtime_settings(package_path, profile)
+        duplicates = set(merged).intersection(collision)
+        if duplicates:
+            raise ValueError(f'Duplicate sensorless settings outside sensorless_collision.yaml: {sorted(duplicates)}')
+        merged.update(collision)
         return merged
     rt["_ACTIVE_RUNTIME_CONFIG_PATH"] = rt_yaml
     return rt
@@ -135,6 +141,8 @@ def runtime_value(package_path: str, key: str, default):
         rt = load_runtime_config(package_path)
         return rt.get(key, default)
     except Exception:
+        if key.startswith(('SENSORLESS_COLLISION_', 'COLLISION_CALIBRATION_', 'EXECUTOR_COLLISION_STOP_')) or key == 'ENABLE_SENSORLESS_COLLISION_MONITOR':
+            raise
         return default
 
 

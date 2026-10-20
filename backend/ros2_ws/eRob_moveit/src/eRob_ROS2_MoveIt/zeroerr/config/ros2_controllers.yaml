@@ -36,25 +36,7 @@ joint_state_broadcaster:
       - mode_display
     publish_dynamic_joint_states: true
 
-realtime_collision_controller:
-  ros__parameters:
-    joints: [Joint_1, Joint_2, Joint_3, Joint_4, Joint_5, Joint_6]
-    base_link: base_link
-    tip_link: tool0
-    collision_config_path: ""
-    observer_gain: 10.0
-    filter_alpha: 0.7
-    acceleration_filter_cutoff_hz: 40.0
-    # Startup and every operator acknowledgement estimate a fresh stationary baseline.
-    warmup_sec: 8.0
-    rearm_settle_sec: 0.5
-    drive_stable_sec: 2.0
-    warmup_velocity_limit: 0.02
-    warmup_min_samples: 20
-    # Plot data is emitted from the synchronous 2 kHz controller update.
-    plot_period_sec: 0.0005
-    # Timing/readiness telemetry remains lightweight at 100 Hz.
-    timing_period_sec: 0.01
+# Sensorless parameters are loaded from the active profile sensorless_collision.yaml.
 
 manipulator_controller:
   ros__parameters:

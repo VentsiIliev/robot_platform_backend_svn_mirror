@@ -29,68 +29,7 @@ ENABLE_COLLISION_CHECKING: true
 MOVEIT_COLLISION_PADDING_M: 0.010
 MOVEIT_COLLISION_SCALE: 1.0
 
-# Enables the experimental sensorless joint-torque collision monitor. This is
-# independent of MoveIt/Servo geometric collision checking above. The monitor
-# is passive: it publishes diagnostics and warnings but does not stop motion.
-ENABLE_SENSORLESS_COLLISION_MONITOR: true
-SENSORLESS_COLLISION_MONITOR_PERIOD_SEC: 0.005
-# Fail closed if either state stream stalls or complete samples drift apart.
-SENSORLESS_COLLISION_INPUT_TIMEOUT_SEC: 0.025
-# Generalized-momentum observer from Chen et al. (2018), equations 3-15.
-# Uses the installed PyKDL with the local URDF-chain parser; no kdl_parser_py
-# package or joint-acceleration measurement is required.
-SENSORLESS_COLLISION_OBSERVER_GAIN: 10.0
-# Require continuous operation_enabled status and zero error code from all six
-# drives before observer initialization begins.
-SENSORLESS_COLLISION_DRIVE_STABLE_SEC: 2.0
-# Keep the arm stationary after startup while the observer learns only the
-# drive/friction/model offset at the initial pose.
-SENSORLESS_COLLISION_WARMUP_SEC: 8.0
-SENSORLESS_COLLISION_WARMUP_MIN_SAMPLES: 20
-SENSORLESS_COLLISION_LOG_ENABLED: false
-SENSORLESS_COLLISION_LOG_PATH: /home/ilv/ros2_ws/eRob_moveit/zeroerr_data/collision_detection/collision_training.csv
-# Log at 20 Hz while collision detection itself continues at 100 Hz. Each
-# accepted instant produces one row per joint (120 rows/s for six joints).
-SENSORLESS_COLLISION_LOG_PERIOD_SEC: 0.05
-SENSORLESS_COLLISION_GUI_ENABLED: false
-
-# MoveIt-validated, low-speed excitation sequence for collecting a compact and
-# varied sensorless-collision training set. The node starts idle and never
-# moves until its ~/start service is called. Keep dry-run true for the first
-# review; change it to false only with a clear, supervised robot workspace.
-COLLISION_CALIBRATION_RUNNER_ENABLED: true
-COLLISION_CALIBRATION_DRY_RUN: false
-COLLISION_CALIBRATION_JOINT_SWEEP_AMPLITUDES_RAD: [0.15, 0.15, 0.15, 0.15, 0.15, 0.15]
-COLLISION_CALIBRATION_SWEEP_LEVELS: 2
-# Conservative multi-joint motions around the known-safe starting posture.
-# Each joint is limited to 35% of its single-joint sweep amplitude (0.0525 rad
-# with the values above), and the robot returns to the anchor every four moves.
-# The old broad full-range workspace sampler is intentionally no longer used.
-COLLISION_CALIBRATION_COUPLED_SAMPLE_COUNT: 24
-COLLISION_CALIBRATION_COUPLED_AMPLITUDE_SCALE: 0.35
-COLLISION_CALIBRATION_COUPLED_RETURN_INTERVAL: 4
-# Dedicated J1 ring ensures coverage candidates around the robot base while
-# holding the other five joints at the run's known-valid anchor posture.
-COLLISION_CALIBRATION_BASE_ROTATION_SAMPLE_COUNT: 12
-COLLISION_CALIBRATION_BASE_ROTATION_MIN_RAD: -3.0
-COLLISION_CALIBRATION_BASE_ROTATION_MAX_RAD: 3.0
-COLLISION_CALIBRATION_MAX_INTERPOLATION_STEP_RAD: 0.015
-# Corresponding velocity/acceleration pairs. Single-joint sweeps are repeated
-# at every profile; workspace samples rotate through the same profiles.
-COLLISION_CALIBRATION_VELOCITY_SCALINGS: [0.04, 0.10, 0.20, 0.30, 0.40, 0.55, 0.70, 0.85, 1.00]
-COLLISION_CALIBRATION_ACCELERATION_SCALINGS: [0.04, 0.12, 0.30, 0.40, 0.50, 0.65, 0.80, 0.90, 1.00]
-# Broad practical sampling box. These are candidate bounds only: MoveIt joint
-# bounds and live-scene collision validation can reject any target or path.
-COLLISION_CALIBRATION_JOINT_SAMPLING_MIN_RAD: [-3.0, -1.5, -1.8, -2.5, -2.5, -3.0]
-COLLISION_CALIBRATION_JOINT_SAMPLING_MAX_RAD: [3.0, 1.5, 1.8, 2.0, 2.5, 3.0]
-COLLISION_CALIBRATION_SETTLE_TIME_SEC: 0.35
-COLLISION_CALIBRATION_COVERAGE_LOG_PERIOD_SEC: 0.05
-COLLISION_CALIBRATION_TRAINING_LOG_PERIOD_SEC: 0.005
-COLLISION_CALIBRATION_TRAINING_FLUSH_PERIOD_SEC: 0.5
-COLLISION_CALIBRATION_COVERAGE_VOXEL_SIZE_M: 0.05
-COLLISION_CALIBRATION_OUTPUT_DIRECTORY: /home/ilv/ros2_ws/eRob_moveit/zeroerr_data/collision_detection/calibration_runs
-
-# Number of controlled robot joints.
+# Sensorless settings: config/<ACTIVE_PROFILE>/sensorless_collision.yaml.
 NUM_JOINTS: 6
 
 # Joint names in controller and MoveIt trajectory order.
@@ -248,10 +187,6 @@ ZEROERR_DRIVE_DIAGNOSTICS_ENABLED: false
 ZEROERR_DRIVE_DIAGNOSTICS_POLL_PERIOD_S: 5.0
 
 MONITOR_UPDATE_RATE_HZ: 10.0
-SENSORLESS_COLLISION_EXPECTED_INPUT_RATE_HZ: 2000.0
-SENSORLESS_COLLISION_LATE_SAMPLE_THRESHOLD_MS: 2.0
-SENSORLESS_COLLISION_CONFIRMATION_MAX_SAMPLE_GAP_MS: 2.0
-
 STATE_PUBLISH_RATE_HZ: 10.0
 JOINT_DERIVATIVE_PUBLISH_RATE_HZ: 10.0
 JOINT_STATE_INPUT_RATE_HZ: 10.0

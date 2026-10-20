@@ -12,6 +12,7 @@ find_package(moveit_msgs REQUIRED)
 find_package(moveit_servo REQUIRED)
 find_package(kdl_parser REQUIRED)
 find_package(nlohmann_json REQUIRED)
+find_package(yaml-cpp REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(realtime_tools REQUIRED)
@@ -50,7 +51,8 @@ ament_target_dependencies(zeroerr_realtime_collision_controller
   sensor_msgs
   std_msgs
 )
-target_link_libraries(zeroerr_realtime_collision_controller nlohmann_json::nlohmann_json)
+target_compile_features(zeroerr_realtime_collision_controller PUBLIC cxx_std_17)
+target_link_libraries(zeroerr_realtime_collision_controller nlohmann_json::nlohmann_json yaml-cpp)
 pluginlib_export_plugin_description_file(
   controller_interface collision_detection/runtime/zeroerr_controllers.xml)
 
@@ -102,7 +104,6 @@ install(DIRECTORY launch DESTINATION share/${PROJECT_NAME}
   PATTERN "setup_assistant.launch" EXCLUDE)
 install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
 install(FILES
-  collision_detection/config/collision_monitor_config.json
   collision_detection/diagnostics/collision_observer_plotjuggler.xml
   DESTINATION share/${PROJECT_NAME}/config
 )
@@ -111,6 +112,8 @@ install(FILES .setup_assistant DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(sensorless_configuration test/test_sensorless_configuration.py
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR})
   ament_add_pytest_test(profile_composition test/test_profile_composition.py
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR})
 endif()

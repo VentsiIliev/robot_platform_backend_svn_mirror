@@ -18,7 +18,7 @@ struct CollisionObserverRecovery
   double settled_sec{0.0};
   void rearm() noexcept
   {
-    // A drive interruption retains the baseline; operator release invalidates it explicitly.
+    // Reinitialize checks without changing the established torque baseline.
     warmup_sum.fill(0.0);
     warmup_elapsed_sec = 0.0;
     warmup_samples = 0;
@@ -30,6 +30,11 @@ struct CollisionObserverRecovery
     baseline_valid = false;
     baseline_offset.fill(0.0);
     rearm();
+  }
+
+  void acknowledge(bool recalibrate) noexcept
+  {
+    if (recalibrate) {invalidate_baseline();} else {rearm();}
   }
 
   static bool stationary(const Values & velocity, double limit) noexcept

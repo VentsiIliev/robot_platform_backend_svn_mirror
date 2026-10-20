@@ -1,5 +1,50 @@
 # Sensorless collision detection
 
+## Profile-owned configuration
+
+Each robot profile owns `config/<profile>/sensorless_collision.yaml`. Profile
+selection follows `ACTIVE_PROFILE` in `config/runtime.yaml` or the existing
+`ZEROERR_ACTIVE_PROFILE` environment override. Missing profile files fail startup;
+there is no silent switch to another profile. Standalone ROS startup uses these
+same files and does not depend on the platform.
+
+The initial profile files explicitly include `../shared/sensorless_collision.yaml`
+with `RUNTIME_INCLUDES`. Nested mappings merge recursively; arrays replace whole
+arrays. Add only differing values to the profile file, for example:
+
+```yaml
+RUNTIME_INCLUDES:
+- ../shared/sensorless_collision.yaml
+controller:
+  warmup_sec: 6.0
+monitor:
+  collision_sensitivity_percent: 110.0
+runtime:
+  EXECUTOR_COLLISION_STOP_STRATEGY: planned_path
+```
+
+The three sections are `controller` (startup observer/recovery/telemetry ROS
+parameters), `monitor` (existing flat GUI/API detection fields and fitted model),
+and `runtime` (recovery policy, stop strategies, collection and legacy settings).
+All effective values were preserved during extraction. Shared robot motion limits
+remain in `joint_limits.yaml`; the brake reads them instead of duplicating them.
+
+The existing platform Robot Settings → Sensorless Collision tab and ROS
+configuration messages retain their field names. Its live changes are atomically
+saved as differences in the selected profile's `monitor` section, never into the
+shared defaults or other profiles. Only live-supported detector fields apply
+immediately. Editing startup observer parameters, runtime policy/strategy values
+or model coefficients requires restarting/reconfiguring the backend. Calibration
+fit tools accept the profile YAML and update only its model/threshold overrides;
+historical explicit JSON inputs remain readable. The old global monitor JSON is
+no longer a configuration source.
+
+The Python runtime, launch helpers and C++ observer resolve the same profile file.
+Collision settings left behind in runtime YAML overrides are rejected instead of
+silently competing with the new source. The platform remains an API client in
+this first extraction step; platform-owned full configuration is future work.
+
+
 This document describes the deployed ZeroErr joint-torque collision detector,
 its direction-dependent calibration models, the data needed to fit them, and
 the runtime stop and recovery workflow.
@@ -371,7 +416,7 @@ ros2 run zeroerr zeroerr_motion_model_fit.py \
   --input SESSION_1/peak_samples.csv \
   --input SESSION_2/peak_samples.csv \
   --input SESSION_3/peak_samples.csv \
-  --config /path/to/collision_monitor_config.json
+  --config /path/to/config/development_short_links/sensorless_collision.yaml
 ```
 
 Preview mode writes `motion_model_fit_report.json`. Add `--apply` only after
@@ -459,7 +504,7 @@ Preview the robust ridge/Huber fit:
 ```bash
 ros2 run zeroerr zeroerr_residual_model_fit.py \
   --input /path/to/combined_collision_training.csv \
-  --config /path/to/zeroerr/collision_detection/config/collision_monitor_config.json
+  --config /path/to/zeroerr/config/<ACTIVE_PROFILE>/sensorless_collision.yaml
 ```
 
 The fitted target is:
@@ -479,7 +524,7 @@ results are acceptable:
 ```bash
 ros2 run zeroerr zeroerr_residual_model_fit.py \
   --input /path/to/combined_collision_training.csv \
-  --config /path/to/zeroerr/collision_detection/config/collision_monitor_config.json \
+  --config /path/to/zeroerr/config/<ACTIVE_PROFILE>/sensorless_collision.yaml \
   --apply
 ```
 
@@ -495,7 +540,7 @@ ros2 run zeroerr zeroerr_dynamic_threshold_fit.py \
   --input /path/to/collision_training.csv \
   --run /path/to/calibration_runs/run_1 \
   --run /path/to/calibration_runs/run_2 \
-  --config /path/to/zeroerr/collision_detection/config/collision_monitor_config.json
+  --config /path/to/zeroerr/config/<ACTIVE_PROFILE>/sensorless_collision.yaml
 ```
 
 Defaults fit the 99.9th percentile and apply a 1.10 margin. The non-negative
@@ -561,16 +606,28 @@ GET  /motion/interlock/status
 POST /motion/interlock/reset
 ```
 
-### Recovery with baseline recalibration
+### Recovery with a retained baseline (trial)
 
-Every operator acknowledgement invalidates the previous torque baseline and
-relearns it at the stopped pose, restoring the previous reset behavior. It also
-resets momentum integration, filters, threshold envelopes and confirmation
-counters. Release therefore includes the 2-second drive-stability interval and
-8-second stationary calibration, followed by 0.5 seconds of clear settling.
-The robot must be free of external contact: any sustained load present during
-calibration becomes part of the new baseline. Movement restarts calibration.
+With `COLLISION_RESET_RECALIBRATE_ON_RELEASE: false` in the active profile `sensorless_collision.yaml` under `runtime`,
+ordinary collision release retains a valid torque baseline. It reinitializes
+momentum integration, filters, threshold envelopes and confirmation counters,
+then requires the existing 2-second drive-stability interval and 0.5 seconds of
+stationary, clear settling. Expected reset time is about 2.5 seconds when those
+checks pass. Startup and explicit recalibration still require the full 8-second
+stationary calibration. An invalid baseline also requires full calibration.
+The runtime sends a distinct `recalibrate` boolean and logs `baseline_retained`;
+coalesced observer requests give explicit recalibration precedence.
+
 Recovery uses the normal collision thresholds, with no lower recovery margin.
+Persistent torque above threshold keeps motion held and eventually times out;
+it never automatically triggers recalibration of an already valid baseline.
+Repeated releases do not change the baseline or learn away continuing contact.
+If earlier pose/model offset problems return, inspect the residual diagnostics.
+To restore full calibration on every ordinary release, set
+`COLLISION_RESET_RECALIBRATE_ON_RELEASE: true` and restart ZeroErr.
+For full calibration the robot must be stationary and free of external contact:
+a sustained load present during calibration becomes part of the new baseline.
+Movement restarts calibration.
 
 The runtime holds motion throughout recovery. Duplicate reset requests return
 `in_progress` without clearing the hold or sending another acknowledgement.
@@ -640,7 +697,7 @@ while the detector is suppressed. EtherCAT/drive faults are never bypassed.
 
 ## Main configuration fields
 
-`zeroerr/collision_detection/config/collision_monitor_config.json` contains the fitted model and
+`zeroerr/config/<ACTIVE_PROFILE>/sensorless_collision.yaml` contains the fitted model and
 operational settings:
 
 - `detection_enabled`: global runtime enable/disable switch for new detections;

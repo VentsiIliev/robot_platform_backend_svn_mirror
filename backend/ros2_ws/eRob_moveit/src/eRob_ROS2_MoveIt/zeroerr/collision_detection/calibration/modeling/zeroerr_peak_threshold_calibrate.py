@@ -14,6 +14,17 @@ from pathlib import Path
 
 import numpy as np
 
+# Shared configuration access also works when this tool is run from source.
+try:
+    from zeroerr_configuration.sensorless_collision import read_monitor_config, write_monitor_config
+except ModuleNotFoundError as error:
+    if error.name != 'zeroerr_configuration':
+        raise
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from zeroerr_configuration.sensorless_collision import read_monitor_config, write_monitor_config
+
+
 
 JOINTS = [f"Joint_{index}" for index in range(1, 7)]
 
@@ -111,7 +122,7 @@ def main():
     args = parse_args()
     paths = [Path(value).expanduser().resolve() for value in args.input]
     config_path = Path(args.config).expanduser().resolve()
-    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    payload = read_monitor_config(config_path)
     samples, median_interval = load_sessions(paths)
     persistence_windows = max(
         1, math.ceil(float(payload["confirm_duration_ms"]) / (median_interval * 1000.0)))
@@ -151,10 +162,10 @@ def main():
     if args.apply:
         backup = config_path.with_name(
             f"{config_path.stem}.pre-threshold-calibration-"
-            f"{time.strftime('%Y%m%d-%H%M%S')}.json"
+            f"{time.strftime('%Y%m%d-%H%M%S')}{config_path.suffix}"
         )
         shutil.copy2(config_path, backup)
-        config_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        write_monitor_config(config_path, payload)
         print(f"Applied thresholds to {config_path}; backup={backup}")
     else:
         print(f"Preview only; report={report_path}")

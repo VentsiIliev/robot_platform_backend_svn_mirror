@@ -14,6 +14,17 @@ from pathlib import Path
 
 import numpy as np
 
+# Shared configuration access also works when this tool is run from source.
+try:
+    from zeroerr_configuration.sensorless_collision import read_monitor_config, write_monitor_config
+except ModuleNotFoundError as error:
+    if error.name != 'zeroerr_configuration':
+        raise
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from zeroerr_configuration.sensorless_collision import read_monitor_config, write_monitor_config
+
+
 
 JOINT_NAMES = [f"Joint_{index}" for index in range(1, 7)]
 POSITION_FEATURE_NAMES = [
@@ -29,7 +40,7 @@ MODEL_FEATURE_NAMES = ["friction_sign", "velocity", *POSITION_FEATURE_NAMES]
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", required=True, help="Combined collision training CSV")
-    parser.add_argument("--config", required=True, help="Monitor configuration JSON")
+    parser.add_argument("--config", required=True, help="Profile sensorless_collision.yaml (or historical JSON input)")
     parser.add_argument("--ridge", type=float, default=1.0)
     parser.add_argument("--huber-scale", type=float, default=1.5)
     parser.add_argument("--apply", action="store_true")
@@ -191,7 +202,7 @@ def main() -> int:
     args = parse_args()
     input_path = Path(args.input).expanduser().resolve()
     config_path = Path(args.config).expanduser().resolve()
-    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    payload = read_monitor_config(config_path)
     deadband = float(payload.get("friction_velocity_deadband_rad_s", 0.01))
     timestamps, samples = load_batches(input_path, deadband)
     sessions = session_slices(timestamps)
@@ -255,9 +266,9 @@ def main() -> int:
     print(f"Fit report written to {report_path}")
     if args.apply:
         backup = input_path.parent / (
-            f"collision_monitor_config.pre-model-fit-{time.strftime('%Y%m%d-%H%M%S')}.json")
+            f"{config_path.stem}.pre-model-fit-{time.strftime('%Y%m%d-%H%M%S')}{config_path.suffix}")
         shutil.copy2(config_path, backup)
-        config_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        write_monitor_config(config_path, payload)
         print(f"Applied accepted model corrections to {config_path}")
         print(f"Previous configuration backed up to {backup}")
     else:

@@ -201,7 +201,7 @@ class PaintCollisionInterlockMonitor:
                     fallback_title="Resetting collision hold",
                     fallback_message=(
                         "Resetting robot protection. Keep the robot stationary and clear of obstructions. "
-                        "This usually takes 10–11 seconds. Motion remains held until recovery completes."
+                        "Motion remains held until recovery completes."
                     ),
                     dedupe_key=self.PROGRESS_KEY,
                     busy=True,

@@ -520,7 +520,7 @@
   },
   "Notifications": {
     "notification.collision.resetting_title": "Resetting collision hold",
-    "notification.collision.resetting_message": "Resetting robot protection. Keep the robot stationary and clear of obstructions. This usually takes 10–11 seconds. Motion remains held until recovery completes.",
+    "notification.collision.resetting_message": "Resetting robot protection. Keep the robot stationary and clear of obstructions. Motion remains held until recovery completes.",
     "notification.collision.reset_failed_title": "Reset not completed",
     "notification.collision.reset_failed_message": "Motion remains held. Check that the robot is clear of obstructions and stationary, then try releasing the hold again."
   }

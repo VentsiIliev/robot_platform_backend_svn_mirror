@@ -17,7 +17,6 @@ collision_detection/
 │   ├── data_collection/        # Calibration runner, coverage and peak recorder
 │   └── modeling/               # Offline fit, threshold calibration and audits
 ├── config/
-│   ├── collision_monitor_config.json
 │   └── archive/                # Local safety backups; JSON files are ignored
 ├── diagnostics/                # Status GUI and PlotJuggler layout
 ├── docs/                       # Architecture and calibration procedures
@@ -26,8 +25,11 @@ collision_detection/
 
 The source files are installed with their existing executable basenames. Commands
 such as `ros2 run zeroerr zeroerr_peak_recorder.py` therefore remain unchanged.
-The active configuration and PlotJuggler layout are also installed into the
-historic `share/zeroerr/config` location to preserve API compatibility.
+The active configuration is `config/<ACTIVE_PROFILE>/sensorless_collision.yaml`,
+with explicit shared defaults in `config/shared/sensorless_collision.yaml`.
+Nested overrides and GUI saves are profile-specific. The PlotJuggler layout remains
+installed into `share/zeroerr/config`. The existing platform/API field names are
+preserved; the old global monitor JSON is no longer used.
 
 ## Ownership rules
 

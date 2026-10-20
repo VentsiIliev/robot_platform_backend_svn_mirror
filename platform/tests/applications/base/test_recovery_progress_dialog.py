@@ -12,7 +12,7 @@ class TestRecoveryProgressDialog(unittest.TestCase):
     def test_existing_fluid_animation_and_complete_text(self):
         dialog = RecoveryProgressDialog(None, "Resetting collision hold",
             "Recalibrating the torque observer. Keep the robot stationary and free of contact. "
-            "This usually takes 10–11 seconds. Motion remains held until recovery completes.")
+            "Motion remains held until recovery completes.")
         dialog.show()
         self.app.processEvents()
         self.assertTrue(dialog.progress.running)
@@ -31,7 +31,7 @@ class TestRecoveryProgressDialog(unittest.TestCase):
     def test_bulgarian_message_fits(self):
         dialog = RecoveryProgressDialog(None, "Нулиране на блокировката след сблъсък",
             "Калибриране на наблюдателя на въртящия момент. Дръжте робота неподвижен и без външен контакт. "
-            "Това обикновено отнема 10–11 секунди. Движението остава блокирано до завършване на възстановяването.")
+            "Движението остава блокирано до завършване на възстановяването.")
         dialog.show()
         self.app.processEvents()
         body = dialog.findChild(QLabel, "recoveryProgressMessage")

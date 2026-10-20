@@ -1467,7 +1467,12 @@ class RobotController(Node):
             previous_event = self.last_collision_event
             collision_reset = recalibrate or (was_active and isinstance(previous_event, dict))
             previous_acknowledgements = self._collision_monitor_acknowledgements
-            baseline_retained = False  # Every collision acknowledgement relearns the baseline.
+            full_calibration = (
+                recalibrate
+                or bool(getattr(config, 'COLLISION_RESET_RECALIBRATE_ON_RELEASE', True))
+                or not self._collision_monitor_baseline_valid
+            )
+            baseline_retained = not full_calibration
             if collision_reset and previous_acknowledgements is None:
                 return {
                     "success": False, "reset": False,
@@ -1498,7 +1503,7 @@ class RobotController(Node):
                 if not bool(enable_result.get('success', False)):
                     return fail_recovery(enable_result.get('error') or 'failed to enable drives for collision monitor recovery')
                 acknowledged = String()
-                acknowledged.data = json.dumps({"timestamp": time.time(), "recalibrate": True})
+                acknowledged.data = json.dumps({"timestamp": time.time(), "recalibrate": full_calibration})
                 self._collision_acknowledged_pub.publish(acknowledged)
                 expected_acknowledgements = previous_acknowledgements + 1
                 deadline = time.monotonic() + 12.0

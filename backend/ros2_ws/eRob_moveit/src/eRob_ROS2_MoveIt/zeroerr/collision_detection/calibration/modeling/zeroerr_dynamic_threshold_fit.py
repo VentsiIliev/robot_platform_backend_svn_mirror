@@ -15,6 +15,17 @@ from pathlib import Path
 import numpy as np
 from scipy.optimize import nnls
 
+# Shared configuration access also works when this tool is run from source.
+try:
+    from zeroerr_configuration.sensorless_collision import read_monitor_config, write_monitor_config
+except ModuleNotFoundError as error:
+    if error.name != 'zeroerr_configuration':
+        raise
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from zeroerr_configuration.sensorless_collision import read_monitor_config, write_monitor_config
+
+
 
 JOINT_NAMES = [f"Joint_{index}" for index in range(1, 7)]
 FEATURE_NAMES = [
@@ -36,7 +47,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--run", required=True, action="append",
         help="Collision-free calibration/test run directory; may be repeated")
-    parser.add_argument("--config", required=True, help="Monitor configuration JSON")
+    parser.add_argument("--config", required=True, help="Profile sensorless_collision.yaml (or historical JSON input)")
     parser.add_argument("--percentile", type=float, default=99.9)
     parser.add_argument("--margin-scale", type=float, default=1.10)
     parser.add_argument("--ridge", type=float, default=0.1)
@@ -154,7 +165,7 @@ def main() -> int:
     config_path = Path(args.config).expanduser().resolve()
     time_ranges = [run_time_bounds(path) for path in run_directories]
     samples = load_samples(input_path, time_ranges)
-    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    payload = read_monitor_config(config_path)
 
     coefficients = {}
     limits = {}
@@ -198,9 +209,9 @@ def main() -> int:
     }
     if args.apply:
         backup = run_directories[-1] / (
-            f"collision_monitor_config.backup-{time.strftime('%Y%m%d-%H%M%S')}.json")
+            f"{config_path.stem}.backup-{time.strftime('%Y%m%d-%H%M%S')}{config_path.suffix}")
         shutil.copy2(config_path, backup)
-        config_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        write_monitor_config(config_path, payload)
         print(f"Applied dynamic thresholds to {config_path}")
         print(f"Previous configuration backed up to {backup}")
     else:

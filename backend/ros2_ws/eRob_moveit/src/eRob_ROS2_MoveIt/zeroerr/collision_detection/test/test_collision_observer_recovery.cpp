@@ -70,8 +70,20 @@ int main()
   recovery.rearm();
   residual[5] = 3.49;
   assert(recovery.ready_to_release(residual, threshold, velocity, 0.5, 0.5, 0.02));
-  // Release now invalidates the old pose's baseline and learns the stopped pose.
-  recovery.invalidate_baseline();
+  // Repeated ordinary releases must never learn away persistent contact.
+  for (int attempt = 0; attempt < 3; ++attempt) {
+    recovery.acknowledge(false);
+    measured.fill(100.0);
+    residual[5] = 4.0;
+    for (int i = 0; i < 100; ++i) {
+      assert(recovery.calibrate(measured, auxiliary, velocity, 0.125, 8.0, 20, 0.02));
+      assert(!recovery.ready_to_release(residual, threshold, velocity, 0.125, 0.5, 0.02));
+    }
+    assert(recovery.baseline_offset == baseline);
+    assert(recovery.warmup_samples == 0);
+  }
+  // Only explicit recalibration invalidates a valid baseline.
+  recovery.acknowledge(true);
   measured.fill(0.0);
   measured[5] = -4.445;
   for (int i = 0; i < 63; ++i) {

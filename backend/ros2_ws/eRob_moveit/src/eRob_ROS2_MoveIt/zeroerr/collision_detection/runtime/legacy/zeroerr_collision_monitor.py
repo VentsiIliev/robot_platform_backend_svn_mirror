@@ -58,9 +58,8 @@ PLOT_METRICS = {
 
 DEFAULT_EFFORT_THRESHOLDS = [20.0, 20.0, 15.0, 8.0, 6.0, 4.0]
 DEFAULT_FOLLOWING_ERROR_THRESHOLDS = [4000.0, 4000.0, 3500.0, 2000.0, 1500.0, 1200.0]
-DEFAULT_COLLISION_CONFIG_PATH = str(
-    Path(__file__).resolve().parents[2] / "config" / "collision_monitor_config.json"
-)
+from zeroerr_configuration.sensorless_collision import default_config_path, read_monitor_config, write_monitor_config
+DEFAULT_COLLISION_CONFIG_PATH = str(default_config_path())
 
 
 class ZeroErrCollisionMonitor(Node):
@@ -544,7 +543,7 @@ class ZeroErrCollisionMonitor(Node):
         if updated:
             try:
                 self._collision_config_path.parent.mkdir(parents=True, exist_ok=True)
-                self._collision_config_path.write_text(
+                self._persist_config_text(
                     json.dumps(
                         {
                             "confirm_duration_ms": self._confirm_duration_sec * 1000.0,
@@ -820,12 +819,15 @@ class ZeroErrCollisionMonitor(Node):
         self.get_logger().warning(
             "[ZeroErrCollisionMonitor] Collision latch cleared; observer warm-up restarted")
 
+    def _persist_config_text(self, text, **_kwargs):
+        write_monitor_config(self._collision_config_path, json.loads(text))
+
     def _load_persisted_config(self) -> None:
         path = self._collision_config_path
         if not path.exists():
             return
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload = read_monitor_config(path)
         except Exception as exc:
             self.get_logger().warning(
                 f"[ZeroErrCollisionMonitor] Failed to load persisted config from {path}: {exc}"

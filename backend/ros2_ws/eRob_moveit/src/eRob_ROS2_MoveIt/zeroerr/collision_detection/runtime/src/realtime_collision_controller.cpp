@@ -1,4 +1,5 @@
 #include "zeroerr/realtime_collision_controller.hpp"
+#include "zeroerr/sensorless_configuration.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -34,23 +35,26 @@ void load_joint_array(
 
 controller_interface::CallbackReturn RealtimeCollisionController::on_init()
 {
-  joint_names_ = auto_declare<std::vector<std::string>>(
-    "joints", {"Joint_1", "Joint_2", "Joint_3", "Joint_4", "Joint_5", "Joint_6"});
-  base_link_ = auto_declare<std::string>("base_link", "base_link");
-  tip_link_ = auto_declare<std::string>("tip_link", "tool0");
   config_path_ = auto_declare<std::string>("collision_config_path", "");
-  observer_gain_ = auto_declare<double>("observer_gain", 10.0);
-  filter_alpha_ = auto_declare<double>("filter_alpha", 0.7);
-  acceleration_filter_cutoff_hz_ =
-    auto_declare<double>("acceleration_filter_cutoff_hz", 40.0);
-  plot_period_sec_ = auto_declare<double>("plot_period_sec", 0.0005);
-  timing_period_sec_ = auto_declare<double>("timing_period_sec", 0.01);
-  warmup_sec_ = auto_declare<double>("warmup_sec", 8.0);
-  rearm_settle_sec_ = std::max(0.1, auto_declare<double>("rearm_settle_sec", 0.5));
-  drive_stable_sec_ = auto_declare<double>("drive_stable_sec", 2.0);
-  warmup_velocity_limit_ = auto_declare<double>("warmup_velocity_limit", 0.02);
-  warmup_min_samples_ = static_cast<std::size_t>(
-    std::max<std::int64_t>(1, auto_declare<std::int64_t>("warmup_min_samples", 20)));
+  if (config_path_.empty()) {
+    config_path_ = sensorless_profile_path(ament_index_cpp::get_package_share_directory("zeroerr"));
+  }
+  const auto controller = load_sensorless_config(config_path_)["controller"];
+  joint_names_ = auto_declare<std::vector<std::string>>("joints", controller["joints"].as<std::vector<std::string>>());
+  base_link_ = auto_declare<std::string>("base_link", controller["base_link"].as<std::string>());
+  tip_link_ = auto_declare<std::string>("tip_link", controller["tip_link"].as<std::string>());
+  observer_gain_ = auto_declare<double>("observer_gain", controller["observer_gain"].as<double>());
+  filter_alpha_ = auto_declare<double>("filter_alpha", controller["filter_alpha"].as<double>());
+  acceleration_filter_cutoff_hz_ = auto_declare<double>("acceleration_filter_cutoff_hz", controller["acceleration_filter_cutoff_hz"].as<double>());
+  plot_period_sec_ = auto_declare<double>("plot_period_sec", controller["plot_period_sec"].as<double>());
+  timing_period_sec_ = auto_declare<double>("timing_period_sec", controller["timing_period_sec"].as<double>());
+  warmup_sec_ = auto_declare<double>("warmup_sec", controller["warmup_sec"].as<double>());
+  rearm_settle_sec_ = auto_declare<double>("rearm_settle_sec", controller["rearm_settle_sec"].as<double>());
+  drive_stable_sec_ = auto_declare<double>("drive_stable_sec", controller["drive_stable_sec"].as<double>());
+  warmup_velocity_limit_ = auto_declare<double>("warmup_velocity_limit", controller["warmup_velocity_limit"].as<double>());
+  rearm_settle_sec_ = std::max(0.1, rearm_settle_sec_);
+  warmup_min_samples_ = static_cast<std::size_t>(std::max<std::int64_t>(1,
+    auto_declare<std::int64_t>("warmup_min_samples", controller["warmup_min_samples"].as<std::int64_t>())));
   static_floor_.fill(10.0);
   training_velocity_limit_.fill(std::numeric_limits<double>::infinity());
   training_acceleration_limit_.fill(std::numeric_limits<double>::infinity());
@@ -193,30 +197,21 @@ bool RealtimeCollisionController::load_model()
 bool RealtimeCollisionController::load_config()
 {
   try {
-    if (config_path_.empty()) {
-      config_path_ = ament_index_cpp::get_package_share_directory("zeroerr") +
-        "/config/collision_monitor_config.json";
-    }
-    std::ifstream input(config_path_);
-    if (!input) {
-      throw std::runtime_error("cannot open " + config_path_);
-    }
-    nlohmann::json config;
-    input >> config;
+    auto config = sensorless_json(load_sensorless_config(config_path_)["monitor"]);
     config["effort_following_error_detection_enabled"] = false;
-    non_rt_config_.detection_enabled = config.value("detection_enabled", true);
-    non_rt_config_.active_stop_enabled = config.value("active_stop_enabled", false);
-    non_rt_config_.diagnostics_enabled = config.value("diagnostics_enabled", true);
-    non_rt_config_.dynamic_threshold_enabled = config.value("dynamic_threshold_enabled", true);
-    non_rt_config_.detection_suppressed = config.value("collision_detection_suppressed", false);
+    non_rt_config_.detection_enabled = config.at("detection_enabled").get<bool>();
+    non_rt_config_.active_stop_enabled = config.at("active_stop_enabled").get<bool>();
+    non_rt_config_.diagnostics_enabled = config.at("diagnostics_enabled").get<bool>();
+    non_rt_config_.dynamic_threshold_enabled = config.at("dynamic_threshold_enabled").get<bool>();
+    non_rt_config_.detection_suppressed = config.at("collision_detection_suppressed").get<bool>();
     non_rt_config_.confirm_duration_sec =
-      std::max(0.0, config.value("confirm_duration_ms", 25.0)) * 1.0e-3;
+      std::max(0.0, config.at("confirm_duration_ms").get<double>()) * 1.0e-3;
     non_rt_config_.sensitivity_percent =
-      std::clamp(config.value("collision_sensitivity_percent", 100.0), 50.0, 200.0);
+      std::clamp(config.at("collision_sensitivity_percent").get<double>(), 50.0, 200.0);
     non_rt_config_.threshold_max_ratio =
-      std::clamp(config.value("dynamic_threshold_max_ratio", 3.5), 1.0, 20.0);
+      std::clamp(config.at("dynamic_threshold_max_ratio").get<double>(), 1.0, 20.0);
     non_rt_config_.threshold_decay_sec =
-      std::max(0.01, config.value("dynamic_threshold_decay_sec", 0.35));
+      std::max(0.01, config.at("dynamic_threshold_decay_sec").get<double>());
     load_joint_array(config, "external_torque_thresholds", static_floor_);
     non_rt_config_.static_floor = static_floor_;
     load_joint_array(config, "friction_coulomb_nm", friction_coulomb_);
@@ -230,11 +225,11 @@ bool RealtimeCollisionController::load_config()
     load_joint_array(config, "friction_static_positive_nm", friction_static_positive_);
     load_joint_array(config, "friction_static_negative_nm", friction_static_negative_);
     friction_deadband_ = std::max(
-      0.0, config.value("friction_velocity_deadband_rad_s", 0.01));
+      0.0, config.at("friction_velocity_deadband_rad_s").get<double>());
     friction_transition_velocity_ = std::max(
-      1.0e-5, config.value("friction_transition_velocity_rad_s", 0.01));
+      1.0e-5, config.at("friction_transition_velocity_rad_s").get<double>());
     friction_stribeck_velocity_ = std::max(
-      friction_transition_velocity_, config.value("friction_stribeck_velocity_rad_s", 0.05));
+      friction_transition_velocity_, config.at("friction_stribeck_velocity_rad_s").get<double>());
     for (std::size_t index = 0; index < kJointCount; ++index) {
       const auto name = joint_names_[index];
       if (config.contains("dynamic_threshold_coefficients") &&
@@ -296,25 +291,30 @@ void RealtimeCollisionController::apply_config_message(
     }
     state["effort_following_error_detection_enabled"] = false;
     auto next = non_rt_config_;
-    next.detection_enabled = state.value("detection_enabled", true);
-    next.active_stop_enabled = state.value("active_stop_enabled", false);
-    next.diagnostics_enabled = state.value("diagnostics_enabled", true);
-    next.dynamic_threshold_enabled = state.value("dynamic_threshold_enabled", true);
-    next.detection_suppressed = state.value("collision_detection_suppressed", false);
+    next.detection_enabled = state.at("detection_enabled").get<bool>();
+    next.active_stop_enabled = state.at("active_stop_enabled").get<bool>();
+    next.diagnostics_enabled = state.at("diagnostics_enabled").get<bool>();
+    next.dynamic_threshold_enabled = state.at("dynamic_threshold_enabled").get<bool>();
+    next.detection_suppressed = state.at("collision_detection_suppressed").get<bool>();
     next.confirm_duration_sec =
-      std::max(0.0, state.value("confirm_duration_ms", 25.0)) * 1.0e-3;
+      std::max(0.0, state.at("confirm_duration_ms").get<double>()) * 1.0e-3;
     next.sensitivity_percent = std::clamp(
-      state.value("collision_sensitivity_percent", 100.0), 50.0, 200.0);
+      state.at("collision_sensitivity_percent").get<double>(), 50.0, 200.0);
     next.threshold_max_ratio = std::clamp(
-      state.value("dynamic_threshold_max_ratio", 3.5), 1.0, 20.0);
+      state.at("dynamic_threshold_max_ratio").get<double>(), 1.0, 20.0);
     next.threshold_decay_sec = std::max(
-      0.01, state.value("dynamic_threshold_decay_sec", 0.35));
+      0.01, state.at("dynamic_threshold_decay_sec").get<double>());
     load_joint_array(state, "external_torque_thresholds", next.static_floor);
-    std::ofstream output(config_path_);
-    if (!output) {
-      throw std::runtime_error("cannot persist " + config_path_);
+    // Normalize persisted/live fields to the values actually applied by the controller.
+    state["confirm_duration_ms"] = next.confirm_duration_sec * 1000.0;
+    state["collision_sensitivity_percent"] = next.sensitivity_percent;
+    state["dynamic_threshold_max_ratio"] = next.threshold_max_ratio;
+    state["dynamic_threshold_decay_sec"] = next.threshold_decay_sec;
+    auto applied_patch = update;
+    for (auto item = applied_patch.begin(); item != applied_patch.end(); ++item) {
+      item.value() = state.at(item.key());
     }
-    output << state.dump(2) << '\n';
+    save_sensorless_monitor_patch(config_path_, applied_patch);
     non_rt_config_ = next;
     config_state_json_ = state.dump();
     runtime_config_.writeFromNonRT(non_rt_config_);
@@ -327,19 +327,23 @@ void RealtimeCollisionController::apply_config_message(
 void RealtimeCollisionController::acknowledge_collision(
   const std_msgs::msg::String::SharedPtr message)
 {
+  bool recalibrate = false;
   try {
     const auto request = nlohmann::json::parse(message->data);
     if (!request.is_object()) {throw std::runtime_error("acknowledgement must be an object");}
+    recalibrate = request.value("recalibrate", false);
   } catch (const std::exception & error) {
     RCLCPP_ERROR(get_node()->get_logger(), "Invalid observer acknowledgement: %s", error.what());
     return;
   }
   RCLCPP_WARN(
     get_node()->get_logger(),
-    "[CollisionObserverReset] acknowledgement received; mode=full_calibration "
+    "[CollisionObserverReset] acknowledgement received; mode=%s "
     "warmup_sec=%.3f drive_stable_sec=%.3f observer_gain=%.3f filter_alpha=%.3f",
+    recalibrate ? "full_calibration" : "retained_baseline",
     warmup_sec_, drive_stable_sec_, observer_gain_, filter_alpha_);
-  reset_requested_.store(true, std::memory_order_release);
+  // Coalesced requests must never downgrade an explicit recalibration.
+  reset_requested_.fetch_or(recalibrate ? 3U : 1U, std::memory_order_release);
 }
 
 void RealtimeCollisionController::publish_config_state(const RuntimeConfig &)
@@ -495,10 +499,10 @@ controller_interface::return_type RealtimeCollisionController::update(
   timing_elapsed_sec_ += dt_sec;
   publish_timing_this_cycle_ = timing_elapsed_sec_ >= timing_period_sec_;
   if (publish_timing_this_cycle_) {timing_elapsed_sec_ = 0.0;}
-  if (reset_requested_.exchange(false, std::memory_order_acq_rel)) {
+  const unsigned int reset_request = reset_requested_.exchange(0U, std::memory_order_acq_rel);
+  if (reset_request != 0U) {
     ++acknowledgement_count_;
-    // Operator release relearns the stationary baseline at the stopped pose.
-    reset_observer();
+    rearm_observer((reset_request & 2U) != 0U);
   }
   const auto * config_ptr = runtime_config_.readFromRT();
   if (config_ptr == nullptr) {
@@ -783,13 +787,12 @@ void RealtimeCollisionController::drain_collision_diagnostics()
 
 void RealtimeCollisionController::reset_observer()
 {
-  recovery_.invalidate_baseline();
-  rearm_observer();
+  rearm_observer(true);
 }
 
-void RealtimeCollisionController::rearm_observer()
+void RealtimeCollisionController::rearm_observer(const bool recalibrate)
 {
-  recovery_.rearm();
+  recovery_.acknowledge(recalibrate);
   if (have_previous_sample_ || observer_ready_) {++observer_reset_count_;}
   observer_ready_age_sec_ = 0.0;
   collision_history_count_ = 0;

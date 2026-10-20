@@ -74,7 +74,7 @@ private:
     std::size_t index, double velocity, double acceleration, double dt_sec,
     const RuntimeConfig & config);
   void reset_observer();
-  void rearm_observer();
+  void rearm_observer(bool recalibrate = false);
   void capture_collision_diagnostics(
     const rclcpp::Time & time, double dt_sec, const RuntimeConfig & config,
     const JointVector & position, const JointVector & velocity,
@@ -201,7 +201,7 @@ private:
   RuntimeConfig non_rt_config_{};
   std::string config_state_json_;
   bool publish_timing_this_cycle_{false};
-  std::atomic<bool> reset_requested_{false};
+  std::atomic<unsigned int> reset_requested_{0U};
   std::array<std::string, kJointCount> stop_payloads_{};
 };
 

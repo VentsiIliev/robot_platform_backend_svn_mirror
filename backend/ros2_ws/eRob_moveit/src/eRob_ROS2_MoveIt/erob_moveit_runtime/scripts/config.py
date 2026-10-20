@@ -229,6 +229,14 @@ def _load_runtime_config() -> dict[str, Any]:
             if profile_config_path and profile_config_path.exists():
                 config = _merge(config, _load_yaml_file(profile_config_path))
 
+    if _config_package() == 'zeroerr':
+        from zeroerr_configuration.sensorless_collision import runtime_settings
+        sensorless = runtime_settings(path.parent.parent, profile)
+        duplicates = set(config).intersection(sensorless)
+        if duplicates:
+            raise ValueError(f'Sensorless settings must live in the profile sensorless_collision.yaml: {sorted(duplicates)}')
+        config = _merge(config, sensorless)
+
     for key in PATH_KEYS:
         if key in config and config[key]:
             config[key] = _resolve_config_path(active_path, config[key])

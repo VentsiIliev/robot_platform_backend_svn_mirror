@@ -22,7 +22,8 @@ def callbacks():
         "is_hardware_ready_for_motion", "get_hardware_fault_reason",
     }]
     module = ast.fix_missing_locations(ast.Module(body=methods, type_ignores=[]))
-    namespace = {"json": json, "time": time, "String": SimpleNamespace, "DynamicJointState": SimpleNamespace}
+    namespace = {"json": json, "time": time, "String": SimpleNamespace, "DynamicJointState": SimpleNamespace,
+                 "config": SimpleNamespace(COLLISION_RESET_RECALIBRATE_ON_RELEASE=False)}
     exec(compile(module, str(script), "exec"), namespace)
     return namespace
 
@@ -359,7 +360,7 @@ class TestCollisionRuntimeLogging(unittest.TestCase):
         request = self.robot._collision_acknowledged_pub.publish.call_args.args[0]
         self.assertTrue(json.loads(request.data)["recalibrate"])
 
-    def test_ordinary_acknowledgement_relearns_baseline(self):
+    def test_ordinary_acknowledgement_retains_valid_baseline(self):
         self.prepare_reset()
 
         def on_sleep(now):
@@ -370,12 +371,27 @@ class TestCollisionRuntimeLogging(unittest.TestCase):
         self.fake_clock(on_sleep)
         self.assertTrue(self.methods["reset_motion_interlock"](self.robot)["success"])
         request = self.robot._collision_acknowledged_pub.publish.call_args.args[0]
-        self.assertTrue(json.loads(request.data)["recalibrate"])
+        self.assertFalse(json.loads(request.data)["recalibrate"])
         entries = [json.loads(call.args[0].split('] ', 1)[1])
                    for call in self.logger.warning.call_args_list
                    if call.args[0].startswith('[CollisionRecoveryDiagnostics]')]
         completed = next(entry for entry in entries if entry["phase"] == "reset_completed")
-        self.assertFalse(completed["baseline_retained"])
+        self.assertTrue(completed["baseline_retained"])
+
+    def test_invalid_baseline_or_revert_setting_requires_full_calibration(self):
+        for baseline_valid, force_calibration in ((False, False), (True, True)):
+            with self.subTest(baseline_valid=baseline_valid, force_calibration=force_calibration):
+                self.prepare_reset()
+                self.robot._collision_monitor_baseline_valid = baseline_valid
+                self.methods["config"].COLLISION_RESET_RECALIBRATE_ON_RELEASE = force_calibration
+                def on_sleep(now):
+                    self.robot._collision_monitor_ready = True
+                    self.robot._collision_monitor_state_ts = now
+                    self.robot._collision_monitor_acknowledgements += 1
+                self.fake_clock(on_sleep)
+                self.assertTrue(self.methods["reset_motion_interlock"](self.robot)["success"])
+                request = self.robot._collision_acknowledged_pub.publish.call_args.args[0]
+                self.assertTrue(json.loads(request.data)["recalibrate"])
 
 
 if __name__ == "__main__":

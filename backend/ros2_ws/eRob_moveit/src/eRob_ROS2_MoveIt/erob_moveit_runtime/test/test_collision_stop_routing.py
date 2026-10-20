@@ -82,7 +82,11 @@ class TestCollisionStopRouting(unittest.TestCase):
 
 class TestStopProfiles(unittest.TestCase):
     def test_joint6_hold_and_duration_are_independent(self):
-        config = SimpleNamespace(**yaml.safe_load((ROOT / 'zeroerr/config/runtime_defaults.yaml').read_text()))
+        sys.path.insert(0, str(ROOT / 'zeroerr'))
+        from zeroerr_configuration.sensorless_collision import runtime_settings
+        values = yaml.safe_load((ROOT / 'zeroerr/config/runtime_defaults.yaml').read_text())
+        values.update(runtime_settings(ROOT / 'zeroerr'))
+        config = SimpleNamespace(**values)
         self.assertEqual(config.EXECUTOR_PATH_STOP_HOLD_JOINT_NAMES, ['Joint_6', 'j6'])
         self.assertEqual(config.EXECUTOR_COLLISION_STOP_HOLD_JOINT_NAMES, [])
         config.EXECUTOR_PATH_STOP_DURATION_S = 0.6
