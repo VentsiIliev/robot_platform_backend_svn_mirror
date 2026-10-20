@@ -24,6 +24,7 @@ from src.robot_systems.paint.contracts.events.dashboard_events import (
     PaintDashboardLiveViewTopics,
     PaintDashboardMessageTopics,
 )
+from src.shared_contracts.events.notification_events import NotificationActionEvent, NotificationTopics
 from src.shared_contracts.events.robot_events import RobotTopics
 from src.shared_contracts.events.shell_events import ShellTopics
 from src.shared_contracts.events.vision_events import CameraTopics
@@ -487,7 +488,8 @@ class PaintDashboardController(
         title = self._t(source_title)
         message = self._t(str(getattr(event, "message", "") or ""))
         if source_title == "Collision Detected":
-            self._dashboard_notice_bridge.collision_ready.emit(title, message)
+            # The system monitor owns the single actionable collision notice.
+            return
         elif str(getattr(event, "level", "info")).lower() == "warning":
             if source_title == "Unknown Workpiece":
                 self._dashboard_notice_bridge.unknown_workpiece_ready.emit(title, message)
@@ -496,12 +498,25 @@ class PaintDashboardController(
         else:
             self._dashboard_notice_bridge.info_ready.emit(title, message)
 
+    def _dashboard_warning_for_event(self, event_state: str, message: str) -> tuple[str, str] | None:
+        # A motion command can report its generic failure before the collision
+        # watcher supplies a collision-specific message. Do not stack that error
+        # over the system collision dialog.
+        if event_state == "error" and self._model.collision_acknowledgement_required() is True:
+            return None
+        return super()._dashboard_warning_for_event(event_state, message)
+
     def _on_collision_notice(self, title: str, message: str) -> None:
+        if self._model.collision_acknowledgement_required() is not True:
+            self._view.apply_dashboard_state(self._model.load())
+            return
         if not self._view.ask_collision_acknowledgement(title, message):
             return
-        self._run_background(
-            self._model.acknowledge_collision,
-            self._on_collision_acknowledgement_finished,
+        # Use the same coordinator and progress popup as the global Release action.
+        self._broker.publish(
+            NotificationTopics.ACTION,
+            NotificationActionEvent(
+                source="paint_collision_interlock", action_key="release_collision_hold"),
         )
 
     def _on_collision_acknowledgement_finished(self, result: object) -> None:

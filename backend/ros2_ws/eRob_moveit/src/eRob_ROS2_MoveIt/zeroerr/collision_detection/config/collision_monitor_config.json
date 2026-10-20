@@ -86,7 +86,7 @@
     "positive_acceleration_squared",
     "negative_acceleration_squared"
   ],
-  "dynamic_threshold_max_ratio": 3.0,
+  "dynamic_threshold_max_ratio": 3.5,
   "dynamic_threshold_training_limits": {
     "Joint_1": [
       1.51564781458661,
@@ -127,7 +127,7 @@
     4.05,
     2.78,
     1.59,
-    1.6,
+    2.0,
     3.5
   ],
   "following_error_thresholds": [

@@ -95,7 +95,6 @@ private:
   double timing_period_sec_{0.01};
   double warmup_sec_{8.0};
   double rearm_settle_sec_{0.5};
-  double rearm_clear_ratio_{0.8};
   double drive_stable_sec_{2.0};
   double warmup_velocity_limit_{0.02};
   std::size_t warmup_min_samples_{20};
@@ -203,7 +202,6 @@ private:
   std::string config_state_json_;
   bool publish_timing_this_cycle_{false};
   std::atomic<bool> reset_requested_{false};
-  std::atomic<bool> recalibration_requested_{false};
   std::array<std::string, kJointCount> stop_payloads_{};
 };
 

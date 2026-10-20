@@ -72,7 +72,23 @@ class MotionCoordinator:
         return result
 
     def stop_motion(self):
-        self._node.get_logger().info('[STOP] Stopping motion called')
+        return self._stop_motion(collision_stop=False)
+
+    def collision_stop(self):
+        return self._stop_motion(collision_stop=True)
+
+    def _stop_motion(self, *, collision_stop):
+        self._node.get_logger().info(
+            '[STOP] Collision stop called' if collision_stop else '[STOP] Stopping motion called')
+        executor = getattr(self._node, 'trajectory_executor', None)
+        if (getattr(executor, '_active_goal_is_stop', False) is True
+                and getattr(executor, '_active_stop_kind', None) == 'collision'):
+            # Process/UI Stop may arrive after the detector. It must not cancel
+            # or replace the collision deceleration with the operator J6 hold.
+            return {
+                'state': 'STOPPING', 'result': 0, 'success': True,
+                'stopped': True, 'queue_cleared': 0, 'stop_kind': 'collision',
+            }
         stopped = False
         queue_cleared = 0
         controller_cancel_error = None
@@ -89,10 +105,10 @@ class MotionCoordinator:
                 controller_cancel_error = str(e)
                 self._node.get_logger().error(f'[STOP] Failed to cancel send future: {e}')
 
-        if self.active_controller_goal is not None:
+        if self.active_controller_goal is not None or (collision_stop and self.is_executing):
             send_path_stop = getattr(
                 getattr(self._node, 'trajectory_executor', None),
-                'send_path_stop_trajectory',
+                'send_collision_stop_trajectory' if collision_stop else 'send_path_stop_trajectory',
                 None,
             )
             if callable(send_path_stop):
@@ -116,15 +132,16 @@ class MotionCoordinator:
                     controller_cancel_error = str(e)
                     self._node.get_logger().error(f'[STOP] Failed to submit path stop trajectory: {e}')
 
-            self._node.get_logger().info('[STOP] Cancelling active controller trajectory...')
-            try:
-                self.active_controller_goal.cancel_goal_async()
-                self.active_controller_goal = None
-                stopped = True
-                self._node.get_logger().warning('[STOP] ✓ Robot motion cancelled!')
-            except Exception as e:
-                controller_cancel_error = str(e)
-                self._node.get_logger().error(f'[STOP] Failed to cancel controller goal: {e}')
+            if self.active_controller_goal is not None:
+                self._node.get_logger().info('[STOP] Cancelling active controller trajectory...')
+                try:
+                    self.active_controller_goal.cancel_goal_async()
+                    self.active_controller_goal = None
+                    stopped = True
+                    self._node.get_logger().warning('[STOP] ✓ Robot motion cancelled!')
+                except Exception as e:
+                    controller_cancel_error = str(e)
+                    self._node.get_logger().error(f'[STOP] Failed to cancel controller goal: {e}')
 
         with self.lock:
             was_executing = bool(self.is_executing)

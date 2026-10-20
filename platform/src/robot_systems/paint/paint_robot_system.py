@@ -786,6 +786,7 @@ class PaintRobotSystem(BaseRobotSystem):
             self._robot,
             self._messaging_service,
             vacuum_pump=self._vacuum_pump,
+            acknowledge_collision=self._main_process.acknowledge_collision,
         )
         self.register_managed_resource(self._collision_interlock_monitor)
         self._collision_interlock_monitor.start()

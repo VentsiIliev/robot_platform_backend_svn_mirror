@@ -807,5 +807,50 @@ class TestPaintDashboardController(unittest.TestCase):
         self.assertTrue(controller._dashboard_camera_feed_updates_enabled())
 
 
+class TestSingleCollisionRecoveryDialog(unittest.TestCase):
+    def make_controller(self, required):
+        controller = PaintDashboardController.__new__(PaintDashboardController)
+        controller._model = MagicMock()
+        controller._model.collision_acknowledgement_required.return_value = required
+        controller._view = MagicMock()
+        controller._dashboard_notice_bridge = MagicMock()
+        controller._t = lambda value: value
+        return controller
+
+    def test_generic_motion_failure_does_not_stack_over_active_collision(self):
+        controller = self.make_controller(True)
+        self.assertIsNone(controller._dashboard_warning_for_event(
+            "error", "Magazine pickup approach before servo contact failed"))
+
+    def test_unrelated_process_errors_remain_visible(self):
+        controller = self.make_controller(False)
+        self.assertEqual(controller._dashboard_warning_for_event("error", "camera failed"),
+                         ("Process Blocked", "camera failed"))
+
+    def test_stale_collision_dialog_does_not_ask_for_acknowledgement(self):
+        controller = self.make_controller(False)
+        controller._on_collision_notice("Collision Detected", "collision")
+        controller._view.ask_collision_acknowledgement.assert_not_called()
+        controller._view.apply_dashboard_state.assert_called_once()
+
+    def test_confirmed_dashboard_reset_uses_shared_progress_coordinator(self):
+        from src.shared_contracts.events.notification_events import NotificationTopics
+        controller = self.make_controller(True)
+        controller._broker = MagicMock()
+        controller._view.ask_collision_acknowledgement.return_value = True
+        controller._on_collision_notice("Collision Detected", "collision")
+        topic, event = controller._broker.publish.call_args.args
+        self.assertEqual(topic, NotificationTopics.ACTION)
+        self.assertEqual(event.source, "paint_collision_interlock")
+        self.assertEqual(event.action_key, "release_collision_hold")
+        controller._model.acknowledge_collision.assert_not_called()
+
+    def test_dashboard_collision_message_leaves_dialog_to_system_monitor(self):
+        controller = self.make_controller(True)
+        controller._on_dashboard_message_raw(SimpleNamespace(
+            title="Collision Detected", message="collision", level="error"))
+        controller._dashboard_notice_bridge.collision_ready.emit.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -16,10 +16,9 @@ struct CollisionObserverRecovery
   double warmup_elapsed_sec{0.0};
   std::size_t warmup_samples{0};
   double settled_sec{0.0};
-
   void rearm() noexcept
   {
-    // Acknowledgement/drive interruption must never learn contact as a new bias.
+    // A drive interruption retains the baseline; operator release invalidates it explicitly.
     warmup_sum.fill(0.0);
     warmup_elapsed_sec = 0.0;
     warmup_samples = 0;
@@ -65,12 +64,12 @@ struct CollisionObserverRecovery
 
   bool ready_to_release(
     const Values & residual, const Values & threshold, const Values & velocity,
-    double dt_sec, double required_sec, double clear_ratio, double velocity_limit) noexcept
+    double dt_sec, double required_sec, double velocity_limit) noexcept
   {
     bool clear = baseline_valid && stationary(velocity, velocity_limit);
     for (std::size_t i = 0; i < residual.size(); ++i) {
       clear = clear && std::isfinite(residual[i]) && std::isfinite(threshold[i]) &&
-        threshold[i] > 0.0 && std::abs(residual[i]) < threshold[i] * clear_ratio;
+        threshold[i] > 0.0 && std::abs(residual[i]) < threshold[i];
     }
     settled_sec = clear ? settled_sec + dt_sec : 0.0;
     return clear && settled_sec >= required_sec;

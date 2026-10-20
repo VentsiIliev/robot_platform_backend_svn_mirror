@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <type_traits>
 #include <vector>
 #include <string>
@@ -13,6 +14,15 @@
 namespace zeroerr
 {
 using CollisionJointValues = std::array<double, 6>;
+
+inline CollisionJointValues observer_residual_for_plot(
+  const CollisionJointValues & residual, bool initialized)
+{
+  if (initialized) {return residual;}
+  CollisionJointValues unavailable;
+  unavailable.fill(std::numeric_limits<double>::quiet_NaN());
+  return unavailable;
+}
 
 struct CollisionTraceSample
 {

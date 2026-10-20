@@ -47,7 +47,6 @@ controller_interface::CallbackReturn RealtimeCollisionController::on_init()
   timing_period_sec_ = auto_declare<double>("timing_period_sec", 0.01);
   warmup_sec_ = auto_declare<double>("warmup_sec", 8.0);
   rearm_settle_sec_ = std::max(0.1, auto_declare<double>("rearm_settle_sec", 0.5));
-  rearm_clear_ratio_ = std::clamp(auto_declare<double>("rearm_clear_ratio", 0.8), 0.1, 0.95);
   drive_stable_sec_ = auto_declare<double>("drive_stable_sec", 2.0);
   warmup_velocity_limit_ = auto_declare<double>("warmup_velocity_limit", 0.02);
   warmup_min_samples_ = static_cast<std::size_t>(
@@ -140,8 +139,9 @@ controller_interface::CallbackReturn RealtimeCollisionController::on_configure(
   for (auto & interfaces : state_publisher_->msg_.interface_values) {
     interfaces.interface_names = {
       "observer_ready", "baseline_valid", "observer_initialized", "acknowledgement_count",
-      "rearm_settled_sec"};
-    interfaces.values.resize(5);
+      "rearm_settled_sec", "filtered_residual_nm", "release_limit_nm",
+      "velocity_rad_s", "drives_stable_sec"};
+    interfaces.values.resize(9);
   }
   peak_publisher_->msg_.joint_names = joint_names_;
   peak_publisher_->msg_.interface_values.resize(kJointCount);
@@ -327,21 +327,18 @@ void RealtimeCollisionController::apply_config_message(
 void RealtimeCollisionController::acknowledge_collision(
   const std_msgs::msg::String::SharedPtr message)
 {
-  bool recalibrate = false;
   try {
     const auto request = nlohmann::json::parse(message->data);
-    recalibrate = request.value("recalibrate", false);
+    if (!request.is_object()) {throw std::runtime_error("acknowledgement must be an object");}
   } catch (const std::exception & error) {
     RCLCPP_ERROR(get_node()->get_logger(), "Invalid observer acknowledgement: %s", error.what());
     return;
   }
-  if (recalibrate) {recalibration_requested_.store(true, std::memory_order_release);}
   RCLCPP_WARN(
     get_node()->get_logger(),
-    "[CollisionObserverReset] acknowledgement received; mode=%s "
+    "[CollisionObserverReset] acknowledgement received; mode=full_calibration "
     "warmup_sec=%.3f drive_stable_sec=%.3f observer_gain=%.3f filter_alpha=%.3f",
-    recalibrate ? "full_calibration" : "retain_baseline", warmup_sec_, drive_stable_sec_,
-    observer_gain_, filter_alpha_);
+    warmup_sec_, drive_stable_sec_, observer_gain_, filter_alpha_);
   reset_requested_.store(true, std::memory_order_release);
 }
 
@@ -500,11 +497,8 @@ controller_interface::return_type RealtimeCollisionController::update(
   if (publish_timing_this_cycle_) {timing_elapsed_sec_ = 0.0;}
   if (reset_requested_.exchange(false, std::memory_order_acq_rel)) {
     ++acknowledgement_count_;
-    if (recalibration_requested_.exchange(false, std::memory_order_acq_rel)) {
-      reset_observer();
-    } else {
-      rearm_observer();
-    }
+    // Operator release relearns the stationary baseline at the stopped pose.
+    reset_observer();
   }
   const auto * config_ptr = runtime_config_.readFromRT();
   if (config_ptr == nullptr) {
@@ -628,7 +622,7 @@ controller_interface::return_type RealtimeCollisionController::update(
   if (observer_initialized_ && !observer_ready_) {
     observer_ready_ = recovery_.ready_to_release(
       filtered_residual_, threshold_, velocity, dt_sec, rearm_settle_sec_,
-      rearm_clear_ratio_, warmup_velocity_limit_);
+      warmup_velocity_limit_);
   }
   if (observer_ready_) {
     observer_ready_age_sec_ += was_observer_ready ? dt_sec : 0.0;
@@ -780,7 +774,6 @@ void RealtimeCollisionController::drain_collision_diagnostics()
       payload["warmup_required_sec"] = warmup_sec_;
       payload["drive_stable_required_sec"] = drive_stable_sec_;
       payload["rearm_settle_required_sec"] = rearm_settle_sec_;
-      payload["rearm_clear_ratio"] = rearm_clear_ratio_;
       RCLCPP_WARN(get_node()->get_logger(), "[CollisionDiagnostics] %s", payload.dump().c_str());
     } catch (const std::exception & error) {
       RCLCPP_ERROR(get_node()->get_logger(), "Collision diagnostic serialization failed: %s", error.what());
@@ -832,18 +825,27 @@ void RealtimeCollisionController::publish_diagnostics(
         publisher->unlockAndPublish();
       }
     };
-  if (publish_plot) {
-    publish_joint_values(residual_publisher_, filtered_residual_);
+  // Keep timestamps flowing while initialization/drive stabilization prevents
+  // observer updates. NaN denotes unavailable torque, rather than letting the
+  // plot interpolate a two-second ramp from the old residual to reset zero.
+  if (publish_plot || (publish_timing_this_cycle_ && !observer_initialized_)) {
+    publish_joint_values(
+      residual_publisher_, observer_residual_for_plot(filtered_residual_, observer_initialized_));
     publish_joint_values(threshold_publisher_, threshold_);
   }
   if (publish_timing_this_cycle_ && state_publisher_ && state_publisher_->trylock()) {
     state_publisher_->msg_.header.stamp = time;
-    for (auto & interfaces : state_publisher_->msg_.interface_values) {
+    for (std::size_t i = 0; i < kJointCount; ++i) {
+      auto & interfaces = state_publisher_->msg_.interface_values[i];
       interfaces.values[0] = observer_ready_ ? 1.0 : 0.0;
       interfaces.values[1] = recovery_.baseline_valid ? 1.0 : 0.0;
       interfaces.values[2] = observer_initialized_ ? 1.0 : 0.0;
       interfaces.values[3] = static_cast<double>(acknowledgement_count_);
       interfaces.values[4] = recovery_.settled_sec;
+      interfaces.values[5] = filtered_residual_[i];
+      interfaces.values[6] = threshold_[i];
+      interfaces.values[7] = previous_velocity_[i];
+      interfaces.values[8] = drives_operational_elapsed_sec_;
     }
     state_publisher_->unlockAndPublish();
   }

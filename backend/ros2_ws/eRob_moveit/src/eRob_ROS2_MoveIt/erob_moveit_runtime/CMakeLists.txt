@@ -125,6 +125,12 @@ set_target_properties(trajectory_state_validator PROPERTIES
   INSTALL_RPATH_USE_LINK_PATH TRUE)
 install(TARGETS trajectory_state_validator DESTINATION lib/${PROJECT_NAME})
 
+add_library(erob_collision_brake SHARED src_cpp/stop_strategies/measured_ruckig.cpp)
+target_link_libraries(erob_collision_brake PRIVATE ruckig::ruckig)
+target_compile_features(erob_collision_brake PRIVATE cxx_std_17)
+set_target_properties(erob_collision_brake PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+install(TARGETS erob_collision_brake LIBRARY DESTINATION lib)
+
 add_executable(ruckig_helper src_cpp/ruckig_helper_node.cpp)
 ament_target_dependencies(ruckig_helper
   rclcpp moveit_core moveit_ros_planning_interface moveit_ros_planning

@@ -167,3 +167,20 @@ class TestUserNotificationPresenter(unittest.TestCase):
         self.assertIsInstance(payload, NotificationActionEvent)
         self.assertEqual(payload.action_key, "release_collision_hold")
         self.assertEqual(payload.dedupe_key, "collision-1")
+
+
+class TestBusyNotification(unittest.TestCase):
+    @patch("src.applications.base.notification_presenter.RecoveryProgressDialog")
+    def test_busy_popup_is_nonblocking_deduplicated_and_dismissible(self, dialog_class):
+        dialog = dialog_class.return_value
+        presenter = UserNotificationPresenter(MagicMock(), MagicMock())
+        event = UserNotificationEvent(source="test", severity=NotificationSeverity.INFO,
+                                      fallback_title="Resetting collision hold", fallback_message="Please wait",
+                                      dedupe_key="reset-progress", busy=True)
+        presenter.present(event)
+        presenter.present(event)
+        dialog_class.assert_called_once_with(presenter._parent, "Resetting collision hold", "Please wait")
+        dialog.open.assert_called_once()
+        presenter._dismiss_notification(DismissNotificationEvent(dedupe_key="reset-progress"))
+        dialog.close.assert_called_once()
+        self.assertNotIn("reset-progress", presenter._active_dialogs)

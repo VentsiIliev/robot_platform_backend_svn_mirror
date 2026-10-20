@@ -137,6 +137,7 @@ class ZeroErrRuntimeAdapter(RuntimeBackendAdapter):
 
     def initialize_runtime_controller(self, robot_controller):
         self._drive_state_lock = Lock()
+        self._drive_state_ts = 0.0
         self._drive_enable_lock = Lock()
         self._drive_operation_enabled_requested = False
         self._drive_joint_order = list(config.JOINT_NAMES)
@@ -187,6 +188,32 @@ class ZeroErrRuntimeAdapter(RuntimeBackendAdapter):
                 "controller_switch_ok": False,
                 "error": reason,
             }
+        if enabled:
+            # A collision clears the software enable request, but may leave the
+            # drives operational. Restore that request without sending a new
+            # hold trajectory or toggling hardware that is already enabled.
+            with self._drive_state_lock:
+                already_enabled = (
+                    self._drive_state_ts > 0.0
+                    and 0.0 <= time.monotonic() - self._drive_state_ts <= 0.5
+                    and len(self._drive_statusword) == config.NUM_JOINTS
+                    and all(np.isfinite(value)
+                            and self._decode_statusword_state(int(value)) == 'operation_enabled'
+                            for value in self._drive_statusword)
+                    and len(self._drive_error_code) == config.NUM_JOINTS
+                    and all(np.isfinite(value) and value == 0.0 for value in self._drive_error_code)
+                )
+            if already_enabled:
+                with self._drive_enable_lock:
+                    self._drive_operation_enabled_requested = True
+                robot_controller.get_logger().info(
+                    '[DriveEnable] Drives already operation_enabled; retaining current hold')
+                return {
+                    "success": True, "requested_enabled": True,
+                    "actual_enabled": True, "state": "OPERATION_ENABLED",
+                    "controller_switch_ok": True, "mode": "csp",
+                    "already_enabled": True,
+                }
         switch_ok = self._ensure_drive_set_controllers_active(robot_controller)
         if not switch_ok:
             return {
@@ -402,6 +429,8 @@ class ZeroErrRuntimeAdapter(RuntimeBackendAdapter):
         statusword = np.zeros(config.NUM_JOINTS, dtype=float)
         error_code = np.zeros(config.NUM_JOINTS, dtype=float)
         mode_display = self._drive_mode_display.copy()
+        status_seen = set()
+        error_seen = set()
         for joint_name, interface_value in zip(msg.joint_names, msg.interface_values):
             index = joint_index.get(joint_name)
             if index is None:
@@ -409,11 +438,17 @@ class ZeroErrRuntimeAdapter(RuntimeBackendAdapter):
             for name, value in zip(interface_value.interface_names, interface_value.values):
                 if name == 'statusword' and np.isfinite(value):
                     statusword[index] = float(value)
+                    status_seen.add(index)
                 elif name == 'error_code' and np.isfinite(value):
                     error_code[index] = float(value)
+                    error_seen.add(index)
                 elif name == 'mode_display' and np.isfinite(value):
                     mode_display[index] = float(value)
         with self._drive_state_lock:
+            self._drive_state_ts = (
+                time.monotonic() if len(status_seen) == config.NUM_JOINTS
+                and len(error_seen) == config.NUM_JOINTS else 0.0
+            )
             self._drive_statusword = statusword
             self._drive_error_code = error_code
             self._drive_mode_display = mode_display

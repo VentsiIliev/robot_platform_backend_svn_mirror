@@ -561,28 +561,30 @@ GET  /motion/interlock/status
 POST /motion/interlock/reset
 ```
 
-### Baseline-preserving recovery
+### Recovery with baseline recalibration
 
-Ordinary acknowledgement retains the calibrated baseline in memory. It resets
-momentum integration from the current measured momentum, filters, threshold
-envelopes and confirmation counters. It does not learn a new offset from contact
-forces present during reset. Startup, controller reactivation, model failure,
-and explicit recalibration invalidate the baseline and require full estimation.
-
-After the existing `drive_stable_sec` interval (default 2 seconds), readiness
-requires all joints below `warmup_vel_threshold_rad_s` and all residuals below
-`rearm_clear_ratio` times their current thresholds, continuously for
-`rearm_settle_sec`. Defaults are 0.8 and 0.5 seconds respectively. Movement or an
-unclear residual restarts that settling window. Normal acknowledgement therefore
-avoids the 8-second baseline estimation when a valid baseline exists; it can
-still take longer or fail if the stationary/clear conditions are not satisfied.
-Initial calibration also requires this clear settling window.
+Every operator acknowledgement invalidates the previous torque baseline and
+relearns it at the stopped pose, restoring the previous reset behavior. It also
+resets momentum integration, filters, threshold envelopes and confirmation
+counters. Release therefore includes the 2-second drive-stability interval and
+8-second stationary calibration, followed by 0.5 seconds of clear settling.
+The robot must be free of external contact: any sustained load present during
+calibration becomes part of the new baseline. Movement restarts calibration.
+Recovery uses the normal collision thresholds, with no lower recovery margin.
 
 The runtime holds motion throughout recovery. Duplicate reset requests return
 `in_progress` without clearing the hold or sending another acknowledgement.
 Release requires fresh ready telemetry carrying the acknowledgement generation
 for this reset; an old ready sample cannot release motion. A new collision,
 drive-enable failure or the 12-second recovery timeout leaves motion interlocked.
+Timeout diagnostics include each joint's filtered residual, actual release limit,
+velocity, observer initialization, drive-stable time and accumulated settling time,
+plus telemetry age and acknowledgement generation in the runtime context.
+The reset response names joints whose residual exceeds their release limit when
+fresh telemetry for the current acknowledgement is available. Stale telemetry
+or an unconfirmed acknowledgement is reported separately. A drive-disable
+request during recovery ends the wait immediately and leaves motion interlocked;
+recovery never automatically reverses an external disable request.
 Real-hardware motion also requires fresh ready telemetry outside reset. Startup drive enable
 uses the separate drive-enable readiness gate, which checks the motion interlock
 and EtherCAT fault state without requiring observer readiness. Enabled drives
@@ -726,7 +728,7 @@ collision and each observer-ready transition. Collision snapshots have an
 `event_id` matching `diagnostic_event_id` in the backend's `[CollisionMonitor]`
 stop-request log. The snapshot's ROS timestamp is captured in the control loop;
 the console timestamp is later because formatting/logging runs on a non-RT timer.
-`event=observer_ready` describes initial calibration or baseline-preserving
+`event=observer_ready` describes initial calibration or acknowledgement-triggered
 rearm completion, rather than a contact detection.
 
 Each snapshot records all six joints' positions, measured velocities and filtered
@@ -767,3 +769,86 @@ failure is captured.
 After updating these sources, rebuild `zeroerr` and `erob_moveit_runtime`, then
 restart the robot backend/controller to load the new C++ plugin and Python files.
 Do not infer that compiling the sources updates an already-running controller.
+
+When the observer is uninitialized (including the drive-stability wait after a
+reset), the torque plot publishes NaN samples at the readiness telemetry cadence.
+These denote unavailable estimates and prevent interpolation from an old torque
+residual to the reset value. Once initialized, live residuals remain visible even
+while readiness is false; plotting does not change the collision or recovery gates.
+
+### Separate collision and operator stopping profiles
+
+The detector calls `RobotController.collision_stop()` and the coordinator selects
+`send_collision_stop_trajectory()`. UI/process Stop continues to call
+`stop_motion()` and uses the existing operator path-stop profile, including its
+Joint_6 hold. Collision-specific settings use `EXECUTOR_COLLISION_STOP_*`; the
+planned-path collision duration is 0.3 seconds with no held joints. Logs identify
+`stop_kind=collision` or `stop_kind=operator`. A later process Stop does not
+overwrite an active collision-stop trajectory.
+
+The operator profile uses the existing planned-path algorithm. The collision
+profile defaults to the measured-state brake described below. Selecting `planned_path`
+restores the previous planned-path collision algorithm and cancellation
+fallback. Neither path is a safety-rated drive stop function.
+
+### Measured-state collision-brake trial
+
+`EXECUTOR_COLLISION_STOP_STRATEGY: measured_ruckig` selects a local native Ruckig
+velocity-control trajectory. It starts from measured joint positions, velocities
+and a 10 Hz low-pass acceleration estimate from successive joint-state samples.
+All six axes target zero velocity and acceleration with time synchronization;
+there is no Joint_6 hold and no initial correction toward the planned path.
+Acceleration/deceleration, velocity and jerk limits are read from the active
+profile's `joint_limits.yaml` or its package default, and position bounds from
+the expanded active URDF. Missing limits or a missing native library refuse this
+brake; no invented joint-limit defaults are used.
+
+The initial trial rejects feedback older than 50 ms (receipt and source stamp),
+trajectories longer than 0.6 seconds, or per-axis excursions exceeding 0.35 rad.
+These configurable rejection budgets are not validated stopping-distance claims.
+Samples include each jerk-phase boundary, positions, velocities and accelerations,
+so the controller can interpolate each constant-jerk segment. A zero trajectory
+header starts execution on receipt. The collision goal also requires velocity
+within 0.02 rad/s at completion. No waits for server discovery are allowed after
+generating a measured-state brake.
+
+Logs contain `generator=measured_ruckig`, state age, generated duration, initial
+joint state and predicted per-axis travel. Result logs include measured endpoint
+positions/velocities and feedback age. If generation fails, the controller is
+unavailable or feedback expires before dispatch, the coordinator uses its existing
+cancellation fallback and records the reason. A rejected brake requests cancellation
+of the previous goal when its handle exists; an unavailable handle is explicitly
+reported as unconfirmed. Execution-active collisions can submit a replacement brake
+even when the previous goal handle is missing. Stale goal responses cannot erase a
+new pending collision-stop request.
+
+For a quick trial revert, set `EXECUTOR_COLLISION_STOP_STRATEGY: planned_path`
+and restore `EXECUTOR_COLLISION_STOP_SAMPLE_PERIOD_S: 0.04`, then restart ZeroErr.
+UI/process Stop retains its original Joint_6 hold in either mode. Native-library
+and trajectory tests plus offline snapshots do not establish physical stopping
+performance; verify measured deceleration, travel and drive faults at reduced
+speed before drawing conclusions about the earlier abrupt stops.
+
+### Stop strategy organization
+
+`erob_moveit_runtime/scripts/motion/execution/stop_strategies/` contains separate
+`planned_path.py` and `measured_ruckig.py` implementations. `base.py` defines the
+`StopStrategy` interface and `StopPlan` result, including trajectory, held-joint
+exemptions, final velocity tolerance, server timeout and optional dispatch deadline.
+`TrajectoryExecutor` handles shared action submission and results without selecting
+strategy-specific braking behavior. `braking_state.py` supplies shared measured
+feedback; the Ruckig wrapper is `stop_strategies/ruckig_generator.py` and its native
+implementation is `src_cpp/stop_strategies/measured_ruckig.cpp`.
+
+Select `EXECUTOR_COLLISION_STOP_STRATEGY: measured_ruckig` or `planned_path` and
+restart ZeroErr. To add a strategy, implement `build(executor, stop_duration_s=None)`
+and register its name in `stop_strategies.STRATEGIES`. A refusal returns `(None,
+reason)` and uses the existing cancellation fallback. A missing native dependency
+or unknown strategy is logged and also leaves cancellation fallback active; it
+never silently selects a different braking algorithm.
+
+For older external configurations only, the deprecated
+`EXECUTOR_COLLISION_STOP_USE_MEASURED_STATE` boolean maps to the corresponding
+strategy if the named setting is absent. The named setting takes precedence.
+Other robot packages without either setting retain `planned_path`. Strategy
+selection does not alter the regular operator/process Stop profile.

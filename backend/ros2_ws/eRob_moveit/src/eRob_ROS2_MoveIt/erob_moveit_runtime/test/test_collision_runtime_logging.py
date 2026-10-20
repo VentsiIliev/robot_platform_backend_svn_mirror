@@ -39,7 +39,9 @@ class TestCollisionRuntimeLogging(unittest.TestCase):
             _collision_monitor_state_ts=time.monotonic(), is_executing=True,
             _collision_monitor_acknowledgements=0, _collision_monitor_baseline_valid=True,
             last_submitted_task_id=123, get_logger=lambda: self.logger,
+            get_drive_operation_status=MagicMock(return_value={"requested_enabled": True}),
             trip_motion_interlock=MagicMock(), stop_motion=MagicMock(return_value={"success": True}),
+            collision_stop=MagicMock(return_value={"success": True}),
         )
         self.robot._collision_runtime_context = lambda: self.methods["_collision_runtime_context"](self.robot)
 
@@ -112,13 +114,15 @@ class TestCollisionRuntimeLogging(unittest.TestCase):
         self.assertTrue(event["runtime_context"]["is_executing"])
         self.assertFalse(event["runtime_context"]["detection_suppressed"])
         self.assertGreaterEqual(event["runtime_context"]["since_reset_complete_ms"], 50)
-        self.robot.stop_motion.assert_called_once_with()
+        self.robot.collision_stop.assert_called_once_with()
+        self.robot.stop_motion.assert_not_called()
 
     def test_failed_diagnostic_capture_cannot_prevent_motion_stop(self):
         self.robot._collision_runtime_context = MagicMock(side_effect=RuntimeError("diagnostic unavailable"))
         self.methods["_collision_monitor_stop_callback"](self.robot, SimpleNamespace(data='{"joint":"Joint_2"}'))
         self.robot.trip_motion_interlock.assert_called_once()
-        self.robot.stop_motion.assert_called_once_with()
+        self.robot.collision_stop.assert_called_once_with()
+        self.robot.stop_motion.assert_not_called()
         self.assertEqual(self.robot.last_collision_event["runtime_context_error"], "diagnostic unavailable")
 
     def test_readiness_logs_transitions_without_logging_every_telemetry_sample(self):
@@ -181,6 +185,57 @@ class TestCollisionRuntimeLogging(unittest.TestCase):
             time=lambda: 123.0 + clock.now, sleep=sleep,
         )
         return clock
+
+    def test_timeout_records_joint_recovery_state_and_keeps_interlock(self):
+        self.prepare_reset()
+        sample = SimpleNamespace(interface_values=[SimpleNamespace(
+            interface_names=["observer_ready", "baseline_valid", "acknowledgement_count",
+                             "filtered_residual_nm", "release_limit_nm"],
+            values=[0.0, 1.0, 1.0, 4.0, 3.0],
+        )])
+
+        def on_sleep(now):
+            self.methods["_collision_monitor_state_callback"](self.robot, sample)
+
+        self.fake_clock(on_sleep)
+        result = self.methods["reset_motion_interlock"](self.robot)
+        self.assertFalse(result["success"])
+        self.assertIn("Joint_1 residual 4.000 Nm exceeds release limit 3.000 Nm", result["error"])
+        self.assertTrue(self.robot._motion_interlock_active)
+        self.assertFalse(self.robot._collision_recovery_hold)
+        entries = [json.loads(call.args[0].split('] ', 1)[1])
+                   for call in self.logger.warning.call_args_list]
+        failure = next(entry for entry in entries if entry["phase"] == "reset_failed")
+        self.assertEqual(failure["monitor_state"][0]["filtered_residual_nm"], 4.0)
+        self.assertEqual(failure["monitor_state"][0]["release_limit_nm"], 3.0)
+        self.assertIsNotNone(failure["runtime_context"]["monitor_state_age_ms"])
+
+    def test_disable_during_recovery_fails_promptly_without_reenabling(self):
+        self.prepare_reset()
+        self.robot._collision_monitor_ready = False
+
+        def on_sleep(now):
+            self.robot.get_drive_operation_status.return_value = {"requested_enabled": False}
+
+        clock = self.fake_clock(on_sleep)
+        result = self.methods["reset_motion_interlock"](self.robot)
+        self.assertFalse(result["success"])
+        self.assertIn("drives were disabled during collision recovery", result["error"])
+        self.assertLess(clock.now, 0.1)
+        self.assertTrue(self.robot._motion_interlock_active)
+        self.assertFalse(self.robot._collision_recovery_hold)
+        self.robot.runtime_adapter.set_drive_operation_enabled.assert_called_once_with(self.robot, True)
+
+    def test_stale_recovery_state_does_not_report_old_joint_blocker(self):
+        self.prepare_reset()
+        self.robot._collision_monitor_ready = False
+        self.robot._collision_monitor_state_ts = 0.0
+        self.robot._collision_monitor_recovery_state = [
+            {"joint": "Joint_5", "filtered_residual_nm": 4.0, "release_limit_nm": 1.6}]
+        self.fake_clock(lambda now: None)
+        result = self.methods["reset_motion_interlock"](self.robot)
+        self.assertIn("telemetry is stale", result["error"])
+        self.assertNotIn("Joint_5", result["error"])
 
     def test_duplicate_reset_during_recovery_does_not_clear_hold(self):
         self.prepare_reset()
@@ -304,7 +359,7 @@ class TestCollisionRuntimeLogging(unittest.TestCase):
         request = self.robot._collision_acknowledged_pub.publish.call_args.args[0]
         self.assertTrue(json.loads(request.data)["recalibrate"])
 
-    def test_ordinary_acknowledgement_does_not_request_calibration(self):
+    def test_ordinary_acknowledgement_relearns_baseline(self):
         self.prepare_reset()
 
         def on_sleep(now):
@@ -315,7 +370,12 @@ class TestCollisionRuntimeLogging(unittest.TestCase):
         self.fake_clock(on_sleep)
         self.assertTrue(self.methods["reset_motion_interlock"](self.robot)["success"])
         request = self.robot._collision_acknowledged_pub.publish.call_args.args[0]
-        self.assertFalse(json.loads(request.data)["recalibrate"])
+        self.assertTrue(json.loads(request.data)["recalibrate"])
+        entries = [json.loads(call.args[0].split('] ', 1)[1])
+                   for call in self.logger.warning.call_args_list
+                   if call.args[0].startswith('[CollisionRecoveryDiagnostics]')]
+        completed = next(entry for entry in entries if entry["phase"] == "reset_completed")
+        self.assertFalse(completed["baseline_retained"])
 
 
 if __name__ == "__main__":

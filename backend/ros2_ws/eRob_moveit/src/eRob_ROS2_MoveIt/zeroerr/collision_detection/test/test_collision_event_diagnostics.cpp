@@ -1,12 +1,19 @@
 #include "zeroerr/collision_event_diagnostics.hpp"
 
 #include <cassert>
+#include <cmath>
 #include <iostream>
 #include <thread>
 
 int main()
 {
   using namespace zeroerr;
+  CollisionJointValues residual{{0.5, -2.0, -0.4, 0.6, -1.6, -4.445}};
+  assert(observer_residual_for_plot(residual, true) == residual);
+  const auto unavailable = observer_residual_for_plot(residual, false);
+  for (double value : unavailable) {assert(std::isnan(value));}
+  // Readiness may be false during settling, but initialized torque stays visible.
+  assert(observer_residual_for_plot(residual, true)[5] == -4.445);
   CollisionDiagnosticQueue<CollisionEventSnapshot, 3> queue;
   CollisionEventSnapshot event;
   event.event_id = 7;

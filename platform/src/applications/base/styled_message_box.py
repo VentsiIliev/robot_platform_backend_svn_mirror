@@ -4,7 +4,7 @@ from typing import Sequence
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QDialog, QFrame, QHBoxLayout, QLabel, QMessageBox, QPushButton,
-    QVBoxLayout, QWidget,
+    QSizePolicy, QVBoxLayout, QWidget,
 )
 
 from pl_gui.settings.settings_view.styles import (
@@ -109,12 +109,14 @@ class ActionWarningDialog(QDialog):
         titles = QVBoxLayout()
         heading_label = QLabel(heading)
         heading_label.setObjectName("warningHeading")
+        heading_label.setWordWrap(True)
         heading_label.setStyleSheet(
             f"color: {ERROR_COLOR}; font-size: 12px; font-weight: bold;"
         )
         titles.addWidget(heading_label)
         title_label = QLabel(title)
         title_label.setObjectName("warningTitle")
+        title_label.setWordWrap(True)
         title_label.setStyleSheet(
             f"color: {TEXT_COLOR}; font-size: 20px; font-weight: bold;"
         )
@@ -140,6 +142,7 @@ class ActionWarningDialog(QDialog):
         if status:
             status_label = QLabel(status)
             status_label.setObjectName("warningStatus")
+            status_label.setWordWrap(True)
             status_label.setStyleSheet(
                 f"background: {SECONDARY_BG}; color: {ERROR_COLOR}; "
                 "padding: 10px; font-size: 12px; font-weight: bold;"
@@ -164,6 +167,22 @@ class ActionWarningDialog(QDialog):
                 button_row.addWidget(button, 1)
         if button_row.count():
             layout.addLayout(button_row)
+
+        # QLabel's default minimum height is only one line. The dialog's
+        # initial size can therefore compress wrapped paragraphs and clip the
+        # first/last lines. Reserve the full wrapped height at the narrowest
+        # supported dialog width before Qt chooses the initial window size.
+        self.ensurePolished()
+        margins = layout.contentsMargins()
+        content_width = self.minimumWidth() - margins.left() - margins.right()
+        for label in self.findChildren(QLabel):
+            if not label.wordWrap():
+                continue
+            width = content_width
+            if label in (heading_label, title_label):
+                width -= icon.width() + header.spacing()
+            label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+            label.setMinimumHeight(max(label.minimumSizeHint().height(), label.heightForWidth(width)))
 
     def _on_action_clicked(self) -> None:
         button = self.sender()

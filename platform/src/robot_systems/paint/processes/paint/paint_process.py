@@ -335,7 +335,8 @@ class PaintProcess(BaseProcess):
             and failure.stage == "collision_monitor"
         )
         if not has_collision_failure and not self._backend_collision_interlock_active():
-            return False, "No collision hold is awaiting acknowledgement"
+            # A queued dialog may outlive a successful release from another view.
+            return True, "Collision hold already cleared"
         method = getattr(self._robot_service, "acknowledge_collision_interlock", None)
         if not callable(method):
             return False, "Robot backend does not support collision acknowledgement"

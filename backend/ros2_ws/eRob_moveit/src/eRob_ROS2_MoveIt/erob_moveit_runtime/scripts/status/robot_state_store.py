@@ -2,6 +2,7 @@
 """Thread-safe store for planner-facing robot state snapshots."""
 
 from threading import Lock
+from motion.execution.braking_state import BrakingStateTracker
 
 
 class RobotStateStore:
@@ -9,6 +10,7 @@ class RobotStateStore:
         self._lock = Lock()
         self._prev_cartesian = None
         self._current_joint_state = None
+        self._braking_tracker = BrakingStateTracker()
         self._latest_data = None
 
     def set_prev_cartesian(self, value):
@@ -22,6 +24,11 @@ class RobotStateStore:
     def set_current_joint_state(self, value):
         with self._lock:
             self._current_joint_state = value
+            self._braking_tracker.observe(value)
+
+    def get_braking_state(self):
+        with self._lock:
+            return self._braking_tracker.state
 
     def get_current_joint_state(self):
         with self._lock:

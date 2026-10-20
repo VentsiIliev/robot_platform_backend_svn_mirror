@@ -43,6 +43,7 @@ class UserNotificationEvent:
     dedupe_key: str | None = None
     actions: tuple[NotificationAction, ...] = ()
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    busy: bool = False
 
 
 @dataclass(frozen=True)

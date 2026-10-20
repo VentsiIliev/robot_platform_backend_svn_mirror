@@ -284,6 +284,7 @@ class RobotController(Node):
         self._collision_monitor_ready = False
         self._collision_monitor_state_ts = 0.0
         self._collision_monitor_acknowledgements = None
+        self._collision_monitor_recovery_state = []
         self._collision_monitor_baseline_valid = False
         self._collision_detection_suppressed = False
         self._collision_last_reset_completed_monotonic_ns = None
@@ -418,7 +419,7 @@ class RobotController(Node):
             f'[CollisionMonitor] Active collision response requested motion stop: {event}')
         try:
             stop_started_ns = time.monotonic_ns()
-            result = self.stop_motion()
+            result = self.collision_stop()
             self.get_logger().warning(
                 f'[CollisionMonitor] Motion stop result: {result}')
             self.get_logger().warning(
@@ -436,8 +437,15 @@ class RobotController(Node):
         readiness = []
         acknowledgements = []
         baselines = []
+        recovery_state = []
         for interfaces in msg.interface_values:
             values = dict(zip(interfaces.interface_names, interfaces.values))
+            joint_names = getattr(msg, 'joint_names', [])
+            recovery_state.append({
+                "joint": joint_names[len(recovery_state)]
+                if len(recovery_state) < len(joint_names) else f"Joint_{len(recovery_state) + 1}",
+                **values,
+            })
             if 'observer_ready' in values:
                 readiness.append(float(values['observer_ready']) >= 0.5)
             if 'acknowledgement_count' in values:
@@ -445,6 +453,7 @@ class RobotController(Node):
             if 'baseline_valid' in values:
                 baselines.append(float(values['baseline_valid']) >= 0.5)
         with self._motion_interlock_lock:
+            self._collision_monitor_recovery_state = recovery_state
             previous_ready = self._collision_monitor_ready
             self._collision_monitor_ready = bool(readiness) and all(readiness)
             current_ready = self._collision_monitor_ready
@@ -1210,6 +1219,9 @@ class RobotController(Node):
     def stop_motion(self):
         return self._motion.stop_motion()
 
+    def collision_stop(self):
+        return self._motion.collision_stop()
+
     def controlled_stop(self, expected_task_id, *, stop_duration_s=None):
         return self._motion.controlled_stop(
             expected_task_id, stop_duration_s=stop_duration_s
@@ -1450,7 +1462,7 @@ class RobotController(Node):
             previous_event = self.last_collision_event
             collision_reset = recalibrate or (was_active and isinstance(previous_event, dict))
             previous_acknowledgements = self._collision_monitor_acknowledgements
-            baseline_retained = self._collision_monitor_baseline_valid and not recalibrate
+            baseline_retained = False  # Every collision acknowledgement relearns the baseline.
             if collision_reset and previous_acknowledgements is None:
                 return {
                     "success": False, "reset": False,
@@ -1471,6 +1483,8 @@ class RobotController(Node):
                 self.get_logger().warning(
                     '[CollisionRecoveryDiagnostics] ' + json.dumps({
                         "phase": "reset_failed", "wall_time_s": time.time(), "error": str(error),
+                        "monitor_state": getattr(self, '_collision_monitor_recovery_state', []),
+                        "runtime_context": self._collision_runtime_context(),
                     }))
                 return {"success": False, "reset": False, "error": str(error)}
 
@@ -1479,7 +1493,7 @@ class RobotController(Node):
                 if not bool(enable_result.get('success', False)):
                     return fail_recovery(enable_result.get('error') or 'failed to enable drives for collision monitor recovery')
                 acknowledged = String()
-                acknowledged.data = json.dumps({"timestamp": time.time(), "recalibrate": recalibrate})
+                acknowledged.data = json.dumps({"timestamp": time.time(), "recalibrate": True})
                 self._collision_acknowledged_pub.publish(acknowledged)
                 expected_acknowledgements = previous_acknowledgements + 1
                 deadline = time.monotonic() + 12.0
@@ -1494,11 +1508,37 @@ class RobotController(Node):
                         interrupted = self._motion_interlock_active or self.last_collision_event is not previous_event
                     if interrupted:
                         return fail_recovery('a new collision interrupted recovery')
+                    drive_status = self.get_drive_operation_status()
+                    if drive_status.get('requested_enabled') is False:
+                        # Respect an explicit disable/Stop from another caller.
+                        # Do not keep waiting for an observer that cannot run,
+                        # and never automatically undo the disable request.
+                        return fail_recovery('drives were disabled during collision recovery; motion remains held')
                     if monitor_ready:
                         break
                     time.sleep(0.05)
                 else:
-                    return fail_recovery('collision monitor did not become stationary and clear within 12 seconds')
+                    error = 'collision monitor did not become stationary and clear within 12 seconds'
+                    with self._motion_interlock_lock:
+                        state_fresh = time.monotonic() - self._collision_monitor_state_ts <= 0.5
+                        state = list(getattr(self, '_collision_monitor_recovery_state', []))
+                        acknowledgements = self._collision_monitor_acknowledgements
+                    if not state_fresh:
+                        error += ': collision monitor telemetry is stale'
+                    elif acknowledgements is None or acknowledgements < expected_acknowledgements:
+                        error += ': observer acknowledgement was not confirmed'
+                    else:
+                        blockers = []
+                        for joint in state:
+                            residual = joint.get('filtered_residual_nm')
+                            limit = joint.get('release_limit_nm')
+                            if residual is not None and limit is not None and abs(residual) >= limit:
+                                blockers.append(
+                                    f"{joint.get('joint', 'unknown joint')} residual {residual:.3f} Nm "
+                                    f"exceeds release limit {limit:.3f} Nm")
+                        if blockers:
+                            error += ': ' + '; '.join(blockers)
+                    return fail_recovery(error)
             except Exception as exc:
                 return fail_recovery(f'collision observer rearm failed: {exc}')
 

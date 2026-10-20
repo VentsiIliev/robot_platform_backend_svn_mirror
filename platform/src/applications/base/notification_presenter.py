@@ -6,6 +6,7 @@ from typing import Callable, Mapping
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QMessageBox, QWidget
 
+from src.applications.base.recovery_progress_dialog import RecoveryProgressDialog
 from src.applications.base.styled_message_box import (
     ActionWarningDialog,
     DialogAction,
@@ -136,6 +137,12 @@ class UserNotificationPresenter(QObject):
     ) -> None:
         existing = self._active_dialogs.get(event.dedupe_key)
         if existing is not None:
+            return
+
+        if event.busy:
+            dialog = RecoveryProgressDialog(self._parent, title, message)
+            self._active_dialogs[event.dedupe_key] = dialog
+            dialog.open()
             return
 
         if event.actions:

@@ -20,17 +20,20 @@ class PaintCollisionInterlockMonitor:
     SOURCE = "paint_collision_interlock"
     ACTION_KEEP_HELD = "keep_collision_held"
     ACTION_RELEASE = "release_collision_hold"
+    PROGRESS_KEY = "paint-collision-recovery-progress"
     def __init__(
         self,
         robot_service,
         messaging,
         *,
         vacuum_pump=None,
+        acknowledge_collision=None,
         poll_period_s: float = 0.05,
     ) -> None:
         self._robot = robot_service
         self._messaging = messaging
         self._vacuum_pump = vacuum_pump
+        self._acknowledge_collision = acknowledge_collision
         self._poll_period_s = max(0.05, float(poll_period_s))
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
@@ -73,6 +76,9 @@ class PaintCollisionInterlockMonitor:
             self._logger.debug("Collision interlock status unavailable", exc_info=True)
             return
         if not isinstance(status, dict):
+            return
+        # The worker owns the progress popup through backend AND local process reset.
+        if self._release_in_progress.is_set():
             return
         interlock = status.get("motion_interlock")
         active = isinstance(interlock, dict) and bool(interlock.get("active", False))
@@ -128,7 +134,8 @@ class PaintCollisionInterlockMonitor:
         else:
             self._logger.error("Collision response could not turn vacuum pump OFF; retrying")
 
-    def _publish_collision_notice(self, reason: str, event_key: str) -> None:
+    def _publish_collision_notice(self, reason: str, event_key: str, *, recovery_failed: bool = False) -> None:
+        self._logger.warning("Collision notice: %s", reason)
         notice_key = f"paint-collision:{event_key}"
         self._active_notice_key = notice_key
         self._messaging.publish(
@@ -136,14 +143,18 @@ class PaintCollisionInterlockMonitor:
             UserNotificationEvent(
                 source=self.SOURCE,
                 severity=NotificationSeverity.CRITICAL,
-                title_key="notification.collision.title",
-                message_key="notification.collision.message",
-                fallback_title="Collision Detected",
+                title_key=("notification.collision.reset_failed_title" if recovery_failed
+                           else "notification.collision.title"),
+                message_key=("notification.collision.reset_failed_message" if recovery_failed
+                             else "notification.collision.message"),
+                fallback_title="Reset not completed" if recovery_failed else "Collision Detected",
                 fallback_message=(
+                    "Motion remains held. Check that the robot is clear of obstructions and stationary, "
+                    "then try releasing the hold again."
+                    if recovery_failed else
                     "Robot motion is held. Remove the obstruction, then release the "
                     "collision hold when it is safe to move again."
                 ),
-                detail=reason,
                 dedupe_key=notice_key,
                 actions=(
                     NotificationAction(
@@ -178,24 +189,61 @@ class PaintCollisionInterlockMonitor:
         ).start()
 
     def _release_collision_hold(self) -> None:
+        self._release_in_progress.set()
         try:
-            acknowledge = getattr(self._robot, "acknowledge_collision_interlock", None)
-            if not callable(acknowledge):
-                self._logger.error("Robot backend does not support collision acknowledgement")
-                return
-            result = acknowledge()
-            if not isinstance(result, dict) or not bool(result.get("success", False)):
-                detail = (
-                    result.get("message") or result.get("error")
-                    if isinstance(result, dict) else "Invalid backend response"
-                )
+            self._messaging.publish(
+                NotificationTopics.USER,
+                UserNotificationEvent(
+                    source=self.SOURCE,
+                    severity=NotificationSeverity.INFO,
+                    title_key="notification.collision.resetting_title",
+                    message_key="notification.collision.resetting_message",
+                    fallback_title="Resetting collision hold",
+                    fallback_message=(
+                        "Resetting robot protection. Keep the robot stationary and clear of obstructions. "
+                        "This usually takes 10–11 seconds. Motion remains held until recovery completes."
+                    ),
+                    dedupe_key=self.PROGRESS_KEY,
+                    busy=True,
+                ),
+            )
+            if self._acknowledge_collision is not None:
+                # The process owns both its local fault and backend acknowledgement.
+                success, detail = self._acknowledge_collision()
+            else:
+                acknowledge = getattr(self._robot, "acknowledge_collision_interlock", None)
+                if not callable(acknowledge):
+                    raise RuntimeError("Robot backend does not support collision acknowledgement")
+                result = acknowledge()
+                success = isinstance(result, dict) and bool(result.get("success", False))
+                detail = (result.get("message") or result.get("error")
+                          if isinstance(result, dict) else "Invalid backend response")
+            if not success:
                 self._logger.error("Collision hold release failed: %s", detail)
+                self._show_release_failure(str(detail))
                 return
+            self._dismiss_active_notice()
             self._logger.warning("Collision hold release accepted by operator")
         except Exception:
             self._logger.exception("Collision hold release request failed")
+            self._show_release_failure("Collision hold release request failed")
         finally:
+            self._messaging.publish(
+                NotificationTopics.DISMISS,
+                DismissNotificationEvent(dedupe_key=self.PROGRESS_KEY),
+            )
             self._release_in_progress.clear()
+
+    def _show_release_failure(self, detail: str) -> None:
+        # Replace the closed action dialog with the reason and a retry action;
+        # do not require a separate warning acknowledgement first.
+        self._messaging.publish(
+            NotificationTopics.DISMISS,
+            DismissNotificationEvent(dedupe_key=self.PROGRESS_KEY),
+        )
+        self._dismiss_active_notice()
+        if self._last_event_key is not None:
+            self._publish_collision_notice(detail, self._last_event_key, recovery_failed=True)
 
     def _dismiss_active_notice(self) -> None:
         key = self._active_notice_key
