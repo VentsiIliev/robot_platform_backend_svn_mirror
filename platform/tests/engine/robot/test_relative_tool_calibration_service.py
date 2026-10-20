@@ -8,6 +8,9 @@ class _Registry:
     def __init__(self):
         self.calls = []
 
+    def get_tool_registry(self):
+        return {"tool_id_map": {2: "TOOL_2"}, "tool_registry": {"TOOL_2": [10, 25, 125, 0, 0, 90]}}
+
     def update_tool(self, tool_id, name, transform, *, persist, collision_profile=None):
         self.calls.append((tool_id, name, list(transform), persist, collision_profile))
         return True, "saved"
@@ -46,7 +49,7 @@ class RelativeToolCalibrationServiceTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "at least 2"):
             service.solve()
 
-    def test_activation_composes_local_offset_and_activates(self):
+    def test_activation_selects_backend_geometry_without_writing(self):
         registry = _Registry()
         activator = _Activator()
         service = ToolActivationService(registry, activator)
@@ -55,7 +58,7 @@ class RelativeToolCalibrationServiceTests(unittest.TestCase):
             tool_id=2,
             name="TOOL_2",
             reference_transform=[10, 20, 100, 0, 0, 90],
-            relative_transform=[5, 0, 25, 0, 0, 0],
+            relative_transform=[999, 999, 999, 0, 0, 0],
         )
 
         self.assertTrue(ok)
@@ -63,7 +66,7 @@ class RelativeToolCalibrationServiceTests(unittest.TestCase):
         self.assertAlmostEqual(resolved[1], 25)
         self.assertAlmostEqual(resolved[2], 125)
         self.assertEqual(activator.active, 2)
-        self.assertEqual(registry.calls[0][0], 2)
+        self.assertEqual(registry.calls, [])
 
 
 if __name__ == "__main__":

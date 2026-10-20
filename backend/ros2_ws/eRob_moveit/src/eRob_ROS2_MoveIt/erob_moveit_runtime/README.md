@@ -78,3 +78,8 @@ It does **not** guarantee that the full Cartesian path between start and target 
 - [Architecture](docs/ARCHITECTURE.md)
 - [REST API](docs/REST_API.md)
 - [Motion And Safety](docs/MOTION_AND_SAFETY.md)
+
+## Profile configuration API
+
+See [Backend profile configuration](docs/backend_configuration.md) for ownership,
+revision-checked edits, saved/applied status, and standalone operation.

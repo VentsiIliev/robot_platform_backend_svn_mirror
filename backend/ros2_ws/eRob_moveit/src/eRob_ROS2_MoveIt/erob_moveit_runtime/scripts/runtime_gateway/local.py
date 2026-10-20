@@ -48,6 +48,7 @@ class LocalRuntimeGateway(RuntimeGateway):
         self._node = node
         self._robot_getter = robot_getter
         self._node_getter = node_getter
+        self._configuration_service = None
 
     @property
     def robot(self) -> Any | None:
@@ -530,33 +531,54 @@ class LocalRuntimeGateway(RuntimeGateway):
 
     # --- tools / workobject ------------------------------------------------
 
+    @property
+    def configuration(self):
+        if self._configuration_service is None:
+            from configuration.bootstrap import build_configuration_service
+            self._configuration_service = build_configuration_service(
+                config, lambda: self.node, lambda: self.robot)
+        return self._configuration_service
+
     def tool_registry(self) -> dict:
-        return config.get_tool_registry_snapshot()
+        view = self.configuration.get('calibration')
+        return {**view['tools'], 'revision': view['revision'], 'profile': view['profile'],
+                'pending_application': view['pending_application'],
+                'tool_collision_profiles': dict(config._CONFIG.get('TOOL_COLLISION_PROFILES', {}))}
 
     def active_tool_name(self) -> str:
         return str(getattr(self.node, "active_tool_name", "TOOL_0"))
 
     def set_active_tool(self, tool_name: str) -> str:
+        if self.configuration.get('calibration')['pending_application']:
+            raise ValueError('Saved calibration is pending application; apply it before selecting a tool')
         self.node.set_tool(tool_name)
         return str(getattr(self.node, "active_tool_name", tool_name))
 
     def update_tool_registry(
         self, tool_id, name=None, transform=None, persist=False, collision_profile=None
     ) -> dict:
-        snapshot = config.update_tool_registry(
-            tool_id=tool_id,
-            name=name,
-            transform=transform,
-            persist=bool(persist),
-            collision_profile=collision_profile,
-        )
-        resolved = config.resolve_tool_name(tool_id)
-        if getattr(self.node, "active_tool_name", None) == resolved:
-            self.node.set_tool(resolved)
-        return snapshot
+        if not persist:
+            raise ValueError('Registry edits must be persisted to the backend profile')
+        changes = {'transform': transform}
+        if name is not None:
+            changes['name'] = name
+        if collision_profile is not None:
+            changes['collision_profile'] = collision_profile
+        view = self.configuration.get('calibration')
+        result = self.configuration.update('calibration', changes, view['revision'], tool_id=tool_id)
+        return {**result['tools'], 'success': not result['pending_application'], 'saved': True,
+                'revision': result['revision'],
+                'pending_application': result['pending_application'],
+                'application_error': result['application_error']}
 
     def workobject_registry(self) -> dict:
-        return config.get_workobject_registry_snapshot()
+        view = self.configuration.get('calibration')
+        saved = view['saved']
+        return {'workobject_registry': saved.get('WORKOBJECT_REGISTRY', {}),
+                'workobject_id_map': saved.get('WORKOBJECT_ID_MAP', {}),
+                'default_workobject_id': saved.get('DEFAULT_WORKOBJECT_ID', 0),
+                'revision': view['revision'], 'profile': view['profile'],
+                'pending_application': view['pending_application']}
 
     def active_workobject(self) -> dict:
         robot = self.robot
@@ -578,20 +600,17 @@ class LocalRuntimeGateway(RuntimeGateway):
         return self.active_workobject()
 
     def update_workobject_registry(self, user_id, name=None, transform=None, persist=False) -> dict:
-        snapshot = config.update_workobject_registry(
-            user_id=user_id,
-            name=name,
-            transform=transform,
-            persist=bool(persist),
-        )
-        resolved = config.resolve_workobject_name(user_id)
-        values = getattr(config, "WORKOBJECT_REGISTRY", {}).get(resolved)
-        if values is not None:
-            self.robot.set_workobject(WorkObject(*values), user_id=int(user_id))
-        active = self.active_workobject()
-        if int(active.get("user_id", -1)) == int(user_id):
-            self.set_active_workobject(int(user_id))
-        return snapshot
+        if not persist:
+            raise ValueError('Registry edits must be persisted to the backend profile')
+        changes = {'transform': transform}
+        if name is not None:
+            changes['name'] = name
+        view = self.configuration.get('calibration')
+        result = self.configuration.update('calibration', changes, view['revision'], user_id=user_id)
+        return {**self.workobject_registry(), 'success': not result['pending_application'], 'saved': True,
+                'revision': result['revision'],
+                'pending_application': result['pending_application'],
+                'application_error': result['application_error']}
 
     def set_workobject(self, origin, user_id=0) -> None:
         self.robot.set_workobject(WorkObject(*origin), user_id=user_id)

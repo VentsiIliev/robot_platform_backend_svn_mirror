@@ -181,6 +181,9 @@ class ToolSettingsController(IApplicationController):
         tool = next((item for item in self._model.get_tools() if item.id == tool_id), None)
         if tool is None:
             return
+        if tool.reference_tool_id is None:
+            show_warning(self._view, "Tool Offsets", "Backend geometry is unavailable. Reconnect and reload before editing.")
+            return
         dialog = _ToolGeometryDialog(tool, parent=self._view)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return

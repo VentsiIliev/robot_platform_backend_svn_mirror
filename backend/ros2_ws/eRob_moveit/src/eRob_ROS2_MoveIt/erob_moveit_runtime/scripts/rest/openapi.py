@@ -361,3 +361,40 @@ SWAGGER_HTML = """<!doctype html>
 </body>
 </html>
 """
+
+
+def _configuration_openapi():
+    section = {"name": "section", "in": "path", "required": True,
+               "schema": {"type": "string", "enum": ["calibration", "sensorless_collision"]}}
+    mutation = {"required": True, "content": {"application/json": {"schema": {
+        "type": "object", "additionalProperties": False, "required": ["expected_revision", "changes"],
+        "properties": {"expected_revision": {"type": "string"}, "changes": {"type": "object"}},
+    }}}}
+    responses = {"200": {"description": "Saved/effective and applied values; check pending_application"},
+                 "400": {"description": "Invalid configuration"},
+                 "409": {"description": "Stale or wrong-profile revision; reload before saving"},
+                 "503": {"description": "Configuration storage unavailable"}}
+    paths = OPENAPI_SPEC["paths"]
+    paths["/configuration"] = {"get": {"tags": ["configuration"], "summary": "Backend configuration authority and active profile",
+                                       "responses": {"200": {"description": "Active profile and supported sections"}}}}
+    paths["/configuration/{section}"] = {
+        "parameters": [section],
+        "get": {"tags": ["configuration"], "summary": "Read saved/effective and applied profile configuration", "responses": responses},
+        "patch": {"tags": ["configuration"], "summary": "Save validated profile changes, then attempt application",
+                  "requestBody": mutation, "responses": responses},
+    }
+    paths["/configuration/{section}/apply"] = {
+        "parameters": [section], "post": {"tags": ["configuration"], "summary": "Retry application of a saved revision",
+        "requestBody": {"required": True, "content": {"application/json": {"schema": {
+            "type": "object", "additionalProperties": False, "required": ["expected_revision"],
+            "properties": {"expected_revision": {"type": "string"}},
+        }}}}, "responses": responses}}
+    for collection, identifier in (("tools", "tool_id"), ("workobjects", "user_id")):
+        paths[f"/configuration/calibration/{collection}/{{{identifier}}}"] = {
+            "parameters": [{"name": identifier, "in": "path", "required": True,
+                            "schema": {"type": "integer", "minimum": 0}}],
+            "patch": {"tags": ["configuration"], "summary": f"Explicitly edit backend {collection} geometry",
+                      "requestBody": mutation, "responses": responses}}
+
+
+_configuration_openapi()

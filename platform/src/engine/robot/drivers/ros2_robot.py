@@ -230,6 +230,18 @@ class Ros2Robot(IRobot):
     def set_active_tool(self, tool: int) -> bool:
         return self._client.set_active_tool(tool)
 
+    def get_backend_configuration(self, section):
+        operation = getattr(self._client, "get_backend_configuration", None)
+        if not callable(operation):
+            raise RuntimeError("Backend configuration is not supported by this robot connection")
+        return operation(section)
+
+    def update_backend_configuration(self, section, changes, expected_revision, *, tool_id=None):
+        operation = getattr(self._client, "update_backend_configuration", None)
+        if not callable(operation):
+            raise RuntimeError("Backend configuration is not supported by this robot connection")
+        return operation(section, changes, expected_revision, tool_id=tool_id)
+
     def get_tool_registry(self):
         getter = getattr(self._client, "get_tool_registry", None)
         return getter() if callable(getter) else None

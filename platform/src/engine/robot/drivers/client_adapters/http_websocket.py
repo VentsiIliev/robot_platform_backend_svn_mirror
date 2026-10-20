@@ -1457,28 +1457,28 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
 
     def get_collision_monitor_config(self) -> dict:
         try:
-            response = self._session.get(
-                f"{self.server_url}/collision/monitor/config", timeout=5)
-            raw = response.json()
-            return raw if isinstance(raw, dict) else {
-                "success": False, "error": "invalid_response"}
+            result = self.get_backend_configuration('sensorless_collision')
+            self._collision_configuration_revision = result['revision']
+            return {**result, 'config': result['saved']['monitor']}
         except Exception as exc:
+            self._collision_configuration_revision = None
             logger.error("Collision monitor configuration read failed: %s", exc)
-            return {"success": False, "error": str(exc)}
+            return {'success': False, 'error': str(exc)}
 
     def update_collision_monitor_config(self, config: dict) -> dict:
+        revision = getattr(self, '_collision_configuration_revision', None)
+        if revision is None:
+            return {'success': False, 'error': 'Reload collision settings before saving'}
         try:
-            response = self._session.post(
-                f"{self.server_url}/collision/monitor/config",
-                json=dict(config),
-                timeout=5,
-            )
-            raw = response.json()
-            return raw if isinstance(raw, dict) else {
-                "success": False, "error": "invalid_response"}
+            result = self.update_backend_configuration('sensorless_collision', {'monitor': dict(config)}, revision)
+            self._collision_configuration_revision = result['revision']
+            return {**result, 'success': not result['pending_application'],
+                    'error': result.get('application_error') or ('Saved; restart the backend to apply all settings'
+                             if result['pending_application'] else None),
+                    'config': result['saved']['monitor']}
         except Exception as exc:
             logger.error("Collision monitor configuration update failed: %s", exc)
-            return {"success": False, "error": str(exc)}
+            return {'success': False, 'error': str(exc)}
 
     def get_rviz_status(self) -> dict:
         return self._rviz_request()
@@ -1699,6 +1699,33 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             self._mark_unavailable(e)
             logger.error("set_active_tool error: %s", e, exc_info=True)
             return False
+
+    def get_backend_configuration(self, section):
+        if section not in {"calibration", "sensorless_collision"}:
+            raise ValueError("Unsupported backend configuration section")
+        response = requests.get(f"{self.server_url}/configuration/{section}", timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        if data.get("success") is not True:
+            raise RuntimeError(data.get("error") or "Backend configuration is unavailable")
+        return data
+
+    def update_backend_configuration(self, section, changes, expected_revision, *, tool_id=None):
+        if section not in {"calibration", "sensorless_collision"}:
+            raise ValueError("Unsupported backend configuration section")
+        suffix = ""
+        if tool_id is not None:
+            if section != "calibration" or type(tool_id) is not int or tool_id < 0:
+                raise ValueError("Invalid tool configuration target")
+            suffix = f"/tools/{tool_id}"
+        response = requests.patch(
+            f"{self.server_url}/configuration/{section}{suffix}",
+            json={"changes": changes, "expected_revision": expected_revision}, timeout=10,
+        )
+        data = response.json()
+        if response.status_code >= 400 or data.get("success") is not True:
+            raise RuntimeError(data.get("error") or f"Configuration save failed (HTTP {response.status_code})")
+        return data
 
     def get_tool_registry(self):
         logger.debug("get_tool_registry → GET /tool/registry")

@@ -266,6 +266,12 @@ class IRobot(ABC):
         """Optional remote active TCP selection for status/current-pose reporting."""
         return False
 
+    def get_backend_configuration(self, section):
+        raise NotImplementedError("Backend configuration is unsupported")
+
+    def update_backend_configuration(self, section, changes, expected_revision, *, tool_id=None):
+        raise NotImplementedError("Backend configuration is unsupported")
+
     def get_tool_registry(self):
         """Return the remote tool registry payload when supported."""
         return None

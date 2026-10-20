@@ -230,12 +230,13 @@ def _load_runtime_config() -> dict[str, Any]:
                 config = _merge(config, _load_yaml_file(profile_config_path))
 
     if _config_package() == 'zeroerr':
-        from zeroerr_configuration.sensorless_collision import runtime_settings
+        from zeroerr_configuration.sensorless_collision import runtime_settings, load_sensorless_config
         sensorless = runtime_settings(path.parent.parent, profile)
         duplicates = set(config).intersection(sensorless)
         if duplicates:
             raise ValueError(f'Sensorless settings must live in the profile sensorless_collision.yaml: {sorted(duplicates)}')
         config = _merge(config, sensorless)
+        config['_SENSORLESS_COLLISION_STARTUP'] = load_sensorless_config(sensorless['SENSORLESS_COLLISION_CONFIG_PATH'])
 
     for key in PATH_KEYS:
         if key in config and config[key]:
@@ -256,6 +257,13 @@ def _load_runtime_config() -> dict[str, Any]:
     config['_ACTIVE_RUNTIME_CONFIG_PATH'] = str(active_path)
     config['WALL_BYPASS_LINKS'] = frozenset(config.get('WALL_BYPASS_LINKS', []))
     config['SAFETY_WALL_NAMES'] = frozenset(config.get('SAFETY_WALL_NAMES', []))
+    if 'TOOL_DEFINITIONS' in config:
+        from configuration.domain import tool_snapshot
+        canonical = {key: value for key, value in config.items()
+                     if key not in {'TOOL_REGISTRY', 'TOOL_COLLISION_PROFILE_MAP'}}
+        tools = tool_snapshot(canonical)
+        config['TOOL_REGISTRY'] = tools['tool_registry']
+        config['TOOL_COLLISION_PROFILE_MAP'] = tools['tool_collision_profile_map']
     config['TOOL_ID_MAP'] = {int(k): v for k, v in dict(config.get('TOOL_ID_MAP', {})).items()}
     config['WORKOBJECT_ID_MAP'] = {int(k): v for k, v in dict(config.get('WORKOBJECT_ID_MAP', {})).items()}
     default_workobject = list(config.get('DEFAULT_WORKOBJECT', [0, 0, 0, 0, 0, 0]) or [0, 0, 0, 0, 0, 0])
@@ -346,42 +354,20 @@ def _validate_tool_name(name: str) -> str:
     return cleaned
 
 
-def update_tool_registry(
-    tool_id: int, name: str | None, transform, persist: bool = False,
-    collision_profile: str | None = None,
-) -> dict[str, Any]:
-    try:
-        resolved_tool_id = int(tool_id)
-    except (TypeError, ValueError):
-        raise ValueError('tool_id must be an integer') from None
-    if resolved_tool_id < 0:
-        raise ValueError('tool_id must be non-negative')
-
-    current_name = TOOL_ID_MAP.get(resolved_tool_id, f'TOOL_{resolved_tool_id}')
-    tool_name = _validate_tool_name(name or current_name)
-    values = _validate_tool_transform(transform)
-
-    TOOL_REGISTRY[tool_name] = values
-    TOOL_ID_MAP[resolved_tool_id] = tool_name
-    _CONFIG['TOOL_REGISTRY'] = TOOL_REGISTRY
-    _CONFIG['TOOL_ID_MAP'] = TOOL_ID_MAP
+def update_tool_registry(tool_id, name, transform, persist=False, collision_profile=None):
+    """Compatibility entry point. Profile writes use the configuration application."""
+    if not persist:
+        raise ValueError('Volatile registry edits are unsupported; use the profile configuration API')
+    from configuration.bootstrap import build_configuration_service
+    from types import SimpleNamespace
+    service = build_configuration_service(SimpleNamespace(_CONFIG=_CONFIG, **_CONFIG))
+    changes = {'transform': transform}
+    if name is not None:
+        changes['name'] = name
     if collision_profile is not None:
-        profile_name = str(collision_profile or '').strip()
-        profiles = dict(_CONFIG.get('TOOL_COLLISION_PROFILES', {}) or {})
-        if profile_name and profile_name not in profiles:
-            raise ValueError(f'unknown tool collision profile {profile_name!r}')
-        profile_map = dict(_CONFIG.get('TOOL_COLLISION_PROFILE_MAP', {}) or {})
-        if profile_name:
-            profile_map[tool_name] = profile_name
-        else:
-            profile_map.pop(tool_name, None)
-        _CONFIG['TOOL_COLLISION_PROFILE_MAP'] = profile_map
-        globals()['TOOL_COLLISION_PROFILE_MAP'] = profile_map
-
-    if persist:
-        _persist_tool_registry()
-
-    return get_tool_registry_snapshot()
+        changes['collision_profile'] = collision_profile
+    view = service.get('calibration')
+    return service.update('calibration', changes, view['revision'], tool_id=tool_id)
 
 
 def get_workobject_registry_snapshot() -> dict[str, Any]:
@@ -426,121 +412,15 @@ def _validate_workobject_name(name: str) -> str:
     return cleaned
 
 
-def update_workobject_registry(user_id: int, name: str | None, transform, persist: bool = False) -> dict[str, Any]:
-    try:
-        resolved_user_id = int(user_id)
-    except (TypeError, ValueError):
-        raise ValueError('user_id must be an integer') from None
-    if resolved_user_id < 0:
-        raise ValueError('user_id must be non-negative')
-
-    current_name = WORKOBJECT_ID_MAP.get(resolved_user_id, f'WOBJ_{resolved_user_id}')
-    workobject_name = _validate_workobject_name(name or current_name)
-    values = _validate_workobject_transform(transform)
-
-    WORKOBJECT_REGISTRY[workobject_name] = values
-    WORKOBJECT_ID_MAP[resolved_user_id] = workobject_name
-    _CONFIG['WORKOBJECT_REGISTRY'] = WORKOBJECT_REGISTRY
-    _CONFIG['WORKOBJECT_ID_MAP'] = WORKOBJECT_ID_MAP
-
-    if persist:
-        _persist_workobject_registry()
-
-    return get_workobject_registry_snapshot()
-
-
-def _persist_tool_registry() -> None:
-    path_value = _CONFIG.get('_CALIBRATION_CONFIG_PATH') or _CONFIG.get('_ACTIVE_RUNTIME_CONFIG_PATH')
-    if not path_value:
-        raise RuntimeError('active runtime config path is unavailable')
-    path = Path(path_value)
-    text = path.read_text(encoding='utf-8') if path.exists() else ''
-    text = _replace_top_level_yaml_block(text, 'TOOL_REGISTRY', _format_tool_registry_block())
-    text = _replace_top_level_yaml_block(text, 'TOOL_ID_MAP', _format_tool_id_map_block())
-    text = _replace_top_level_yaml_block(
-        text, 'TOOL_COLLISION_PROFILE_MAP', _format_tool_collision_profile_map_block()
-    )
-    path.write_text(text, encoding='utf-8')
-
-
-def _persist_workobject_registry() -> None:
-    path_value = _CONFIG.get('_CALIBRATION_CONFIG_PATH') or _CONFIG.get('_ACTIVE_RUNTIME_CONFIG_PATH')
-    if not path_value:
-        raise RuntimeError('active runtime config path is unavailable')
-    path = Path(path_value)
-    text = path.read_text(encoding='utf-8') if path.exists() else ''
-    text = _replace_top_level_yaml_block(text, 'WORKOBJECT_REGISTRY', _format_workobject_registry_block())
-    text = _replace_top_level_yaml_block(text, 'WORKOBJECT_ID_MAP', _format_workobject_id_map_block())
-    path.write_text(text, encoding='utf-8')
-
-
-def _format_tool_registry_block() -> list[str]:
-    lines = ['TOOL_REGISTRY:']
-    for name, values in dict(TOOL_REGISTRY).items():
-        lines.append(f'  {name}:')
-        for value in values:
-            lines.append(f'  - {_format_yaml_number(float(value))}')
-    return lines
-
-
-def _format_tool_id_map_block() -> list[str]:
-    lines = ['TOOL_ID_MAP:']
-    for tool_id, name in dict(TOOL_ID_MAP).items():
-        lines.append(f'  {int(tool_id)}: {name}')
-    return lines
-
-
-def _format_tool_collision_profile_map_block() -> list[str]:
-    lines = ['TOOL_COLLISION_PROFILE_MAP:']
-    for tool_name, profile_name in dict(
-        _CONFIG.get('TOOL_COLLISION_PROFILE_MAP', {}) or {}
-    ).items():
-        lines.append(f'  {tool_name}: {profile_name}')
-    return lines
-
-
-def _format_workobject_registry_block() -> list[str]:
-    lines = ['WORKOBJECT_REGISTRY:']
-    for name, values in dict(WORKOBJECT_REGISTRY).items():
-        lines.append(f'  {name}:')
-        for value in values:
-            lines.append(f'  - {_format_yaml_number(float(value))}')
-    return lines
-
-
-def _format_workobject_id_map_block() -> list[str]:
-    lines = ['WORKOBJECT_ID_MAP:']
-    for user_id, name in dict(WORKOBJECT_ID_MAP).items():
-        lines.append(f'  {int(user_id)}: {name}')
-    return lines
-
-
-def _format_yaml_number(value: float) -> str:
-    if value.is_integer():
-        return str(int(value))
-    return f'{value:.12g}'
-
-
-def _replace_top_level_yaml_block(text: str, key: str, replacement_lines: list[str]) -> str:
-    lines = text.splitlines()
-    key_prefix = f'{key}:'
-    start = None
-    for index, line in enumerate(lines):
-        if line.startswith(key_prefix):
-            start = index
-            break
-
-    if start is None:
-        if lines and lines[-1].strip():
-            lines.append('')
-        lines.extend(replacement_lines)
-        return '\n'.join(lines) + '\n'
-
-    end = start + 1
-    while end < len(lines):
-        line = lines[end]
-        if line and not line[0].isspace():
-            break
-        end += 1
-
-    return '\n'.join(lines[:start] + replacement_lines + lines[end:]) + '\n'
+def update_workobject_registry(user_id, name, transform, persist=False):
+    """Compatibility entry point. Save only; live application belongs to the runtime adapter."""
+    if not persist:
+        raise ValueError('Volatile registry edits are unsupported; use the profile configuration API')
+    from configuration.bootstrap import build_configuration_service
+    from types import SimpleNamespace
+    service = build_configuration_service(SimpleNamespace(_CONFIG=_CONFIG, **_CONFIG))
+    changes = {'transform': transform}
+    if name is not None:
+        changes['name'] = name
+    view = service.get('calibration')
+    return service.update('calibration', changes, view['revision'], user_id=user_id)

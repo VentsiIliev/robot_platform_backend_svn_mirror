@@ -524,7 +524,7 @@ class RuntimeApi:
             tool_name = self._gateway_or_local().set_active_tool(tool_name)
             return ApiResponse({"success": True, "tool_name": tool_name})
         except ValueError as exc:
-            return ApiResponse({"success": False, "error": str(exc)}, 400)
+            return ApiResponse({"success": False, "error": str(exc)}, getattr(exc, "status", 400))
         except Exception as exc:
             logger.error(f"REST /tool/active exception: {exc}\n{traceback.format_exc()}")
             return ApiResponse({"success": False, "error": str(exc)}, 500)
@@ -539,9 +539,10 @@ class RuntimeApi:
                 persist=bool(payload.get("persist", False)),
                 collision_profile=payload.get("collision_profile"),
             )
-            return ApiResponse({"success": True, **snapshot})
+            return ApiResponse({"success": True, **snapshot},
+                               409 if snapshot.get("pending_application") else 200)
         except ValueError as exc:
-            return ApiResponse({"success": False, "error": str(exc)}, 400)
+            return ApiResponse({"success": False, "error": str(exc)}, getattr(exc, "status", 400))
         except Exception as exc:
             logger.error(f"REST /tool/registry exception: {exc}\n{traceback.format_exc()}")
             return ApiResponse({"success": False, "error": str(exc)}, 500)
@@ -560,7 +561,7 @@ class RuntimeApi:
             active = self._gateway_or_local().set_active_workobject(int(payload.get("user_id")))
             return ApiResponse({"success": True, **active})
         except ValueError as exc:
-            return ApiResponse({"success": False, "error": str(exc)}, 400)
+            return ApiResponse({"success": False, "error": str(exc)}, getattr(exc, "status", 400))
         except Exception as exc:
             logger.error(f"REST /workobject/active exception: {exc}\n{traceback.format_exc()}")
             return ApiResponse({"success": False, "error": str(exc)}, 500)
@@ -574,9 +575,10 @@ class RuntimeApi:
                 transform=payload.get("transform") or payload.get("origin"),
                 persist=bool(payload.get("persist", False)),
             )
-            return ApiResponse({"success": True, **snapshot})
+            return ApiResponse({"success": True, **snapshot},
+                               409 if snapshot.get("pending_application") else 200)
         except ValueError as exc:
-            return ApiResponse({"success": False, "error": str(exc)}, 400)
+            return ApiResponse({"success": False, "error": str(exc)}, getattr(exc, "status", 400))
         except Exception as exc:
             logger.error(f"REST /workobject/registry exception: {exc}\n{traceback.format_exc()}")
             return ApiResponse({"success": False, "error": str(exc)}, 500)

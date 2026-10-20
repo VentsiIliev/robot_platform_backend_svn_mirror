@@ -1093,7 +1093,7 @@ def _build_calibration_application(robot_system):
         CameraZShiftCalibrationService,
     )
     from src.engine.robot.calibration.calibration_navigation_service import CalibrationNavigationService
-    from src.engine.robot.calibration.ros_tool_registry_client import RosToolRegistryClient
+    from src.engine.robot.calibration.robot_tool_registry_client import RobotToolRegistryClient
     from src.engine.robot.calibration.tool_tcp_calibration_service import ToolTcpCalibrationService
     from src.engine.robot.calibration.service_builders import (
         build_calibration_artifact_vision_proxy,
@@ -1193,7 +1193,7 @@ def _build_calibration_application(robot_system):
         if vision_service is not None and robot_service is not None and robot_config is not None else None
     )
 
-    ros_tool_registry_client = RosToolRegistryClient()
+    ros_tool_registry_client = RobotToolRegistryClient(robot_service)
     tool_tcp_calibrator = ToolTcpCalibrationService(
         robot_service=robot_service,
         tool_registry_client=ros_tool_registry_client,
@@ -1363,12 +1363,13 @@ def _build_tool_settings_application(robot_app):
     from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.tool_settings import ToolSettingsApplicationService, ToolSettingsFactory
-    from src.engine.robot.calibration.ros_tool_registry_client import RosToolRegistryClient
+    from src.engine.robot.calibration.robot_tool_registry_client import RobotToolRegistryClient
 
+    robot_service = robot_app.get_optional_service(CommonServiceID.ROBOT)
     service = ToolSettingsApplicationService(
         robot_app._settings_service,
-        robot_service=robot_app.get_optional_service(CommonServiceID.ROBOT),
-        tool_registry_client=RosToolRegistryClient(),
+        robot_service=robot_service,
+        tool_registry_client=RobotToolRegistryClient(robot_service),
     )
     jog_service = build_robot_system_jog_service(robot_app)
     return WidgetApplication(

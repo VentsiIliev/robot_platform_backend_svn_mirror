@@ -278,6 +278,18 @@ class RobotService(IRobotService):
                     self._logger.warning("State refresh after set_active_workobject failed", exc_info=True)
         return ok
 
+    def get_backend_configuration(self, section):
+        operation = getattr(self._robot, "get_backend_configuration", None)
+        if not callable(operation):
+            raise RuntimeError("Backend configuration is not supported by this robot connection")
+        return operation(section)
+
+    def update_backend_configuration(self, section, changes, expected_revision, *, tool_id=None):
+        operation = getattr(self._robot, "update_backend_configuration", None)
+        if not callable(operation):
+            raise RuntimeError("Backend configuration is not supported by this robot connection")
+        return operation(section, changes, expected_revision, tool_id=tool_id)
+
     def get_tool_registry(self):
         getter = getattr(self._robot, "get_tool_registry", None)
         return getter() if callable(getter) else None

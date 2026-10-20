@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 import traceback
+import uuid
 
 from flask import Flask, Response, jsonify, request
 import rclpy
@@ -360,7 +361,9 @@ def start_rest_server(
     @app.before_request
     def require_runtime_ready():
         allowed_endpoints = {"health", "startup_status", "swagger_docs", "openapi_json", "static"}
-        if request.endpoint in allowed_endpoints:
+        if (request.blueprint == "backend_configuration"
+                or request.endpoint in allowed_endpoints
+                or request.method == "GET" and request.endpoint in {"get_tool_registry", "get_workobject_registry"}):
             return None
         if robot is None or node is None:
             return jsonify({
@@ -407,7 +410,7 @@ def start_rest_server(
     )
     collision_config_channel = {"publisher": None, "subscription": None}
     collision_config_publisher_lock = threading.Lock()
-    collision_config_state = {"payload": None}
+    collision_config_state = {"payload": None, "received_at": 0.0}
     collision_config_state_changed = threading.Condition()
     collision_diagnostics_process = {"process": None}
 
@@ -418,6 +421,7 @@ def start_rest_server(
                 return
             with collision_config_state_changed:
                 collision_config_state["payload"] = state
+                collision_config_state["received_at"] = time.monotonic()
                 collision_config_state_changed.notify_all()
         except (TypeError, ValueError, json.JSONDecodeError):
             logger.warning("Invalid collision monitor config-state payload")
@@ -430,6 +434,14 @@ def start_rest_server(
         gateway=gateway,
         conditional_servo=conditional_servo,
     )
+
+    from configuration.http import configuration_blueprint
+    from configuration.domain import ConfigurationError
+    app.register_blueprint(configuration_blueprint(lambda: configuration_service()))
+
+    @app.errorhandler(ConfigurationError)
+    def configuration_error(error):
+        return jsonify(success=False, error=str(error), code=error.code), error.status
 
     def api_response(response):
         return jsonify(response.body), response.status
@@ -493,14 +505,40 @@ def start_rest_server(
             return None, _response_error(
                 "collision monitor config subscriber is unavailable", 503)
         message = String()
-        message.data = json.dumps(payload)
+        request_id = uuid.uuid4().hex
+        message.data = json.dumps({**payload, "_request_id": request_id})
         publisher.publish(message)
         confirmed = wait_for_collision_config(
-            lambda state: all(state.get(key) == value for key, value in payload.items()))
+            lambda state: state.get("_request_id") == request_id
+            and all(state.get(key) == value for key, value in payload.items()))
         if confirmed is None:
             return None, _response_error(
                 "collision monitor did not confirm configuration update", 504)
         return confirmed, None
+
+    def observed_collision_config():
+        if node is None:
+            return None
+        if ensure_collision_config_channel() is None:
+            return None
+        with collision_config_state_changed:
+            if time.monotonic() - collision_config_state['received_at'] > 2.0:
+                return None
+            state = collision_config_state['payload']
+            return dict(state) if isinstance(state, dict) else None
+
+    def apply_collision_config(patch):
+        if node is None:
+            return 'Saved; collision controller is unavailable'
+        state, error = publish_collision_config(patch)
+        return None if error is None else 'Saved; collision controller did not confirm application'
+
+    # Construct lazily once the profile is known, including during standalone startup.
+    def configuration_service():
+        service = gateway.configuration
+        service.runtime.monitor_getter = observed_collision_config
+        service.runtime.monitor_apply = apply_collision_config
+        return service
 
     @app.route("/move/linear", methods=["POST"])
     def move_linear():
@@ -557,10 +595,12 @@ def start_rest_server(
         if not payload or unknown:
             return _response_error(
                 f"unsupported collision configuration fields: {unknown}", 400)
-        state, error = publish_collision_config(payload)
-        if error is not None:
-            return error
-        return jsonify({"success": True, "config": state})
+        service = configuration_service()
+        view = service.get('sensorless_collision')
+        result = service.update('sensorless_collision', {'monitor': payload}, view['revision'])
+        return jsonify({**result, 'saved_successfully': True,
+                        'success': not result['pending_application'],
+                        'config': (result['applied'] or result['saved'])['monitor']}), (409 if result['pending_application'] else 200)
 
     @app.route("/visualization/rviz", methods=["GET", "POST"])
     def control_rviz():

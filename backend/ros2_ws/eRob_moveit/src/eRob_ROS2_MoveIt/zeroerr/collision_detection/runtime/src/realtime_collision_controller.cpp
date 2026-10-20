@@ -310,11 +310,7 @@ void RealtimeCollisionController::apply_config_message(
     state["collision_sensitivity_percent"] = next.sensitivity_percent;
     state["dynamic_threshold_max_ratio"] = next.threshold_max_ratio;
     state["dynamic_threshold_decay_sec"] = next.threshold_decay_sec;
-    auto applied_patch = update;
-    for (auto item = applied_patch.begin(); item != applied_patch.end(); ++item) {
-      item.value() = state.at(item.key());
-    }
-    save_sensorless_monitor_patch(config_path_, applied_patch);
+    // Persistence belongs to the backend configuration application, never the controller.
     non_rt_config_ = next;
     config_state_json_ = state.dump();
     runtime_config_.writeFromNonRT(non_rt_config_);
@@ -352,7 +348,17 @@ void RealtimeCollisionController::publish_config_state(const RuntimeConfig &)
     return;
   }
   std_msgs::msg::String message;
-  message.data = config_state_json_;
+  auto state = nlohmann::json::parse(config_state_json_);
+  state["_controller"] = {
+    {"joints", joint_names_}, {"base_link", base_link_}, {"tip_link", tip_link_},
+    {"observer_gain", observer_gain_}, {"filter_alpha", filter_alpha_},
+    {"acceleration_filter_cutoff_hz", acceleration_filter_cutoff_hz_},
+    {"plot_period_sec", plot_period_sec_}, {"timing_period_sec", timing_period_sec_},
+    {"warmup_sec", warmup_sec_}, {"rearm_settle_sec", rearm_settle_sec_},
+    {"drive_stable_sec", drive_stable_sec_}, {"warmup_velocity_limit", warmup_velocity_limit_},
+    {"warmup_min_samples", warmup_min_samples_}
+  };
+  message.data = state.dump();
   config_state_publisher_->publish(message);
 }
 

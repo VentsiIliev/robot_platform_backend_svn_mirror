@@ -148,7 +148,7 @@ class ProfileCompositionTests(unittest.TestCase):
             runtime.update_tool_registry(1, None, [1, 2, 3, 4, 5, 6], persist=True)
             runtime.update_workobject_registry(1, None, [6, 5, 4, 3, 2, 1], persist=True)
             calibration = load_yaml_layers(copy / 'config/paint_tray_dry/calibration.yaml')
-            self.assertEqual(calibration['TOOL_REGISTRY']['TOOL_1'], [1, 2, 3, 4, 5, 6])
+            self.assertEqual(calibration['TOOL_DEFINITIONS']['TOOL_1']['transform'], [1, 2, 3, 4, 5, 6])
             self.assertEqual(calibration['WORKOBJECT_REGISTRY']['WOBJ_1'], [6, 5, 4, 3, 2, 1])
             self.assertEqual(shared.read_bytes(), shared_before)
             self.assertEqual(profile_path.read_bytes(), profile_before)

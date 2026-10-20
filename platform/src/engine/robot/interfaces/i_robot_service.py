@@ -136,6 +136,12 @@ class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
     @abstractmethod
     def set_active_tool(self, tool: int) -> bool: ...
 
+    def get_backend_configuration(self, section):
+        raise NotImplementedError("Backend configuration is unsupported")
+
+    def update_backend_configuration(self, section, changes, expected_revision, *, tool_id=None):
+        raise NotImplementedError("Backend configuration is unsupported")
+
     def get_tool_registry(self):
         return None
 

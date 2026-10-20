@@ -1,4 +1,5 @@
 import logging
+from copy import deepcopy
 from typing import List, Tuple
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
 
@@ -21,6 +22,8 @@ class ToolSettingsApplicationService(IToolSettingsService):
         self._robot = robot_service
         self._registry = tool_registry_client
         self._calibration = RelativeToolCalibrationService(minimum_samples=3)
+        self._configuration_snapshot = None
+        self._calibration_snapshot = None
 
     def _load(self) -> ToolChangerSettings:
         return self._settings.get(CommonSettingsID.TOOL_CHANGER_CONFIG)
@@ -29,7 +32,28 @@ class ToolSettingsApplicationService(IToolSettingsService):
         self._settings.save(CommonSettingsID.TOOL_CHANGER_CONFIG, tc)
 
     def get_tools(self) -> List[ToolDefinition]:
-        return self._load().tools
+        tools = deepcopy(self._load().tools)
+        if self._registry is None:
+            return tools
+        try:
+            self._configuration_snapshot = self._registry.get_configuration()
+        except Exception:
+            self._configuration_snapshot = None
+            _logger.warning("Backend tool geometry is unavailable", exc_info=True)
+            for tool in tools:
+                tool.reference_tool_id = None
+                tool.relative_transform = [0] * 6
+                tool.collision_profile = ''
+            return tools
+        snapshot = self._configuration_snapshot['tools']
+        ids = snapshot['tool_id_map']
+        for tool in tools:
+            key = ids.get(tool.id, ids.get(str(tool.id)))
+            definition = snapshot['tool_definitions'].get(key, {})
+            tool.reference_tool_id = definition.get('reference_tool_id', snapshot['reference_tool_id'])
+            tool.relative_transform = list(definition.get('relative_transform', [0] * 6))
+            tool.collision_profile = definition.get('collision_profile', '')
+        return tools
 
     def add_tool(self, tool_id: int, name: str) -> Tuple[bool, str]:
         tc = self._load()
@@ -97,17 +121,26 @@ class ToolSettingsApplicationService(IToolSettingsService):
     def update_tool_geometry(
         self, tool_id: int, relative_transform: list[float], collision_profile: str = ""
     ) -> Tuple[bool, str]:
-        if len(relative_transform) != 6:
-            return False, "Relative transform must contain X, Y, Z, RX, RY, RZ"
-        tc = self._load()
-        for tool in tc.tools:
-            if tool.id == int(tool_id):
-                tool.reference_tool_id = int(tc.reference_tool_id)
-                tool.relative_transform = [float(value) for value in relative_transform]
-                tool.collision_profile = str(collision_profile or "").strip()
-                self._save(tc)
-                return True, "Tool geometry updated"
-        return False, f"Tool {tool_id} not found"
+        if self._registry is None:
+            return False, "Backend tool configuration is unavailable"
+        if not any(tool.id == int(tool_id) for tool in self._load().tools):
+            return False, f"Tool {tool_id} not found"
+        try:
+            self._require_stationary_robot()
+            snapshot = self._configuration_snapshot
+            if snapshot is None:
+                return False, 'Reload tool geometry from the backend before editing'
+            reference_id = snapshot['tools']['reference_tool_id']
+            changes = {'relative_transform': list(relative_transform),
+                       'reference_tool_id': reference_id,
+                       'collision_profile': str(collision_profile or '').strip()}
+            if int(tool_id) == reference_id:
+                return False, "Calibrate the reference tool with absolute TCP calibration"
+            result = self._registry.update_definition(int(tool_id), changes, snapshot['revision'])
+            self._configuration_snapshot = None
+            return result
+        except Exception as exc:
+            return False, str(exc)
 
     def update_slot_sequences(
         self, slot_id: int, pickup: list[dict], dropoff: list[dict]
@@ -131,8 +164,14 @@ class ToolSettingsApplicationService(IToolSettingsService):
             return False, "Robot tool calibration is not configured"
         try:
             self._require_stationary_robot()
-            reference_id = self._load().reference_tool_id
-            reference = self._registry_transform(reference_id)
+            self._calibration_snapshot = self._registry.get_configuration()
+            if self._calibration_snapshot['pending_application']:
+                raise RuntimeError('Saved calibration is pending application')
+            snapshot = self._calibration_snapshot['tools']
+            reference_id = snapshot['reference_tool_id']
+            ids = snapshot['tool_id_map']
+            key = ids.get(reference_id, ids.get(str(reference_id)))
+            reference = snapshot['tool_registry'][key]
             flange = self._robot.get_current_flange_position()
             _logger.info(
                 "[TOOL_CALIBRATION] capturing_reference reference_tool_id=%d "
@@ -165,6 +204,10 @@ class ToolSettingsApplicationService(IToolSettingsService):
             result = self._calibration.solve()
         except Exception as exc:
             return False, str(exc), {}
+        if self._calibration_snapshot is None:
+            return False, "Capture the reference contact before saving calibration", {}
+        # Keep the revision from reference capture, even if the UI refreshed while sampling.
+        self._configuration_snapshot = self._calibration_snapshot
         ok, message = self.update_tool_geometry(
             int(tool_id), result["relative_transform"], self._tool_collision_profile(tool_id)
         )
@@ -188,13 +231,9 @@ class ToolSettingsApplicationService(IToolSettingsService):
             return False, f"Tool {tool_id} not found"
         try:
             self._require_stationary_robot()
-            reference = self._registry_transform(tc.reference_tool_id)
             ok, message, _ = ToolActivationService(self._registry, self._robot).activate(
                 tool_id=tool.id,
                 name=f"TOOL_{tool.id}",
-                reference_transform=reference,
-                relative_transform=tool.relative_transform,
-                collision_profile=tool.collision_profile,
             )
             if ok:
                 config = self._settings.get(CommonSettingsID.ROBOT_CONFIG)
@@ -217,8 +256,13 @@ class ToolSettingsApplicationService(IToolSettingsService):
             return False, str(exc), []
 
     def _tool_collision_profile(self, tool_id: int) -> str:
-        tool = next((item for item in self._load().tools if item.id == int(tool_id)), None)
-        return str(getattr(tool, "collision_profile", "") or "")
+        snapshot = self._calibration_snapshot or self._configuration_snapshot
+        if snapshot is None:
+            return ""
+        tools = snapshot['tools']
+        ids = tools['tool_id_map']
+        key = ids.get(int(tool_id), ids.get(str(int(tool_id))))
+        return tools['tool_collision_profile_map'].get(key, '')
 
     def _require_stationary_robot(self) -> None:
         if self._robot is None:

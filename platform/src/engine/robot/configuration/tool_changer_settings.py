@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from copy import deepcopy
 from typing import List, Sequence
 
 from src.engine.repositories.interfaces import ISettingsSerializer
@@ -13,6 +14,8 @@ class ToolChangerSettings:
     tools: List[ToolDefinition] = field(default_factory=list)
     slots: List[SlotConfig] = field(default_factory=list)
     reference_tool_id: int = 1
+    # Historical import evidence only; never replayed to the backend.
+    legacy_backend_geometry: dict = field(default_factory=dict)
 
     def get_tool_names(self) -> List[str]:
         return [t.name for t in self.tools]
@@ -54,14 +57,12 @@ class ToolChangerSettingsSerializer(ISettingsSerializer):
 
     def to_dict(self, settings: ToolChangerSettings) -> dict:
         return {
-            "reference_tool_id": int(settings.reference_tool_id),
+            **({"legacy_backend_geometry": deepcopy(settings.legacy_backend_geometry)}
+               if settings.legacy_backend_geometry else {}),
             "tools": [
                 {
                     "id": t.id,
                     "name": t.name,
-                    "reference_tool_id": t.reference_tool_id,
-                    "relative_transform": list(t.relative_transform),
-                    "collision_profile": t.collision_profile,
                 }
                 for t in settings.tools
             ],
@@ -87,12 +88,6 @@ class ToolChangerSettingsSerializer(ISettingsSerializer):
             ToolDefinition(
                 id=int(t["id"]),
                 name=str(t["name"]),
-                reference_tool_id=(
-                    int(t["reference_tool_id"])
-                    if t.get("reference_tool_id") is not None else None
-                ),
-                relative_transform=list(t.get("relative_transform", [0, 0, 0, 0, 0, 0])),
-                collision_profile=str(t.get("collision_profile", "")),
             )
             for t in (raw_tools if raw_tools is not None else [tool.to_dict() for tool in self._default_tools])
         ]
@@ -110,8 +105,13 @@ class ToolChangerSettingsSerializer(ISettingsSerializer):
                 else [{"slot_id": slot.id, "tool_id": slot.tool_id} for slot in self._default_slots]
             )
         ]
-        return ToolChangerSettings(
-            tools=tools,
-            slots=slots,
-            reference_tool_id=int(data.get("reference_tool_id", 1)),
-        )
+        legacy = deepcopy(data.get("legacy_backend_geometry", {}))
+        old_geometry = [
+            {key: deepcopy(value) for key, value in tool.items()
+             if key in {"id", "reference_tool_id", "relative_transform", "collision_profile"}}
+            for tool in (raw_tools or [])
+            if any(key in tool for key in ("reference_tool_id", "relative_transform", "collision_profile"))
+        ]
+        if old_geometry or "reference_tool_id" in data:
+            legacy = {"reference_tool_id": int(data.get("reference_tool_id", 1)), "tools": old_geometry}
+        return ToolChangerSettings(tools=tools, slots=slots, legacy_backend_geometry=legacy)

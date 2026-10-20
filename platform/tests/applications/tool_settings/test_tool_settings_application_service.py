@@ -187,14 +187,36 @@ class TestToolSettingsApplicationServiceSlots(unittest.TestCase):
 
 
 class TestToolSettingsApplicationServiceCalibration(unittest.TestCase):
-    def test_update_tool_geometry_persists_relative_transform(self):
-        tc = ToolChangerSettings(tools=[ToolDefinition(2, "Vacuum")], reference_tool_id=1)
-        svc, ss = _make_svc(tc)
-        ok, _ = svc.update_tool_geometry(2, [1, 2, 3, 0, 0, 0], "vacuum")
+    def test_update_tool_geometry_edits_backend_with_loaded_revision(self):
+        tc = ToolChangerSettings(tools=[ToolDefinition(2, "Vacuum")], reference_tool_id=99)
+        ss = MagicMock()
+        ss.get.return_value = tc
+        robot = MagicMock()
+        robot.get_state.return_value = 'idle'
+        robot.get_current_velocity.return_value = 0.0
+        registry = MagicMock()
+        registry.get_configuration.return_value = {
+            'revision': 'loaded_revision',
+            'tools': {'reference_tool_id': 1, 'tool_id_map': {'2': 'TOOL_2'},
+                      'tool_definitions': {'TOOL_2': {'relative_transform': [0]*6}}},
+        }
+        registry.update_definition.return_value = (True, 'Saved')
+        service = ToolSettingsApplicationService(ss, robot, registry)
+        service.get_tools()
+        ok, _ = service.update_tool_geometry(2, [1, 2, 3, 0, 0, 0], 'vacuum')
         self.assertTrue(ok)
-        self.assertEqual(tc.tools[0].relative_transform[:3], [1.0, 2.0, 3.0])
-        self.assertEqual(tc.tools[0].reference_tool_id, 1)
-        ss.save.assert_called_once()
+        registry.update_definition.assert_called_once_with(2, {
+            'reference_tool_id': 1, 'relative_transform': [1, 2, 3, 0, 0, 0],
+            'collision_profile': 'vacuum'}, 'loaded_revision')
+        self.assertEqual(tc.tools[0].relative_transform, [0]*6)
+        ss.save.assert_not_called()
+
+    def test_unavailable_backend_cannot_save_platform_geometry(self):
+        tc = ToolChangerSettings(tools=[ToolDefinition(2, "Vacuum")])
+        service, settings = _make_svc(tc)
+        ok, _ = service.update_tool_geometry(2, [1]*6)
+        self.assertFalse(ok)
+        settings.save.assert_not_called()
 
 
 if __name__ == "__main__":
