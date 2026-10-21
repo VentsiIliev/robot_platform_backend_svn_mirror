@@ -6,7 +6,7 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock, patch
 
-path = Path(__file__).resolve().parents[1] / 'scripts/rest/rviz_process.py'
+path = Path(__file__).resolve().parents[1] / 'scripts/runtime_gateway/adapters/rviz_process.py'
 spec = importlib.util.spec_from_file_location('rviz_process_under_test', path)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
@@ -93,20 +93,24 @@ class RvizProcessTests(unittest.TestCase):
 
 class RvizRouteTests(unittest.TestCase):
     def setUp(self):
-        # Compile the actual route in isolation; no ROS runtime or robot is started.
-        import ast
-        from flask import Flask, jsonify, request
-        source = path.with_name('server.py')
-        tree = ast.parse(source.read_text())
-        server = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'start_rest_server')
-        route = next(node for node in server.body if isinstance(node, ast.FunctionDef) and node.name == 'control_rviz')
-        error = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == '_response_error')
+        # Exercise the real HTTP -> ControlApi -> gateway adapter path without starting a process.
+        from flask import Flask
+        from runtime_api.control.api import ControlApi
+        from runtime_gateway.base import RuntimeGateway
+        from runtime_gateway.adapters.diagnostics import RuntimeDiagnostics
+        from rest.routes.control import control_blueprint
+        from rest.routes.common import install_http_contract
         app = Flask(__name__)
+        install_http_contract(app)
         self.manager = MagicMock()
         self.manager.status.return_value = {'success': True, 'running': False}
         self.manager.set_enabled.return_value = {'success': True, 'running': True}
-        self.env = {'app': app, 'jsonify': jsonify, 'request': request, 'rviz_manager': self.manager, 'node': object()}
-        exec(compile(ast.Module(body=[error, route], type_ignores=[]), str(source), 'exec'), self.env)
+        self.env = {'node': object()}
+        diagnostics = RuntimeDiagnostics(lambda: self.env['node'], MagicMock(), self.manager)
+        gateway = MagicMock(spec=RuntimeGateway)
+        gateway.rviz_status.side_effect = diagnostics.rviz_status
+        gateway.set_rviz_enabled.side_effect = diagnostics.set_rviz_enabled
+        app.register_blueprint(control_blueprint(ControlApi(gateway)))
         self.client = app.test_client()
 
     def test_status_start_stop_and_strict_boolean_validation(self):
@@ -116,8 +120,10 @@ class RvizRouteTests(unittest.TestCase):
         self.client.post('/visualization/rviz', json={'enabled': False})
         self.manager.set_enabled.assert_called_with(False)
         calls = self.manager.set_enabled.call_count
-        for bad in ({'enabled': 'false'}, {'enabled': 0}, [], None):
+        for bad in ({'enabled': 'false'}, {'enabled': 0}, []):
             self.assertEqual(self.client.post('/visualization/rviz', json=bad).status_code, 400)
+        self.assertEqual(self.client.post('/visualization/rviz', data='null', content_type='application/json').status_code, 400)
+        self.assertEqual(self.client.post('/visualization/rviz').status_code, 415)
         self.assertEqual(self.manager.set_enabled.call_count, calls)
 
     def test_initializing_backend_cannot_launch_and_start_failure_is_reported(self):

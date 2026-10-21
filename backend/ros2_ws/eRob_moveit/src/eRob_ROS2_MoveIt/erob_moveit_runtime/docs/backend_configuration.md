@@ -89,7 +89,9 @@ backend as appropriate. Application errors do not silently discard a durable sav
 ## Persistence and runtime application
 
 Domain validation, application use cases, YAML storage, runtime application, and
-HTTP transport are separate modules under `scripts/configuration/`. Domain and
+HTTP transport are separate: domain/storage/application code lives under
+`scripts/configuration/`, `ConfigurationApi` under `scripts/runtime_api/configuration/`,
+and HTTP routes under `scripts/rest/routes/configuration.py`. Domain and
 application code have no Flask or ROS dependency. The repository/runtime ports
 allow a different store or transport without changing validation/use cases.
 
@@ -140,3 +142,9 @@ and platform measurement history.
 This API deliberately exposes registered sections rather than arbitrary backend
 YAML or parameter names. Extend the section schema, repository registration,
 runtime adapter and tests together for additional backend configuration.
+
+All configuration routes now follow HTTP → ConfigurationApi → RuntimeGateway →
+LocalRuntimeGateway → ConfigurationService. The legacy `configuration.http` module
+is an import shim for the thin route adapter; it does not accept a service getter.
+See [Runtime API architecture](runtime_api_architecture.md) for typed errors,
+correlation IDs, the four groups, and future ROS 2 gateway mapping.

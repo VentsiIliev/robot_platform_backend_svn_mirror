@@ -383,3 +383,77 @@ class RuntimeGateway(ABC):
     @abstractmethod
     def set_digital_output(self, port: int, value: int) -> int:
         raise NotImplementedError
+
+    # --- profile configuration --------------------------------------------
+
+    @abstractmethod
+    def configuration_catalog(self) -> dict:
+        """Selected backend profile and supported sections; available before ROS starts."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_configuration(self, section: str) -> dict:
+        """Effective saved values, observed application state and profile-bound revision."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def update_configuration(self, section: str, changes: dict, expected_revision: str, *,
+                             tool_id: int | None = None, user_id: int | None = None) -> dict:
+        """Validate and persist once, then attempt application; pending is not a failed save."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def apply_configuration(self, section: str, expected_revision: str) -> dict:
+        """Retry application only for the specified saved revision."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def collision_monitor_configuration(self) -> dict:
+        raise NotImplementedError
+
+    @abstractmethod
+    def update_collision_monitor_configuration(self, changes: dict) -> dict:
+        """Compatibility update through the same profile configuration service."""
+        raise NotImplementedError
+
+    # --- local/remote control operations ----------------------------------
+
+    @abstractmethod
+    def set_active_tool_by_id(self, tool_id: int) -> str:
+        raise NotImplementedError
+
+    @abstractmethod
+    def conditional_servo_start(self, payload: dict) -> dict:
+        raise NotImplementedError
+
+    @abstractmethod
+    def conditional_servo_status(self) -> dict:
+        raise NotImplementedError
+
+    @abstractmethod
+    def conditional_servo_cancel(self) -> dict:
+        raise NotImplementedError
+
+    @abstractmethod
+    def set_collision_suppressed(self, suppressed: bool) -> dict:
+        raise NotImplementedError
+
+    @abstractmethod
+    def start_collision_recording(self) -> dict:
+        raise NotImplementedError
+
+    @abstractmethod
+    def stop_collision_recording(self) -> dict:
+        raise NotImplementedError
+
+    @abstractmethod
+    def rviz_status(self) -> dict:
+        raise NotImplementedError
+
+    @abstractmethod
+    def set_rviz_enabled(self, enabled: bool) -> dict:
+        raise NotImplementedError
+
+    @abstractmethod
+    def open_collision_diagnostics(self) -> dict:
+        raise NotImplementedError

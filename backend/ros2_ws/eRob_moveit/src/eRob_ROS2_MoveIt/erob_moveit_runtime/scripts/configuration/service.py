@@ -4,7 +4,8 @@ import logging
 
 from .domain import LIVE_MONITOR_FIELDS, ConfigurationError, Conflict, canonical_calibration, edit_tool, edit_workobject, tool_snapshot, validate_sensorless
 from .documents import merge, revision
-from .ports import ConfigurationRepository, RuntimeConfiguration
+from .ports import ApplicationFailure, ConfigurationRepository, RuntimeConfiguration
+from dataclasses import asdict
 
 logger = logging.getLogger(__name__)
 
@@ -19,13 +20,15 @@ class ConfigurationService:
     def _view(self, section, saved, *, reason=None):
         try:
             applied = self.runtime.snapshot(section)
-        except Exception:
+        except Exception as error:
             logger.exception('Configuration runtime state is unavailable')
             applied = None
-            reason = reason or 'Saved configuration is available; runtime state could not be verified'
+            reason = reason or ApplicationFailure.from_exception(error, prefix='Saved configuration is available; runtime state could not be verified')
         expected = canonical_calibration(saved) if section == 'calibration' else saved
         applied_normalized = canonical_calibration(applied) if section == 'calibration' and applied is not None else applied
         reason = reason or self._application_errors.get(section)
+        if isinstance(reason, str):
+            reason = ApplicationFailure('configuration_application_pending', reason)
         comparison_expected = deepcopy(expected)
         comparison_applied = deepcopy(applied_normalized)
         if section == 'sensorless_collision':
@@ -41,7 +44,8 @@ class ConfigurationService:
                 if key not in LIVE_MONITOR_FIELDS and key != 'collision_detection_suppressed')
         return {'success': True, 'profile': self.repository.profile, 'section': section,
                 'revision': self._revision(section, saved), 'saved': deepcopy(saved), 'applied': deepcopy(applied),
-                'pending_application': pending, 'application_error': reason,
+                'pending_application': pending, 'application_error': reason.message if reason else None,
+                'application_error_info': asdict(reason) if reason else None,
                 'restart_required': restart_required,
                 **({'tools': tool_snapshot(saved)} if section == 'calibration' else {})}
 
@@ -51,9 +55,9 @@ class ConfigurationService:
     def _apply(self, section, document):
         try:
             reason = self.runtime.apply(section, document)
-        except Exception:
+        except Exception as error:
             logger.exception('Saved configuration application failed')
-            reason = 'Saved; runtime application failed. Restart the backend before moving'
+            reason = ApplicationFailure.from_exception(error)
         if reason:
             self._application_errors[section] = reason
         else:

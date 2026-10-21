@@ -5,6 +5,7 @@ import math
 import time
 
 from .domain import LIVE_MONITOR_FIELDS, canonical_calibration, tool_snapshot
+from .ports import ApplicationFailure
 
 logger = logging.getLogger(__name__)
 CALIBRATION_KEYS = ('TOOL_DEFINITIONS', 'TOOL_REGISTRY', 'TOOL_ID_MAP', 'REFERENCE_TOOL_ID',
@@ -54,42 +55,42 @@ class LocalConfigurationRuntime:
     def apply(self, section, document):
         if section == 'sensorless_collision':
             if self.monitor_apply is None:
-                return 'Saved; runtime application is unavailable'
+                return ApplicationFailure('configuration_runtime_unavailable', 'Saved; runtime application is unavailable', retryable=True)
             patch = {key: document['monitor'][key] for key in LIVE_MONITOR_FIELDS}
             try:
                 return self.monitor_apply(patch)
-            except Exception:
+            except Exception as error:
                 logger.exception('Saved sensorless configuration could not be applied')
-                return 'Saved; collision controller could not confirm application'
+                return ApplicationFailure.from_exception(error, prefix='Saved; collision controller could not confirm application')
         node = self.node_getter()
         robot = self.robot_getter()
         if node is None or robot is None:
-            return 'Saved; robot runtime is unavailable'
+            return ApplicationFailure('configuration_runtime_unavailable', 'Saved; robot runtime is unavailable', retryable=True)
         lock = getattr(node, 'execution_lock', None)
         if lock is None or not lock.acquire(blocking=False):
-            return 'Saved; robot is busy. Apply when stationary'
+            return ApplicationFailure('configuration_robot_busy', 'Saved; robot is busy. Apply when stationary', retryable=True)
         try:
             if (bool(getattr(node, 'is_executing', False))
                     or node.is_motion_active() or node.has_pending_motion()):
-                return 'Saved; robot is executing. Apply when stationary'
+                return ApplicationFailure('configuration_robot_busy', 'Saved; robot is executing. Apply when stationary', retryable=True)
             servo = getattr(robot, 'cartesian_servo', None)
             if servo is not None and str(servo.get_status().state.value) == 'running':
-                return 'Saved; Cartesian Servo is running. Apply when stationary'
+                return ApplicationFailure('configuration_servo_running', 'Saved; Cartesian Servo is running. Apply when stationary', retryable=True)
             measured = node.state_store.get_braking_state()
             if measured is None or not 0 <= time.monotonic() - measured.received_at <= 0.25:
-                return 'Saved; fresh joint velocity state is unavailable'
+                return ApplicationFailure('configuration_state_stale', 'Saved; fresh joint velocity state is unavailable', retryable=True)
             if tuple(measured.names) != tuple(getattr(self.config, 'JOINT_NAMES', ())):
-                return 'Saved; joint velocity order does not match this profile'
+                return ApplicationFailure('configuration_joint_order_mismatch', 'Saved; joint velocity order does not match this profile', retryable=False)
             values = list(measured.velocity)
             if len(values) != len(getattr(self.config, 'JOINT_NAMES', ())):
-                return 'Saved; joint velocity state is incomplete'
+                return ApplicationFailure('configuration_joint_state_incomplete', 'Saved; joint velocity state is incomplete', retryable=False)
             if any(not math.isfinite(float(v)) or abs(float(v)) > 0.01 for v in values):
-                return 'Saved; robot must be stationary before applying calibration'
+                return ApplicationFailure('configuration_robot_moving', 'Saved; robot must be stationary before applying calibration', retryable=True)
             self._apply_calibration(node, robot, document)
             return None
-        except Exception:
+        except Exception as error:
             logger.exception('Saved calibration could not be fully applied')
-            return 'Saved; calibration application failed. Restart the backend before moving'
+            return ApplicationFailure.from_exception(error, prefix='Saved; calibration application failed. Restart the backend before moving')
         finally:
             lock.release()
 

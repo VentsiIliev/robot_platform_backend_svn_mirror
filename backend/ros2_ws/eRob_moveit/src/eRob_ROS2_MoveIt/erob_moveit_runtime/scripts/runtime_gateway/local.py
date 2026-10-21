@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from threading import RLock
 from typing import Any, Callable
 
 import config
@@ -43,12 +44,22 @@ class LocalRuntimeGateway(RuntimeGateway):
         *,
         robot_getter: Callable[[], Any] | None = None,
         node_getter: Callable[[], Any] | None = None,
+        conditional_servo=None,
+        collision_monitor=None,
+        rviz_manager=None,
+        diagnostics=None,
     ):
         self._robot = robot
         self._node = node
         self._robot_getter = robot_getter
         self._node_getter = node_getter
         self._configuration_service = None
+        self._configuration_lock = RLock()
+        self._conditional_servo = conditional_servo
+        from runtime_gateway.adapters.collision_monitor import CollisionMonitorChannel
+        from runtime_gateway.adapters.diagnostics import RuntimeDiagnostics
+        self._collision_monitor = collision_monitor or CollisionMonitorChannel(lambda: self.node)
+        self._diagnostics = diagnostics or RuntimeDiagnostics(lambda: self.node, self._collision_monitor, rviz_manager)
 
     @property
     def robot(self) -> Any | None:
@@ -277,8 +288,8 @@ class LocalRuntimeGateway(RuntimeGateway):
         trajectory_optimizer=None,
     ) -> int:
         try:
-            from motion.move_linear_timing import ensure as ensure_move_linear_timing
-            ensure_move_linear_timing(self.node, source="/move/fast_lin")
+            from motion.move_linear_timing import begin as begin_move_linear_timing
+            begin_move_linear_timing(self.node, source="/move/fast_lin")
         except Exception:
             pass
         return self.robot.move_fast_lin(
@@ -532,15 +543,18 @@ class LocalRuntimeGateway(RuntimeGateway):
     # --- tools / workobject ------------------------------------------------
 
     @property
-    def configuration(self):
-        if self._configuration_service is None:
-            from configuration.bootstrap import build_configuration_service
-            self._configuration_service = build_configuration_service(
-                config, lambda: self.node, lambda: self.robot)
-        return self._configuration_service
+    def _profile_configuration(self):
+        with self._configuration_lock:
+            if self._configuration_service is None:
+                from configuration.bootstrap import build_configuration_service
+                self._configuration_service = build_configuration_service(
+                    config, lambda: self.node, lambda: self.robot)
+                self._configuration_service.runtime.monitor_getter = self._collision_monitor.observed
+                self._configuration_service.runtime.monitor_apply = self._collision_monitor.apply
+            return self._configuration_service
 
     def tool_registry(self) -> dict:
-        view = self.configuration.get('calibration')
+        view = self._profile_configuration.get('calibration')
         return {**view['tools'], 'revision': view['revision'], 'profile': view['profile'],
                 'pending_application': view['pending_application'],
                 'tool_collision_profiles': dict(config._CONFIG.get('TOOL_COLLISION_PROFILES', {}))}
@@ -549,7 +563,7 @@ class LocalRuntimeGateway(RuntimeGateway):
         return str(getattr(self.node, "active_tool_name", "TOOL_0"))
 
     def set_active_tool(self, tool_name: str) -> str:
-        if self.configuration.get('calibration')['pending_application']:
+        if self._profile_configuration.get('calibration')['pending_application']:
             raise ValueError('Saved calibration is pending application; apply it before selecting a tool')
         self.node.set_tool(tool_name)
         return str(getattr(self.node, "active_tool_name", tool_name))
@@ -564,15 +578,15 @@ class LocalRuntimeGateway(RuntimeGateway):
             changes['name'] = name
         if collision_profile is not None:
             changes['collision_profile'] = collision_profile
-        view = self.configuration.get('calibration')
-        result = self.configuration.update('calibration', changes, view['revision'], tool_id=tool_id)
+        view = self._profile_configuration.get('calibration')
+        result = self._profile_configuration.update('calibration', changes, view['revision'], tool_id=tool_id)
         return {**result['tools'], 'success': not result['pending_application'], 'saved': True,
                 'revision': result['revision'],
                 'pending_application': result['pending_application'],
                 'application_error': result['application_error']}
 
     def workobject_registry(self) -> dict:
-        view = self.configuration.get('calibration')
+        view = self._profile_configuration.get('calibration')
         saved = view['saved']
         return {'workobject_registry': saved.get('WORKOBJECT_REGISTRY', {}),
                 'workobject_id_map': saved.get('WORKOBJECT_ID_MAP', {}),
@@ -605,8 +619,8 @@ class LocalRuntimeGateway(RuntimeGateway):
         changes = {'transform': transform}
         if name is not None:
             changes['name'] = name
-        view = self.configuration.get('calibration')
-        result = self.configuration.update('calibration', changes, view['revision'], user_id=user_id)
+        view = self._profile_configuration.get('calibration')
+        result = self._profile_configuration.update('calibration', changes, view['revision'], user_id=user_id)
         return {**self.workobject_registry(), 'success': not result['pending_application'], 'saved': True,
                 'revision': result['revision'],
                 'pending_application': result['pending_application'],
@@ -639,3 +653,74 @@ class LocalRuntimeGateway(RuntimeGateway):
 
     def set_digital_output(self, port: int, value: int) -> int:
         return self.robot.setDigitalOutput(port, value)
+
+    # --- profile configuration --------------------------------------------
+
+    def configuration_catalog(self) -> dict:
+        service = self._profile_configuration
+        return {'success': True, 'schema_version': 1, 'active_profile': service.repository.profile,
+                'sections': list(service.repository.sections), 'authority': 'backend_profile'}
+
+    def get_configuration(self, section: str) -> dict:
+        return self._profile_configuration.get(section)
+
+    def update_configuration(self, section: str, changes: dict, expected_revision: str, *,
+                             tool_id: int | None = None, user_id: int | None = None) -> dict:
+        return self._profile_configuration.update(section, changes, expected_revision,
+                                                  tool_id=tool_id, user_id=user_id)
+
+    def apply_configuration(self, section: str, expected_revision: str) -> dict:
+        return self._profile_configuration.retry_application(section, expected_revision)
+
+    def collision_monitor_configuration(self) -> dict:
+        return self._collision_monitor.read()
+
+    def update_collision_monitor_configuration(self, changes: dict) -> dict:
+        snapshot = self.get_configuration('sensorless_collision')
+        return self.update_configuration('sensorless_collision', {'monitor': changes}, snapshot['revision'])
+
+    # --- control operations -----------------------------------------------
+
+    def set_active_tool_by_id(self, tool_id: int) -> str:
+        from configuration.domain import identifier
+        return self.set_active_tool(config.resolve_tool_name(identifier(tool_id, 'tool_id')))
+
+    def _conditional_supervisor(self):
+        if self._conditional_servo is None:
+            from runtime_gateway.errors import GatewayError
+            raise GatewayError('conditional_servo_unavailable', 'Conditional Servo supervisor is unavailable',
+                               kind='unavailable', retryable=True)
+        if self.node is not None:
+            self.node.conditional_servo_supervisor = self._conditional_servo
+        return self._conditional_servo
+
+    def conditional_servo_start(self, payload: dict) -> dict:
+        return self._conditional_supervisor().start(**payload)
+
+    def conditional_servo_status(self) -> dict:
+        return self._conditional_supervisor().snapshot()
+
+    def conditional_servo_cancel(self) -> dict:
+        return self._conditional_supervisor().cancel()
+
+    def set_collision_suppressed(self, suppressed: bool) -> dict:
+        self._collision_monitor.publish({'collision_detection_suppressed': suppressed})
+        return {'success': True, 'suppressed': suppressed}
+
+    def start_collision_recording(self) -> dict:
+        return self._collision_monitor.trigger('/zeroerr_collision_calibration_runner/start_external')
+
+    def stop_collision_recording(self) -> dict:
+        return self._collision_monitor.trigger('/zeroerr_collision_calibration_runner/stop')
+
+    def rviz_status(self) -> dict:
+        return self._diagnostics.rviz_status()
+
+    def set_rviz_enabled(self, enabled: bool) -> dict:
+        return self._diagnostics.set_rviz_enabled(enabled)
+
+    def open_collision_diagnostics(self) -> dict:
+        return self._diagnostics.open_collision_diagnostics()
+
+    def close(self):
+        self._diagnostics.close()

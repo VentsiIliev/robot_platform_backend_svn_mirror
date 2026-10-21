@@ -83,3 +83,6 @@ It does **not** guarantee that the full Cartesian path between start and target 
 
 See [Backend profile configuration](docs/backend_configuration.md) for ownership,
 revision-checked edits, saved/applied status, and standalone operation.
+
+See [Runtime API architecture](docs/runtime_api_architecture.md) for the four API
+groups, gateway contract, typed failures, HTTP/OpenAPI contracts and extension/testing rules.

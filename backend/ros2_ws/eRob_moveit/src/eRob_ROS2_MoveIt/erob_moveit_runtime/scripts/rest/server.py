@@ -4,37 +4,30 @@ ROS2 Bridge Server - Exposes the shared MoveIt robot backend via REST API.
 """
 import os
 import atexit
-import json
 import logging
 import socket
-import subprocess
 import sys
 import threading
 import time
-import traceback
-import uuid
 
 from flask import Flask, Response, jsonify, request
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
-from std_srvs.srv import Trigger
-from std_msgs.msg import String
-from werkzeug.exceptions import HTTPException
-from ament_index_python.packages import get_package_prefix, get_package_share_directory
 
 from robot_controller import RobotController
 from backend.backend_factory import create_robot_backend
 from backend.i_robot_backend import IRobotBackend
 from runtime_api.handlers import RuntimeApi
+from runtime_api.contracts import response_error
+from rest.routes.common import install_http_contract, to_http
 from runtime_gateway.local import LocalRuntimeGateway
 from runtime_websockets.execution_server import start_execution_websocket_server
 from runtime_websockets.state_server import start_state_websocket_server
 from runtime_websockets.sensor_server import start_sensor_websocket_server
 from motion.servo.conditional_servo import ConditionalServoSupervisor
 from rest.openapi import OPENAPI_SPEC, SWAGGER_HTML
-from rest.rviz_process import RvizProcessManager
+from runtime_gateway.adapters.rviz_process import RvizProcessManager
 import config
-
 
 LOG_FILE = config.REST_LOG
 logger = logging.getLogger("erob_moveit_rest_server")
@@ -49,7 +42,6 @@ if not logger.handlers:
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
 
-
 def _to_jsonable(value):
     """Convert nested ROS / numpy-ish values into plain JSON-safe Python types."""
     if isinstance(value, dict):
@@ -63,10 +55,8 @@ def _to_jsonable(value):
             pass
     return value
 
-
 def _response_error(message: str, status_code: int, **extra):
-    return jsonify({"success": False, "error": message, **extra}), status_code
-
+    return to_http(response_error(message, status_code, **extra))
 
 def _http_status_for_state(state: str | None, default: int = 500) -> int:
     if state in {"HARDWARE_NOT_READY"}:
@@ -75,13 +65,11 @@ def _http_status_for_state(state: str | None, default: int = 500) -> int:
         return 501
     return default
 
-
 def _as_dict(value, error_message: str) -> dict:
     value = _to_jsonable(value)
     if isinstance(value, dict):
         return value
     return {"success": False, "error": error_message}
-
 
 def _configured_tcp_servers(host: str, port: int) -> list[tuple[str, str, int]]:
     servers = [("REST HTTP", str(host or "0.0.0.0"), int(port))]
@@ -105,7 +93,6 @@ def _configured_tcp_servers(host: str, port: int) -> list[tuple[str, str, int]]:
         ))
     return servers
 
-
 def _assert_tcp_servers_available(servers: list[tuple[str, str, int]]) -> None:
     seen: set[tuple[str, int]] = set()
     conflicts = []
@@ -127,7 +114,6 @@ def _assert_tcp_servers_available(servers: list[tuple[str, str, int]]) -> None:
             f"{conflict_text}"
         )
 
-
 def start_rest_server(
     robot: IRobotBackend | None = None,
     node: RobotController | None = None,
@@ -146,12 +132,13 @@ def start_rest_server(
     """
 
     app = Flask(__name__)
+    install_http_contract(app)
     def update_rviz_markers(running):
         if node is not None and rclpy.ok():
             node.set_rviz_visualization_enabled(running)
 
     rviz_manager = RvizProcessManager(on_state_changed=update_rviz_markers)
-    atexit.register(rviz_manager.close)
+    # Gateway owns injected diagnostic resources and closes them on shutdown.
 
     def start_initial_rviz():
         if os.environ.get("ZEROERR_USE_RVIZ", "false").strip().lower() in {"1", "true", "yes", "on"}:
@@ -178,10 +165,20 @@ def start_rest_server(
             })
             startup_state.update(extra)
 
+    conditional_servo = ConditionalServoSupervisor(
+        lambda: robot,
+        logger=logger,
+        monitor_rate_hz=50.0,
+    )
+
     gateway = LocalRuntimeGateway(
         robot_getter=lambda: robot,
         node_getter=lambda: node,
+        conditional_servo=conditional_servo,
+        rviz_manager=rviz_manager,
     )
+
+    atexit.register(gateway.close)
 
     try:
         _assert_tcp_servers_available(_configured_tcp_servers(host, port))
@@ -193,6 +190,8 @@ def start_rest_server(
     def get_startup_status():
         with startup_lock:
             status = dict(startup_state)
+        status['robot_release'] = {'target': os.environ.get('ROBOT_RELEASE_TARGET'),
+                                   'profile': os.environ.get('ZEROERR_ACTIVE_PROFILE')}
         runtime_status = gateway.startup_status()
         status["ros2_active"] = bool(runtime_status.get("ros2_active", False))
         if status.get("error") is not None:
@@ -211,69 +210,6 @@ def start_rest_server(
                 status["ready"] = False
                 status["motion_stack_fault"] = runtime_status.get("motion_stack_fault")
         return status
-
-    def drive_command_response(command_result: dict, desired_enabled: bool):
-        command_result = _to_jsonable(command_result)
-        if not isinstance(command_result, dict):
-            return jsonify({
-                "success": False,
-                "command_accepted": False,
-                "desired_enabled": bool(desired_enabled),
-                "error": f"unexpected drive command result type: {type(command_result).__name__}",
-            }), 500
-        command_accepted = bool(command_result.get("success", False))
-        verify_timeout_s = max(
-            float(getattr(config, "STARTUP_AUTO_ENABLE_DRIVES_VERIFY_TIMEOUT_S", 5.0)),
-            0.1,
-        )
-        verify_deadline = time.monotonic() + verify_timeout_s
-        drive_status = _as_dict(
-            node.get_drive_operation_status(),
-            "unexpected drive status result type",
-        )
-
-        while command_accepted and time.monotonic() < verify_deadline:
-            actual_enabled = bool(drive_status.get("actual_enabled", False))
-            requested_enabled = bool(drive_status.get("requested_enabled", False))
-            if desired_enabled and actual_enabled and requested_enabled:
-                break
-            if not desired_enabled and not actual_enabled and not requested_enabled:
-                break
-            time.sleep(0.05)
-            drive_status = _as_dict(
-                node.get_drive_operation_status(),
-                "unexpected drive status result type",
-            )
-            if not drive_status.get("success", True):
-                break
-
-        actual_enabled = bool(drive_status.get("actual_enabled", False))
-        requested_enabled = bool(drive_status.get("requested_enabled", False))
-        verified = (
-            actual_enabled and requested_enabled
-            if desired_enabled
-            else not actual_enabled and not requested_enabled
-        )
-        response = {
-            **drive_status,
-            "success": bool(command_accepted and verified),
-            "command_accepted": command_accepted,
-            "desired_enabled": bool(desired_enabled),
-            "request": command_result,
-        }
-        if response["success"]:
-            return jsonify(response), 200
-        if not command_accepted:
-            error = str(command_result.get("error") or "drive command was rejected")
-            status_code = _http_status_for_state(command_result.get("state"))
-            response["error"] = error
-            return jsonify(response), status_code
-        response["error"] = (
-            "drive enable command accepted, but drives are not operation_enabled"
-            if desired_enabled
-            else "drive disable command accepted, but drives still report operation_enabled"
-        )
-        return jsonify(response), 202
 
     # ------------------------------------------------------------------
     # ROS2 initialization (standalone mode)
@@ -340,59 +276,25 @@ def start_rest_server(
     if robot is None and runtime_initializer is None and not allow_starting_without_robot:
         raise RuntimeError("REST server started without a robot instance")
 
-    @app.errorhandler(Exception)
-    def json_error_handler(exc):
-        if isinstance(exc, HTTPException):
-            return jsonify({
-                "success": False,
-                "status": "error",
-                "error": exc.description,
-                "code": exc.code,
-                "startup": get_startup_status(),
-            }), exc.code
-        logger.exception("Unhandled REST exception")
-        return jsonify({
-            "success": False,
-            "status": "error",
-            "error": str(exc),
-            "startup": get_startup_status(),
-        }), 500
-
     @app.before_request
     def require_runtime_ready():
+        if request.url_rule is None:
+            return None
         allowed_endpoints = {"health", "startup_status", "swagger_docs", "openapi_json", "static"}
+        endpoint = (request.endpoint or "").rsplit(".", 1)[-1]
         if (request.blueprint == "backend_configuration"
-                or request.endpoint in allowed_endpoints
-                or request.method == "GET" and request.endpoint in {"get_tool_registry", "get_workobject_registry"}):
+                or endpoint in allowed_endpoints
+                or request.method == "GET" and endpoint in {"get_tool_registry", "get_workobject_registry"}):
             return None
         if robot is None or node is None:
-            return jsonify({
-                "success": False,
-                "error": "robot runtime is still starting",
-                "startup": get_startup_status(),
-            }), 503
+            return to_http(response_error('Robot runtime is still starting', 503,
+                                          code='runtime_unavailable', retryable=True,
+                                          startup=get_startup_status()))
         return None
 
     # ------------------------------------------------------------------
     # Routes
     # ------------------------------------------------------------------
-
-    @app.route("/health", methods=["GET"])
-    def health():
-        status = get_startup_status()
-        status["robot_release"] = {"target": os.environ.get("ROBOT_RELEASE_TARGET"), "profile": os.environ.get("ZEROERR_ACTIVE_PROFILE")}
-        http_status = 200 if status.get("error") is None else 500
-        # Legacy GUI clients use /health.status == "ok" as their interaction
-        # gate, so only report ok once the motion stack is ready.
-        health_status = "error" if status.get("error") else "ok" if status.get("ready") else status.get("phase", "starting")
-        return jsonify({"status": health_status, **status}), http_status
-
-    @app.route("/startup/status", methods=["GET"])
-    def startup_status():
-        status = get_startup_status()
-        status["robot_release"] = {"target": os.environ.get("ROBOT_RELEASE_TARGET"), "profile": os.environ.get("ZEROERR_ACTIVE_PROFILE")}
-        http_status = 200 if status.get("error") is None else 500
-        return jsonify(status), http_status
 
     @app.route("/docs", methods=["GET"])
     @app.route("/api/docs", methods=["GET"])
@@ -403,28 +305,6 @@ def start_rest_server(
     def openapi_json():
         return jsonify(OPENAPI_SPEC)
 
-    conditional_servo = ConditionalServoSupervisor(
-        lambda: robot,
-        logger=logger,
-        monitor_rate_hz=50.0,
-    )
-    collision_config_channel = {"publisher": None, "subscription": None}
-    collision_config_publisher_lock = threading.Lock()
-    collision_config_state = {"payload": None, "received_at": 0.0}
-    collision_config_state_changed = threading.Condition()
-    collision_diagnostics_process = {"process": None}
-
-    def on_collision_config_state(message: String) -> None:
-        try:
-            state = json.loads(message.data)
-            if not isinstance(state, dict):
-                return
-            with collision_config_state_changed:
-                collision_config_state["payload"] = state
-                collision_config_state["received_at"] = time.monotonic()
-                collision_config_state_changed.notify_all()
-        except (TypeError, ValueError, json.JSONDecodeError):
-            logger.warning("Invalid collision monitor config-state payload")
     runtime_api = RuntimeApi(
         robot_getter=lambda: robot,
         node_getter=lambda: node,
@@ -435,464 +315,14 @@ def start_rest_server(
         conditional_servo=conditional_servo,
     )
 
-    from configuration.http import configuration_blueprint
-    from configuration.domain import ConfigurationError
-    app.register_blueprint(configuration_blueprint(lambda: configuration_service()))
-
-    @app.errorhandler(ConfigurationError)
-    def configuration_error(error):
-        return jsonify(success=False, error=str(error), code=error.code), error.status
-
-    def api_response(response):
-        return jsonify(response.body), response.status
-
-    def call_trigger_service(service_name: str, timeout_s: float = 3.0):
-        """Call a sibling ROS Trigger service without spinning this node twice."""
-        client = node.create_client(Trigger, service_name)
-        try:
-            if not client.wait_for_service(timeout_sec=timeout_s):
-                return _response_error(
-                    f"ROS service is unavailable: {service_name}", 503)
-            future = client.call_async(Trigger.Request())
-            completed = threading.Event()
-            future.add_done_callback(lambda _future: completed.set())
-            if not completed.wait(timeout_s):
-                return _response_error(
-                    f"ROS service timed out: {service_name}", 504)
-            result = future.result()
-            if result is None:
-                return _response_error(
-                    f"ROS service returned no result: {service_name}", 500)
-            status = 200 if result.success else 409
-            return jsonify({
-                "success": bool(result.success),
-                "message": str(result.message),
-            }), status
-        finally:
-            node.destroy_client(client)
-
-    def ensure_collision_config_channel():
-        with collision_config_publisher_lock:
-            publisher = collision_config_channel["publisher"]
-            if publisher is None:
-                publisher = node.create_publisher(
-                    String, "/zeroerr/collision_monitor/config", 10)
-                collision_config_channel["publisher"] = publisher
-                collision_config_channel["subscription"] = node.create_subscription(
-                    String,
-                    "/zeroerr/collision_monitor/config_state",
-                    on_collision_config_state,
-                    10,
-                )
-        discovery_deadline = time.monotonic() + 1.0
-        while publisher.get_subscription_count() < 1 and time.monotonic() < discovery_deadline:
-            time.sleep(0.02)
-        return publisher if publisher.get_subscription_count() >= 1 else None
-
-    def wait_for_collision_config(predicate, timeout_s: float = 2.0):
-        deadline = time.monotonic() + timeout_s
-        with collision_config_state_changed:
-            while time.monotonic() < deadline:
-                state = collision_config_state["payload"]
-                if isinstance(state, dict) and predicate(state):
-                    return dict(state)
-                collision_config_state_changed.wait(timeout=0.05)
-        return None
-
-    def publish_collision_config(payload: dict):
-        publisher = ensure_collision_config_channel()
-        if publisher is None:
-            return None, _response_error(
-                "collision monitor config subscriber is unavailable", 503)
-        message = String()
-        request_id = uuid.uuid4().hex
-        message.data = json.dumps({**payload, "_request_id": request_id})
-        publisher.publish(message)
-        confirmed = wait_for_collision_config(
-            lambda state: state.get("_request_id") == request_id
-            and all(state.get(key) == value for key, value in payload.items()))
-        if confirmed is None:
-            return None, _response_error(
-                "collision monitor did not confirm configuration update", 504)
-        return confirmed, None
-
-    def observed_collision_config():
-        if node is None:
-            return None
-        if ensure_collision_config_channel() is None:
-            return None
-        with collision_config_state_changed:
-            if time.monotonic() - collision_config_state['received_at'] > 2.0:
-                return None
-            state = collision_config_state['payload']
-            return dict(state) if isinstance(state, dict) else None
-
-    def apply_collision_config(patch):
-        if node is None:
-            return 'Saved; collision controller is unavailable'
-        state, error = publish_collision_config(patch)
-        return None if error is None else 'Saved; collision controller did not confirm application'
-
-    # Construct lazily once the profile is known, including during standalone startup.
-    def configuration_service():
-        service = gateway.configuration
-        service.runtime.monitor_getter = observed_collision_config
-        service.runtime.monitor_apply = apply_collision_config
-        return service
-
-    @app.route("/move/linear", methods=["POST"])
-    def move_linear():
-        return api_response(runtime_api.move_linear(request.json))
-
-    @app.route("/collision/calibration/recording/start", methods=["POST"])
-    def start_collision_calibration_recording():
-        return call_trigger_service(
-            "/zeroerr_collision_calibration_runner/start_external")
-
-    @app.route("/collision/calibration/recording/stop", methods=["POST"])
-    def stop_collision_calibration_recording():
-        return call_trigger_service("/zeroerr_collision_calibration_runner/stop")
-
-    @app.route("/collision/monitor/suppression", methods=["POST"])
-    def set_collision_monitor_suppression():
-        payload = request.get_json(silent=True) or {}
-        if not isinstance(payload.get("suppressed"), bool):
-            return _response_error("suppressed must be a boolean", 400)
-        requested = payload["suppressed"]
-        _state, error = publish_collision_config({
-            "collision_detection_suppressed": requested})
-        if error is not None:
-            return error
-        return jsonify({
-            "success": True,
-            "suppressed": payload["suppressed"],
-        })
-
-    @app.route("/collision/monitor/config", methods=["GET"])
-    def get_collision_monitor_config():
-        if ensure_collision_config_channel() is None:
-            return _response_error(
-                "collision monitor config subscriber is unavailable", 503)
-        state = wait_for_collision_config(lambda value: bool(value))
-        if state is None:
-            return _response_error(
-                "collision monitor configuration is unavailable", 504)
-        return jsonify({"success": True, "config": state})
-
-    @app.route("/collision/monitor/config", methods=["POST"])
-    def update_collision_monitor_config():
-        payload = request.get_json(silent=True) or {}
-        allowed = {
-            "detection_enabled", "active_stop_enabled",
-            "effort_following_error_detection_enabled",
-            "collision_sensitivity_percent", "confirm_duration_ms",
-            "dynamic_threshold_enabled", "dynamic_threshold_decay_sec",
-            "dynamic_threshold_max_ratio", "effort_thresholds",
-            "following_error_thresholds", "external_torque_thresholds",
-            "diagnostics_enabled",
-        }
-        unknown = sorted(set(payload) - allowed)
-        if not payload or unknown:
-            return _response_error(
-                f"unsupported collision configuration fields: {unknown}", 400)
-        service = configuration_service()
-        view = service.get('sensorless_collision')
-        result = service.update('sensorless_collision', {'monitor': payload}, view['revision'])
-        return jsonify({**result, 'saved_successfully': True,
-                        'success': not result['pending_application'],
-                        'config': (result['applied'] or result['saved'])['monitor']}), (409 if result['pending_application'] else 200)
-
-    @app.route("/visualization/rviz", methods=["GET", "POST"])
-    def control_rviz():
-        if request.method == "GET":
-            return jsonify(rviz_manager.status())
-        payload = request.get_json(silent=True)
-        if not isinstance(payload, dict) or not isinstance(payload.get("enabled"), bool):
-            return _response_error("enabled must be a boolean", 400)
-        if payload["enabled"] and node is None:
-            return _response_error("Robot runtime is still initializing", 503)
-        result = rviz_manager.set_enabled(payload["enabled"])
-        return jsonify(result), 200 if result.get("success") else 503
-
-    @app.route("/collision/monitor/diagnostics/open", methods=["POST"])
-    def open_collision_monitor_diagnostics():
-        process = collision_diagnostics_process["process"]
-        if process is not None and process.poll() is None:
-            state, error = publish_collision_config({"diagnostics_enabled": True})
-            if error is not None:
-                return error
-            return jsonify({
-                "success": True,
-                "already_running": True,
-                "config": state,
-            })
-
-        try:
-            prefix = get_package_prefix("plotjuggler")
-            executable = os.path.join(prefix, "lib", "plotjuggler", "plotjuggler")
-        except Exception:
-            return _response_error(
-                "PlotJuggler is not installed. Install ros-jazzy-plotjuggler-ros and retry.",
-                503,
-            )
-        if not os.path.isfile(executable) or not os.access(executable, os.X_OK):
-            return _response_error(
-                f"PlotJuggler executable is unavailable: {executable}", 503)
-        if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
-            return _response_error(
-                "The backend has no graphical display available for PlotJuggler", 503)
-
-        state, error = publish_collision_config({"diagnostics_enabled": True})
-        if error is not None:
-            return error
-
-        layout = os.path.join(
-            get_package_share_directory("zeroerr"),
-            "config",
-            "collision_observer_plotjuggler.xml",
-        )
-        try:
-            collision_diagnostics_process["process"] = subprocess.Popen(
-                [
-                    executable,
-                    "-l", layout,
-                    "--start_streamer", "DataStreamROS2",
-                    "--buffer_size", "30",
-                ],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-            )
-        except OSError as exc:
-            return _response_error(f"Could not start PlotJuggler: {exc}", 500)
-        return jsonify({
-            "success": True,
-            "already_running": False,
-            "config": state,
-        })
-
-    @app.route("/move/fast_lin", methods=["POST"])
-    def move_fast_lin():
-        return api_response(runtime_api.move_fast_lin(request.json))
-
-
-    @app.route("/move/ptp", methods=["POST"])
-    def move_ptp():
-        return api_response(runtime_api.move_ptp(request.json))
-
-    @app.route("/execute/path", methods=["POST"])
-    def execute_path():
-        return api_response(runtime_api.execute_path(request.json))
-
-    @app.route("/execute/sequence", methods=["POST"])
-    def execute_sequence():
-        return api_response(runtime_api.execute_sequence(request.json))
-
-    @app.route("/execute/ordered_motion_chain", methods=["POST"])
-    def execute_ordered_motion_chain():
-        return api_response(runtime_api.execute_ordered_motion_chain(request.json))
-
-    @app.route("/execute/ordered_motion_chain/prepare", methods=["POST"])
-    def prepare_ordered_motion_chain():
-        return api_response(runtime_api.prepare_ordered_motion_chain(request.json))
-
-    @app.route("/execute/ordered_motion_chain/prepared/<plan_id>/execute", methods=["POST"])
-    def execute_prepared_ordered_motion_chain(plan_id):
-        return api_response(runtime_api.execute_prepared_ordered_motion_chain(plan_id))
-
-    @app.route("/execute/ordered_motion_chain/prepared/<plan_id>", methods=["GET", "DELETE"])
-    def prepared_ordered_motion_chain(plan_id):
-        if request.method == "DELETE":
-            return api_response(runtime_api.discard_prepared_ordered_motion_chain(plan_id))
-        return api_response(runtime_api.prepared_ordered_motion_chain_status(plan_id))
-
-    @app.route("/unwind/joint6", methods=["POST"])
-    def unwind_joint6():
-        return api_response(runtime_api.unwind_joint6(request.json))
-
-    @app.route("/safety/walls/enabled", methods=["GET"])
-    def safety_walls_enabled():
-        return api_response(runtime_api.safety_walls_enabled())
-
-    @app.route("/safety/walls/status", methods=["GET"])
-    def safety_walls_status():
-        return api_response(runtime_api.safety_walls_status())
-
-    @app.route("/safety/walls/enable", methods=["POST"])
-    def enable_safety_walls():
-        return api_response(runtime_api.enable_safety_walls())
-
-    @app.route("/safety/walls/disable", methods=["POST"])
-    def disable_safety_walls():
-        return api_response(runtime_api.disable_safety_walls())
-
-    @app.route("/safety/passages", methods=["GET"])
-    def motion_passages_status():
-        return api_response(runtime_api.motion_passage_status())
-
-    @app.route("/safety/passages/<passage_id>", methods=["GET", "POST"])
-    def motion_passage(passage_id):
-        if request.method == "GET":
-            return api_response(runtime_api.motion_passage_status(passage_id))
-        return api_response(runtime_api.set_motion_passage_closed(passage_id, request.json))
-
-    @app.route("/position/current", methods=["GET"])
-    def get_position():
-        return api_response(runtime_api.current_position())
-
-    @app.route("/position/base_tcp", methods=["GET"])
-    def get_base_tcp_position():
-        return api_response(runtime_api.base_tcp_position())
-
-    @app.route("/position/flange", methods=["GET"])
-    def get_flange_position():
-        return api_response(runtime_api.flange_position())
-
-    @app.route("/tool/registry", methods=["GET"])
-    def get_tool_registry():
-        return api_response(runtime_api.tool_registry())
-
-    @app.route("/tool/active", methods=["GET"])
-    def get_active_tool():
-        return api_response(runtime_api.active_tool())
-
-    @app.route("/tool/active", methods=["POST"])
-    def set_active_tool():
-        return api_response(runtime_api.set_active_tool(request.json))
-
-    @app.route("/tool/registry/<int:tool_id>", methods=["POST"])
-    def update_tool_registry(tool_id):
-        return api_response(runtime_api.update_tool_registry(tool_id, request.json))
-
-    @app.route("/reachability/pose", methods=["POST"])
-    def validate_pose():
-        return api_response(runtime_api.validate_pose(request.json))
-
-    @app.route("/velocity/current", methods=["GET"])
-    def get_velocity():
-        return api_response(runtime_api.current_velocity())
-
-    @app.route("/stop", methods=["POST"])
-    def stop_motion():
-        return api_response(runtime_api.stop_motion())
-
-    @app.route("/motion/controlled-stop", methods=["POST"])
-    def controlled_stop():
-        return api_response(runtime_api.controlled_stop(request.json))
-
-    @app.route("/workobject/set", methods=["POST"])
-    def set_workobject():
-        return api_response(runtime_api.set_workobject(request.json))
-
-    @app.route("/workobject/registry", methods=["GET"])
-    def get_workobject_registry():
-        return api_response(runtime_api.workobject_registry())
-
-    @app.route("/workobject/registry/<int:user_id>", methods=["POST"])
-    def update_workobject_registry(user_id):
-        return api_response(runtime_api.update_workobject_registry(user_id, request.json))
-
-    @app.route("/workobject/active", methods=["GET"])
-    def get_active_workobject():
-        return api_response(runtime_api.active_workobject())
-
-    @app.route("/workobject/active", methods=["POST"])
-    def set_active_workobject():
-        return api_response(runtime_api.set_active_workobject(request.json))
-
-    @app.route("/status", methods=["GET"])
-    def get_status():
-        return api_response(runtime_api.status())
-
-    @app.route("/execute/ordered_motion_chain/status", methods=["GET"])
-    def get_ordered_motion_chain_status():
-        return api_response(runtime_api.ordered_motion_chain_status())
-
-    @app.route("/state/snapshot", methods=["GET"])
-    def get_state_snapshot():
-        return api_response(runtime_api.state_snapshot())
-
-    @app.route("/state/kinematics", methods=["GET"])
-    def get_state_kinematics():
-        return api_response(runtime_api.state_kinematics())
-
-    @app.route("/servo/cartesian/start", methods=["POST"])
-    def cartesian_servo_start():
-        return api_response(
-            runtime_api.cartesian_servo_start(request.get_json(silent=True))
-        )
-
-    @app.route("/servo/cartesian/update", methods=["POST"])
-    def cartesian_servo_update():
-        return api_response(
-            runtime_api.cartesian_servo_update(request.get_json(silent=True))
-        )
-
-    @app.route("/servo/cartesian/stop", methods=["POST"])
-    def cartesian_servo_stop():
-        return api_response(
-            runtime_api.cartesian_servo_stop()
-        )
-
-    @app.route("/jog", methods=["POST"])
-    def jog():
-        return api_response(runtime_api.jog(request.get_json(silent=True)))
-
-    @app.route("/jog/joint", methods=["POST"])
-    def joint_jog():
-        return api_response(runtime_api.joint_jog(request.get_json(silent=True)))
-
-    @app.route("/servojog/start", methods=["POST"])
-    def servo_jog_start():
-        return api_response(runtime_api.servo_jog_start(request.get_json(silent=True)))
-
-    @app.route("/servojog/stop", methods=["POST"])
-    def servo_jog_stop():
-        payload = request.get_json(silent=True) or {}
-        # Capture receipt at the transport boundary. The reserved field is
-        # passed only to the timing instrumentation and does not affect motion.
-        payload["_ros_http_route_enter_ns"] = time.monotonic_ns()
-        return api_response(runtime_api.servo_jog_stop(payload))
-
-    @app.route("/servojog/until-condition/start", methods=["POST"])
-    def conditional_servo_start():
-        return api_response(runtime_api.conditional_servo_start(request.get_json(silent=True)))
-
-    @app.route("/servojog/until-condition/status", methods=["GET"])
-    def conditional_servo_status():
-        return api_response(runtime_api.conditional_servo_status())
-
-    @app.route("/servojog/until-condition/cancel", methods=["POST"])
-    def conditional_servo_cancel():
-        return api_response(runtime_api.conditional_servo_cancel())
-
-    @app.route("/servojog/to-z", methods=["POST"])
-    def servo_jog_to_z():
-        return api_response(runtime_api.servo_jog_to_z(request.get_json(silent=True)))
-
-    @app.route("/io/digital_output", methods=["POST"])
-    def set_digital_output():
-        return api_response(runtime_api.set_digital_output(request.json))
-
-    @app.route("/drive/enable", methods=["POST"])
-    def enable_drive_operation():
-        return api_response(runtime_api.enable_drive_operation())
-
-    @app.route("/drive/disable", methods=["POST"])
-    def disable_drive_operation():
-        return api_response(runtime_api.disable_drive_operation())
-
-    @app.route("/drive/status", methods=["GET"])
-    def drive_operation_status():
-        return api_response(runtime_api.drive_operation_status())
-
-    @app.route("/motion/interlock/status", methods=["GET"])
-    def motion_interlock_status():
-        return api_response(runtime_api.motion_interlock_status())
-
-    @app.route("/motion/interlock/reset", methods=["POST"])
-    def reset_motion_interlock():
-        return api_response(runtime_api.reset_motion_interlock())
+    from rest.routes.configuration import configuration_blueprint
+    from rest.routes.motion import motion_blueprint
+    from rest.routes.state import state_blueprint
+    from rest.routes.control import control_blueprint
+    app.register_blueprint(configuration_blueprint(runtime_api.configuration))
+    app.register_blueprint(motion_blueprint(runtime_api.motion))
+    app.register_blueprint(state_blueprint(runtime_api.state))
+    app.register_blueprint(control_blueprint(runtime_api.control))
 
     # ------------------------------------------------------------------
     # Run server
@@ -935,4 +365,4 @@ def start_rest_server(
         try:
             app.run(host=host, port=port, threaded=True, use_reloader=False)
         finally:
-            rviz_manager.close()
+            gateway.close()

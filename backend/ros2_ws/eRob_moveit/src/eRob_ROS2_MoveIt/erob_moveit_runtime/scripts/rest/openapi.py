@@ -398,3 +398,7 @@ def _configuration_openapi():
 
 
 _configuration_openapi()
+
+# Shared DTO/response schemas are derived from the same contracts used by the API layer.
+from rest.openapi_contracts import add_runtime_contracts
+add_runtime_contracts(OPENAPI_SPEC)

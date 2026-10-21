@@ -11,7 +11,10 @@ from flask import Flask
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from configuration.domain import ConfigurationError, Conflict, canonical_calibration, edit_tool, tool_snapshot
-from configuration.http import configuration_blueprint
+from rest.routes.configuration import configuration_blueprint
+from runtime_api.configuration.api import ConfigurationApi
+from runtime_gateway.base import RuntimeGateway
+from unittest.mock import Mock
 from configuration.repository import YamlProfileRepository
 from configuration.service import ConfigurationService
 
@@ -49,7 +52,11 @@ def context(tmp_path):
     runtime = Runtime()
     service = ConfigurationService(repository, runtime)
     app = Flask(__name__)
-    app.register_blueprint(configuration_blueprint(lambda: service))
+    gateway = Mock(spec=RuntimeGateway)
+    gateway.get_configuration.side_effect = service.get
+    gateway.update_configuration.side_effect = service.update
+    gateway.apply_configuration.side_effect = service.retry_application
+    app.register_blueprint(configuration_blueprint(ConfigurationApi(gateway)))
     return service, runtime, path, app.test_client()
 
 
@@ -251,12 +258,12 @@ def test_calibration_application_waits_for_fresh_stationary_state():
         assert runtime.apply('calibration', CALIBRATION) is None
         apply.assert_called_once()
         measured.received_at = time.monotonic() - 1
-        assert 'fresh' in runtime.apply('calibration', CALIBRATION)
+        assert 'fresh' in runtime.apply('calibration', CALIBRATION).message
         measured.received_at = time.monotonic()
         measured.velocity = (0.1, 0)
-        assert 'stationary' in runtime.apply('calibration', CALIBRATION)
+        assert 'stationary' in runtime.apply('calibration', CALIBRATION).message
         node.has_pending_motion.return_value = True
-        assert 'executing' in runtime.apply('calibration', CALIBRATION)
+        assert 'executing' in runtime.apply('calibration', CALIBRATION).message
     assert not node.execution_lock.locked()
 
 
@@ -321,3 +328,24 @@ def test_unavailable_runtime_state_does_not_hide_successful_save(context):
     assert result['applied'] is None
     assert result['restart_required'] is None
     assert tool_snapshot(yaml.safe_load(path.read_text()))['tool_registry']['TOOL_2'] == [7]*6
+
+
+def test_durable_save_reports_exact_pending_gateway_cause(context):
+    from runtime_gateway.errors import GatewayError
+    service, runtime, path, client = context
+    revision = service.get('calibration')['revision']
+    error = GatewayError('controller_confirmation_timeout', 'Controller did not acknowledge command xyz',
+                         kind='timeout', outcome_unknown=True, details={'command_id': 'xyz'})
+    with patch.object(runtime, 'apply', side_effect=error):
+        response = client.patch('/configuration/calibration/tools/2', json={
+            'expected_revision': revision, 'changes': {'transform': [3]*6}})
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body['success'] and body['pending_application']
+    info = body['application_error_info']
+    assert info['code'] == 'controller_confirmation_timeout'
+    assert info['source'] == 'gateway'
+    assert info['outcome_unknown'] is True and info['retryable'] is False
+    assert info['details']['command_id'] == 'xyz'
+    assert str(error) in info['message']
+    assert tool_snapshot(yaml.safe_load(path.read_text()))['tool_registry']['TOOL_2'] == [3]*6

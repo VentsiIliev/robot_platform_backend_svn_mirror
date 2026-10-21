@@ -1,4 +1,11 @@
-from runtime_gateway.base import RuntimeGateway
-from runtime_gateway.local import LocalRuntimeGateway
+"""Runtime contract; local backend dependencies load only when explicitly requested."""
+from .base import RuntimeGateway
 
-__all__ = ["RuntimeGateway", "LocalRuntimeGateway"]
+__all__ = ['RuntimeGateway', 'LocalRuntimeGateway']
+
+
+def __getattr__(name):
+    if name == 'LocalRuntimeGateway':
+        from .local import LocalRuntimeGateway
+        return LocalRuntimeGateway
+    raise AttributeError(name)
