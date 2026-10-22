@@ -86,8 +86,8 @@ def main():
 
     rest_kwargs = dict(
         start_ros=False,  # runtime_initializer owns ROS initialization
-        host="0.0.0.0",
-        port=5000,
+        host=config.REST_HOST,
+        port=config.REST_PORT,
         runtime_initializer=initialize_runtime,
         allow_starting_without_robot=True,
     )

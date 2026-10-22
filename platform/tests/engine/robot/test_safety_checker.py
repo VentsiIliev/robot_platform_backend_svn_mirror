@@ -1,70 +1,80 @@
 import unittest
-from unittest.mock import MagicMock
+from types import SimpleNamespace
+from unittest.mock import Mock
 
-from src.engine.robot.safety.safety_checker import SafetyChecker
 from src.engine.common_settings_ids import CommonSettingsID
+from src.engine.robot.configuration.robot_settings import SafetyLimits
+from src.engine.robot.safety.safety_checker import (
+    InvalidSettingsServiceError, SafetyChecker, SafetyLimitsNotFoundError,
+)
 
-settings_key = CommonSettingsID.ROBOT_CONFIG
+
 class TestSafetyChecker(unittest.TestCase):
-
     def setUp(self):
-        self.checker = SafetyChecker(settings_key=settings_key,settings_service=None)
+        self.limits = SafetyLimits(z_min=0)
+        self.settings = Mock()
+        self.settings.get.return_value = SimpleNamespace(safety_limits=self.limits)
+        self.checker = SafetyChecker(CommonSettingsID.ROBOT_CONFIG, self.settings)
 
-    # ------------------------------------------------------------------
-    # No settings — always allow
-    # ------------------------------------------------------------------
+    def test_missing_settings_rejected_at_construction(self):
+        with self.assertRaises(InvalidSettingsServiceError):
+            SafetyChecker(CommonSettingsID.ROBOT_CONFIG)
 
-    def test_no_settings_allows_any_position(self):
-        self.assertTrue(self.checker.is_within_safety_limits([100.0, 200.0, 300.0, 0, 0, 0]))
+    def test_missing_limits_raises_for_both_queries(self):
+        for config in (None, SimpleNamespace(), SimpleNamespace(safety_limits=None)):
+            self.settings.get.return_value = config
+            for method in (self.checker.get_violations, self.checker.is_within_safety_limits):
+                with self.subTest(config=config, method=method.__name__):
+                    with self.assertRaises(SafetyLimitsNotFoundError):
+                        method([0, 0, 300])
 
-    def test_empty_position_blocked(self):
-        self.assertFalse(self.checker.is_within_safety_limits([]))
+    def test_repository_failure_propagates(self):
+        self.settings.get.side_effect = OSError('settings unreadable')
+        for method in (self.checker.get_violations, self.checker.is_within_safety_limits):
+            with self.assertRaises(OSError):
+                method([0, 0, 300])
 
-    def test_none_position_blocked(self):
-        self.assertFalse(self.checker.is_within_safety_limits(None))
+    def test_empty_and_short_positions_blocked(self):
+        for position in (None, [], [10, 20]):
+            with self.assertRaises(ValueError):
+                self.checker.is_within_safety_limits(position)
 
-    def test_position_too_short_blocked(self):
-        self.assertFalse(self.checker.is_within_safety_limits([10.0, 20.0]))
+    def test_valid_and_boundary_positions_allowed(self):
+        for position in ([100, -200, 400, 0, 0, 0], [-500, -500, 0], [500, 500, 800]):
+            self.assertTrue(self.checker.is_within_safety_limits(position))
+            self.assertEqual(self.checker.get_violations(position), [])
 
-    # ------------------------------------------------------------------
-    # Settings with no limits attr — allow
-    # ------------------------------------------------------------------
+    def test_outside_each_axis_blocked(self):
+        for position in ([-501, 0, 300], [501, 0, 300], [0, -501, 300],
+                         [0, 501, 300], [0, 0, -1], [0, 0, 801]):
+            self.assertFalse(self.checker.is_within_safety_limits(position))
+            self.assertTrue(self.checker.get_violations(position))
 
-    def test_settings_without_limits_allows(self):
-        settings = MagicMock()
-        settings.get.return_value = MagicMock(spec=[])  # no safety_limits attr
-        checker = SafetyChecker(settings_key,settings)
-        self.assertTrue(checker.is_within_safety_limits([100.0, 200.0, 300.0]))
+    def test_invalid_bounds_rejected_on_every_check(self):
+        for field in ('x_min', 'x_max', 'y_min', 'y_max', 'z_min', 'z_max'):
+            original = getattr(self.limits, field)
+            for value in (None, '500', True, float('nan'), float('inf'), -float('inf')):
+                with self.subTest(field=field, value=value):
+                    setattr(self.limits, field, value)
+                    with self.assertRaises(ValueError):
+                        self.checker.get_violations([0, 0, 300])
+            setattr(self.limits, field, original)
+        for axis in ('x', 'y', 'z'):
+            original = getattr(self.limits, f'{axis}_min')
+            setattr(self.limits, f'{axis}_min', getattr(self.limits, f'{axis}_max') + 1)
+            with self.assertRaises(ValueError):
+                self.checker.get_violations([0, 0, 300])
+            setattr(self.limits, f'{axis}_min', original)
 
-    # ------------------------------------------------------------------
-    # Settings with limits
-    # ------------------------------------------------------------------
+    def test_invalid_coordinates_rejected(self):
+        for index in range(6):
+            for value in (None, '1', True, float('nan'), float('inf')):
+                position = [0, 0, 300, 0, 0, 0]
+                position[index] = value
+                with self.subTest(index=index, value=value):
+                    with self.assertRaises(ValueError):
+                        self.checker.get_violations(position)
 
-    def _checker_with_limits(self, x_min, x_max, y_min, y_max, z_min, z_max):
-        limits = MagicMock()
-        limits.x_min, limits.x_max = x_min, x_max
-        limits.y_min, limits.y_max = y_min, y_max
-        limits.z_min, limits.z_max = z_min, z_max
-        cfg = MagicMock()
-        cfg.safety_limits = limits
-        settings = MagicMock()
-        settings.get.return_value = cfg
-        return SafetyChecker(settings_key=settings_key,settings_service=settings)
-
-    def test_position_within_limits_allowed(self):
-        checker = self._checker_with_limits(-500, 500, -500, 500, 0, 800)
-        self.assertTrue(checker.is_within_safety_limits([100.0, -200.0, 400.0, 0, 0, 0]))
-
-    def test_x_exceeds_max_blocked(self):
-        checker = self._checker_with_limits(-500, 500, -500, 500, 0, 800)
-        self.assertFalse(checker.is_within_safety_limits([600.0, 0.0, 400.0]))
-
-    def test_z_below_min_blocked(self):
-        checker = self._checker_with_limits(-500, 500, -500, 500, 0, 800)
-        self.assertFalse(checker.is_within_safety_limits([0.0, 0.0, -10.0]))
-
-    def test_settings_exception_fails_open(self):
-        settings = MagicMock()
-        settings.get.side_effect = RuntimeError("config error")
-        checker = SafetyChecker(settings_key,settings)
-        self.assertTrue(checker.is_within_safety_limits([100.0, 200.0, 300.0]))
+    def test_generic_escape_never_authorized(self):
+        for current, target in (([600, 0, 300], [500, 0, 300]), ([], [])):
+            self.assertFalse(self.checker.is_escape_move(current, target))

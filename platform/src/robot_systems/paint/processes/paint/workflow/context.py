@@ -75,6 +75,8 @@ class PaintExecutionContext:
     dry_run_metadata: dict | None = None
 
     diagnostic_cycle_id: str = field(default_factory=lambda: uuid4().hex)
+    diagnostic_context: dict = field(default_factory=dict)
+    diagnostic_evidence: dict = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.run_allowed.set()
@@ -136,6 +138,8 @@ class PaintExecutionContext:
 
     def snapshot_dict(self) -> dict:
         return {
+            'diagnostic_context': dict(self.diagnostic_context),
+            'diagnostic_evidence': dict(self.diagnostic_evidence),
             "current_state": None if self.current_state is None else self.current_state.name,
             "paused_from_state": None if self.paused_from_state is None else self.paused_from_state.name,
             "resume_state": None if self.resume_state is None else self.resume_state.name,

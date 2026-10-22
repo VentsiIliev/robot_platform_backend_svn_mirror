@@ -1,8 +1,16 @@
-import logging
+import math
 from enum import Enum
 from typing import List
 
 from ..interfaces.i_safety_checker import ISafetyChecker
+
+
+class InvalidSettingsServiceError(Exception):
+    pass
+
+
+class SafetyLimitsNotFoundError(Exception):
+    pass
 
 
 class SafetyChecker(ISafetyChecker):
@@ -13,62 +21,56 @@ class SafetyChecker(ISafetyChecker):
                 f"SafetyChecker: settings_key must be an Enum value, got {type(settings_key).__name__!r}. "
                 f"Use a constant from settings_ids, not a bare string."
             )
+
+        if settings_service is None:
+            raise InvalidSettingsServiceError("SafetyChecker: settings_service cannot be None; it is required for safety limit checks")
+
         self._settings = settings_service
         self.settings_key = settings_key
-        self._logger = logging.getLogger(self.__class__.__name__)
 
     def _compute_violations(self, position: List[float]) -> List[str]:
         if not position or len(position) < 3:
-            return ["Position is empty or has fewer than 3 coordinates"]
+            raise ValueError("Position is empty or has fewer than 3 coordinates")
         if self._settings is None:
-            return []
+            raise InvalidSettingsServiceError("SafetyChecker: settings_service is None; cannot check safety limits")
         config = self._settings.get(self.settings_key)
         limits = getattr(config, "safety_limits", None)
         if limits is None:
-            return []
+            raise SafetyLimitsNotFoundError("SafetyChecker: safety_limits not found in settings")
+
+        # Validate the live snapshot on every admission: settings can change at runtime.
+        for axis in ("x", "y", "z"):
+            lower = getattr(limits, f"{axis}_min", None)
+            upper = getattr(limits, f"{axis}_max", None)
+            if not all(self._is_finite_number(value) for value in (lower, upper)):
+                raise ValueError(f"SafetyChecker: {axis.upper()} limits must be finite numbers")
+            if lower > upper:
+                raise ValueError(f"SafetyChecker: {axis.upper()} minimum exceeds maximum")
+        if not all(self._is_finite_number(value) for value in position):
+            raise ValueError("SafetyChecker: position must contain only finite numbers")
+
         x, y, z = position[0], position[1], position[2]
         violations = []
+
         if not (limits.x_min <= x <= limits.x_max):
             violations.append(f"X={x:.2f} not in [{limits.x_min}, {limits.x_max}]")
         if not (limits.y_min <= y <= limits.y_max):
             violations.append(f"Y={y:.2f} not in [{limits.y_min}, {limits.y_max}]")
         if not (limits.z_min <= z <= limits.z_max):
             violations.append(f"Z={z:.2f} not in [{limits.z_min}, {limits.z_max}]")
+
         return violations
 
     def get_violations(self, position: List[float]) -> List[str]:
-        try:
-            return self._compute_violations(position)
-        except Exception:
-            self._logger.warning("Safety limit check failed", exc_info=True)
-            return []
+        return self._compute_violations(position)
 
     def is_within_safety_limits(self, position: List[float]) -> bool:
-        try:
-            return len(self._compute_violations(position)) == 0
-        except Exception:
-            self._logger.warning("Safety limit check failed — allowing motion", exc_info=True)
-            return True
+        return len(self._compute_violations(position)) == 0
 
     def is_escape_move(self, current: List[float], target: List[float]) -> bool:
-        if not current or not target or len(current) < 3 or len(target) < 3:
-            return False
-        if self._settings is None:
-            return True
-        try:
-            config = self._settings.get(self.settings_key)
-            limits = getattr(config, "safety_limits", None)
-            if limits is None:
-                return True
-            cx, cy, cz = current[0], current[1], current[2]
-            tx, ty, tz = target[0], target[1], target[2]
-            if cx < limits.x_min and tx < cx: return False
-            if cx > limits.x_max and tx > cx: return False
-            if cy < limits.y_min and ty < cy: return False
-            if cy > limits.y_max and ty > cy: return False
-            if cz < limits.z_min and tz < cz: return False
-            if cz > limits.z_max and tz > cz: return False
-            return True
-        except Exception:
-            self._logger.warning("is_escape_move check failed — allowing", exc_info=True)
-            return True
+        """Do not authorize generic escapes; recovery belongs to explicit motion policies."""
+        return False
+
+    @staticmethod
+    def _is_finite_number(value) -> bool:
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)

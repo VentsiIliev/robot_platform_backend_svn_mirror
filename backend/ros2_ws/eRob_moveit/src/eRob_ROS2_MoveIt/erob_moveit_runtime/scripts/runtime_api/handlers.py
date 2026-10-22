@@ -13,13 +13,13 @@ from runtime_api.control.api import ControlApi
 class RuntimeApi:
     """Preserves existing entry points while clients migrate to named API groups."""
     def __init__(self, robot_getter=None, node_getter=None, startup_status_getter=None,
-                 runtime_state_snapshot_getter=None, *, port=5000, gateway=None, conditional_servo=None,
+                 runtime_state_snapshot_getter=None, *, port=None, gateway=None, conditional_servo=None,
                  settings: ApiSettings | None = None):
         if settings is None:
             import config
             from runtime_api.motion.requests import MotionDefaults
-            settings = ApiSettings(port=port,
-                execution_ws_port=int(getattr(config, 'REST_WS_EXECUTION_PORT', port + 2)),
+            settings = ApiSettings(port=config.REST_PORT if port is None else port,
+                execution_ws_port=config.REST_WS_EXECUTION_PORT,
                 drive_verify_timeout_s=float(getattr(config, 'STARTUP_AUTO_ENABLE_DRIVES_VERIFY_TIMEOUT_S', 5.0)),
                 motion_defaults=MotionDefaults(config.DEFAULT_VEL_PERCENT, config.DEFAULT_ACC_PERCENT, tuple(config.JOINT_NAMES)))
         if gateway is None:

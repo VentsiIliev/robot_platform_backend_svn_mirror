@@ -1,5 +1,7 @@
 # Full Stack Launch Refactor Plan
 
+> Historical launch-refactor plan. Current launch composition is under `launch/full_stack.launch.py` and its `launch/zeroerr_launch/` helpers. Use the [build/launch guide](../../../../../BUILD_SCRIPTS_README.md) for current operating commands.
+
 ## Goal
 
 Make `zeroerr/launch/full_stack.launch.py` easier to maintain without changing launch behavior.

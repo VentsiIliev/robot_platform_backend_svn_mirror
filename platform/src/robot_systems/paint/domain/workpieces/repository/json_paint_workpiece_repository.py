@@ -3,6 +3,9 @@ import logging
 import os
 import shutil
 import tempfile
+from pathlib import Path
+from src.engine.core.durable_files import atomic_write_bytes, sync_directory, store_lock, ensure_directory
+from src.engine.repositories.json.json_store import read_json_object
 from threading import RLock
 from datetime import datetime
 from typing import List, Optional
@@ -36,7 +39,7 @@ class JsonPaintWorkpieceRepository:
     def __init__(self, storage_root: str):
         self._lock = RLock()
         self._root = os.path.realpath(storage_root)
-        os.makedirs(self._root, exist_ok=True)
+        ensure_directory(Path(self._root))
         _logger.info("JsonPaintWorkpieceRepository: root -> %s", self._root)
 
     @staticmethod
@@ -60,14 +63,18 @@ class JsonPaintWorkpieceRepository:
 
     def save(self, workpiece: dict) -> str:
         with self._lock:
-            file_path = self._build_path()
-            folder = os.path.dirname(file_path)
-            storage_id = os.path.basename(folder)
-            staging = tempfile.mkdtemp(prefix=".paint-save-", dir=os.path.dirname(folder))
+            try:
+                file_path = self._build_path()
+                folder = os.path.dirname(file_path)
+                storage_id = os.path.basename(folder)
+                staging = tempfile.mkdtemp(prefix=".paint-save-", dir=os.path.dirname(folder))
+            except Exception as exc:
+                raise WorkpieceWriteError(f"Could not prepare paint workpiece storage: {exc}") from exc
             try:
                 self._prepare_record(staging, storage_id, workpiece)
                 # The record becomes visible only when both files are ready.
                 os.rename(staging, folder)
+                sync_directory(Path(folder).parent)
                 return file_path
             except Exception as exc:
                 raise WorkpieceWriteError(f"Could not save paint workpiece '{storage_id}': {exc}") from exc
@@ -78,7 +85,7 @@ class JsonPaintWorkpieceRepository:
     def _prepare_record(folder: str, storage_id: str, data: dict) -> None:
         serialized = _numpy_to_python(data)
         try:
-            payload = json.dumps(serialized, indent=2).encode("utf-8")
+            payload = json.dumps(serialized, indent=2, allow_nan=False).encode("utf-8")
         except Exception as exc:
             raise WorkpieceWriteError(f"JSON serialization failed: {exc}") from exc
         try:
@@ -89,10 +96,7 @@ class JsonPaintWorkpieceRepository:
             raise WorkpieceWriteError(f"Thumbnail generation failed: {exc}") from exc
         for name, content in [(f"{storage_id}_workpiece.json", payload),
                               (f"{storage_id}_thumbnail.png", thumbnail)]:
-            with open(os.path.join(folder, name), "wb") as handle:
-                handle.write(content)
-                handle.flush()
-                os.fsync(handle.fileno())
+            atomic_write_bytes(Path(folder) / name, content)
 
     @staticmethod
     def _discard_staging(folder: str) -> None:
@@ -111,7 +115,7 @@ class JsonPaintWorkpieceRepository:
         return self._list_all(strict=True)
 
     def _list_all(self, *, strict: bool) -> List[dict]:
-        with self._lock:
+        with self._lock, store_lock(Path(self._root) / ".publication"):
             records: List[dict] = []
             for date_dir in sorted(os.listdir(self._root)):
                 date_path = os.path.join(self._root, date_dir)
@@ -119,7 +123,12 @@ class JsonPaintWorkpieceRepository:
                     continue
                 for storage_id in sorted(os.listdir(date_path)):
                     storage_path = os.path.join(date_path, storage_id)
-                    if not os.path.isdir(storage_path) or os.path.exists(os.path.join(storage_path, ".incomplete")):
+                    if not os.path.isdir(storage_path) or storage_id.startswith('.'):
+                        continue
+                    if os.path.exists(os.path.join(storage_path, ".incomplete")):
+                        if strict:
+                            raise WorkpieceReadError(f"Workpiece '{storage_id}' has an incomplete update; recovery required")
+                        _logger.warning("Skipping incomplete workpiece %s", storage_id)
                         continue
                     json_path = os.path.join(storage_path, f"{storage_id}_workpiece.json")
                     try:
@@ -130,10 +139,12 @@ class JsonPaintWorkpieceRepository:
                         _logger.warning("Skipping unsafe paint workpiece %s: %s", storage_id, exc)
                         continue
                     if not os.path.exists(json_path):
+                        if strict:
+                            raise WorkpieceReadError(f"Workpiece '{storage_id}' is missing its JSON record")
+                        _logger.warning("Skipping workpiece with missing JSON: %s", storage_id)
                         continue
                     try:
-                        with open(json_path, "r", encoding="utf-8") as handle:
-                            raw = json.load(handle)
+                        raw = read_json_object(Path(json_path))
                         if not isinstance(raw, dict):
                             raise ValueError("Saved workpiece JSON must contain an object")
                         thumb_path = os.path.join(storage_path, f"{storage_id}_thumbnail.png")
@@ -163,19 +174,20 @@ class JsonPaintWorkpieceRepository:
             return records
 
     def delete(self, storage_id: str) -> bool:
-        with self._lock:
+        with self._lock, store_lock(Path(self._root) / ".publication"):
             path = self._find_file(storage_id)
             if path is None:
                 return False
             try:
                 shutil.rmtree(os.path.dirname(path))
+                sync_directory(Path(path).parent.parent)
                 return True
             except Exception as exc:
                 _logger.error("Failed to delete paint workpiece %s: %s", storage_id, exc)
                 return False
 
     def get_thumbnail_bytes(self, storage_id: str) -> Optional[bytes]:
-        with self._lock:
+        with self._lock, store_lock(Path(self._root) / ".publication"):
             path = self._find_file(storage_id)
             if path is None:
                 return None
@@ -186,8 +198,7 @@ class JsonPaintWorkpieceRepository:
                 with open(thumb_path, "rb") as handle:
                     return handle.read()
             try:
-                with open(path, "r", encoding="utf-8") as handle:
-                    raw = json.load(handle)
+                raw = read_json_object(Path(path))
                 thumb_bytes = generate_thumbnail_bytes(raw)
                 if thumb_bytes:
                     with open(thumb_path, "wb") as handle:
@@ -199,21 +210,21 @@ class JsonPaintWorkpieceRepository:
 
     def workpiece_id_exists(self, workpiece_id: str) -> bool:
         with self._lock:
-            for meta in self.list_all():
+            for meta in self.list_for_matching():
                 path = meta.get("path")
                 if not path:
                     continue
                 try:
-                    with open(path, "r", encoding="utf-8") as handle:
-                        raw = json.load(handle)
+                    raw = read_json_object(Path(path))
                     if str(raw.get("workpieceId", "")).strip() == str(workpiece_id).strip():
                         return True
                 except Exception:
-                    _logger.debug("Failed while checking workpieceId existence", exc_info=True)
+                    _logger.exception("Failed while checking workpieceId existence")
+                    raise
             return False
 
     def update(self, storage_id: str, data: dict) -> str:
-        with self._lock:
+        with self._lock, store_lock(Path(self._root) / ".publication"):
             path = self._find_file(storage_id)
             if path is None:
                 raise FileNotFoundError(f"Paint workpiece '{storage_id}' not found")
@@ -224,6 +235,7 @@ class JsonPaintWorkpieceRepository:
             staging = tempfile.mkdtemp(prefix=".paint-update-", dir=folder)
             marker_created = False
             thumbnail_published = False
+            json_published = False
             preserve_staging = False
             backup = os.path.join(staging, "previous_thumbnail.png")
             marker = os.path.join(folder, ".incomplete")
@@ -231,21 +243,32 @@ class JsonPaintWorkpieceRepository:
             try:
                 self._prepare_record(staging, record_id, data)
                 if had_thumbnail:
-                    shutil.copyfile(thumbnail_path, backup)
+                    atomic_write_bytes(Path(backup), Path(thumbnail_path).read_bytes())
                 # Mark unfinished publication so subsequent readers cannot use a partial pair.
                 with open(marker, "x", encoding="utf-8") as handle:
+                    marker_created = True
                     handle.write(staging)
-                marker_created = True
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                sync_directory(Path(folder))
                 os.replace(os.path.join(staging, f"{record_id}_thumbnail.png"), thumbnail_path)
                 thumbnail_published = True
                 os.replace(os.path.join(staging, f"{record_id}_workpiece.json"), path)
+                json_published = True
+                sync_directory(Path(folder))
             except Exception as exc:
+                if json_published:
+                    preserve_staging = True
+                    raise WorkpieceWriteError(
+                        f"Publication durability unconfirmed for {storage_id}; record blocked; recovery files: {staging}"
+                    ) from exc
                 if thumbnail_published:
                     try:
                         if had_thumbnail:
                             os.replace(backup, thumbnail_path)
                         else:
                             os.unlink(thumbnail_path)
+                        sync_directory(Path(folder))
                     except OSError as rollback_exc:
                         preserve_staging = True
                         raise WorkpieceWriteError(
@@ -258,6 +281,7 @@ class JsonPaintWorkpieceRepository:
                     if marker_created and os.path.exists(marker):
                         try:
                             os.unlink(marker)
+                            sync_directory(Path(folder))
                         except OSError as exc:
                             raise WorkpieceWriteError(
                                 f"Paint workpiece '{storage_id}' remains blocked because publication cleanup failed: {exc}; recovery files: {staging}"
@@ -266,12 +290,11 @@ class JsonPaintWorkpieceRepository:
             return path
 
     def load_raw(self, storage_id: str) -> Optional[dict]:
-        with self._lock:
+        with self._lock, store_lock(Path(self._root) / ".publication"):
             path = self._find_file(storage_id)
             if path is None:
                 return None
-            with open(path, "r", encoding="utf-8") as handle:
-                return json.load(handle)
+            return read_json_object(Path(path))
 
     def _build_path(self) -> str:
         now = datetime.now()
@@ -279,7 +302,7 @@ class JsonPaintWorkpieceRepository:
         storage_id = now.strftime("%Y-%m-%d_%H-%M-%S-%f")
         folder = os.path.join(self._root, date_str, storage_id)
         self._assert_safe_path(folder)
-        os.makedirs(os.path.dirname(folder), exist_ok=True)
+        ensure_directory(Path(folder).parent)
         return os.path.join(folder, f"{storage_id}_workpiece.json")
 
     def _find_file(self, storage_id: str) -> Optional[str]:

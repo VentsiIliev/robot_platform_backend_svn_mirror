@@ -46,7 +46,7 @@ On first settings_service.get("robot_config"):
         │  not in cache → reload("robot_config")
         │      └─ BaseJsonSettingsRepository.load()
         │              ├─ file exists? → json.load → serializer.from_dict → return T
-        │              └─ file missing? → write defaults → return T
+        │              └─ file missing? → required: raise; optional: in-memory defaults
         │
         └─ cache["robot_config"] = T → return T
 
@@ -155,10 +155,10 @@ fresh = settings_service.reload("robot_config")
 
 ## Design Notes
 
-- **Lazy loading**: `get()` only reads from disk on the first call. Subsequent calls return the in-memory cache. Use `reload()` to force a re-read.
+- **Lazy loading**: `get()` only reads from disk on the first call. Subsequent calls return independent copies of the in-memory cache. Use `reload()` to force a re-read.
 - **Write-through cache**: `save()` writes to disk and immediately updates the cache, so subsequent `get()` calls see the new value without a disk round-trip.
-- **Auto-create defaults**: If the settings file does not exist, `BaseJsonSettingsRepository.load()` creates it with default values from `serializer.get_default()`. This ensures the app always starts successfully even on a fresh installation.
-- **Error handling**: JSON parse errors fall back to defaults and log a warning. Other I/O errors raise `SettingsLoadError` / `SettingsSaveError`.
+- **Explicit provisioning**: Required files must exist. Optional missing files can use in-memory defaults; loading never creates a file.
+- **Error handling**: Corrupt, empty and unreadable files raise. Failed saves/reloads invalidate the cache. See [the persistence contract and recovery procedure](json/README.md).
 
 <!-- source-navigation:start -->
 ## Source navigation

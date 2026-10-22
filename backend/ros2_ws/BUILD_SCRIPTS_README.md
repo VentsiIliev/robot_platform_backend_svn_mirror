@@ -1,320 +1,151 @@
-# ROS2 Workspace Build Scripts
+# Backend build, test and launch
 
-This directory contains helper scripts for building and launching your ROS2 workspace.
+Run commands from **`backend/ros2_ws`**, relative to your checkout. Scripts resolve
+paths from their own location; `/home/ilv/ros2_ws` is not a required installation
+path. See [workspace requirements](WORKSPACE_REQUIREMENTS.md) for ROS/MoveIt,
+EtherLab and hardware dependencies. Build scripts do not install system packages.
 
-## Scripts Overview
+## ROS environment
 
-### 1. `clean_build.sh` - Complete Clean Build
-Performs a full clean and rebuild of the entire workspace.
+Build/launch scripts choose ROS in this order: `ROS_SETUP_FILE`, an installed
+`ROS_DISTRO` from the environment, Rolling if installed, then Jazzy. Pin one distro
+for a deployment, for example:
 
-**Usage:**
 ```bash
-./clean_build.sh
+export ROS_SETUP_FILE=/opt/ros/jazzy/setup.bash
 ```
 
-**What it does:**
-- Removes `build/`, `install/`, and `log/` directories
-- Sources ROS2 Rolling base installation
-- Builds all packages from scratch
-- Verifies critical packages and libraries
-- Checks library paths
+Use a separate build/install workspace when changing ROS distros, or deliberately
+clean generated artifacts first. Build scripts clear inherited ROS/overlay paths
+to avoid mixing installations. ZeroErr also supports `MOVEIT_SETUP_FILE` for an
+additional MoveIt underlay.
 
-**When to use:**
-- After pulling major changes from git
-- When experiencing strange build errors
-- After modifying CMakeLists.txt or package.xml files
-- First time setup
+## ZeroErr: fresh checkout or incremental build
 
----
-
-### 2. `quick_build.sh` - Incremental Build
-Rebuilds packages without cleaning (faster for development).
-
-**Usage:**
 ```bash
-# Build all packages
-./quick_build.sh
-
-# Build specific packages only
-./quick_build.sh fairino5_v6_moveit2_config
-./quick_build.sh fairino_hardware fairino_msgs
-```
-
-**What it does:**
-- Sources ROS2 Rolling
-- Builds specified packages (or all if none specified)
-- Uses existing build artifacts for faster compilation
-
-**When to use:**
-- During iterative development
-- After modifying source code
-- When you only changed specific packages
-
----
-
-### 3. `build_zeroerr.sh` - Build Overlay Workspace
-Builds only the overlay workspace packages (`erob_moveit_runtime` and `zeroerr`).
-
-**Usage:**
-```bash
-# Build all overlay packages
 ./build_zeroerr.sh
-
-# Build specific overlay packages
-./build_zeroerr.sh erob_moveit_runtime
+source "$ROS_SETUP_FILE"
+source install/local_setup.bash
 ```
 
-**What it does:**
-- Sources ROS2 Rolling base installation
-- Sources base workspace (`install/local_setup.bash`) for dependencies
-- Builds overlay packages in `eRob_moveit/` workspace
-- Uses `--symlink-install` for Python changes to take effect immediately
+The top-level wrapper calls `eRob_moveit/build_zeroerr.sh`. It builds in
+`ros2_ws/build` and `ros2_ws/install` with `--symlink-install`, selecting
+`--packages-up-to erob_moveit_runtime zeroerr`. Local dependencies are included on
+every run, including retries after failure. An existing base install is not
+required. This script does **not** implement positional package selection; use
+`quick_build.sh <package>` or an explicit colcon invocation for that purpose.
 
-**When to use:**
-- When working only on overlay packages (`erob_moveit_runtime`, `zeroerr`)
-- Faster than full rebuild when base workspace hasn't changed
-- After modifying Python scripts in `erob_moveit_runtime`
+Dependency integration tests are disabled by default (`BUILD_TESTING=OFF`). To
+build them after installing their dependencies:
 
-**Note:** This script requires the base workspace to be built first.
-
----
-
-### 4. `launch_robot.sh` - Launch with Environment Check
-Launches the robot system with proper environment setup.
-
-**Usage:**
 ```bash
-# Launch default full_stack.launch.py
-./launch_robot.sh
-
-# Launch specific launch file
-./launch_robot.sh full_stack.launch.py
-
-# Launch with additional arguments
-./launch_robot.sh full_stack.launch.py use_sim_time:=true
+BUILD_TESTING=ON ./build_zeroerr.sh
 ```
 
-**What it does:**
-- Sources ROS2 and workspace environment
-- Verifies critical libraries exist
-- Launches the specified launch file
+Rebuild `zeroerr` and `erob_moveit_runtime` together after changes to shared profile
+composition, collision-controller interfaces, native brake code or installed
+resources. Existing Python symlinks may reflect source edits, but newly added
+modules/resources and running processes still require rebuild/restart as relevant.
 
-**When to use:**
-- Instead of manually sourcing and running ros2 launch
-- To ensure environment is properly set up
+## Fairino and the legacy stacked build
 
----
-
-## Typical Workflow
-
-### Initial Setup
 ```bash
-cd /home/ilv/ros2_ws
-./clean_build.sh
-```
-
-### Daily Development (Base Workspace)
-```bash
-# Make code changes...
-
-# Quick rebuild (all packages)
 ./quick_build.sh
-
-# Or rebuild specific package
+# Or selected packages (dependencies must already be built):
 ./quick_build.sh fairino_hardware
-./quick_build.sh erob_moveit_runtime
-
-# Launch robot
-./launch_robot.sh
+./quick_build.sh erob_moveit_runtime fairino5_v6_moveit2_config
 ```
 
-### Daily Development (Overlay/ZeroErr Only)
+With no arguments, `quick_build.sh` builds `fairino_msgs`, the remaining base
+packages, then all three overlay packages under `eRob_moveit/`. With package
+arguments it routes each selection to the base or overlay; it uses
+`--packages-select`, not dependency closure. The overlay sources
+`ros2_ws/install/local_setup.bash` and installs under `eRob_moveit/install`.
+`./build_fairino.sh` is the dedicated wrapper for the runtime and Fairino overlay;
+it also expects local dependencies to have been built.
+
+For this stacked layout, source the ROS installation, then
+`eRob_moveit/install/setup.bash` (which chains its recorded underlay). Do not
+accidentally launch against an older overlay after building ZeroErr into the root
+install: the configured launch setup path determines which artifacts are used.
+The ZeroErr launcher selects the root install; Fairino selects the overlay.
+
+## Offline verification
+
 ```bash
-# After modifying only overlay packages (erob_moveit_runtime, zeroerr)
-./build_zeroerr.sh
-
-# Launch ZeroErr robot (edit eRob_moveit/robot_launch.conf first)
-./launch_robot.sh
+./test_backend.sh
 ```
 
-### After Git Pull
+This runs the shared runtime's Python tests using `/usr/bin/python3 -m pytest`.
+It requires `python3-pytest` and the modules used by the selected tests. It does
+not start the robot. Profile/collision suites are separate; from the same directory
+in a sourced ROS environment:
+
 ```bash
-./clean_build.sh
-./launch_robot.sh
+python3 -m pytest -q \
+  eRob_moveit/src/eRob_ROS2_MoveIt/zeroerr/test/test_profile_composition.py \
+  eRob_moveit/src/eRob_ROS2_MoveIt/zeroerr/test/test_sensorless_configuration.py
 ```
 
-### Rebuild Single Package
+## Launch and profile selection
+
 ```bash
-# After editing Python scripts in erob_moveit_runtime
-./quick_build.sh erob_moveit_runtime
-
-# After editing fairino5_v6_moveit2_config
-./quick_build.sh fairino5_v6_moveit2_config
+./launch_zeroerr.sh --fake
+# Real hardware:
+./launch_zeroerr.sh
+# Fairino:
+./launch_fairino.sh
 ```
 
----
+`--fake` selects ZeroErr mock hardware and skips EtherCAT preparation/monitoring.
+Without it, the ZeroErr launcher uses its configured real-hardware path. The
+launcher accepts `--fake`, `--real` and `--`; it does not accept a launch filename
+or arbitrary `ros2 launch` arguments as positional options.
 
-## Manual Commands (Alternative)
+`eRob_moveit/zeroerr_launch.conf` and `fairino_launch.conf` select workspace/setup,
+launch file, hardware/RT policy and RViz startup. The compatibility
+`robot_launch.conf` currently selects **Fairino**, so prefer explicit robot
+wrappers. For a custom launcher configuration, use the generic wrapper:
 
-If you prefer manual control:
-
-### Complete Clean Build
 ```bash
-cd /home/ilv/ros2_ws
-rm -rf build install log
-source /opt/ros/rolling/setup.bash
-colcon build --symlink-install
-source install/setup.bash
+ROBOT_LAUNCH_CONFIG=/absolute/path/custom.conf ./launch_robot.sh
 ```
 
-### Quick Rebuild
+`ZEROERR_PROFILE=full|ethercat_only` chooses the stack mode. It is separate from
+`ZEROERR_ACTIVE_PROFILE`, which chooses the robot/cell configuration:
+
 ```bash
-cd /home/ilv/ros2_ws
-source /opt/ros/rolling/setup.bash
-colcon build --symlink-install
-source install/setup.bash
+ZEROERR_ACTIVE_PROFILE=development_short_links ./launch_zeroerr.sh --fake
 ```
 
-### Launch
-```bash
-source /home/ilv/ros2_ws/install/setup.bash
-ros2 launch fairino5_v6_moveit2_config full_stack.launch.py
-```
+Without that override, `zeroerr/config/runtime.yaml` selects `ACTIVE_PROFILE`.
+The platform selects its profile through `platform/config/platform.json` and
+starts the same independent backend. Runtime values, calibration and sensorless
+settings belong to that backend profile; see
+[configuration ownership](eRob_moveit/src/eRob_ROS2_MoveIt/erob_moveit_runtime/docs/backend_configuration.md).
 
----
+Source changes do not update already-running processes. Restart after rebuilding
+to load code/controller/startup settings. Persistent API edits may apply a subset
+live; check their saved/applied/restart status rather than restarting blindly.
 
 ## Troubleshooting
 
-### Missing `rosidl_default_generators` Error
-If you see this CMake error during build:
-```
-By not providing "Findrosidl_default_generators.cmake" in CMAKE_MODULE_PATH
-this project has asked CMake to find a package configuration file provided
-by "rosidl_default_generators"...
-```
+- Missing ROS generators or MoveIt packages: install dependencies for the selected
+  distro; do not mix Rolling package names with a Jazzy build.
+- `libfairino.so.2` unavailable: build/install `fairino_hardware` before the Fairino
+  overlay and source the setup selected by the launcher.
+- A partially failed ZeroErr build: rerun `./build_zeroerr.sh`; it includes local
+  dependencies even if a partial `install/local_setup.bash` already exists.
+- Wrong runtime/model after rebuilding: inspect launch setup paths and profile
+  selection; source only the intended deployment layout.
+- Port conflict: the HTTP startup check includes enabled WebSocket listeners and
+  fails with the conflicting addresses. Stop the stale instance instead of
+  launching a second runtime.
+- DDS cross-talk: use the launcher's configured ROS domain/local discovery policy;
+  see the [recorded investigation](docs/fix-pl25488-dds-crosstalk.md).
 
-Install the missing package:
-```bash
-sudo apt update && sudo apt install -y ros-rolling-rosidl-default-generators
-```
-
-Then rebuild:
-```bash
-./build_zeroerr.sh
-```
-
-### "libfairino.so.2 not found" Error
-This library must exist at `install/fairino_hardware/lib/libfairino.so.2`. Run a clean build:
-```bash
-./clean_build.sh
-```
-
-### Build Fails on Specific Package
-Clean build just that package:
-```bash
-rm -rf build/PACKAGE_NAME install/PACKAGE_NAME
-./quick_build.sh PACKAGE_NAME
-```
-
-### Overlay/Underlay Workspace Conflict Warning
-If you see warnings about packages being built in multiple workspaces:
-```
-WARNING: Some selected packages are already built in one or more underlay workspaces
-```
-
-This is normal for `erob_moveit_runtime` which exists in both workspaces. To suppress, add `--allow-overriding erob_moveit_runtime` to the colcon command (already handled by `quick_build.sh`).
-
-### Environment Not Set Up
-Always source the **overlay** workspace (it chains to the base underlay):
-```bash
-source /home/ilv/ros2_ws/eRob_moveit/install/setup.bash
-```
-
-For convenience, add to your `~/.bashrc`:
-```bash
-echo "source /home/ilv/ros2_ws/eRob_moveit/install/setup.bash" >> ~/.bashrc
-```
-
-### FastDDS Shared Memory Issues
-If ROS2 nodes fail to communicate, clean shared memory:
-```bash
-rm -rf /dev/shm/fastdds_* /dev/shm/sem.fastdds_*
-```
-
----
-
-## Workspace Structure
-
-The project uses a **stacked workspace** layout with an underlay (base) and overlay:
-
-| Workspace | Path | Packages |
-|-----------|------|----------|
-| **Base (underlay)** | `/home/ilv/ros2_ws/` | `fairino_msgs`, `fairino_hardware`, `fairino_description` |
-| **Overlay** | `/home/ilv/ros2_ws/eRob_moveit/` | `erob_moveit_runtime`, `fairino5_v6_moveit2_config`, `zeroerr` |
-
-The overlay automatically sources the base workspace, so you only need to source the overlay:
-```bash
-source eRob_moveit/install/setup.bash
-```
-
-## Package Dependencies
-
-The workspace includes these key packages:
-- **fairino_msgs** - Custom ROS2 messages/services (`ApplyIPP.srv`)
-- **fairino_hardware** - ros2_control hardware interface for Fairino robots (C++)
-- **fairino_description** - URDF/Meshes for Fairino5 v6 robot model
-- **erob_moveit_runtime** - Shared runtime (Python/C++): motion planning, execution, safety, REST API
-- **fairino5_v6_moveit2_config** - MoveIt2 config for Fairino robot
-- **zeroerr** - MoveIt2 config for eRobo3 (ZeroErr) EtherCAT-driven arm
-
-### Build Order
-The build order is critical and handled automatically by the build scripts:
-1. `fairino_msgs` (message definitions)
-2. Base workspace packages
-3. Overlay workspace packages
-
-**Important:** The overlay (`eRob_moveit/`) must be built after the base workspace.
-
----
-
-## Tips
-
-1. **Parallel builds**: The scripts use all CPU cores by default. To limit:
-   ```bash
-   colcon build --parallel-workers 4
-   ```
-
-2. **Only rebuild changed packages**:
-   ```bash
-   colcon build --packages-up-to PACKAGE_NAME
-   ```
-
-3. **See detailed output**:
-   ```bash
-   colcon build --event-handlers console_direct+
-   ```
-
-4. **Build in debug mode** (for development):
-   Edit the scripts and change:
-   ```bash
-   -DCMAKE_BUILD_TYPE=Release
-   ```
-   to:
-   ```bash
-   -DCMAKE_BUILD_TYPE=Debug
-   ```
-## Fresh checkout and retrying failed ZeroErr builds
-
-From `backend/ros2_ws`, run `./build_zeroerr.sh`. The script always builds
-local dependencies up to `erob_moveit_runtime` and `zeroerr`, including after
-an interrupted or failed build. It does not require an existing install overlay.
-Dependency integration tests are disabled by default. To enable them, install
-the ROS test dependencies for your distro and use `BUILD_TESTING=ON ./build_zeroerr.sh`.
-The ROS setup can be selected explicitly with `ROS_SETUP_FILE=/opt/ros/jazzy/setup.bash`.
-Use the same distro for successive builds; changing distro requires a separate
-build/install workspace or cleaning the generated build and install directories.
-
-Run `./test_backend.sh` for the backend Python unit tests (requires the system
-`python3-pytest` package). These tests use mocks and do not launch the robot.
-The build requires the ROS/MoveIt and EtherLab dependencies described in
-`WORKSPACE_REQUIREMENTS.md`; it does not install system software automatically.
+`clean_build.sh` does not exist in this checkout. `clean_zeroerr.sh` is a separate
+cleanup helper; inspect its scope before using it. Cleaning build artifacts is
+not a routine requirement after every pull. The
+[CPU isolation note](docs/rt_cpu_isolation.md) records machine-specific RT findings;
+its core numbers and kernel options are not portable defaults.

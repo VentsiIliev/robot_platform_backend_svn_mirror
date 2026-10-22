@@ -28,7 +28,7 @@ from src.engine.robot.procedures import (  # noqa: E402
 )
 
 BACKEND = "http"  # "fake" or "http"
-SERVER_URL = "http://localhost:5000"
+SERVER_URL = None  # Uses config/backend_network.json
 
 SERVO_AXIS = RobotAxis.Z
 SERVO_DIRECTION = Direction.MINUS

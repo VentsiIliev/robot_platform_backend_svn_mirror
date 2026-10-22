@@ -1,4 +1,5 @@
 from typing import Callable, List
+from uuid import uuid4
 from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from PyQt6.QtWidgets import (QStackedWidget, QFrame, QWidget)
 from PyQt6.QtWidgets import (QVBoxLayout, QApplication, QSizePolicy)
@@ -15,6 +16,7 @@ class AppShell(QWidget):
     start_requested = pyqtSignal()
     stop_requested = pyqtSignal()
     pause_requested = pyqtSignal()
+    navigation_event = pyqtSignal(dict)
 
     def __init__(
         self,
@@ -70,6 +72,11 @@ class AppShell(QWidget):
     def on_app_selected(self, app_name):
         """Handle when an app is selected from any folder"""
         if not self.can_switch_to_app(app_name):
+            base = {'event': 'navigation.application', 'request_id': uuid4().hex,
+                    'application': app_name, 'cached': app_name in self.running_widgets}
+            self.navigation_event.emit(dict(base, outcome='started'))
+            self.navigation_event.emit(dict(base, outcome='rejected', reason='application_close_veto',
+                                            displayed=False))
             return
         print(f"Currently running app: {self.current_running_app}")
         print(f"MainWindow: App selected - {app_name}")
@@ -108,6 +115,24 @@ class AppShell(QWidget):
         return True
 
     def show_app(self, app_name):
+        request_id = uuid4().hex
+        base = {'event': 'navigation.application', 'request_id': request_id,
+                'application': app_name, 'cached': app_name in self.running_widgets}
+        self.navigation_event.emit(dict(base, outcome='started'))
+        try:
+            widget = self._show_app(app_name)
+        except Exception as error:
+            self.navigation_event.emit(dict(base, outcome='failed', error=str(error)))
+            raise
+        result = getattr(widget, '_application_load_result', {}) if widget is not None else {}
+        if not isinstance(result, dict):
+            result = {}
+        self.navigation_event.emit(dict(base, outcome='rejected' if widget is None else
+                                        ('failed' if result.get('fallback') else 'succeeded'),
+                                        load_result=result, displayed=widget is not None))
+        return widget
+
+    def _show_app(self, app_name):
         if not self.can_switch_to_app(app_name):
             return None
         # Check if widget already exists
@@ -156,6 +181,19 @@ class AppShell(QWidget):
 
 
     def close_all_apps(self, *, force: bool = False):
+        request_id = uuid4().hex
+        base = {'event': 'navigation.main_menu', 'request_id': request_id,
+                'applications': list(self.running_widgets), 'force': force}
+        self.navigation_event.emit(dict(base, outcome='started'))
+        try:
+            result = self._close_all_apps(force=force)
+        except Exception as error:
+            self.navigation_event.emit(dict(base, outcome='failed', error=str(error)))
+            raise
+        self.navigation_event.emit(dict(base, outcome='rejected' if self.running_widgets else 'succeeded'))
+        return result
+
+    def _close_all_apps(self, *, force: bool = False):
         """
         Close all cached app widgets and restore the folder interface.
         Useful when logging out or shutting down.

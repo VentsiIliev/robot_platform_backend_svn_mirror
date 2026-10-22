@@ -1,5 +1,7 @@
 # Fix: pl25488 (eRobo3) URDF Cross-Contamination via DDS
 
+> Historical DDS incident report. The current launcher reads domain/local-discovery settings from the per-robot launch config; see [build/launch guidance](../BUILD_SCRIPTS_README.md).
+
 ## Problem
 
 On launch, RViz flooded with errors:

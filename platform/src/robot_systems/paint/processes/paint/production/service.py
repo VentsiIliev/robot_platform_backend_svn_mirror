@@ -24,6 +24,8 @@ from src.robot_systems.paint.processes.paint.workflow import (
     PaintExecutionContext,
 )
 from src.robot_systems.paint.processes.paint.production.cycle_runner import run_paint_cycle
+from src.robot_systems.paint.diagnostics.operation import observed_operation
+from src.engine.diagnostics.events import current_context
 from src.robot_systems.paint.processes.paint.workflow.state import PaintExecutionState
 from src.robot_systems.paint.processes.paint.production.magazine.outcomes import (
     ALL_MAGAZINES_EMPTY,
@@ -94,6 +96,7 @@ class PaintProductionService:
         self._dry_run_snapshot_source = dry_run_snapshot_source
         self._failure_artifact_root = failure_artifact_root
         self._failure_register_context = None
+        self._failure_register_observation = {}
         self._failure_register_streak: int | None = None
         self._failure_bundle_path = None
 
@@ -108,13 +111,16 @@ class PaintProductionService:
 
         with self._active_context_lock:
             context = self._failure_register_context
+            observation = context.diagnostic_context if context is not None else (
+                self._failure_register_observation or current_context())
             streak = self._failure_register_streak
             return {
                 "schema_version": 1,
                 "recorded_at_utc": datetime.now(timezone.utc).isoformat(),
                 "run_id": run_id,
-                "cycle_id": context.diagnostic_cycle_id if context is not None else None,
-                "cycle_index": context.cycle_index if context is not None else None,
+                "context": dict(observation),
+                "cycle_id": context.diagnostic_cycle_id if context is not None else observation.get('cycle_id'),
+                "cycle_index": context.cycle_index if context is not None else observation.get('cycle_index'),
                 "consecutive_completed_cycles": (
                     self._consecutive_completed_cycles if streak is None else streak
                 ),
@@ -235,6 +241,7 @@ class PaintProductionService:
         )
         return result.as_legacy_pair()
 
+    @observed_operation('paint.production')
     def run_once_result(
         self,
         stop_requested: Optional[Callable[[], bool]] = None,
@@ -247,6 +254,7 @@ class PaintProductionService:
         self.last_failure = None
         with self._active_context_lock:
             self._failure_register_context = None
+            self._failure_register_observation = current_context()
             self._failure_register_streak = None
             self._failure_bundle_path = None
         self.ensure_tray_ready_for_start()
@@ -712,6 +720,7 @@ class PaintProductionService:
         """Legacy single-cycle adapter; internal orchestration uses run_cycle_result."""
         return self.run_cycle_result(should_stop, **kwargs).as_legacy_pair()
 
+    @observed_operation('paint.cycle', cycle=True)
     def run_cycle_result(
         self,
         should_stop: Callable[[], bool],
@@ -734,6 +743,12 @@ class PaintProductionService:
         adjustment_session=None,
         initial_state: PaintExecutionState = PaintExecutionState.STARTING,
     ) -> PaintOperationResult:
+        with self._active_context_lock:
+            # A failed new preparation must never inherit the previous part/bundle.
+            self._failure_register_context = None
+            self._failure_register_observation = current_context()
+            self._failure_register_streak = None
+            self._failure_bundle_path = None
         raw_process_config = process_config or PAINT_PROCESS_CONFIG
         process_config = scale_paint_process_accelerations(raw_process_config)
         if self._paint_process_config_service is not None:
@@ -782,6 +797,8 @@ class PaintProductionService:
             adjustment_session=adjustment_session,
             snapshot=cached_snapshot,
             cached_workpiece_contour=cached_workpiece_contour,
+            diagnostic_cycle_id=current_context()['cycle_id'],
+            diagnostic_context=current_context(),
         )
         if isinstance(magazine_source, dict) and "position" in magazine_source:
             context.magazine_fixed_pickup_pose = [

@@ -23,9 +23,25 @@ class PaintDashboardModel(IApplicationModel):
     def save(self, _data) -> None:
         return None
 
-    def start(self) -> DashboardState:
-        self._service.start()
+    def start(self, action_context: dict | None = None) -> DashboardState:
+        if action_context:
+            self._service.start(action_context)
+        else:
+            self._service.start()
         return self.load()
+
+    def begin_start_request(self) -> dict:
+        try:
+            token = self._service.begin_start_request()
+            return token if isinstance(token, dict) else {}
+        except Exception:
+            return {}
+
+    def record_start_outcome(self, context: dict, outcome: str, stage: str, details: dict) -> None:
+        try:
+            self._service.record_start_outcome(context, outcome, stage, details)
+        except Exception:
+            pass
 
     def stop_process(self) -> DashboardState:
         self._service.stop()
@@ -105,7 +121,9 @@ class PaintDashboardModel(IApplicationModel):
     def get_production_start_guard_state(self, mode: str) -> dict[str, object]:
         return self._service.get_production_start_guard_state(mode)
 
-    def prepare_production_start(self, mode: str):
+    def prepare_production_start(self, mode: str, action_context: dict | None = None):
+        if action_context:
+            return self._service.prepare_production_start(mode, action_context)
         return self._service.prepare_production_start(mode)
 
     def get_plate_layout_state(self) -> dict[str, object]:

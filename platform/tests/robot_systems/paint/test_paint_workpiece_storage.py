@@ -148,9 +148,11 @@ class TestJsonPaintWorkpieceRepository(unittest.TestCase):
             calls = 0
             def fail_after_thumbnail(source, destination):
                 nonlocal calls
-                calls += 1
-                if calls > 1:
-                    raise OSError("disk unavailable")
+                # Count publication/rollback only, not atomic staging writes.
+                if Path(destination).parent == path.parent:
+                    calls += 1
+                    if calls > 1:
+                        raise OSError("disk unavailable")
                 return replace(source, destination)
             with patch(module + ".os.replace", side_effect=fail_after_thumbnail):
                 with self.assertRaisesRegex(WorkpieceWriteError, "rollback failed.*Record is blocked"):

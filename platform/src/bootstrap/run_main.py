@@ -15,6 +15,8 @@ from PyQt6.QtGui import QMouseEvent
 from PyQt6.QtWidgets import QApplication, QWidget
 
 from src.bootstrap.logging_config import setup_logging
+from src.engine.diagnostics.service import build_diagnostics_service
+from src.engine.diagnostics.events import observe
 from src.bootstrap.build_engine import EngineContext
 from src.bootstrap.application_loader import ApplicationLoader
 from src.bootstrap.shell_configurator import ShellConfigurator
@@ -111,6 +113,25 @@ def main() -> None:
     setup_logging()
     # _pin_process_to_non_rt_cores()
     startup_config = load_startup_config()
+    diagnostics_service = build_diagnostics_service(startup_config.diagnostics)
+    try:
+        diagnostics_service.start()
+        status = diagnostics_service.status
+        if status['state'] == 'unavailable':
+            _LOGGER.warning('Diagnostics capture unavailable: %s', status['last_error'])
+        else:
+            _LOGGER.info('Diagnostics capture: %s', status['state'])
+        _run_application(startup_config, diagnostics_service)
+    finally:
+        # Includes startup failures and cleanup, before the final writer drain.
+        diagnostics_service.close()
+
+
+def _run_application(startup_config, diagnostics_service) -> None:
+    observe(_LOGGER, 'platform.configuration_loaded', robot_system=startup_config.robot_system,
+            build_info={key: startup_config.system_config[key] for key in (
+                'release_version', 'platform_version', 'backend_version',
+                'robot_driver', 'backend', 'backend_profile')})
     dev_skip_login = startup_config.ui.dev_skip_login and not startup_config.ui.kiosk_mode
     skip_splash = startup_config.ui.skip_splash
     kiosk_mode = startup_config.ui.kiosk_mode
@@ -138,10 +159,10 @@ def main() -> None:
         kiosk_password = KioskPassword(Path(startup_config.ui.kiosk_password_file))
 
     # 1 — engine singletons
-    ctx = EngineContext.build()
+    ctx = EngineContext.build(diagnostics_service=diagnostics_service)
 
-    # ros_backend = build_ros_backend_launcher_from_env(startup_config.ros_backend, startup_config.robot_system)
-    # ros_backend.start()
+    ros_backend = build_ros_backend_launcher_from_env(startup_config.ros_backend, startup_config.robot_system)
+    ros_backend.start()
 
     # 2 — robot app (settings loaded, services wired)
     try:
@@ -253,6 +274,13 @@ def main() -> None:
         shell._startup_splash_coordinator = startup_splash_coordinator
 
     session = UserSession()
+    from src.engine.diagnostics.actions import ActionRecorder
+    from src.bootstrap.navigation_diagnostics import NavigationDiagnostics
+    actions = ActionRecorder(session, authentication_mode='development_bypass' if dev_skip_login else 'authenticated')
+    robot_app._diagnostic_actions = actions
+    shell._navigation_diagnostics = NavigationDiagnostics(shell, actions)
+    shell._navigation_diagnostics.start()
+    qt_app.aboutToQuit.connect(shell._navigation_diagnostics.stop)
     active_login_view = {"widget": None}
 
     # Wire broker → shell navigation
@@ -335,6 +363,7 @@ def main() -> None:
         return True
 
     session_controller = ShellSessionController(
+        actions=actions,
         shell=shell,
         session=session,
         dev_skip_login=dev_skip_login,

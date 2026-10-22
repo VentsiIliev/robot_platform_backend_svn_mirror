@@ -224,6 +224,10 @@ def install(args):
         shutil.copy2(__file__, new_tools / "manage.py")
         updater_source = Path(sys.modules[PlatformUpdater.__module__].__file__).parent
         shutil.copytree(updater_source, new_tools / "src/engine/updates", ignore=shutil.ignore_patterns("__pycache__"))
+        core = new_tools / "src/engine/core"
+        core.mkdir()
+        (core / "__init__.py").touch()
+        shutil.copy2(updater_source.parent / "core/durable_files.py", core / "durable_files.py")
         (new_tools / "src/__init__.py").touch()
         (new_tools / "src/engine/__init__.py").touch()
         atomic_json(new_tools / "installation.json", {"product": product, "config_path": str(config_path)})

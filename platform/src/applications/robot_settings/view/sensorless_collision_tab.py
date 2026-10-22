@@ -29,11 +29,21 @@ class SensorlessCollisionTab(QWidget):
     refresh_requested = pyqtSignal()
     save_requested = pyqtSignal(dict)
     open_diagnostics_requested = pyqtSignal()
+    active_response_edited = pyqtSignal(bool, bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._joint_fields: dict[str, list[KeyboardNumberField]] = {}
         self._build_ui()
+        self._active_stop.toggled.connect(self._on_active_response_edited)
+        self._last_active_response = self._active_stop.isChecked()
+        self._loading_config = False
+
+    def _on_active_response_edited(self, enabled: bool) -> None:
+        previous = self._last_active_response
+        self._last_active_response = enabled
+        if not self._loading_config:
+            self.active_response_edited.emit(previous, enabled)
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -233,6 +243,14 @@ class SensorlessCollisionTab(QWidget):
         }
 
     def load_config(self, config: dict) -> None:
+        self._loading_config = True
+        try:
+            self._load_config(config)
+        finally:
+            self._last_active_response = self._active_stop.isChecked()
+            self._loading_config = False
+
+    def _load_config(self, config: dict) -> None:
         self._enabled.setChecked(bool(config.get("detection_enabled", True)))
         self._active_stop.setChecked(bool(config.get("active_stop_enabled", False)))
         self._secondary_enabled.setChecked(bool(

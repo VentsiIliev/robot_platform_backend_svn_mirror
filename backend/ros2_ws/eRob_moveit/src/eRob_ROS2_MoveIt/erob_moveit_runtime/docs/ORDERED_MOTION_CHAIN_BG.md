@@ -1,5 +1,12 @@
 # Ordered Motion Chain в ROS2 runtime
 
+Актуализация на API слоя (2026-10-21): HTTP → `MotionApi` → `RuntimeGateway`.
+Проверките за статус са в `StateApi`; старият `RuntimeApi` е compatibility facade.
+Типизираните грешки и accepted/final семантиката са описани в
+[API contracts](runtime_api_architecture.md), а пълният маршрутен списък е в
+[REST API](REST_API.md). Детайлите за planning/execution по-долу остават отделни
+от HTTP адаптера.
+
 ## 1. Цел и обхват
 
 Този документ описва ROS2 страната на `ordered_motion_chain`: публичния REST API, runtime gateway слоя, MoveIt backend-а, планиращия worker, scheduler bridge-а, изпълнението към `FollowJointTrajectory` контролера, статусите, blending, readiness бариерите, trajectory concatenation и prepared-chain режима.
@@ -66,7 +73,7 @@ Content-Type: application/json
 | `segments` | array | задължително | Непразен списък в точния ред за изпълнение. |
 | `tool` | integer | `0` | Избира TCP/tool transform за IK и Cartesian planning. |
 | `user` | integer | `0` | Избира workobject/user frame. Cartesian позициите се преобразуват към base frame. |
-| `blocking` | boolean | `true` | Полето се нормализира и се препраща до backend-а, но текущата ordered-chain pipeline остава синхронна и HTTP handler-ът чака крайния result code. То не прави заявката fire-and-forget и не променя геометрията. |
+| `blocking` | boolean | `true` | Полето се нормализира и се препраща до backend-а, но текущата ordered-chain pipeline остава синхронна и HTTP handler-ът чака крайния result code. То не променя геометрията и не гарантира незабавно връщане: backend pipeline-ът остава синхронен. API mapping-ът използва 202/`final=false` при `blocking=false`; това само по себе си не доказва, че backend-ът е асинхронен. |
 | `trajectory_optimizer` | `TOTG`, `RUCKIG` или `null` | runtime default | Избира time parameterization/optimization. REST parser-ът отхвърля други стойности. |
 
 ### 3.2 Prepared chain
@@ -417,17 +424,17 @@ Group state се извежда от member states. Ако който и да е
 
 ### `parse_execute_ordered_motion_chain_request(data)`
 
-Валидира request shape, segment types, LIN/PTP position, optimizer, LIN/PTP blend radius и safe names. За PATH проверява само непразна стойност; за PATH/UNWIND не пренася `blendR`. Създава нов normalized dictionary. Ново поле трябва изрично да бъде копирано тук — иначе ще бъде загубено между клиента и backend-а.
+Валидира request shape, segment types, LIN/PTP position, optimizer, LIN/PTP blend radius и safe names. Общият typed wrapper отхвърля non-finite числови стойности в JSON дървото, невалидни top-level tool/user IDs и boolean флагове с друг тип. За PATH проверява само непразна стойност; за PATH/UNWIND не пренася `blendR`. Създава нов normalized dictionary. Ново поле трябва изрично да бъде копирано тук — иначе ще бъде загубено между клиента и backend-а.
 
 ### `parse_prepare_ordered_motion_chain_request(data)`
 
 Извиква основния parser и добавя `start_position`, `allow_servo_during_prepare`, `blocking=true`.
 
-### `RuntimeApiHandlers.execute_ordered_motion_chain(data)`
+### `MotionApi.execute_ordered_motion_chain(data)`
 
 Парсва заявката, проверява motion stack readiness и делегира към gateway. Превръща result code в HTTP response.
 
-### `RuntimeApiHandlers.prepare_ordered_motion_chain(data)`
+### `MotionApi.prepare_ordered_motion_chain(data)`
 
 Парсва prepared заявката и създава background prepared record.
 
@@ -814,11 +821,17 @@ ordered_segment_execute_start ... type=concatenate_consumed
 ## 19. Карта на основните файлове
 
 ```text
-scripts/rest/api_support.py
-    REST schema и нормализация
+scripts/rest/routes/motion.py
+    HTTP adapter
+
+scripts/runtime_api/motion/requests.py
+    Typed request schema и нормализация
+
+scripts/runtime_api/motion/api.py
+    MotionApi orchestration и typed response mapping
 
 scripts/runtime_api/handlers.py
-    HTTP-facing orchestration
+    Legacy RuntimeApi compatibility facade
 
 scripts/runtime_gateway/local.py
     API → backend adapter

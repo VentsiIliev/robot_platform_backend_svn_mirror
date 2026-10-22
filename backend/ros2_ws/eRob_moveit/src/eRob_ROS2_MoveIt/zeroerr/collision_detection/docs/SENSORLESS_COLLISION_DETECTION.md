@@ -29,21 +29,23 @@ and `runtime` (recovery policy, stop strategies, collection and legacy settings)
 All effective values were preserved during extraction. Shared robot motion limits
 remain in `joint_limits.yaml`; the brake reads them instead of duplicating them.
 
-The existing platform Robot Settings → Sensorless Collision tab and ROS
-configuration messages retain their field names. Its live changes are atomically
-saved as differences in the selected profile's `monitor` section, never into the
-shared defaults or other profiles. Only live-supported detector fields apply
-immediately. Editing startup observer parameters, runtime policy/strategy values
-or model coefficients requires restarting/reconfiguring the backend. Calibration
-fit tools accept the profile YAML and update only its model/threshold overrides;
-historical explicit JSON inputs remain readable. The old global monitor JSON is
-no longer a configuration source.
+The platform Robot Settings → Sensorless Collision tab edits backend-owned
+configuration through the revision-checked backend API. Saves are atomic profile
+overrides, never writes to shared defaults or other profiles. Only supported live
+monitor fields apply immediately; startup/controller, model, stop and recovery
+changes remain pending until restart. Check saved/applied/restart state rather
+than assuming save success means the controller has applied every field.
 
-The Python runtime, launch helpers and C++ observer resolve the same profile file.
-Collision settings left behind in runtime YAML overrides are rejected instead of
-silently competing with the new source. The platform remains an API client in
-this first extraction step; platform-owned full configuration is future work.
+Direct ROS configuration messages change runtime only and are not durable file
+writes. The Python runtime, launch helpers and C++ observer resolve the same
+profile file. Collision settings left behind in generic runtime YAML overrides
+are rejected instead of silently competing with the profile source. The backend
+profile remains authoritative; the platform is its API client and is not required
+for standalone startup. See [backend configuration](../../../erob_moveit_runtime/docs/backend_configuration.md).
 
+Calibration fit tools accept profile YAML and explicitly update model/threshold
+overrides; historical explicit JSON inputs remain readable. The old global
+monitor JSON is no longer a configuration source.
 
 This document describes the deployed ZeroErr joint-torque collision detector,
 its direction-dependent calibration models, the data needed to fit them, and
@@ -204,7 +206,8 @@ external joint torque.
 
 At startup, and after drive recovery when initialization was interrupted, the
 observer learns stationary model/drive bias for `warmup_sec` while velocity is
-below `warmup_vel_threshold_rad_s`. External torque is reported as unavailable,
+below the configured `controller.warmup_velocity_limit` (mapped to the
+controller warm-up velocity parameter). External torque is reported as unavailable,
 not zero, during this interval. Collision protection must be treated as not
 active until all observer inputs are valid and warm-up has completed. Warm-up
 requires both the configured elapsed time and `warmup_min_samples` complete,
@@ -312,7 +315,7 @@ the launch files, and is retained only for offline comparison and legacy tests.
 ROS is used for the existing runtime control contracts and diagnostics:
 
 - `/zeroerr/collision_monitor/config` and `config_state` for live platform settings;
-- `/zeroerr/collision_monitor/acknowledged` for explicit latch reset and warm-up;
+- `/zeroerr/collision_monitor/acknowledged` for correlated latch reset/rearm and optional recalibration;
 - `/zeroerr/collision_monitor/stop_request` for active collision response;
 - `/zeroerr/collision_monitor/state` for observer readiness;
 - `/zeroerr/collision_monitor/plot/external_torque` and
@@ -322,8 +325,10 @@ ROS is used for the existing runtime control contracts and diagnostics:
 
 `active_stop_enabled` is controlled live by the platform. When enabled, a
 confirmed threshold crossing remains latched until the operator acknowledgement
-is received; acknowledgement restarts observer warm-up before recovery motion is
-released. Confirm that `last_update_us` stays below the 500 us cycle budget and
+is received. Acknowledgement reinitializes observer dynamics and rearms readiness;
+with a valid retained baseline, ordinary release does not repeat full calibration.
+Explicit recalibration or an invalid baseline requires stationary warm-up. See
+[recovery with a retained baseline](#recovery-with-a-retained-baseline-trial). Confirm that `last_update_us` stays below the 500 us cycle budget and
 `overruns` remains zero. Plot publication is independent of the 100 Hz timing
 telemetry and may be disabled with `diagnostics_enabled` without disabling
 collision decisions.
@@ -366,11 +371,22 @@ for every joint, the sample with the largest absolute observer residual in each
 transients without performing disk I/O or blocking ROS publication in the
 control loop.
 
-Record one collision-free production session with:
+From `backend/ros2_ws`, source this checkout's install before recording. Merely
+changing directory does not select a ROS package install; an older sourced overlay
+may contain broken executable symlinks after the recorder source was reorganized.
+Use the same ROS distro and domain as the running backend (the supplied launcher
+uses domain 42):
 
 ```bash
+source /opt/ros/jazzy/setup.bash
+source install/local_setup.bash
+export ROS_DOMAIN_ID=42
 ros2 run zeroerr zeroerr_peak_recorder.py
 ```
+
+For another deployed distro/domain, substitute its values. Verify selection with
+`ros2 pkg prefix zeroerr` and `ros2 pkg executables zeroerr`; the prefix should
+point at the install built for this checkout. Record collision-free motion only.
 
 Stop with Ctrl-C. Each run creates a new directory under
 `~/zeroerr_data/collision_detection/peak_sessions/` containing
@@ -612,9 +628,9 @@ With `COLLISION_RESET_RECALIBRATE_ON_RELEASE: false` in the active profile `sens
 ordinary collision release retains a valid torque baseline. It reinitializes
 momentum integration, filters, threshold envelopes and confirmation counters,
 then requires the existing 2-second drive-stability interval and 0.5 seconds of
-stationary, clear settling. Expected reset time is about 2.5 seconds when those
-checks pass. Startup and explicit recalibration still require the full 8-second
-stationary calibration. An invalid baseline also requires full calibration.
+stationary, clear settling. With these shared defaults, reset is about 2.5 seconds when those
+checks pass; profile overrides, drive state and telemetry can extend it. Startup and explicit recalibration still require the configured stationary
+calibration interval (`warmup_sec`, shared default 8 seconds). An invalid baseline also requires full calibration.
 The runtime sends a distinct `recalibrate` boolean and logs `baseline_retained`;
 coalesced observer requests give explicit recalibration precedence.
 
@@ -719,11 +735,13 @@ operational settings:
   correction;
 - `motion_residual_correction_limits`: correction training envelope.
 
-`zeroerr/config/ros2_controllers.yaml` controls the C++ observer gain, plot and
-timing publication periods, stationary warm-up, drive-stability gate, links,
-and joint interfaces. `zeroerr/config/runtime.yaml` retains non-real-time GUI
-and calibration-runner settings; it no longer selects a Python production
-observer.
+The profile file's `controller` section owns observer gain, publication periods,
+warm-up, drive stability and model links/joints. Launch composes these values with
+`zeroerr/config/ros2_controllers.yaml`, which supplies controller/plugin/interface
+wiring. Non-real-time collision stop/recovery, logging and calibration-runner
+settings are under the profile file's `runtime` section. Generic
+`zeroerr/config/runtime.yaml` selects the profile and non-collision composition;
+it is not a second source for sensorless values.
 
 ## Live observer diagnostics
 

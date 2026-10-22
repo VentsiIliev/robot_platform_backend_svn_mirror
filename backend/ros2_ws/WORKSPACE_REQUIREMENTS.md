@@ -2,7 +2,13 @@
 
 This file records the environment needed to run this ROS 2 workspace on another PC. It is not a Python-only `requirements.txt`; the workspace depends on Ubuntu packages, ROS 2 Rolling packages, a PREEMPT_RT kernel, a custom EtherLab/IgH EtherCAT master install, and the source packages in this repository.
 
-Observed on this PC on 2026-07-20.
+The versions below are a **2026-07-20 installation snapshot**, not a declaration
+of the currently selected ROS distro or portable deployment defaults. Current
+build/launch scripts support explicit `ROS_SETUP_FILE`, then installed
+`ROS_DISTRO`, then Rolling/Jazzy discovery. The latest local API build was verified
+with Jazzy. See [build/launch instructions](BUILD_SCRIPTS_README.md) for current
+commands and the distinction between root ZeroErr and stacked Fairino installs.
+Do not install a Rolling lockfile into a Jazzy deployment.
 
 ## Target machine
 
@@ -129,61 +135,17 @@ Some `package.xml` dependencies are local or robot-vendor packages, not apt pack
 - `moveit_ros_perception` and `warehouse_ros_mongo`: referenced by local MoveIt config package XML files, but not present as installed ROS packages here. `ros-rolling-moveit-ros-warehouse` is installed and available; no `ros-rolling-warehouse-ros-mongo` or `ros-rolling-moveit-ros-perception` apt package was found in the configured Rolling repository.
 - Fairino SDK library: `src/fairino_hardware/libfairino/lib/libfairino.so`, installed into `install/fairino_hardware/lib/libfairino.so.2` by the build.
 
-## Build order
+## Build and runtime checks
 
-From a fresh clone at `/home/ilv/ros2_ws`:
+Follow the [build, test and launch guide](BUILD_SCRIPTS_README.md). It documents
+fresh dependency-closed ZeroErr builds, the Fairino stacked build, explicit distro
+selection, profile selection and offline tests. `quick_build.sh` still uses a
+base/overlay sequence; `build_zeroerr.sh` now builds dependencies and ZeroErr into
+the root workspace install.
 
-```bash
-cd /home/ilv/ros2_ws
-source /opt/ros/rolling/setup.bash
-rosdep update
-rosdep install --from-paths src eRob_moveit/src --ignore-src -r -y
-./quick_build.sh
-```
-
-If only the overlay packages changed:
-
-```bash
-cd /home/ilv/ros2_ws
-./build_zeroerr.sh
-```
-
-Manual equivalent:
-
-```bash
-cd /home/ilv/ros2_ws
-source /opt/ros/rolling/setup.bash
-colcon build --symlink-install --packages-select fairino_msgs --cmake-args -DCMAKE_BUILD_TYPE=Release
-colcon build --symlink-install --packages-skip fairino_msgs --cmake-args -DCMAKE_BUILD_TYPE=Release
-cd eRob_moveit
-source /home/ilv/ros2_ws/install/local_setup.bash
-colcon build --symlink-install --packages-select erob_moveit_runtime fairino5_v6_moveit2_config zeroerr --cmake-args -DCMAKE_BUILD_TYPE=Release
-```
-
-## Runtime checks
-
-Before launching on another PC:
-
-```bash
-source /opt/ros/rolling/setup.bash
-source /home/ilv/ros2_ws/install/setup.bash
-source /home/ilv/ros2_ws/eRob_moveit/install/setup.bash
-ros2 pkg list | grep -E 'fairino|zeroerr|erob|ethercat'
-ethercat version
-```
-
-For Fairino:
-
-```bash
-cd /home/ilv/ros2_ws
-./launch_fairino.sh
-```
-
-For ZeroErr:
-
-```bash
-cd /home/ilv/ros2_ws
-./launch_zeroerr.sh
-```
+After sourcing the ROS installation and setup chosen by the launcher, inspect
+available packages with `ros2 pkg list` and the master with `ethercat version`.
+Use `./launch_zeroerr.sh --fake` for the mock hardware launch path. Real launches
+are `./launch_zeroerr.sh` and `./launch_fairino.sh` from `backend/ros2_ws`.
 
 Do not run the real robot until EtherCAT master configuration, NIC selection, realtime kernel boot options, CPU isolation settings, and emergency-stop/safety wiring are verified on the new PC.

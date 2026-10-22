@@ -5,6 +5,8 @@ import os
 from dataclasses import replace
 from pathlib import Path
 from typing import Callable
+from src.engine.diagnostics.actions import ActionRecorder
+from src.engine.diagnostics.events import diagnostic_context
 
 import numpy as np
 
@@ -25,7 +27,7 @@ from src.robot_systems.paint.applications.dashboard.service.i_paint_dashboard_se
 )
 
 from src.robot_systems.paint.processes.paint.tray_dry.errors import (
-    TrayError, TrayBusyError, TrayUnavailableError,
+    TrayError, TrayBusyError, TrayUnavailableError, TrayConfirmationRequiredError,
 )
 
 
@@ -52,8 +54,10 @@ class PaintDashboardService(IPaintDashboardService):
         plate_layout_service=None,
         target_point_name: str = "camera",
         frame_name: str = "calibration",
+        diagnostic_actions=None,
     ) -> None:
         self._process = process
+        self._diagnostic_actions = diagnostic_actions or ActionRecorder()
         self._capture_snapshot_service = capture_snapshot_service
         self._path_preparation_service = path_preparation_service
         self._resolver_getter = resolver_getter
@@ -125,13 +129,56 @@ class PaintDashboardService(IPaintDashboardService):
             pause_label="Resume" if is_paused else "Pause",
         )
 
-    def start(self) -> None:
+    def bind_diagnostic_actions(self, actions) -> None:
+        """Late composition: the login session exists after system services start."""
+        if actions is not None:
+            self._diagnostic_actions = actions
+
+    def begin_start_request(self) -> dict:
+        try:
+            token = self._diagnostic_actions.operation_context()
+            self._diagnostic_actions.record('paint.start.requested', context=token, outcome='started',
+                expected_evidence=['paint.raw_process_settings', 'paint.effective_process_settings',
+                                   'paint.workpiece', 'paint.execution_plan'])
+            return token
+        except Exception:
+            return {}
+
+    def record_start_outcome(self, context: dict, outcome: str, stage: str, details: dict) -> None:
+        try:
+            self._diagnostic_actions.record('paint.start.result', context=context,
+                outcome=outcome, stage=stage, **details)
+        except Exception:
+            pass
+
+    def start(self, action_context: dict | None = None) -> None:
+        token = action_context if action_context else self.begin_start_request()
+        with diagnostic_context(**token):
+            try:
+                self._start_with_context(token)
+            except TrayError as error:
+                self.record_start_outcome(token, 'confirmation_required' if isinstance(error,
+                    TrayConfirmationRequiredError) else 'rejected', 'tray_readiness', {'error': str(error)})
+                raise
+            except Exception:
+                self.record_start_outcome(token, 'failed', 'start_dispatch', {})
+                raise
+
+    def _start_with_context(self, token) -> None:
         if self.get_drying_mode() in {"manual", "demo"} and not self.is_dry_run_mode_enabled():
             if self._plate_layout_service is None:
                 raise TrayUnavailableError()
             config = self._paint_process_config_service.get_snapshot().dropoff
             self._plate_layout_service.ensure_ready(config)
-        self._process.start()
+        method = getattr(type(self._process), 'start_with_diagnostics', None)
+        if callable(method):
+            result = self._process.start_with_diagnostics(token)
+            self.record_start_outcome(token, 'accepted' if result['accepted'] else 'rejected',
+                                      'process_transition', result)
+        else:
+            self._process.start()
+            self.record_start_outcome(token, 'unknown', 'legacy_dispatch',
+                                      {'reason': 'start_returned_without_acceptance_contract'})
 
     def stop(self) -> None:
         self._process.stop()
@@ -486,7 +533,15 @@ class PaintDashboardService(IPaintDashboardService):
             return {"required": False, "ready": True}
         return dict(guard.state(mode))
 
-    def prepare_production_start(self, mode: str) -> DashboardCommandResult:
+    def prepare_production_start(self, mode: str, action_context: dict | None = None) -> DashboardCommandResult:
+        with diagnostic_context(**(action_context or {})):
+            try:
+                return self._prepare_production_start(mode)
+            except Exception:
+                self.record_start_outcome(action_context or {}, 'failed', 'production_preparation', {})
+                raise
+
+    def _prepare_production_start(self, mode: str) -> DashboardCommandResult:
         guard = self._production_start_guard
         if guard is None:
             return DashboardCommandResult(True, "Production start is ready.")

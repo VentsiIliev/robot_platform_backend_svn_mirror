@@ -1,186 +1,96 @@
-# Architecture
+# Runtime architecture
 
-## Package Layout
+`erob_moveit_runtime` is shared by the `zeroerr` and
+`fairino5_v6_moveit2_config` robot packages. Robot packages supply descriptions,
+MoveIt/controller configuration, launch files and profile values; they do not
+contain private copies of this runtime.
 
-```text
-fairino5_v6_moveit2_config/
-├── scripts/
-│   ├── main.py
-│   ├── robot_controller.py
-│   ├── config.py
-│   ├── rest/
-│   │   ├── main.py
-│   │   ├── server.py
-│   │   ├── api_support.py
-│   │   └── openapi.py
-│   ├── backend/
-│   ├── motion/
-│   │   ├── strategies.py
-│   │   ├── planning/
-│   │   └── execution/
-│   ├── safety/
-│   ├── status/
-│   └── utils/
-├── src_cpp/
-│   ├── ipp_helper_node.cpp
-│   ├── ruckig_helper_node.cpp
-│   └── robot_state_publisher.cpp
-├── srv/
-│   └── ApplyIPP.srv
-├── launch/
-├── config/
-└── meshes/
-```
+## Composition and process model
 
-## Runtime Composition
+`scripts/main.py` starts `rest.server.start_rest_server()` with an asynchronous
+initializer. `runtime_initializer.initialize_robot_runtime()` constructs the ROS
+node, executor and configured backend. HTTP can report initialization progress
+before the motion stack is ready. The main entry point currently explicitly binds
+HTTP to `0.0.0.0:5000`; callers of `start_rest_server()` otherwise use its configured
+host/port defaults or explicit arguments.
 
-### `main.py`
+HTTP and the state/execution/sensor WebSocket servers share the runtime process.
+Using a gateway separates responsibilities but does not yet isolate failures into
+separate processes. A ROS-backed gateway is an extension point, not a deployed
+transport. `scripts/rest/main.py` supports standalone REST startup; embedded mode
+reuses supplied robot/node instances.
 
-Typical dev/runtime composition:
-1. initialize ROS2
-2. construct `RobotController`
-3. spin the node in a background thread
-4. construct the configured robot backend through `backend_factory.py`
-5. start the Flask REST server in another background thread
-
-### `RobotController`
-
-`RobotController` is the main owner of runtime state.
-
-Responsibilities:
-- create ROS clients and action clients
-- extract workspace limits from URDF
-- manage `SafetyWallManager`
-- own `MotionQueue` and `MotionCoordinator`
-- route strategies into planning/execution modules
-- keep current joint/cartesian state through `RobotStateStore`
-- host helper accessors used by planning, diagnostics, and REST
-
-Important embedded components:
-- `MotionQueue`
-- `MotionCoordinator`
-- `TrajectoryExecutor`
-- `PlannerContext`
-- `PlannerSupportService`
-- `SafetyWallManager`
-- `RobotMonitor`
-- `RobotStateStore`
-- `RobotStatusPublisher`
-
-### `MoveItRobotBackend`
-
-`MoveItRobotBackend` is the robot-wrapper facade used by the REST layer.
-
-Responsibilities:
-- apply workobject/user transforms
-- convert tool/user/velocity inputs into execution requests
-- expose robot-style methods like `move_liner`, `execute_path`, `get_current_position`
-- proxy safety-wall control to `RobotController`
-
-### REST Layer
-
-`rest/server.py` exposes HTTP endpoints for:
-- point moves
-- path execution
-- jog
-- stop
-- current position/velocity/status
-- safety wall control
-- reachability validation
-
-The REST server can run in:
-- standalone mode
-  - creates its own ROS node
-- embedded mode
-  - reuses an existing `RobotController`
-
-`rest/api_support.py` holds the non-routing REST helpers:
-- motion error to HTTP mapping
-- jog payload parsing / normalization
-- pose reachability validation via IK + state validity
-
-`rest/openapi.py` holds the OpenAPI spec and Swagger HTML served by the docs routes.
-
-## Motion Flow
-
-### Single target
+## Request boundary
 
 ```text
-REST /move/linear
-  -> MoveItRobotBackend.move_liner()
-    -> SingleTargetStrategy
-      -> motion.planning.single_target.send_cartesian_goal()
-        -> MoveIt cartesian planning
-        -> trajectory optimization (TOTG or Ruckig helper)
-        -> FollowJointTrajectory execution
+rest/server.py                      startup and composition
+  -> rest/routes/<group>.py         HTTP parsing/serialization only
+  -> runtime_api/<group>/api.py     validation, typed results, error mapping
+  -> runtime_gateway/base.py        transport-independent operations
+  -> runtime_gateway/local.py       local services and adapters
+     -> configuration/              profile persistence and application
+     -> backend/                    robot-style facade and frame transforms
+     -> RobotController             planning, execution, state and interlocks
+     -> runtime_gateway/adapters/   ROS confirmations and diagnostic processes
 ```
 
-### Multi-waypoint path
+The four groups are `ConfigurationApi`, `MotionApi`, `StateApi` and `ControlApi`.
+Each has `api.py`, `requests.py`, `responses.py` and `__init__.py`.
+`runtime_api/contracts.py` supplies `ApiResponse[T]`, correlation and the shared
+exception boundary. `RuntimeApi` in `handlers.py` is the flat compatibility facade.
+`rest/api_support.py`, `rest/rviz_process.py` and `configuration/http.py` retain
+compatibility imports rather than owning the implementation.
 
-```text
-REST /execute/path
-  -> MoveItRobotBackend.execute_path()
-    -> PathStrategy
-      -> motion.planning.trajectory.send_path_cartesian()
-        -> path planning / optional staged approach
-        -> trajectory optimization
-        -> controller execution
-```
+See [API architecture](runtime_api_architecture.md) for type/error contracts and
+[configuration ownership](backend_configuration.md) for persistent state.
 
-### Queueing
+## Robot and motion ownership
 
-`MotionCoordinator` decides whether a request:
-- starts immediately
-- is queued
-- is rejected because it is non-queueable while busy
+`RobotController` owns ROS clients, `MotionCoordinator`, `MotionQueue`,
+`TrajectoryExecutor`, planning support/context, workspace safety and state caches.
+`MoveItRobotBackend` applies user/work-object and tool context before delegating
+robot-style operations to that controller. API code accesses it through the gateway.
 
-`MotionQueue` tracks:
-- current task
-- queued tasks
-- completion result per task id
+A linear target normally uses Cartesian planning; PTP and forced Pilz LIN use their
+respective planning paths. Paths/sequences and ordered chains have their own
+planning/execution orchestration. Time parameterization uses the selected
+trajectory optimizer before FollowJointTrajectory dispatch. Micro-move fallback
+and direct-contour behavior are controlled by their planning configuration.
 
-## Planning Modules
+`MotionCoordinator` arbitrates immediate execution, queueing and rejection.
+`MotionQueue` tracks requests, IDs and completion; acceptance of a queued task is
+not controller completion. `TrajectoryExecutor` owns action submission/results,
+stop trajectory dispatch and execution handoff.
 
-- `motion/strategies.py`
-  - thin strategy wrappers for single-point and path requests
-- `motion/planning/single_target.py`
-  - planning entry for single Cartesian targets
-  - true micro-moves use the Jacobian path
-  - normal single-target linear moves currently send only start/end Cartesian poses into MoveIt and let `compute_cartesian_path` do the interpolation
-  - structural pre-interpolation is intentionally disabled for normal single-target moves because exact intermediate waypoint anchors were found to over-constrain short Cartesian moves
-- `motion/planning/trajectory.py`
-  - planning entry for multi-waypoint Cartesian paths
-- `motion/planning/trajectory_planner.py`
-  - shared request builder and response handling
-- `motion/planning/jacobian_move.py`
-  - fallback for extremely small moves / collapsed trajectories
-- `motion/planning/planner_diagnostics.py`
-  - FK mismatch and collision diagnostics
-- `motion/planning/planner_support_service.py`
-  - lazy ROS service clients for FK, IK, and state validity
-- `motion/planning/planner_context.py`
-  - narrow context passed into planning code instead of direct god-node access
+## Stop, collision and recovery
 
-## Execution Modules
+Operator/process Stop and collision Stop have distinct profiles. Implementations
+live in `motion/execution/stop_strategies/`; collision strategy selection comes
+from the active profile's sensorless runtime settings. Action handling and fallback
+remain in the executor. UI/process Stop retains its existing Joint_6 hold policy;
+collision stop uses its own configured held joints.
 
-- `motion/execution/motion_coordinator.py`
-  - execution ownership, queue arbitration, stop semantics
-- `motion/execution/motion_queue.py`
-  - queued task bookkeeping and wait-for-task support
-- `motion/execution/trajectory_executor.py`
-  - FollowJointTrajectory dispatch and result handling
-- `motion/execution/trajectory_optimizer.py`
-  - optimizer selection / helper dispatch
+The production ZeroErr observer is the C++ `zeroerr/RealtimeCollisionController`
+in the controller-manager update loop. Python estimator modules and the deprecated
+Python monitor are retained for offline/legacy use. Runtime ROS adapters consume
+collision stop/readiness/acknowledgement messages. A confirmed active collision
+latches motion, clears queued work and invokes the collision stop path.
 
-## Safety And Status Modules
+Recovery uses a fresh acknowledgement generation. Ordinary release can retain a
+valid stationary torque baseline; explicit recalibration and invalid baseline
+require full warm-up. Reset releases the hold only after current readiness and
+settling checks. It does not resume the previous task or suppress detection.
+See [motion and safety](MOTION_AND_SAFETY.md) and the
+[sensorless runbook](../../zeroerr/collision_detection/docs/SENSORLESS_COLLISION_DETECTION.md).
 
-- `safety/safety_wall_manager.py`
-  - workspace walls, RViz markers, planning-scene collision objects
-- `safety/collision_detection/`
-  - dynamics-based external torque collision detection
-- `status/robot_monitor.py`
-  - live robot monitor / cartesian state pipeline
-- `status/robot_state_store.py`
-  - shared state cache for planning and REST
-- `status/robot_status_publisher.py`
-  - ROS status publication
+## State and diagnostics
+
+`status/` maintains measured state and publishes status. `StateApi` exposes
+snapshots and queries; partial state explicitly lists unavailable fields.
+`runtime_websockets/` provides streaming state, execution and generic sensor data.
+Those servers still have separate stream payload/lifecycle code; the four API
+request/response contracts do not imply all streams have been migrated to it.
+
+The gateway owns diagnostic resources. `adapters/rviz_process.py` manages only its
+own RViz launch session; diagnostics adapters open the configured collision plots.
+The backend shutdown path closes owned resources.

@@ -1,5 +1,7 @@
 # Direct Contour IK For `execute_path`
 
+> Implementation plan and investigation log. Recorded status/defaults/timings describe individual development stages, not guaranteed effective profile values. See the [current runtime architecture](../eRob_moveit/src/eRob_ROS2_MoveIt/erob_moveit_runtime/docs/ARCHITECTURE.md) and active profile contour configuration.
+
 ## Implementation Status
 
 Status as of this pass:

@@ -6,7 +6,7 @@ from src.applications.robot_settings.service.robot_settings_application_service 
 from src.engine.common_settings_ids import CommonSettingsID
 
 
-def _make_svc(robot=None, nav=None, tool_key=None, tool_settings=None):
+def _make_svc(robot=None, nav=None, tool_key=None, tool_settings=None, actions=None):
     ss = MagicMock()
     if tool_key and tool_settings is not None:
         ss.get.side_effect = lambda k: tool_settings if k == tool_key else None
@@ -18,6 +18,7 @@ def _make_svc(robot=None, nav=None, tool_key=None, tool_settings=None):
         robot_service=robot,
         tool_settings_key=tool_key,
         navigation_service=nav,
+        diagnostic_actions=actions,
     )
 
 
@@ -61,6 +62,51 @@ class TestGetCurrentPosition(unittest.TestCase):
 
 
 class TestCollisionMonitorConfiguration(unittest.TestCase):
+
+    def test_pending_application_retains_separate_save_and_runtime_evidence(self):
+        robot = MagicMock()
+        response = {'success': False, 'saved': {'monitor': {'active_stop_enabled': False}},
+                    'applied': {'monitor': {'active_stop_enabled': True}},
+                    'revision': 'revision-2', 'pending_application': True}
+        robot.update_collision_monitor_config.return_value = response
+        actions = MagicMock()
+        token = {'action_id': 'action-1', 'actor': {'user_id': '42'}}
+
+        self.assertIs(_make_svc(robot=robot, actions=actions).save_collision_monitor_config(
+            {'active_stop_enabled': False}, token), response)
+
+        calls = actions.record.call_args_list
+        self.assertEqual([call.args[0] for call in calls], [
+            'settings.collision.persistence_reported',
+            'settings.collision.application_reported', 'settings.collision.save_result'])
+        self.assertEqual(calls[0].kwargs['configuration'], response['saved'])
+        self.assertEqual(calls[1].kwargs['configuration'], response['applied'])
+        self.assertEqual(calls[2].kwargs['persistence'], 'reported_saved')
+        self.assertEqual(calls[2].kwargs['application'], 'pending')
+        self.assertTrue(all(call.kwargs['context'] == token for call in calls))
+
+    def test_broken_audit_adapter_does_not_change_save_result_or_exception(self):
+        robot, actions = MagicMock(), MagicMock()
+        actions.record.side_effect = RuntimeError('recorder adapter failed')
+        response = {'success': True, 'saved': {'active_stop_enabled': False}}
+        robot.update_collision_monitor_config.return_value = response
+        service = _make_svc(robot=robot, actions=actions)
+        self.assertIs(service.save_collision_monitor_config({'active_stop_enabled': False}), response)
+        original = OSError('device connection failed')
+        robot.update_collision_monitor_config.side_effect = original
+        with self.assertRaises(OSError) as caught:
+            service.save_collision_monitor_config({'active_stop_enabled': False})
+        self.assertIs(caught.exception, original)
+
+    def test_legacy_success_does_not_establish_persistence_or_application(self):
+        robot, actions = MagicMock(), MagicMock()
+        robot.update_collision_monitor_config.return_value = {'success': True, 'applied': False}
+        _make_svc(robot=robot, actions=actions).save_collision_monitor_config(
+            {'active_stop_enabled': False}, {'action_id': 'action-1'})
+        result = actions.record.call_args.kwargs
+        self.assertEqual(result['outcome'], 'succeeded')
+        self.assertEqual(result['persistence'], 'unknown')
+        self.assertEqual(result['application'], 'unknown')
 
     def test_load_delegates_to_robot(self):
         robot = MagicMock()

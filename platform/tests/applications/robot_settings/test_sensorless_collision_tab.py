@@ -45,3 +45,18 @@ class SensorlessCollisionTabTests(unittest.TestCase):
 
         self.assertEqual(len(emitted), 1)
         self.assertIn("detection_enabled", emitted[0])
+
+    def test_only_operator_toggle_emits_edit_and_loading_updates_baseline(self):
+        tab = SensorlessCollisionTab()
+        emitted = []
+        def record(previous, enabled):
+            emitted.append((previous, enabled))
+        tab.active_response_edited.connect(record)
+        tab.load_config({'active_stop_enabled': True})
+        self.assertEqual(emitted, [])
+        tab._active_stop.click()
+        self.assertEqual(emitted, [(True, False)])
+        tab.load_config({'active_stop_enabled': True})
+        self.assertEqual(emitted, [(True, False)])
+        tab._active_stop.click()
+        self.assertEqual(emitted, [(True, False), (True, False)])

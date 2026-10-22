@@ -21,7 +21,7 @@ class GlueBootstrapProvider(RobotSystemBootstrapProvider):
 
     def build_robot(self):
         # TODO: Move concrete robot driver selection into persisted startup config.
-        # return Ros2Robot(server_url="http://localhost:5000")
+        # return Ros2Robot()
         return Ros2Robot(server_url="fake://local")
 
     def build_login_view(self, robot_system, messaging_service):

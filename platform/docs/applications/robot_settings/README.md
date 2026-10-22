@@ -183,3 +183,21 @@ viewer does not stop robot control or MoveIt. Unsupported/older backends show
 an explanatory message. Updated backend packages require one rebuild and restart
 before the controls can be used. No platform restart is needed for subsequent
 RViz on/off requests. English and Bulgarian catalogs cover the tab and status.
+
+## Diagnostics wiring
+
+Views emit semantic tab-selection and active-response-edit signals. The controller
+delegates to `RobotSettingsModel.record_ui_action()` and the app-owned service
+interface; only `RobotSettingsApplicationService` imports engine diagnostics.
+Paint composition injects the bootstrap action recorder so actor identity matches
+the shell session. Services without an injected session report unknown identity.
+
+Collision Save captures the actor/action token before background submission and
+records backend-reported saved versus applied configuration separately, including
+revision, pending application and errors. Editing a checkbox is recorded before a
+Save and never presented as persistence. Programmatic loads suppress edit events.
+The original backend result/exception is retained if the audit adapter fails.
+Other setting controls and general multi-resource Save remain future coverage.
+
+See [engine diagnostics](../../engine/diagnostics/README.md) for event names and
+capture limits. These hooks add no UI text or machine commands.

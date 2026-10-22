@@ -78,13 +78,14 @@ A successful configuration response includes:
 - `profile`, `section`, `revision`;
 - `saved`: effective values saved for the selected profile, including inheritance;
 - `applied`: runtime values, or null when they cannot be observed;
-- `pending_application`, `application_error`, `restart_required` (null when runtime state is unknown);
+- `pending_application`, `application_error`, `application_error_info`, `restart_required` (null when runtime state is unknown);
 - `tools`: resolved absolute TCPs plus canonical relative definitions for the editor.
 
 `success: true` means the save succeeded. It does **not** mean application is
 complete: clients must check `pending_application`. Do not report a pending save
-as a completed calibration. Retry `/apply` with the saved revision, or restart the
-backend as appropriate. Application errors do not silently discard a durable save.
+as a completed calibration. `application_error_info` preserves the actual cause,
+retryability and any unknown outcome separately from durable-save success.
+Retry `/apply` with the saved revision, or restart the backend as appropriate. Application errors do not silently discard a durable save.
 
 ## Persistence and runtime application
 

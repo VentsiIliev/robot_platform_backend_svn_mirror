@@ -17,6 +17,7 @@ from src.shared_contracts.events.robot_events import RobotTopics
 
 def _observed_motion(fn):
     """Observe service results without changing the robot motion contract."""
+
     @wraps(fn)
     def wrapped(self, *args, **kwargs):
         started = time.monotonic()
@@ -36,8 +37,9 @@ def _observed_motion(fn):
         observe(self._logger, "robot.motion.ended", metrics=metrics,
                 operation=operation, success=bool(result),
                 target_position=target[:6] if operation in {"move_ptp", "move_linear"}
-                and isinstance(target, (list, tuple)) else None)
+                                              and isinstance(target, (list, tuple)) else None)
         return result
+
     return wrapped
 
 
@@ -112,6 +114,8 @@ class MotionService(IMotionService):
         started = time.perf_counter()
         safety_started = time.perf_counter()
         violations = self._motion_violations(position)
+        if violations is None:
+            return False
         self._logger.info(
             "[TIMING] move_ptp_safety_check elapsed_s=%.3f violations=%d",
             time.perf_counter() - safety_started,
@@ -175,6 +179,8 @@ class MotionService(IMotionService):
     ) -> bool:
         self._last_jog_target = []
         violations = self._motion_violations(position)
+        if violations is None:
+            return False
         if bypass_safety_limits and violations:
             self._logger.warning(
                 "move_linear platform safety limits BYPASSED by Jog Recovery: %s",
@@ -191,9 +197,9 @@ class MotionService(IMotionService):
             violations = [
                 violation for violation in violations
                 if "sub-zero" not in violation.lower()
-                and not (
-                    violation.lstrip().startswith("Z=")
-                    and "not in [0," in violation
+                   and not (
+                        violation.lstrip().startswith("Z=")
+                        and "not in [0," in violation
                 )
             ]
         if violations:
@@ -235,6 +241,8 @@ class MotionService(IMotionService):
         safety_started = time.perf_counter()
         for index, segment in enumerate(segments):
             violations = self._motion_violations(segment.position)
+            if violations is None:
+                return False
             if violations:
                 self._logger.warning(
                     "move_sequence blocked by safety limits at segment %d: %s",
@@ -297,6 +305,8 @@ class MotionService(IMotionService):
         safety_started = time.perf_counter()
         for index, segment in enumerate(segments):
             violations = self._motion_violations(segment.position)
+            if violations is None:
+                return False
             if violations:
                 self._logger.warning(
                     "move_custom_sequence blocked by safety limits at segment %d: %s",
@@ -378,6 +388,8 @@ class MotionService(IMotionService):
                         target[idx] += direction.value * step
                 self._logger.info(f"Target -> {target}")
                 violations = self._motion_violations(target)
+                if violations is None:
+                    return -1
                 # Recovery from an accidental sub-zero opening collision must
                 # remain possible with the physical step jog controls.  Keep
                 # this exception deliberately narrow: only Cartesian X/Y/Z,
@@ -386,16 +398,16 @@ class MotionService(IMotionService):
                 # synthetic sub-zero floor/corridor messages; all workspace,
                 # collision, drive, and joint-limit checks remain enforced.
                 if (
-                    axis in (RobotAxis.X, RobotAxis.Y, RobotAxis.Z)
-                    and abs(float(step)) <= 1.0
-                    and base_position
-                    and len(base_position) >= 3
-                    and float(base_position[2]) < 0.0
+                        axis in (RobotAxis.X, RobotAxis.Y, RobotAxis.Z)
+                        and abs(float(step)) <= 1.0
+                        and base_position
+                        and len(base_position) >= 3
+                        and float(base_position[2]) < 0.0
                 ):
                     violations = [
                         violation for violation in violations
                         if "sub-zero" not in violation.lower()
-                        and "not in [0, 800]" not in violation.lower()
+                           and "not in [0, 800]" not in violation.lower()
                     ]
                 if violations:
                     self._logger.warning(
@@ -404,7 +416,8 @@ class MotionService(IMotionService):
                     )
                     return -1
             else:
-                target = []
+                self._logger.error("start_jog rejected: current position unavailable")
+                return -1
 
             ret = self._robot.start_jog(axis, direction, step, jog_velocity, jog_acceleration)
             if ret == 0 and target:
@@ -439,16 +452,16 @@ class MotionService(IMotionService):
                 current_getter = self._robot.get_current_position
             current = list(current_getter() or self._cached_position or [])
             subzero_recovery = (
-                axis == RobotAxis.Z
-                and direction == Direction.PLUS
-                and len(current) >= 3
-                and float(current[2]) < 0.0
+                    axis == RobotAxis.Z
+                    and direction == Direction.PLUS
+                    and len(current) >= 3
+                    and float(current[2]) < 0.0
             )
             bounded_retract_settle = (
-                axis == RobotAxis.Z
-                and direction == Direction.PLUS
-                and len(current) >= 3
-                and allow_subzero_retract_settle
+                    axis == RobotAxis.Z
+                    and direction == Direction.PLUS
+                    and len(current) >= 3
+                    and allow_subzero_retract_settle
             )
             recovery = subzero_recovery or bounded_retract_settle
             result = int(starter(
@@ -543,7 +556,6 @@ class MotionService(IMotionService):
 
     def move_fast_linear(self, **kwargs) -> dict | None:
         self._last_jog_target = []
-        self._servo_floor_stop.set()
         driver_kwargs = dict(kwargs)
         position = driver_kwargs.get("position")
         allow_subzero_retract = bool(driver_kwargs.pop("allow_subzero_retract", False))
@@ -559,16 +571,16 @@ class MotionService(IMotionService):
                 current_values = []
                 vertical_target = []
             valid_upward_retract = (
-                len(current_values) == 6
-                and len(vertical_target) == 6
-                and all(math.isfinite(value) for value in (*current_values, *vertical_target))
-                and vertical_target[2] > current_values[2]
+                    len(current_values) == 6
+                    and len(vertical_target) == 6
+                    and all(math.isfinite(value) for value in (*current_values, *vertical_target))
+                    and vertical_target[2] > current_values[2]
             )
             subzero_recovery = bool(valid_upward_retract and current_values[2] < 0.0)
             safety_current = current_values
             if not valid_upward_retract or (
-                subzero_recovery
-                and not self._is_bounded_subzero_retract(current_values, vertical_target)
+                    subzero_recovery
+                    and not self._is_bounded_subzero_retract(current_values, vertical_target)
             ):
                 return {
                     "result": -1, "success": False, "accepted": False,
@@ -581,13 +593,19 @@ class MotionService(IMotionService):
             position = vertical_target
             driver_kwargs["position"] = vertical_target
         violations = self._motion_violations(position, current_position=safety_current)
+        if violations is None:
+            return {
+                "result": -1, "success": False, "accepted": False,
+                "final": True, "queued": False,
+                "error": "platform_safety_unavailable",
+            }
         if subzero_recovery:
             violations = [
                 violation for violation in violations
                 if "sub-zero" not in violation.lower()
-                and not (
-                    violation.lstrip().startswith("Z=")
-                    and "not in [0," in violation
+                   and not (
+                        violation.lstrip().startswith("Z=")
+                        and "not in [0," in violation
                 )
             ]
         if violations:
@@ -604,6 +622,7 @@ class MotionService(IMotionService):
         mover = getattr(self._robot, "move_fast_linear", None)
         if not callable(mover):
             return None
+        self._servo_floor_stop.set()
         try:
             outcome = mover(**driver_kwargs)
             if isinstance(outcome, dict):
@@ -733,9 +752,9 @@ class MotionService(IMotionService):
             descending = 0.0 <= current_z <= corridor.entry_z_max and corridor.z_min <= target_z < 0.0
             retracting = corridor.z_min <= current_z < 0.0 and 0.0 <= target_z <= corridor.entry_z_max
             planar_transit = (
-                corridor.allow_planar_transit
-                and corridor.contains_xyz(current)
-                and corridor.contains_xyz(target)
+                    corridor.allow_planar_transit
+                    and corridor.contains_xyz(current)
+                    and corridor.contains_xyz(target)
             )
             if not (descending or retracting or planar_transit):
                 violations.append("move is not permitted by the registered corridor")
@@ -776,7 +795,8 @@ class MotionService(IMotionService):
             if descending and not success:
                 passage_setter(corridor_id, True)
             if retracting and success and not passage_setter(corridor_id, True):
-                self._logger.error("Corridor retract completed but passage lid failed to close corridor_id=%s", corridor_id)
+                self._logger.error("Corridor retract completed but passage lid failed to close corridor_id=%s",
+                                   corridor_id)
                 return False
             return bool(success)
         except Exception:
@@ -869,7 +889,7 @@ class MotionService(IMotionService):
                             10.0 if allow_initial_reverse_settle and elapsed <= 0.35 else 2.0
                         )
                         if not (z < initial_z - reverse_limit_mm or (
-                            time.monotonic() - started > 1.0 and z <= initial_z + 0.2
+                                time.monotonic() - started > 1.0 and z <= initial_z + 0.2
                         )):
                             continue
                         self._logger.error(
@@ -1026,28 +1046,40 @@ class MotionService(IMotionService):
             (sz * cy, sz * sy * sx + cz * cx, sz * sy * cx - cz * sx),
             (-sy, cy * sx, cy * cx),
         )
+
     def _motion_violations(
-        self,
-        position: List[float],
-        *,
-        current_position: List[float] | None = None,
-    ) -> List[str]:
-        violations = list(self._safety.get_violations(position))
-        current = current_position
-        if current is None:
-            current_getter = getattr(self._robot, "get_current_position_fresh", None)
-            if not callable(current_getter):
-                current_getter = self._robot.get_current_position
-            current = current_getter()
-            if not isinstance(current, (list, tuple)) or len(current) < 3:
-                current = self._robot.get_current_position()
-        current = current or self._cached_position or []
-        if current and len(current) >= 3 and isinstance(current[2], (int, float)) and float(current[2]) < 0.0:
-            violations.append(
-                "Platform Z floor violation: a sub-zero pose may only retract through its registered corridor LIN"
-            )
-        if position and len(position) >= 3 and float(position[2]) < 0.0:
-            violations.append(
-                "Platform Z floor violation: sub-zero motion requires a registered corridor LIN"
-            )
-        return violations
+            self,
+            position: List[float],
+            *,
+            current_position: List[float] | None = None,
+    ) -> List[str] | None:
+        """Return violations, or None when admission could not be checked.
+
+        Unavailable checks must be rejected before applying any recovery bypass.
+        """
+        try:
+            result = self._safety.get_violations(position)
+            if not isinstance(result, list) or not all(isinstance(item, str) for item in result):
+                raise ValueError("Safety checker must return a list of violation strings")
+            violations = list(result)
+            current = current_position
+            if current is None:
+                current_getter = getattr(self._robot, "get_current_position_fresh", None)
+                if not callable(current_getter):
+                    current_getter = self._robot.get_current_position
+                current = current_getter()
+                if not isinstance(current, (list, tuple)) or len(current) < 3:
+                    current = self._robot.get_current_position()
+            current = current or self._cached_position or []
+            if current and len(current) >= 3 and isinstance(current[2], (int, float)) and float(current[2]) < 0.0:
+                violations.append(
+                    "Platform Z floor violation: a sub-zero pose may only retract through its registered corridor LIN"
+                )
+            if position and len(position) >= 3 and float(position[2]) < 0.0:
+                violations.append(
+                    "Platform Z floor violation: sub-zero motion requires a registered corridor LIN"
+                )
+            return violations
+        except Exception:
+            self._logger.exception("Motion rejected: safety admission check unavailable")
+            return None

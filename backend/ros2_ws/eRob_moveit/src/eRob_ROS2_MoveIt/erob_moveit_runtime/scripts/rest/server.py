@@ -72,24 +72,24 @@ def _as_dict(value, error_message: str) -> dict:
     return {"success": False, "error": error_message}
 
 def _configured_tcp_servers(host: str, port: int) -> list[tuple[str, str, int]]:
-    servers = [("REST HTTP", str(host or "0.0.0.0"), int(port))]
+    servers = [("REST HTTP", str(host), int(port))]
     if bool(getattr(config, "REST_WS_STATE_ENABLED", True)):
         servers.append((
             "state WebSocket",
-            str(getattr(config, "REST_WS_STATE_HOST", host) or host or "0.0.0.0"),
-            int(getattr(config, "REST_WS_STATE_PORT", int(port) + 1)),
+            config.REST_WS_STATE_HOST,
+            config.REST_WS_STATE_PORT,
         ))
     if bool(getattr(config, "REST_WS_EXECUTION_ENABLED", True)):
         servers.append((
             "execution WebSocket",
-            str(getattr(config, "REST_WS_EXECUTION_HOST", host) or host or "0.0.0.0"),
-            int(getattr(config, "REST_WS_EXECUTION_PORT", int(port) + 2)),
+            config.REST_WS_EXECUTION_HOST,
+            config.REST_WS_EXECUTION_PORT,
         ))
     if bool(getattr(config, "REST_WS_SENSOR_ENABLED", True)):
         servers.append((
             "sensor WebSocket",
-            str(getattr(config, "REST_WS_SENSOR_HOST", host) or host or "0.0.0.0"),
-            int(getattr(config, "REST_WS_SENSOR_PORT", int(port) + 3)),
+            config.REST_WS_SENSOR_HOST,
+            config.REST_WS_SENSOR_PORT,
         ))
     return servers
 
@@ -101,7 +101,8 @@ def _assert_tcp_servers_available(servers: list[tuple[str, str, int]]) -> None:
         if key in seen:
             continue
         seen.add(key)
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        family = socket.AF_INET6 if ":" in bind_host else socket.AF_INET
+        with socket.socket(family, socket.SOCK_STREAM) as probe:
             probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
                 probe.bind((bind_host, bind_port))

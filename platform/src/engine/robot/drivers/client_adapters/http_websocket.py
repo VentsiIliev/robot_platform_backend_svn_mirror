@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 from src.engine.robot.drivers.client_adapters.base import RobotClientAdapter
+from src.engine.robot.configuration.backend_network import load_backend_network
 
 
 class HttpWebSocketRobotClient(RobotClientAdapter):
@@ -20,6 +21,7 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
     transport_name = "http_websocket"
     _RECONNECT_CHECK_INTERVAL_S = 1.0
     _HEALTH_ERROR_LOG_INTERVAL_S = 10.0
+    _STATUS_ERROR_LOG_INTERVAL_S = 10.0
     _STATE_WS_STALE_AFTER_S = 1.0
     _EXECUTION_WS_STALE_AFTER_S = 1.0
     _STATE_HTTP_FALLBACK_INTERVAL_S = 0.5
@@ -31,7 +33,8 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
     _STOP_STATE_STOP_REQUESTED_BUT_UNCONFIRMED = "STOP_REQUESTED_BUT_UNCONFIRMED"
     _STOP_STATE_ERROR = "ERROR"
 
-    def __init__(self, server_url="http://localhost:5000", ip=None):
+    def __init__(self, server_url=None, ip=None):
+        server_url = server_url or load_backend_network().http_url
         self.server_url = server_url.rstrip('/')
         self.ip = ip or "ros2_bridge"
         self._last_execute_path_response = None
@@ -44,6 +47,8 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
         self._last_reconnect_check = 0.0
         self._last_health_error = None
         self._last_health_error_logged_at = 0.0
+        self._last_status_error = None
+        self._last_status_error_logged_at = 0.0
         self._drive_enabled = False
         self._connection_generation = 0
         self._session = requests.Session()
@@ -93,40 +98,29 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
         self._start_sensor_websocket()
 
     @staticmethod
-    def _derive_state_ws_url(server_url: str) -> str:
-        explicit = os.environ.get("ROBOT_STATE_WS_URL")
-        if explicit:
-            return explicit.rstrip("/")
-
+    def _derive_ws_url(server_url: str, port_key: str, path: str) -> str:
+        legacy = ("ROBOT_STATE_WS_URL", "ROBOT_EXECUTION_WS_URL", "ROBOT_SENSOR_WS_URL")
+        if any(os.environ.get(key) for key in legacy):
+            raise ValueError("Configure WebSocket endpoints in backend_network.json; URL environment overrides are unsupported")
+        network = load_backend_network()
         parsed = urlparse(server_url)
         scheme = "wss" if parsed.scheme == "https" else "ws"
-        hostname = parsed.hostname or "localhost"
-        port = 5001
-        netloc = f"{hostname}:{port}"
-        return urlunparse((scheme, netloc, "/ws/state", "", "", ""))
+        hostname = parsed.hostname or network.client_host
+        if ":" in hostname:
+            hostname = f"[{hostname}]"
+        return urlunparse((scheme, f"{hostname}:{getattr(network, port_key)}", path, "", "", ""))
+
+    @staticmethod
+    def _derive_state_ws_url(server_url: str) -> str:
+        return HttpWebSocketRobotClient._derive_ws_url(server_url, "state_ws_port", "/ws/state")
 
     @staticmethod
     def _derive_execution_ws_url(server_url: str) -> str:
-        explicit = os.environ.get("ROBOT_EXECUTION_WS_URL")
-        if explicit:
-            return explicit.rstrip("/")
-
-        parsed = urlparse(server_url)
-        scheme = "wss" if parsed.scheme == "https" else "ws"
-        hostname = parsed.hostname or "localhost"
-        port = 5002
-        netloc = f"{hostname}:{port}"
-        return urlunparse((scheme, netloc, "/ws/execution", "", "", ""))
+        return HttpWebSocketRobotClient._derive_ws_url(server_url, "execution_ws_port", "/ws/execution")
 
     @staticmethod
     def _derive_sensor_ws_url(server_url: str) -> str:
-        explicit = os.environ.get("ROBOT_SENSOR_WS_URL")
-        if explicit:
-            return explicit.rstrip("/")
-        parsed = urlparse(server_url)
-        scheme = "wss" if parsed.scheme == "https" else "ws"
-        hostname = parsed.hostname or "localhost"
-        return urlunparse((scheme, f"{hostname}:5003", "/ws/sensors", "", "", ""))
+        return HttpWebSocketRobotClient._derive_ws_url(server_url, "sensor_ws_port", "/ws/sensors")
 
     def _mark_available(self):
         self._available = True
@@ -1778,6 +1772,7 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
     def get_status(self):
         ws_status = self._get_execution_ws_status()
         if ws_status is not None:
+            self._last_status_error = None
             return ws_status
 
         try:
@@ -1786,12 +1781,25 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             if self._response_failed("get_status", response, data):
                 return None
             self._mark_available()
+            self._last_status_error = None
             logger.debug("get_status ← http=%s raw=%s", response.status_code, data)
             return data
         except Exception as e:
             self._mark_unavailable(e)
-            logger.error("get_status error: %s", e, exc_info=True)
+            self._log_status_error(e)
             return None
+
+    def _log_status_error(self, error: Exception) -> None:
+        signature = (type(error), str(error))
+        now = time.monotonic()
+        if (
+            signature == self._last_status_error
+            and now - self._last_status_error_logged_at < self._STATUS_ERROR_LOG_INTERVAL_S
+        ):
+            return
+        self._last_status_error = signature
+        self._last_status_error_logged_at = now
+        logger.error("get_status error: %s", error, exc_info=True)
 
     def get_ordered_motion_chain_status(self):
         try:

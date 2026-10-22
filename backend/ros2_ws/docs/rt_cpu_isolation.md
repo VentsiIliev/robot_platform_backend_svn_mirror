@@ -1,5 +1,7 @@
 # RT CPU Isolation Fix — EtherCAT Missed Cycles
 
+> Machine-specific investigation and tuning record. Core numbers, kernel choices and measured overruns below are not portable defaults. The current launcher policy is [zeroerr_rt_policy.env](../eRob_moveit/zeroerr_rt_policy.env); inspect it for the deployed configuration.
+
 ## Problem
 
 After startup, `ros2_control_node` on the ZeroErr robot was missing EtherCAT cycles with overruns up to **187ms** on a `SCHED_FIFO-90` thread. Timing showed the missed cycles started ~0.55 seconds after safety walls were published — the moment `move_group` processes the `PlanningScene` collision objects update.

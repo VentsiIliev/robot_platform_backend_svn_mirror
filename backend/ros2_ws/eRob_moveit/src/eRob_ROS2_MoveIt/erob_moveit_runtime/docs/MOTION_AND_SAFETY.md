@@ -74,9 +74,11 @@ Planner diagnostics distinguish:
 
 ### Dynamics-based collision detector
 
-`/scripts/safety/collision_detection/` contains the rigid-body model and
-external-torque estimators. The deployed monitor is the `zeroerr` package's
-`zeroerr_collision_monitor.py` node.
+The production ZeroErr observer is the C++ `zeroerr/RealtimeCollisionController`
+running inside the synchronous controller-manager update loop. It reads loaned
+joint/drive interfaces after hardware read. `scripts/safety/collision_detection/`
+contains Python models/estimators for offline/legacy use;
+`zeroerr_collision_monitor.py` is deprecated and is not launched in production.
 
 The production estimator is a generalized-momentum observer with calibrated
 friction, pose-residual and signed velocity/acceleration compensation. Both its
@@ -97,7 +99,7 @@ runtime motion interlock and blocks later motion/drive-enable requests until
 operator acknowledgement. Recovery Jog can temporarily suppress detection, but
 the backend must confirm suppression and detection is restored on exit.
 
-See `zeroerr/docs/SENSORLESS_COLLISION_DETECTION.md` for the equations, clean
+See the [sensorless collision runbook](../../zeroerr/collision_detection/docs/SENSORLESS_COLLISION_DETECTION.md) for the equations, clean
 data requirements, fitting procedure, validation, latch workflow and Recovery
 Jog behavior.
 
@@ -133,7 +135,11 @@ That remains the authority for:
 
 ## Important Config Knobs
 
-In `scripts/config.py`:
+These names are exposed by `scripts/config.py`, which loads the selected robot
+package/profile YAML composition. Change their owning configuration file rather
+than editing the loader. Sensorless stop/recovery settings have their own
+profile file, described below.
+
 - `CARTESIAN_MIN_FRACTION`
 - `WALL_XY_OFFSET_M`
 - `SAFETY_MARGIN_M`
@@ -182,3 +188,27 @@ Single-target planning currently uses:
 For normal single-target linear moves, MoveIt now performs the Cartesian interpolation internally from the start pose to the end pose without additional structural waypoint anchors from our side.
 
 This is a deliberate temporary policy because it avoids the short-move failure mode above.
+
+## Dedicated collision stop and recovery
+
+Collision Stop uses the selected implementation under
+`motion/execution/stop_strategies/`: `measured_ruckig` or `planned_path`.
+`EXECUTOR_COLLISION_STOP_ENABLED: false` disables the dedicated brake trajectory
+and leaves cancellation fallback; it does not select another brake strategy.
+The named strategy and limits live under `runtime` in the active profile's
+`sensorless_collision.yaml`. Regular operator/process Stop retains its own
+Joint_6 hold behavior. Changing the collision strategy does not change that path.
+
+Ordinary collision release retains a valid baseline when
+`COLLISION_RESET_RECALIBRATE_ON_RELEASE` is false. It resets integration/filter
+state and waits for drive stability, stationary settling and fresh matching
+acknowledgement-generation readiness. An invalid baseline or explicit
+recalibration still requires full warm-up. Recovery uses normal trip thresholds,
+with no extra lower release threshold. Continuing above-threshold torque leaves
+motion interlocked. Reset neither resumes the old trajectory nor learns away
+contact on each release.
+
+Read the active profile/effective API values for timing and stop limits; shared
+values are inheritance defaults, not guaranteed live controller state. The
+[sensorless runbook](../../zeroerr/collision_detection/docs/SENSORLESS_COLLISION_DETECTION.md)
+documents the timeout, suppression/recovery-only gate, braking limits and fallback.

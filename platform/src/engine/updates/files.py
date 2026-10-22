@@ -1,32 +1,12 @@
 """Durable state files and cooperative process locks for Linux installations."""
 from contextlib import contextmanager
 import fcntl
-import json
 import os
 from pathlib import Path
-import tempfile
 
 
-def sync_directory(path: Path) -> None:
-    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
-    try:
-        os.fsync(fd)
-    finally:
-        os.close(fd)
-
-
-def atomic_json(path: Path, value: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=".state-")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as stream:
-            json.dump(value, stream, indent=2)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, path)
-        sync_directory(path.parent)
-    finally:
-        Path(temporary).unlink(missing_ok=True)
+# Keep updater imports stable while sharing the single durability implementation.
+from src.engine.core.durable_files import atomic_write_json as atomic_json, sync_directory
 
 
 @contextmanager

@@ -1,5 +1,7 @@
 # Runtime Gateway Migration Plan
 
+> Historical migration design. The four API groups and local gateway are implemented; a remote ROS gateway and process isolation remain future work. See [current API architecture](runtime_api_architecture.md).
+
 ## Goal
 
 Prevent REST or WebSocket server failures from taking down the robot runtime, while avoiding a large one-shot rewrite.

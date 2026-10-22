@@ -1,0 +1,8 @@
+{
+  "bind_host": "127.0.0.1",
+  "client_host": "127.0.0.1",
+  "http_port": 5000,
+  "state_ws_port": 5001,
+  "execution_ws_port": 5002,
+  "sensor_ws_port": 5003
+}

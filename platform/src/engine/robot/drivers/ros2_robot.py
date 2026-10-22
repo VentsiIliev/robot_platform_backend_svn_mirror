@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 class Ros2Robot(IRobot):
 
-    def __init__(self, server_url: str):
+    def __init__(self, server_url: str | None = None):
         logger.info("Ros2Robot init — server_url=%s", server_url)
         self._client = build_robot_client(server_url=server_url)
         logger.info("Ros2Robot ready")

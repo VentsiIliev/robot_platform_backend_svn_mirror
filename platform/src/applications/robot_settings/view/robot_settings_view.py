@@ -54,6 +54,8 @@ class RobotSettingsView(IApplicationView):
     collision_config_refresh_requested = pyqtSignal()
     collision_config_save_requested = pyqtSignal(dict)
     collision_diagnostics_open_requested = pyqtSignal()
+    settings_tab_opened = pyqtSignal(str)
+    collision_active_response_edited = pyqtSignal(bool, bool)
     rviz_status_refresh_requested = pyqtSignal()
     rviz_enabled_requested = pyqtSignal(bool)
 
@@ -124,6 +126,15 @@ class RobotSettingsView(IApplicationView):
         return widget
 
     def _on_tab_changed(self, index: int) -> None:
+        if index >= 0:
+            tab_ids = ['general', 'safety', 'movement_groups', 'targeting']
+            if self._show_sensorless_collision_tab:
+                tab_ids.append('sensorless_collision')
+            if _SHOW_LEGACY_CALIBRATION_TAB:
+                tab_ids.append('calibration')
+            tab_ids.append('visualization')
+            if index < len(tab_ids):
+                self.settings_tab_opened.emit(tab_ids[index])
         if index == 2 and self._movement_tab is None:
             self._build_movement_groups_tab()
         elif index == 3 and self._targeting_tab is None:
@@ -178,6 +189,7 @@ class RobotSettingsView(IApplicationView):
 
     def _build_collision_tab(self) -> None:
         self._collision_tab = SensorlessCollisionTab()
+        self._collision_tab.active_response_edited.connect(self._on_collision_active_response_edited)
         self._collision_tab.refresh_requested.connect(
             self.collision_config_refresh_requested)
         self._collision_tab.save_requested.connect(
@@ -187,6 +199,9 @@ class RobotSettingsView(IApplicationView):
         self._replace_tab_with_widget(
             index=4, title="Sensorless Collision", widget=self._collision_tab)
         self.collision_config_refresh_requested.emit()
+
+    def _on_collision_active_response_edited(self, previous: bool, enabled: bool) -> None:
+        self.collision_active_response_edited.emit(previous, enabled)
 
     def load_collision_config(self, config: dict) -> None:
         if self._collision_tab is not None:

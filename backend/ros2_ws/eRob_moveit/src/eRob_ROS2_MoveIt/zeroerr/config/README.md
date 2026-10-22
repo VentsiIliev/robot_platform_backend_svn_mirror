@@ -54,6 +54,10 @@ production cell's guarded drop-opening passage.
   another installation's profile. Existing values are migrated unchanged.
 - `shared/motion/paint.yaml`: runtime motion values common to the paint profiles.
   Dedicated contour/PTP/Servo/trajectory-limit files remain beside their profile.
+- `<profile>/sensorless_collision.yaml`: sensorless controller startup parameters,
+  monitor/model values and runtime stop/recovery policy. Each profile can include
+  `../shared/sensorless_collision.yaml` and override its own values. The backend
+  configuration API writes profile overrides, never the shared defaults.
 - `<profile>/runtime.yaml`: explicit composition (`RUNTIME_INCLUDES`), URDF/SRDF
   selection, frame settings and calibration save path.
 
@@ -71,7 +75,7 @@ profile in `platform/config/platform.json`; the tray-dryer now selects its own
 
 Both readers use the same include loader. Included mappings merge in listed
 order, then explicit values in the including file override them. This is a
-**top-level** merge: explicitly supplied registries/lists replace those from an
+**top-level** runtime include merge: explicitly supplied registries/lists replace those from an
 include. Missing includes and cycles fail startup rather than silently falling
 back. Keep calibration as the last included component.
 
@@ -103,3 +107,22 @@ python3 -B zeroerr/test/test_profile_composition.py -v
 Tests verify original geometry/limits/inertias, matching launch/runtime
 selection, shared-change propagation, local mounting isolation and independent
 calibration persistence without starting ROS nodes or commanding the robot.
+
+## Configuration authority and live edits
+
+The backend profile is the durable authority. Platform editors use the same
+backend connection and revision-checked configuration API; platform robot-system
+storage owns UI/process settings and measurement history. Backend startup does
+not depend on the platform or replay platform geometry into the profile.
+
+Sensorless files use their own section-aware inheritance: nested mappings merge
+and lists replace inherited lists. This differs from the top-level runtime include
+merge described above. Read effective values and revision through
+`GET /configuration/sensorless_collision`; a small profile file can inherit most
+of its settings without using hardcoded runtime defaults.
+
+A successful save does not prove all values are live. Check `pending_application`,
+`application_error_info`, `applied` and `restart_required`. Supported monitor
+fields can apply live; controller/model/stop/recovery changes require restart.
+See [backend configuration](../../erob_moveit_runtime/docs/backend_configuration.md)
+and the [sensorless runbook](../collision_detection/docs/SENSORLESS_COLLISION_DETECTION.md).

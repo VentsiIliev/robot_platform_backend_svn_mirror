@@ -7,6 +7,11 @@
     "paint_tray_dry",
     "welding"
   ],
+  "diagnostics": {
+    "enabled": true,
+    "capture_logs": true,
+    "console_events": false
+  },
   "ros_backend": {
     "auto_launch": true,
     "auto_stop": true,

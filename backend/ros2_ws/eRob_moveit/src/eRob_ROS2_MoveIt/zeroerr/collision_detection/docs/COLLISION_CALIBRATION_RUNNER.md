@@ -18,10 +18,13 @@ object. Use the hardware emergency stop and supervise the complete real run.
 
 ## First dry run
 
-Keep this setting in `config/runtime.yaml`:
+Keep this setting under `runtime` in the active profile's
+`config/<ACTIVE_PROFILE>/sensorless_collision.yaml` (or edit it through the
+revision-checked backend configuration API):
 
 ```yaml
-COLLISION_CALIBRATION_DRY_RUN: true
+runtime:
+  COLLISION_CALIBRATION_DRY_RUN: true
 ```
 
 Restart the stack, then start and inspect the validation-only run:
@@ -36,8 +39,8 @@ controller goals and therefore has no measured Cartesian coverage.
 
 ## Supervised data collection
 
-Stop the stack, set `COLLISION_CALIBRATION_DRY_RUN: false` and
-`SENSORLESS_COLLISION_LOG_ENABLED: true`, then restart it. With the robot
+Stop the stack, set `runtime.COLLISION_CALIBRATION_DRY_RUN: false` and
+`runtime.SENSORLESS_COLLISION_LOG_ENABLED: true` in that profile, then restart it. With the robot
 stationary and the workspace clear, call the same `start` service. Stop at any
 time with:
 
@@ -52,7 +55,7 @@ all six joint positions during actual motion. Render XY, XZ, YZ, and 3-D views:
 
 ```bash
 ros2 run zeroerr zeroerr_calibration_coverage_plot.py \
-  /home/ilv/ros2_ws/eRob_moveit/zeroerr_data/collision_detection/calibration_runs/RUN_TIMESTAMP
+  /path/to/zeroerr_data/collision_detection/calibration_runs/RUN_TIMESTAMP
 ```
 
 This measured coverage describes the accepted and executed calibration paths,

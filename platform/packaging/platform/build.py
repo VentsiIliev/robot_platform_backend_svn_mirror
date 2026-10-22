@@ -108,6 +108,9 @@ def main():
     shutil.copy2(ROOT / "packaging/runtime/manage.py", installation / "system-setup.py")
     shutil.copytree(ROOT / "src/engine/updates", installation / "src/engine/updates",
                     ignore=shutil.ignore_patterns("__pycache__"), dirs_exist_ok=True)
+    (installation / "src/engine/core").mkdir(parents=True, exist_ok=True)
+    for name in ("src/engine/core/__init__.py", "src/engine/core/durable_files.py"):
+        shutil.copy2(ROOT / name, installation / name)
     for name in ("src/__init__.py", "src/engine/__init__.py"):
         shutil.copy2(ROOT / name, installation / name)
     updater = installation / 'updater'

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import json
-import os
 from pathlib import Path
 from typing import List
+
+from src.engine.core.durable_files import atomic_write_json, sync_directory, ensure_directory
+from src.engine.repositories.json.json_store import read_json_object
 
 from src.robot_systems.twin_robot.domain import ChoreographyDefinition
 
@@ -13,7 +14,7 @@ class ChoreographyRepository:
 
     def __init__(self, root_dir: str):
         self._root = Path(root_dir)
-        self._root.mkdir(parents=True, exist_ok=True)
+        ensure_directory(self._root)
 
     def _path(self, choreography_id: str) -> Path:
         safe = "".join(c for c in str(choreography_id).strip() if c.isalnum() or c in {"-", "_"})
@@ -24,10 +25,7 @@ class ChoreographyRepository:
     def list(self) -> List[ChoreographyDefinition]:
         result: List[ChoreographyDefinition] = []
         for path in sorted(self._root.glob("*.json")):
-            try:
-                result.append(self._load_path(path))
-            except Exception:
-                continue
+            result.append(self._load_path(path))
         return result
 
     def get(self, choreography_id: str) -> ChoreographyDefinition:
@@ -38,17 +36,14 @@ class ChoreographyRepository:
 
     def save(self, choreography: ChoreographyDefinition) -> None:
         path = self._path(choreography.choreography_id)
-        tmp = path.with_suffix(".json.tmp")
-        with tmp.open("w", encoding="utf-8") as handle:
-            json.dump(choreography.to_dict(), handle, indent=2)
-        os.replace(tmp, path)
+        atomic_write_json(path, choreography.to_dict())
 
     def delete(self, choreography_id: str) -> None:
         path = self._path(choreography_id)
         if path.exists():
             path.unlink()
+            sync_directory(path.parent)
 
     @staticmethod
     def _load_path(path: Path) -> ChoreographyDefinition:
-        with path.open("r", encoding="utf-8") as handle:
-            return ChoreographyDefinition.from_dict(json.load(handle))
+        return ChoreographyDefinition.from_dict(read_json_object(path))

@@ -12,6 +12,7 @@ from targets import load_target
 target = load_target(os.environ.get("ROBOT_PLATFORM_BUILD_TARGET", "paint"))
 config_dir = ROOT / "build/platform-config" / target["target"]
 datas = [(str(config_dir / "platform.json"), "config"),
+         (str(config_dir / "backend_network.json"), "config"),
          (str(config_dir / "factory-defaults.json"), "config"),
          (str(config_dir / "release-target.json"), "config"),
          (str(config_dir / "update-source" / (target["target"] + ".json")), "config/update-source")]

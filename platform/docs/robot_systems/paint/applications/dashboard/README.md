@@ -4,6 +4,21 @@ This page follows the source directory. The reference below records its modules 
 
 [Parent guide](../README.md).
 
+## Start diagnostics
+
+The controller obtains a detached actor/action/operation token through its model
+before Start confirmations or settings/readiness checks. The service owns engine
+diagnostics and the model/interface carry plain dictionaries; views import no
+recorder. Pending destination preparation and tray confirmation reuse that token.
+Cancelled/rejected requests are visible, and an exception retains the original
+error while its diagnostic observation records the traceback. Preparation workers
+have an error signal so failures release the worker and restore the Start action.
+
+Process admission is reported separately from execution completion. The process
+captures the token into its worker; changing sessions does not reassign the run.
+Other dashboard controls remain selectively instrumented. See the
+[Paint diagnostics guide](../../diagnostics/README.md) for events/evidence and export.
+
 ## Start availability during stopping
 
 The dashboard keeps the existing process-state display and disables Start while the previous production worker or hardware-stop worker is still active. `PaintDashboardService.load_state()` sets `can_start=False` during cleanup; process-state events and periodic dashboard refreshes apply this value to the button. Once both workers exit, the next refresh restores Start availability for `IDLE` or `STOPPED`. The process independently rejects premature starts, including calls outside the dashboard.

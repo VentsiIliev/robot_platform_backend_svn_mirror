@@ -32,13 +32,14 @@ def load_factory_defaults(resource_root: Path, identity: dict) -> dict:
 
 
 def seed_factory_defaults(resource_root: Path, data_root: Path, identity: dict) -> list[str]:
-    """Atomically create missing settings files, including on subsequent releases."""
+    """Seed clean settings directories; existing installations require explicit recovery."""
     files = load_factory_defaults(resource_root, identity)
     migrate_paint_profile_storage(data_root, identity)
     settings = data_root / identity["storage_system"]
     if identity["profile"] != "default" and identity["storage_system"] != identity["robot_system"]:
         settings = settings / "profiles" / identity["profile"]
     settings = settings / "storage/settings"
+    established = settings.exists()
     created = []
     for relative, value in files.items():
         destination = settings / relative
@@ -49,6 +50,11 @@ def seed_factory_defaults(resource_root: Path, data_root: Path, identity: dict) 
             parent = parent.parent
         if destination.exists():
             continue
+        if established:
+            raise RuntimeError(
+                f"Missing factory setting in established storage: {destination}; "
+                "restore from backup or provision explicitly before starting"
+            )
         destination.parent.mkdir(parents=True, exist_ok=True)
         temporary = destination.with_name(".factory-" + uuid.uuid4().hex)
         try:

@@ -44,6 +44,8 @@ def write_paint_failure_bundle(
             "schema_version": 1,
             "recorded_at_utc": timestamp.isoformat(),
             "cycle_id": context.diagnostic_cycle_id,
+            "context": dict(getattr(context, 'diagnostic_context', {})),
+            "evidence": dict(getattr(context, 'diagnostic_evidence', {})),
             "cycle": context.snapshot_dict(),
             "failure": _json_safe(context.operation_failure),
             "tray_failure": _json_safe(context.tray_failure),

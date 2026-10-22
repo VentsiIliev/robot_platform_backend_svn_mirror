@@ -1,9 +1,11 @@
 import logging
+from uuid import uuid4
 from typing import Any, Callable, Dict, List, Optional
 
 from pl_gui.shell.app_registry import build_app_registry
 from pl_gui.shell.app_descriptor import AppDescriptor
 from src.engine.core.i_messaging_service import IMessagingService
+from src.engine.diagnostics.events import diagnostic_context
 from src.shared_contracts.declarations.system_specs import ApplicationSpec
 
 _LOGGER = logging.getLogger("ApplicationLoader")
@@ -55,17 +57,17 @@ class _WidgetFactory:
         self._messaging_service = messaging_service
 
     def create_widget(self, app_name: str):
-        from pl_gui.shell.base_app_widget.AppWidget import AppWidget
-
         try:
             application = self._manager.get_or_create_application(app_name)
-        except Exception:
-            _LOGGER.exception("Failed to build application '%s' lazily", app_name)
-            return AppWidget(app_name=f"Failed to load ({app_name})")
+        except Exception as error:
+            error_id = uuid4().hex
+            with diagnostic_context(error_id=error_id):
+                _LOGGER.exception("Failed to build application '%s' lazily", app_name)
+            return self._fallback(app_name, str(error), error_id)
 
         if application is None:
             _LOGGER.warning("No application found for '%s' — using fallback widget", app_name)
-            return AppWidget(app_name=f"Placeholder ({app_name})")
+            return self._fallback(app_name, 'application_not_found')
 
         try:
             if hasattr(application, "register") and not getattr(application, "_lazy_registered", False):
@@ -73,13 +75,27 @@ class _WidgetFactory:
                 application._lazy_registered = True
 
             if hasattr(application, "create_widget"):
-                return application.create_widget()
-        except Exception:
-            _LOGGER.exception("Failed to create widget for application '%s'", app_name)
-            return AppWidget(app_name=f"Failed to load ({app_name})")
+                widget = application.create_widget()
+                widget._application_load_result = {'application': app_name, 'fallback': False,
+                                                   'outcome': 'succeeded'}
+                return widget
+        except Exception as error:
+            error_id = uuid4().hex
+            with diagnostic_context(error_id=error_id):
+                _LOGGER.exception("Failed to create widget for application '%s'", app_name)
+            return self._fallback(app_name, str(error), error_id)
 
         _LOGGER.warning("Application '%s' has no create_widget() — using fallback", app_name)
-        return AppWidget(app_name=app_name)
+        return self._fallback(app_name, 'create_widget_unavailable')
+
+    @staticmethod
+    def _fallback(app_name, error, error_id=None):
+        from pl_gui.shell.base_app_widget.AppWidget import AppWidget
+        widget = AppWidget(app_name=f"Failed to load ({app_name})")
+        widget._application_load_result = {'application': app_name, 'fallback': True,
+                                           'outcome': 'failed', 'error': error,
+                                           'error_id': error_id or uuid4().hex}
+        return widget
 
 
 class ApplicationLoader:

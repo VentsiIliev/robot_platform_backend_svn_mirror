@@ -61,6 +61,7 @@ install(PROGRAMS
 install(FILES
   scripts/__init__.py
   scripts/config.py
+  scripts/backend_network.py
   scripts/enums.py
   scripts/monitor_window.py
   scripts/runtime_initializer.py

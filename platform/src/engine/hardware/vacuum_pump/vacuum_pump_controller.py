@@ -97,9 +97,8 @@ class VacuumPumpController(IVacuumPumpController, IHealthCheckable):
                     register, int(self._config.blow_off_on_value)
                 )
             except Exception:
-                _logger.exception(
-                    "Vacuum pump blow-off pulse failed register=%d", register
-                )
+                observe(_logger, 'vacuum_pump.blow_off_failed', level=logging.ERROR,
+                        register=register)
                 self._last_operation_ok = False
                 return False
             pulse_seconds = max(0.0, float(self._config.blow_off_pulse_seconds))
@@ -115,12 +114,8 @@ class VacuumPumpController(IVacuumPumpController, IHealthCheckable):
             self._blow_off_timer = timer
             self._last_operation_ok = True
             timer.start()
-            _logger.info(
-                "Vacuum pump blow-off pulse continuing asynchronously "
-                "register=%d duration_s=%.3f",
-                register,
-                pulse_seconds,
-            )
+            observe(_logger, 'vacuum_pump.blow_off_started', register=register,
+                    duration_s=pulse_seconds)
             return True
 
     def close(self) -> None:
@@ -146,10 +141,7 @@ class VacuumPumpController(IVacuumPumpController, IHealthCheckable):
                 return
             self._blow_off_timer = None
             if self._finish_blow_off_locked(register):
-                _logger.info(
-                    "Vacuum pump asynchronous blow-off pulse completed register=%d",
-                    register,
-                )
+                observe(_logger, 'vacuum_pump.blow_off_completed', register=register)
 
     def _finish_blow_off_locked(self, register: int) -> bool:
         try:
@@ -157,7 +149,8 @@ class VacuumPumpController(IVacuumPumpController, IHealthCheckable):
                 register, int(self._config.blow_off_off_value)
             )
         except Exception:
-            _logger.exception("Vacuum pump blow-off close failed register=%d", register)
+            observe(_logger, 'vacuum_pump.blow_off_close_failed', level=logging.ERROR,
+                    register=register)
             self._last_operation_ok = False
             return False
         self._last_operation_ok = True
@@ -189,12 +182,6 @@ class VacuumPumpController(IVacuumPumpController, IHealthCheckable):
         try:
             self._transport.write_register(self._pump_register, int(value))
         except Exception:
-            _logger.exception(
-                "Vacuum pump %s failed register=%d value=%d",
-                label,
-                self._pump_register,
-                value,
-            )
             observe(_logger, "vacuum_pump.write_failed", level=logging.ERROR,
                     metrics={"vacuum_pump.command_failures": 1},
                     output=("vacuum_pump", None), requested_state=label,
@@ -204,12 +191,6 @@ class VacuumPumpController(IVacuumPumpController, IHealthCheckable):
                 metrics={f"vacuum_pump.commands.{label.lower()}": 1},
                 output=("vacuum_pump", value == self._config.on_value),
                 register=self._pump_register, value=value)
-        _logger.info(
-            "Vacuum pump %s register=%d value=%d",
-            label,
-            self._pump_register,
-            value,
-        )
         return True
 
     def _pulse_blow_off(self) -> bool:
@@ -231,7 +212,8 @@ class VacuumPumpController(IVacuumPumpController, IHealthCheckable):
                 time.sleep(self._config.blow_off_pulse_seconds)
             self._transport.write_register(register, int(self._config.blow_off_off_value))
         except Exception:
-            _logger.exception("Vacuum pump blow-off pulse failed register=%d", register)
+            observe(_logger, 'vacuum_pump.blow_off_failed', level=logging.ERROR,
+                    register=register)
             return False
         return True
 
@@ -243,6 +225,7 @@ class VacuumPumpController(IVacuumPumpController, IHealthCheckable):
         try:
             self._transport.write_register(register, int(self._config.blow_off_off_value))
         except Exception:
-            _logger.exception("Vacuum pump blow-off close failed register=%d", register)
+            observe(_logger, 'vacuum_pump.blow_off_close_failed', level=logging.ERROR,
+                    register=register)
             return False
         return True

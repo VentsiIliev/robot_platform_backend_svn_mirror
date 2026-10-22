@@ -125,8 +125,8 @@ def start_execution_websocket_server(
         logger.error(f"Execution WebSocket unavailable: {exc}")
         return
 
-    ws_host = str(getattr(config, "REST_WS_EXECUTION_HOST", fallback_host) or fallback_host)
-    ws_port = int(getattr(config, "REST_WS_EXECUTION_PORT", int(fallback_port) + 2))
+    ws_host = config.REST_WS_EXECUTION_HOST
+    ws_port = config.REST_WS_EXECUTION_PORT
     ws_rate_hz = max(float(getattr(config, "REST_WS_EXECUTION_RATE_HZ", 10.0)), 0.1)
     ws_period_s = 1.0 / ws_rate_hz
     sequence_counter = itertools.count(1)

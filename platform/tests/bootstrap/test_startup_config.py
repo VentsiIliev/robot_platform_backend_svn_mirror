@@ -36,6 +36,22 @@ class _TestProvider(RobotSystemBootstrapProvider):
 
 
 class TestStartupConfig(unittest.TestCase):
+    def test_loads_and_validates_optional_diagnostics_policy(self):
+        with TemporaryDirectory() as directory, patch.dict('os.environ', {}, clear=True):
+            path = Path(directory) / 'platform.json'
+            payload = dict(robot_system='paint', supported_robot_systems=['paint'],
+                robot_systems={'paint': self.system_config()},
+                diagnostics={'enabled': False, 'capture_logs': False, 'console_events': True})
+            path.write_text(json.dumps(payload))
+            config = load_startup_config(path)
+            self.assertFalse(config.diagnostics.enabled)
+            self.assertFalse(config.diagnostics.capture_logs)
+            self.assertTrue(config.diagnostics.console_events)
+            payload['diagnostics']['enabled'] = 'false'
+            path.write_text(json.dumps(payload))
+            with self.assertRaisesRegex(RuntimeError, 'diagnostics.enabled'):
+                load_startup_config(path)
+
     @staticmethod
     def system_config():
         return dict(robot_driver="zeroerr", backend="zeroerr", backend_profile="paint_short_links",
@@ -50,7 +66,7 @@ class TestStartupConfig(unittest.TestCase):
         config = StartupConfig(robot_system="paint", supported_robot_systems=("paint",), system_config=self.system_config())
         with patch("src.engine.robot.drivers.ros2_robot.Ros2Robot") as robot:
             result = build_configured_robot(config)
-        robot.assert_called_once_with(server_url="http://localhost:5000")
+        robot.assert_called_once_with()
         self.assertIs(result, robot.return_value)
 
     def test_missing_selected_system_fails(self):

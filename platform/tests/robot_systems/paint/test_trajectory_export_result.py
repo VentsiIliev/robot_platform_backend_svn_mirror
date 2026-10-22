@@ -1,17 +1,24 @@
 """Optional exports report failures without raising into their motion caller."""
 import tempfile
 import unittest
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
 from src.robot_systems.paint.diagnostics import trajectory as diagnostics
+from src.engine.diagnostics.work_budget import WorkBudget
 from src.robot_systems.paint.diagnostics.trajectory_export_result import (
     ExportFailed, ExportFailureCode, ExportSkipped, ExportWritten,
 )
 
 
 class TestTrajectoryExportResult(unittest.TestCase):
+    def setUp(self):
+        self.budget = WorkBudget(max_jobs=2, max_units=100000)
+        patcher = patch.object(diagnostics, '_TRAJECTORY_EXPORT_BUDGET', self.budget)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def request(self, **overrides):
         args = dict(command_path=[[0, 1, 2, 3, 4, 5]], vel=10, acc=20,
                     pattern_type="contour", stage="execute_job_1")
@@ -115,3 +122,43 @@ class TestTrajectoryExportResult(unittest.TestCase):
             executor.submit.side_effect = KeyboardInterrupt()
             with self.assertRaises(KeyboardInterrupt):
                 self.request()
+        self.assertEqual(self.budget.status['jobs'], 0)
+
+    def test_saturation_refuses_before_copy_and_completion_releases_capacity(self):
+        first, second, third = Future(), Future(), Future()
+        with patch.object(diagnostics, '_TRAJECTORY_EXPORT_EXECUTOR') as executor:
+            executor.submit.side_effect = [first, second, third]
+            self.request()
+            self.request()
+            with patch.object(diagnostics, '_copy_path') as copy:
+                skipped = self.request().result()
+            self.assertIsInstance(skipped, ExportSkipped)
+            copy.assert_not_called()
+            self.assertEqual(executor.submit.call_count, 2)
+            first.set_result(None)
+            self.assertIs(self.request(), third)
+            second.cancel()
+            third.set_result(None)
+        self.assertEqual(self.budget.status, {'jobs': 0, 'units': 0})
+
+    def test_oversized_path_is_refused_without_snapshot_or_submission(self):
+        with patch.object(diagnostics, '_copy_path') as copy, \
+             patch.object(diagnostics, '_TRAJECTORY_EXPORT_EXECUTOR') as executor:
+            skipped = self.request(command_path=[[0] * 6] * 100001).result()
+        self.assertIsInstance(skipped, ExportSkipped)
+        copy.assert_not_called()
+        executor.submit.assert_not_called()
+
+    def test_cartesian_analysis_admission_precedes_copy_and_recovers_after_cancel(self):
+        budget = WorkBudget(max_jobs=1, max_units=10)
+        pending = Future()
+        with patch.object(diagnostics, '_CART_PATH_DIAG_BUDGET', budget), \
+             patch.object(diagnostics, '_CART_PATH_DIAG_EXECUTOR') as executor:
+            executor.submit.return_value = pending
+            diagnostics._log_cartesian_command_path_diagnostics([[0] * 6])
+            with patch.object(diagnostics, '_copy_path') as copy:
+                diagnostics._log_cartesian_command_path_diagnostics([[0] * 6])
+            copy.assert_not_called()
+            executor.submit.assert_called_once()
+            pending.cancel()
+            self.assertEqual(budget.status['jobs'], 0)

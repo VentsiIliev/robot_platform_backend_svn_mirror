@@ -22,6 +22,22 @@ This page follows the source directory. The reference below records its modules 
 
 Application `can_close()` guards navigation, logout and normal main-window close. A main-window veto ignores the event before cleanup. Forced teardown is separate; controllers must retain workers until they exit.
 
+## Navigation observations
+
+`AppShell.navigation_event(dict)` is a neutral Qt signal; the shell imports no
+engine diagnostics. Application display and return-to-main-menu requests emit
+paired started/terminal outcomes sharing a request ID. Close vetoes are rejected.
+The display outcome distinguishes loader fallback widgets from successfully
+loaded applications using `_application_load_result` metadata supplied by bootstrap.
+Fallback display remains a failed requested load; the metadata includes its error
+reference. The bootstrap `NavigationDiagnostics` adapter attaches an actor/action
+identity, bounds pending starts and disconnects on shutdown.
+
+Main-menu success describes return to the folder page. It does not establish that
+every widget cleanup succeeded; cleanup retains its existing exception behavior.
+Folder expansion/collapse and window-close events are outside this signal's current
+coverage.
+
 ## Context-sensitive onboarding action
 
 `Header` owns a generic, initially hidden help button and emits

@@ -1,5 +1,7 @@
 # Conditional Servo: Measurement-First Optimization Plan
 
+> Measurement/design plan, not the current runtime contract or an authorization to run a hardware trial. Use [current routes](REST_API.md) and the `motion/servo/conditional_servo` implementation for deployed behavior; timings below are proposed measurements.
+
 **Status:** Pre-implementation measurement plan  
 **Scope:** Current `ServoUntilConditionProcedure` and MoveIt Servo implementation  
 **Principle:** Do not replace the current motion primitive until its latency, stop semantics, CPU cost, and retract gate have been measured on the real controller.

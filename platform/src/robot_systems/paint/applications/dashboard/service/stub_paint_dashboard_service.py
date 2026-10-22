@@ -65,7 +65,7 @@ class StubPaintDashboardService(IPaintDashboardService):
             pause_label="Resume" if state == "paused" else "Pause",
         )
 
-    def start(self) -> None:
+    def start(self, action_context: dict | None = None) -> None:
         if self._drying_mode in {"manual", "demo"} and not self._tray_confirmed:
             raise TrayConfirmationRequiredError()
         if self._state in ("idle", "stopped", "error"):
@@ -165,7 +165,7 @@ class StubPaintDashboardService(IPaintDashboardService):
     def get_production_start_guard_state(self, mode: str) -> dict[str, object]:
         return {"required": False, "ready": True}
 
-    def prepare_production_start(self, mode: str) -> DashboardCommandResult:
+    def prepare_production_start(self, mode: str, action_context: dict | None = None) -> DashboardCommandResult:
         return DashboardCommandResult(True, "Production start is ready.")
 
     def get_plate_layout_state(self) -> dict[str, object]:

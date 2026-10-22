@@ -1,5 +1,7 @@
 # Servo Pickup / Paint Contact Context - 2026-08-13
 
+> Historical handoff from 2026-08-13. Machine paths, settings and conclusions below are a dated snapshot. Use the [backend documentation index](../docs/README.md) for current guidance.
+
 ## Scope
 
 Work covered MoveIt Servo integration, ServoJog support, generic servo-until-condition pickup, paint pickup strategy wiring, and the initial scaffold for height-measured pickup Z.
@@ -323,4 +325,3 @@ Likely modified in platform:
 - `src/robot_systems/paint/storage/settings/paint/process.json`
 - `tests/engine/robot/procedures/test_servo_until_condition.py`
 - `tests/robot_systems/paint/processes/paint/execute/test_servo_contact_pickup_executor.py`
-

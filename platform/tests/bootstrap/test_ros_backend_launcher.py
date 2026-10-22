@@ -205,7 +205,6 @@ class TestRosBackendLauncher(unittest.TestCase):
                 stop_script="~/custom_ws/stop.sh",
                 startup_delay_s=2.5,
                 log_file="~/backend.log",
-                status_urls=("http://localhost:6000/health",),
                 status_timeout_s=0.7,
             )
         )
@@ -216,7 +215,7 @@ class TestRosBackendLauncher(unittest.TestCase):
         self.assertEqual(launcher._stop_script, Path.home() / "custom_ws" / "stop.sh")
         self.assertEqual(launcher._startup_delay_s, 2.5)
         self.assertEqual(launcher._log_file, Path.home() / "backend.log")
-        self.assertEqual(launcher._status_urls, ("http://localhost:6000/health",))
+        self.assertEqual(launcher._status_urls, ("http://127.0.0.1:5000/startup/status", "http://127.0.0.1:5000/health"))
         self.assertEqual(launcher._status_timeout_s, 0.7)
 
     def test_builder_defaults_to_current_users_ros_workspace(self) -> None:

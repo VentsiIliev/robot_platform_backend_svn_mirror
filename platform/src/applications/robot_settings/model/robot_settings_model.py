@@ -100,8 +100,16 @@ class RobotSettingsModel(IApplicationModel):
     def load_collision_monitor_config(self) -> dict:
         return self._service.load_collision_monitor_config()
 
-    def save_collision_monitor_config(self, config: dict) -> dict:
-        return self._service.save_collision_monitor_config(config)
+    def save_collision_monitor_config(self, config: dict, action_context: dict | None = None) -> dict:
+        if action_context is None:
+            return self._service.save_collision_monitor_config(config)
+        return self._service.save_collision_monitor_config(config, action_context)
+
+    def record_ui_action(self, event: str, fields: dict) -> dict:
+        try:
+            return self._service.record_ui_action(event, fields)
+        except Exception:
+            return {}
 
     def open_collision_monitor_diagnostics(self) -> dict:
         return self._service.open_collision_monitor_diagnostics()

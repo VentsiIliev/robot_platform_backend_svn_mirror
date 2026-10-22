@@ -12,8 +12,8 @@ UI dataclass defaults are authentication enabled, splash enabled, fullscreen, 12
 
 ## Startup order
 
-1. Configure logging; parse config and resolve the provider.
-2. Build `EngineContext` and start the configured ROS backend launcher.
+1. Configure console logging; parse config and start the optional engine diagnostics service. `diagnostics.enabled` in `config/platform.json` (or `ROBOT_PLATFORM_DIAGNOSTICS_ENABLED=0/1`) controls capture on the next launch. Bootstrap reports disabled/unavailable capture; storage failure does not gate machine startup. Resolve the provider.
+2. Build `EngineContext` with the diagnostics service and start the configured ROS backend launcher. An omitted service uses the no-op implementation.
 3. Build the system with the configured robot, messaging and development-mode flag. If system construction raises, stop the ROS backend and re-raise.
 4. Register shell folder metadata through `ShellConfigurator`.
 5. Create `QApplication`, terminal signal handlers, and the layered `LocalizationService`.
@@ -23,6 +23,11 @@ UI dataclass defaults are authentication enabled, splash enabled, fullscreen, 12
 9. Enter the Qt event loop. The `finally` block stops support/splash/notifiers, the robot system and backend.
 
 The shutdown `finally` starts around `qt_app.exec()`; exceptions during earlier shell/login/localization setup are not covered by it. This limitation is recorded in [code issues](../CODE_ISSUES.md).
+
+The diagnostics service has a separate outer `finally`, so its drain also runs on
+startup exceptions. Console configuration has no recorder side effects. See the
+[diagnostics guide](../engine/diagnostics/README.md) for capture policy, no-op
+behavior and measured resource limits. Policy changes currently require restart.
 
 ## Lazy application lifecycle
 
@@ -45,3 +50,11 @@ Use `tests/bootstrap/` for startup config, lazy loading, sessions, splash and ba
 <!-- source-navigation:end -->
 
 A vetoed header power-off resets the shutdown-request latch and re-enables the power button, allowing the operator to stop the operation and retry.
+
+## Backend endpoint configuration
+
+Backend HTTP/WebSocket hosts and ports are defined in
+[`config/backend_network.json`](../../config/backend_network.json).
+The launcher derives startup probes from it and passes its absolute path as
+`ROBOT_BACKEND_NETWORK_CONFIG` to the backend. Legacy status URL overrides are
+rejected. See [deployment and migration details](../engine/robot/backend_network.md).

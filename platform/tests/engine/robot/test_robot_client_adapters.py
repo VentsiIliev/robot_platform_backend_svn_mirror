@@ -50,6 +50,50 @@ class TestSensorWebSocketSession(unittest.IsolatedAsyncioTestCase):
 
 class TestRobotClientAdapters(unittest.TestCase):
 
+    def test_status_errors_are_throttled_and_reset_after_recovery(self):
+        module = "src.engine.robot.drivers.client_adapters.http_websocket"
+        for recovery_transport in ("http", "websocket"):
+            with self.subTest(recovery_transport=recovery_transport):
+                client = object.__new__(HttpWebSocketRobotClient)
+                client.server_url = "http://localhost:5000"
+                client._last_status_error = None
+                client._last_status_error_logged_at = 0.0
+                client._get_execution_ws_status = MagicMock(return_value=None)
+                client._mark_unavailable = MagicMock()
+                client._mark_available = MagicMock()
+                with (
+                    patch(f"{module}.requests.get") as get,
+                    patch(f"{module}.time.monotonic", return_value=0.0) as clock,
+                    patch(f"{module}.logger") as log,
+                ):
+                    get.side_effect = ConnectionError("bridge down")
+                    self.assertIsNone(client.get_status())
+                    clock.return_value = 9.9
+                    self.assertIsNone(client.get_status())
+                    self.assertEqual(log.error.call_count, 1)
+                    clock.return_value = 10.0
+                    self.assertIsNone(client.get_status())
+                    self.assertEqual(log.error.call_count, 2)
+                    get.side_effect = TimeoutError("bridge timeout")
+                    self.assertIsNone(client.get_status())
+                    self.assertEqual(log.error.call_count, 3)
+                    self.assertEqual(client._mark_unavailable.call_count, 4)
+
+                    status = {"is_executing": False}
+                    if recovery_transport == "websocket":
+                        client._get_execution_ws_status.return_value = status
+                    else:
+                        get.side_effect = None
+                        get.return_value = MagicMock(status_code=200)
+                        get.return_value.json.return_value = status
+                    self.assertEqual(client.get_status(), status)
+
+                    client._get_execution_ws_status.return_value = None
+                    get.side_effect = TimeoutError("bridge timeout")
+                    self.assertIsNone(client.get_status())
+                    self.assertEqual(log.error.call_count, 4)
+                    self.assertTrue(log.error.call_args.kwargs["exc_info"])
+
     def test_execution_methods_enforce_integer_completion_contract(self):
         robot = object.__new__(Ros2Robot)
         robot._client = MagicMock()

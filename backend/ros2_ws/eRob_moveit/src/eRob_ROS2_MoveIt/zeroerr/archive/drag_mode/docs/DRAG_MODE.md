@@ -17,7 +17,7 @@ This is the current source-of-truth for the ZeroErr hand-guiding path.
 
 Drag mode is implemented in:
 
-- [robot_controller.py](/home/ilv/ros2_ws/eRob_moveit/src/eRob_ROS2_MoveIt/erob_moveit_runtime/scripts/robot_controller.py)
+- [robot_controller.py](../../../../erob_moveit_runtime/scripts/robot_controller.py)
 
 The runtime exposes:
 
@@ -27,11 +27,11 @@ The runtime exposes:
 
 The actual hardware/control interfaces used for drag mode are defined in:
 
-- [eRobo3.ros2_control.xacro](/home/ilv/ros2_ws/eRob_moveit/src/eRob_ROS2_MoveIt/zeroerr/config/urdfs/eRobo3.ros2_control.xacro)
-- [zeroErr.yaml](/home/ilv/ros2_ws/eRob_moveit/src/eRob_ROS2_MoveIt/zeroerr/config/zeroErr.yaml)
-- [zeroErr1.yaml](/home/ilv/ros2_ws/eRob_moveit/src/eRob_ROS2_MoveIt/zeroerr/config/zeroErr1.yaml)
-- [ros2_controllers.yaml](/home/ilv/ros2_ws/eRob_moveit/src/eRob_ROS2_MoveIt/zeroerr/config/ros2_controllers.yaml)
-- [runtime.yaml](/home/ilv/ros2_ws/eRob_moveit/src/eRob_ROS2_MoveIt/zeroerr/config/runtime.yaml)
+- [eRobo3.ros2_control.xacro](../../../config/urdfs/eRobo3.ros2_control.xacro)
+- [zeroErr.yaml](../../../config/zeroErr.yaml)
+- [zeroErr1.yaml](../../../config/zeroErr1.yaml)
+- [ros2_controllers.yaml](../../../config/ros2_controllers.yaml)
+- [runtime.yaml](../../../config/runtime.yaml)
 
 ## Drag Mode Signal Path
 
@@ -122,7 +122,7 @@ The hardware xacro originally had a plugin param that could force startup mode:
 
 That was removed from:
 
-- [eRobo3.ros2_control.xacro](/home/ilv/ros2_ws/eRob_moveit/src/eRob_ROS2_MoveIt/zeroerr/config/urdfs/eRobo3.ros2_control.xacro)
+- [eRobo3.ros2_control.xacro](../../../config/urdfs/eRobo3.ros2_control.xacro)
 
 The startup default was left only in the PDO YAMLs:
 
@@ -134,7 +134,7 @@ This was the correct cleanup, but it was not the final blocker.
 
 The actual root cause was in:
 
-- [generic_ec_cia402_drive.cpp](/home/ilv/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_generic_plugins/ethercat_generic_cia402_drive/src/generic_ec_cia402_drive.cpp)
+- [generic_ec_cia402_drive.cpp](../../../../../../../src/ethercat_driver_ros2/ethercat_generic_plugins/ethercat_generic_cia402_drive/src/generic_ec_cia402_drive.cpp)
 
 The plugin was doing this after initialization:
 
@@ -272,7 +272,7 @@ So the free-fall test means:
 
 All of these are currently defined in:
 
-- [runtime.yaml](/home/ilv/ros2_ws/eRob_moveit/src/eRob_ROS2_MoveIt/zeroerr/config/runtime.yaml)
+- [runtime.yaml](../../../config/runtime.yaml)
 
 ### `DRAG_MODE_COMPENSATION_SCALE`
 
@@ -392,11 +392,11 @@ Successful CST drag mode should show:
 
 ## Relevant Files
 
-- [robot_controller.py](/home/ilv/ros2_ws/eRob_moveit/src/eRob_ROS2_MoveIt/erob_moveit_runtime/scripts/robot_controller.py)
-- [config.py](/home/ilv/ros2_ws/eRob_moveit/src/eRob_ROS2_MoveIt/erob_moveit_runtime/scripts/config.py)
-- [runtime.yaml](/home/ilv/ros2_ws/eRob_moveit/src/eRob_ROS2_MoveIt/zeroerr/config/runtime.yaml)
-- [ros2_controllers.yaml](/home/ilv/ros2_ws/eRob_moveit/src/eRob_ROS2_MoveIt/zeroerr/config/ros2_controllers.yaml)
-- [eRobo3.ros2_control.xacro](/home/ilv/ros2_ws/eRob_moveit/src/eRob_ROS2_MoveIt/zeroerr/config/urdfs/eRobo3.ros2_control.xacro)
-- [zeroErr.yaml](/home/ilv/ros2_ws/eRob_moveit/src/eRob_ROS2_MoveIt/zeroerr/config/zeroErr.yaml)
-- [zeroErr1.yaml](/home/ilv/ros2_ws/eRob_moveit/src/eRob_ROS2_MoveIt/zeroerr/config/zeroErr1.yaml)
-- [generic_ec_cia402_drive.cpp](/home/ilv/ros2_ws/src/ethercat_driver_ros2/ethercat_driver_ros2/ethercat_generic_plugins/ethercat_generic_cia402_drive/src/generic_ec_cia402_drive.cpp)
+- [robot_controller.py](../../../../erob_moveit_runtime/scripts/robot_controller.py)
+- [config.py](../../../../erob_moveit_runtime/scripts/config.py)
+- [runtime.yaml](../../../config/runtime.yaml)
+- [ros2_controllers.yaml](../../../config/ros2_controllers.yaml)
+- [eRobo3.ros2_control.xacro](../../../config/urdfs/eRobo3.ros2_control.xacro)
+- [zeroErr.yaml](../../../config/zeroErr.yaml)
+- [zeroErr1.yaml](../../../config/zeroErr1.yaml)
+- [generic_ec_cia402_drive.cpp](../../../../../../../src/ethercat_driver_ros2/ethercat_generic_plugins/ethercat_generic_cia402_drive/src/generic_ec_cia402_drive.cpp)

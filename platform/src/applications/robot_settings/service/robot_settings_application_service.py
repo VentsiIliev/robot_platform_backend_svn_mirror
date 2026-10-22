@@ -12,6 +12,9 @@ from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.applications.robot_settings.service.i_robot_settings_service import IRobotSettingsService
 from src.applications.robot_settings.service.i_robot_settings_navigation import IRobotSettingsNavigation
 from src.engine.robot.enums.axis import RobotAxis, Direction
+from src.engine.diagnostics.actions import ActionRecorder
+from src.engine.diagnostics.events import diagnostic_context, observe
+import logging
 
 _JOG_GROUP_ID = "JOG"
 _DEFAULT_JOG_VELOCITY = 10.0
@@ -32,7 +35,9 @@ class RobotSettingsApplicationService(IRobotSettingsService):
         load_targeting_definitions_fn: Optional[Callable[[], object]] = None,
         save_targeting_definitions_fn: Optional[Callable[[object], None]] = None,
         movement_group_definitions: Optional[List[MovementGroupDefinition]] = None,
+        diagnostic_actions=None,
     ):
+        self._diagnostic_actions = diagnostic_actions or ActionRecorder()
         self._settings          = settings_service
         self._config_key        = config_key
         self._movement_groups_key = movement_groups_key
@@ -230,7 +235,51 @@ class RobotSettingsApplicationService(IRobotSettingsService):
             return {"success": False, "error": "collision monitor unsupported"}
         return method()
 
-    def save_collision_monitor_config(self, config: dict) -> dict:
+    def record_ui_action(self, event: str, fields: dict) -> dict:
+        return self._record_action(event, **fields)
+
+    def _record_action(self, event: str, **fields) -> dict:
+        try:
+            return self._diagnostic_actions.record(event, **fields)
+        except Exception:
+            # An instrumentation adapter must not affect the hardware/API result.
+            return {}
+
+    def save_collision_monitor_config(self, config: dict, action_context: dict | None = None) -> dict:
+        token = action_context if action_context is not None else self.record_ui_action(
+            'settings.collision.save_requested', {'requested': dict(config), 'outcome': 'started'})
+        try:
+            result = self._save_collision_monitor_config(config)
+        except Exception:
+            try:
+                with diagnostic_context(**token):
+                    observe(logging.getLogger(__name__), 'settings.collision.save_exception',
+                            level=logging.ERROR, outcome='failed')
+            except Exception:
+                pass
+            raise
+        response = result if isinstance(result, dict) else {}
+        # Preserve persistence versus effective application; legacy success alone
+        # does not establish saved state or active runtime confirmation.
+        for key, event in (('saved', 'settings.collision.persistence_reported'),
+                           ('applied', 'settings.collision.application_reported')):
+            if isinstance(response.get(key), dict):
+                self._record_action(event, context=token,
+                    configuration=response[key], revision=response.get('revision'),
+                    pending_application=response.get('pending_application'))
+        self._record_action(
+            'settings.collision.save_result', context=token,
+            outcome='succeeded' if response.get('success') is True else 'failed',
+            persistence='reported_saved' if isinstance(response.get('saved'), dict) else 'unknown',
+            application='pending' if response.get('pending_application') else
+                        ('reported_applied' if isinstance(response.get('applied'), dict) else 'unknown'),
+            response={key: response[key] for key in (
+                'success', 'request_id', 'error', 'error_info', 'revision',
+                'pending_application', 'application_error') if key in response},
+        )
+        return result
+
+    def _save_collision_monitor_config(self, config: dict) -> dict:
         if self._robot is None:
             return {"success": False, "error": "robot service unavailable"}
         method = getattr(self._robot, "update_collision_monitor_config", None)

@@ -1,5 +1,7 @@
 # ROS2 MoveIt Backend Refactoring Plan
 
+> Historical refactoring/validation journal. Dated commands, test counts, timings and profile values are recorded evidence. Current entry points are in the [documentation index](../../../docs/README.md); this journal does not override the current API/configuration contracts.
+
 Canonical plan: use this document as the working refactoring plan. The older
 `refactoring_plan.md` and `refactoring_plan_updated.md` are retained only as
 historical drafts.

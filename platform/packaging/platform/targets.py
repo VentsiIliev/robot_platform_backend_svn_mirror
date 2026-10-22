@@ -28,6 +28,9 @@ def prepare_target(name: str, destination: Path) -> dict:
     payload["ros_backend"] = {**payload.get("ros_backend", {}), "auto_launch": True, "auto_stop": True}
     payload["ros_backend"].pop("launch_script", None)
     payload["ros_backend"].pop("stop_script", None)
+    (destination / "backend_network.json").write_text(
+        (ROOT / "config/backend_network.json").read_text(encoding="utf-8"), encoding="utf-8"
+    )
     (destination / "platform.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
     (destination / "release-target.json").write_text(json.dumps(target, indent=2), encoding="utf-8")
     factory = ROOT / "config/factory_defaults" / f"{name}.json"

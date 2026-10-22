@@ -1,5 +1,7 @@
 ZeroErr actuator family inertial assumptions used in `erob_arm_family_motor_masses.urdf`.
 
+> Legacy model assumptions. Active profile model selection is documented in [profile composition](../config/README.md); not every profile selects this mass variant.
+
 Sources:
 - `eRob70T` family page: `1.24 kg`, `73 x 99 mm`
 - `eRob80T` family page: `1.94 kg`, `85 x 111.8 mm`

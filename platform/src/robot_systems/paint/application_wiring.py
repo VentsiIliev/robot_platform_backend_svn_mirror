@@ -251,6 +251,9 @@ def _build_dashboard_application(robot_system):
     from src.robot_systems.paint.applications.dashboard import PaintDashboardFactory
     from src.robot_systems.paint.component_ids import SettingsID
 
+    robot_system._dashboard_service.bind_diagnostic_actions(
+        getattr(robot_system, '_diagnostic_actions', None))
+
     dashboard_ui_config = robot_system.ui_config
     camera_roles = tuple(robot_system.get_settings(SettingsID.CAMERAS).cameras)
     jog_service = (
@@ -1349,6 +1352,7 @@ def _build_robot_settings_application(robot_app):
         load_targeting_definitions_fn=_load_targeting_definitions,
         save_targeting_definitions_fn=_save_targeting_definitions,
         movement_group_definitions=robot_app.get_movement_group_definitions(),
+        diagnostic_actions=getattr(robot_app, '_diagnostic_actions', None),
     )
     jog_service = build_robot_system_jog_service(robot_app)
     return WidgetApplication(

@@ -30,5 +30,6 @@ def build_from_specs(
         repos[spec.name] = BaseJsonSettingsRepository(
             serializer=spec.serializer,
             file_path=path,
+            required=spec.required,
         )
     return SettingsService(repos)

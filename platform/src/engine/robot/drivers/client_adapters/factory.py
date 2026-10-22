@@ -11,7 +11,7 @@ def should_use_fake_robot_client(server_url: str | None) -> bool:
     )
 
 
-def build_robot_client(server_url="http://localhost:5000", ip=None, transport=None):
+def build_robot_client(server_url=None, ip=None, transport=None):
     if should_use_fake_robot_client(server_url):
         return FakeRobotClient(server_url=server_url, ip=ip)
 

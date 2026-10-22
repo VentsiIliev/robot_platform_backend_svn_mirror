@@ -92,6 +92,8 @@ class ReleaseTargetTests(unittest.TestCase):
                     target = targets.prepare_target(name, self.directory / name)
                 self.assertNotIn(target["product"], products)
                 products.add(target["product"])
+                self.assertEqual((self.directory / name / "backend_network.json").read_text(),
+                                 (ROOT / "config/backend_network.json").read_text())
                 config = load_startup_config(self.directory / name / "platform.json")
                 seed = json.loads((self.directory / name / 'update-source' / f'{name}.json').read_text())
                 self.assertEqual(seed['product'], target['product'])
@@ -255,7 +257,7 @@ with patch.object(manager, 'install_remote_support'), patch.object(manager, 'ins
         subprocess.run(["/usr/bin/python3", str(extracted / prefix / "manage.py"), "--help"],
                        cwd="/tmp", check=True, capture_output=True)
 
-    def test_activation_seeds_factory_files_without_replacing_existing_settings(self):
+    def test_activation_preserves_explicitly_provisioned_factory_settings(self):
         factory = json.loads((ROOT / "config/factory_defaults/paint_tray_dry.json").read_text())
         updater = PlatformUpdater(UpdateConfig(self.directory / "tray", "", None, product="paint-tray-dry-robot"))
         settings = updater.data / "paint_tray_dry/storage/settings"
@@ -263,6 +265,12 @@ with patch.object(manager, 'install_remote_support'), patch.object(manager, 'ins
         saved.parent.mkdir(parents=True)
         saved.write_text('{"port": "operator-port", "baudrate": 9600}')
         before = saved.read_bytes()
+        # Existing installations provision new settings explicitly before upgrade.
+        for relative, value in factory['files'].items():
+            destination = settings / relative
+            if not destination.exists():
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_text(json.dumps(value))
         updater.stage_local(self.archive("paint_tray_dry", factory=factory))
         updater.queue()
         updater.apply_pending()

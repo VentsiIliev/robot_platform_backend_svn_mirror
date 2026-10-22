@@ -1,2 +1,11 @@
 RUNTIME_INCLUDES:
-  - ../shared/sensorless_collision.yaml
+- ../shared/sensorless_collision.yaml
+monitor:
+  dynamic_threshold_max_ratio: 4.0
+  external_torque_thresholds:
+  - 5.1
+  - 5.1
+  - 3.0
+  - 2.0
+  - 2.0
+  - 4.0

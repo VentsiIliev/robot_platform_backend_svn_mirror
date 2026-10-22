@@ -5,6 +5,8 @@ from typing import Sequence
 
 import requests
 
+from src.engine.robot.configuration.backend_network import load_backend_network
+
 
 _logger = logging.getLogger(__name__)
 
@@ -12,8 +14,8 @@ _logger = logging.getLogger(__name__)
 class RosToolRegistryClient:
     """Small REST adapter for ROS2 runtime tool registry and flange-pose endpoints."""
 
-    def __init__(self, server_url: str = "http://localhost:5000", *, timeout_s: float = 5.0):
-        self._server_url = str(server_url or "").rstrip("/")
+    def __init__(self, server_url: str | None = None, *, timeout_s: float = 5.0):
+        self._server_url = str(server_url or load_backend_network().http_url).rstrip("/")
         self._timeout_s = float(timeout_s)
 
     @property

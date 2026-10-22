@@ -32,13 +32,17 @@ from src.shared_contracts.events.vision_events import CameraTopics
 
 class _Worker(QObject):
     finished = pyqtSignal(object)
+    failed = pyqtSignal(str)
 
     def __init__(self, fn):
         super().__init__()
         self._fn = fn
 
     def run(self) -> None:
-        self.finished.emit(self._fn())
+        try:
+            self.finished.emit(self._fn())
+        except Exception as error:
+            self.failed.emit(str(error))
 
 
 class _DashboardNoticeBridge(QObject):
@@ -189,7 +193,7 @@ class PaintDashboardController(
         if getattr(self, "_tray_confirmation_pending", False):
             return
         try:
-            state = self._model.start()
+            state = self._dispatch_start()
         except TrayConfirmationRequiredError:
             self._tray_confirmation_pending = True
             try:
@@ -197,14 +201,16 @@ class PaintDashboardController(
             finally:
                 self._tray_confirmation_pending = False
             if not confirmed:
+                self._record_start('cancelled', 'empty_tray_confirmation')
                 return
             result = self._model.confirm_empty_tray()
             if not result.success:
+                self._record_start('rejected', 'empty_tray_confirmation', message=result.message)
                 self._view.show_warning(self._t("Tray Readiness"), self._t(result.message))
                 return
             self._refresh_plate_layout()
             try:
-                state = self._model.start()
+                state = self._dispatch_start()
             except TrayError as exc:
                 self._view.show_warning(self._t("Tray Readiness"), self._t(str(exc)))
                 return
@@ -214,6 +220,31 @@ class PaintDashboardController(
         self._view.apply_dashboard_state(state)
 
     def _on_start(self) -> None:
+        token = self._model.begin_start_request()
+        token = token if isinstance(token, dict) else {}
+        if getattr(self, '_start_in_progress', False):
+            self._model.record_start_outcome(token, 'rejected', 'start_already_pending', {})
+            return
+        self._start_in_progress = True
+        self._start_action_context = token
+        try:
+            self._on_start_impl()
+        except Exception:
+            self._production_start_pending = False
+            self._record_start('failed', 'dashboard_preflight')
+            raise
+        finally:
+            if not getattr(self, '_production_start_pending', False):
+                self._start_in_progress = False
+
+    def _dispatch_start(self):
+        token = getattr(self, '_start_action_context', None)
+        return self._model.start(token) if token else self._model.start()
+
+    def _record_start(self, outcome, stage, **details):
+        self._model.record_start_outcome(getattr(self, '_start_action_context', {}), outcome, stage, details)
+
+    def _on_start_impl(self) -> None:
         if self._model.is_dry_run_mode_enabled() is True:
             confirmed = self._view.ask_production_start_confirmation(
                 self._t("Dry Run Mode"),
@@ -222,6 +253,7 @@ class PaintDashboardController(
                 ),
             )
             if not confirmed:
+                self._record_start('cancelled', 'dry_run_confirmation')
                 return
         drying_mode = self._model.get_drying_mode()
         if drying_mode in {"auto", "demo"}:
@@ -237,10 +269,12 @@ class PaintDashboardController(
                     str(state.get("title") or self._t("Production Start")),
                     str(state.get("message") or self._t("Production destination is unavailable.")),
                 )
+                self._record_start('rejected', 'production_destination', guard=state)
                 return
             if bool(state.get("enabled", False)) and not bool(state.get("ready", False)):
                 message = str(state.get("message") or self._t("Production destination is not ready."))
                 self._view.show_warning(str(state.get("title") or self._t("Production Start")), message)
+                self._record_start('rejected', 'production_destination', guard=state)
                 return
             if not bool(state.get("ready", False)):
                 confirmed = self._view.ask_production_start_confirmation(
@@ -250,26 +284,49 @@ class PaintDashboardController(
                 if not confirmed:
                     if self._confirm_start_guard_bypass(state):
                         self._start_process()
+                    else:
+                        self._record_start('cancelled', 'production_preparation')
                     return
                 if self._production_start_pending:
                     return
                 self._production_start_pending = True
                 self._view.set_action_enabled("start", False)
-                self._run_background(
-                    partial(self._model.prepare_production_start, drying_mode),
-                    self._on_production_start_prepared,
-                )
+                token = getattr(self, '_start_action_context', {})
+                if token:
+                    self._run_background(
+                        partial(self._model.prepare_production_start, drying_mode, token),
+                        self._on_production_start_prepared, self._on_production_start_failed)
+                else:
+                    self._run_background(partial(self._model.prepare_production_start, drying_mode),
+                                         self._on_production_start_prepared)
                 return
         self._start_process()
 
     def _on_production_start_prepared(self, result: object) -> None:
+        try:
+            self._production_start_prepared(result)
+        except Exception:
+            self._record_start('failed', 'production_preparation')
+            raise
+        finally:
+            self._start_in_progress = False
+
+    def _on_production_start_failed(self, error: str) -> None:
+        self._production_start_pending = self._start_in_progress = False
+        if self._view_ok():
+            self._view.set_action_enabled('start', True)
+            self._view.show_warning(self._t('Production Start'), error)
+
+    def _production_start_prepared(self, result: object) -> None:
         self._production_start_pending = False
         if not self._view_ok():
+            self._record_start('cancelled', 'dashboard_closed_before_start')
             return
         if bool(getattr(result, "success", False)):
             self._start_process()
             return
         self._view.apply_dashboard_state(self._model.load())
+        self._record_start('rejected', 'production_preparation', message=str(getattr(result, 'message', '')))
         self._show_command_result(self._t("Drying Mode"), result)
 
     def _on_stop(self) -> None:
@@ -678,7 +735,7 @@ class PaintDashboardController(
             self._on_contour_transform_debug_finished,
         )
 
-    def _run_background(self, fn, on_done) -> None:
+    def _run_background(self, fn, on_done, on_error=None) -> None:
         thread = QThread()
         worker = _Worker(fn)
         worker.moveToThread(thread)
@@ -686,6 +743,10 @@ class PaintDashboardController(
         worker.finished.connect(on_done)
         worker.finished.connect(thread.quit)
         worker.finished.connect(worker.deleteLater)
+        if on_error is not None:
+            worker.failed.connect(on_error)
+        worker.failed.connect(thread.quit)
+        worker.failed.connect(worker.deleteLater)
         thread.finished.connect(partial(self._cleanup_finished_worker, thread))
         thread.finished.connect(thread.deleteLater)
         self._workers.append((thread, worker))

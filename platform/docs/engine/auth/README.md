@@ -158,7 +158,7 @@ session.logout()
 
 ### `JsonPermissionsRepository`
 
-Reads and writes a JSON file at the given path. Auto-creates parent directories and an empty file if missing.
+Reads a pre-provisioned JSON permissions file. Missing, empty, malformed or unreadable files raise rather than creating defaults. Mutations reread under a cross-process lock and publish atomically with mode 0600; no mutable permissions cache is updated before persistence. See [persistence and recovery](../repositories/json/README.md).
 
 ```python
 repo = JsonPermissionsRepository(

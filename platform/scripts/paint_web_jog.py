@@ -137,7 +137,7 @@ updateState(); setInterval(updateState,1000);
 class JogRuntime:
     def __init__(self, server_url: str, tool: int, user: int) -> None:
         provider = PaintBootstrapProvider()
-        robot = provider.build_robot() if server_url == "http://localhost:5000" else None
+        robot = provider.build_robot() if server_url is None else None
         if robot is None:
             from src.engine.robot.drivers.ros2_robot import Ros2Robot
             robot = Ros2Robot(server_url=server_url)
@@ -211,7 +211,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8088)
-    parser.add_argument("--robot-url", default="http://localhost:5000")
+    parser.add_argument("--robot-url", default=None, help="Explicit test override; defaults to backend_network.json")
     parser.add_argument("--tool", type=int, default=0)
     parser.add_argument("--user", type=int, default=0)
     parser.add_argument(

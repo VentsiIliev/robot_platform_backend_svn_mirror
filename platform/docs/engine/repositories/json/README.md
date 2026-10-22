@@ -1,153 +1,93 @@
-# `src/engine/repositories/json/` — JSON Settings Repository
+# JSON repository persistence
 
-This package provides the single concrete `ISettingsRepository` implementation used by the platform: `BaseJsonSettingsRepository`. It stores settings as pretty-printed JSON files and handles file creation, parsing, and error recovery.
+`BaseJsonSettingsRepository` uses the serializer contract and the shared durable
+file helper in `src/engine/core/durable_files.py`. Reads never create or repair files.
 
----
+## Load policy
 
-## Class Diagram
+`load_result()` returns `LoadResult(status, value, detail)`. Status is `OK`,
+`MISSING`, `EMPTY`, `CORRUPT`, or `INACCESSIBLE`. Empty bytes are different from a
+valid empty object. Duplicate keys, nonfinite numbers, invalid encoding and
+non-object JSON are rejected. Domain validation remains the serializer's job;
+existing serializer field defaults are unchanged.
 
-```
-ISettingsRepository[T]
-        │
-        └── BaseJsonSettingsRepository[T]
-                  ─────────────────────────
-                  _serializer: ISettingsSerializer[T]
-                  file_path:   Optional[str]   (inherited)
-```
+`load()` returns the validated value or raises `SettingsLoadError` with a status.
+Only `required=False` plus a missing file may return defaults, with a warning.
+Those defaults remain in memory; loading never writes them. Empty, corrupt or
+unreadable optional files also raise, preserving the original evidence.
 
----
+The settings factory passes `SettingsSpec.required` to the repository. Existing
+specs default to required. Missing required data must be explicitly provisioned
+for a clean installation or restored for an established installation.
 
-## API Reference
+## Write policy
 
-### `BaseJsonSettingsRepository[T]`
+Explicit `save()` serializes and validates the value before publishing it. A
+same-directory unique temporary file is written, flushed and fsynced, then
+replaced atomically; the parent directory is fsynced. Existing ownership and mode
+are preserved (failure to preserve them fails the write); new files default to
+0600. Symlink and non-regular destination files are rejected. Handled failures
+clean up temporary files. Abrupt process termination may leave hidden temporary
+files, which are never interpreted as committed data.
 
-**File:** `base_json_settings_repository.py`
+Errors before replacement leave the previous file intact. Errors after replacement
+raise a `SettingsSaveError` with `published=True`: the new file is visible but
+crash durability is unconfirmed. Do not report these as an unchanged file or
+silently retry a larger business operation. Inspect/reload before recovery.
 
-```python
-class BaseJsonSettingsRepository(ISettingsRepository[T], Generic[T]):
-    def __init__(
-        self,
-        serializer: ISettingsSerializer[T],
-        file_path: Optional[str] = None,
-    ): ...
+Per-store sidecar locks serialize writes across repository instances/processes.
+Whole-settings saves remain last-writer-wins; locks do not merge independently
+edited snapshots. The stable `.lock` file must not be deleted while writers run.
 
-    def load(self) -> T: ...
-    def save(self, settings: T) -> None: ...
-    def exists(self) -> bool: ...
-```
+## Cache behavior
 
----
+`SettingsService` returns independent copies, so editing a retrieved settings
+object cannot modify the active cache before save. Load/save/cache operations are
+serialized. Failed reloads and saves evict the cached value; the next `get()` must
+read the repository again. Other processes' successful writes still require an
+explicit reload to refresh a running service.
 
-#### `load() → T`
+## Repository coverage
 
-```
-if no file_path:
-    log warning → return serializer.get_default()
+- Settings: strict reads, required policy, durable writes and isolated cache.
+- Permissions: strict schema, no missing-file creation, fresh reads, locked full
+  read-modify-write and 0600 publication. A failed pre-publication save cannot
+  change effective permissions.
+- Glue workpieces: durable JSON replacement; corrupt loads and inventory reads
+  raise instead of silently omitting records. Thumbnails remain derived assets.
+- Paint workpieces: existing JSON/thumbnail staged publication is retained, with
+  durable staging, directory synchronization and cross-instance update/read locks.
+  Incomplete or durability-uncertain updates block production reads and retain
+  recovery evidence. UI listings may log and skip unusable records.
+- Twin choreography: unique durable replacement and strict JSON inventory reads.
+- Updater state: reuses the same atomic helper; updater locking semantics remain
+  unchanged. Standalone updater packaging includes the shared helper.
 
-if file does not exist:
-    create file with defaults → return defaults
+Factory seeding only creates missing files in a clean settings directory. Missing
+files inside established settings storage require explicit provisioning/recovery;
+new release settings must be provisioned by a deliberate migration, not inferred
+from absence.
 
-read file → json.load(fh) → serializer.from_dict(data) → return T
+## Recovery and deployment
 
-on JSONDecodeError / FileNotFoundError:
-    log error → return serializer.get_default()   (graceful fallback)
+Before deploying, back up settings, permissions and workpiece libraries. Verify
+all declared required settings and permissions files exist and parse correctly.
+A permissions file must contain an object mapping app IDs to role lists. For a
+clean installation, explicitly provision the intended policy; do not reset an
+established file to `{}` just to pass startup.
 
-on other exceptions:
-    raise SettingsLoadError
-```
+Stop affected processes before restoring trusted backups. Preserve damaged files
+and paint `.incomplete` markers/staging for diagnosis. Validate restored data with
+its serializer/repository before allowing operation. A blocked paint record needs
+both JSON and thumbnail restored consistently before its marker is removed.
 
-**Behavior summary:**
+This change does not add automatic last-known-good restoration, a recovery GUI,
+schema migrations, installation identity, or CSV enrollment changes. It does not
+make several separate JSON saves one transaction. Those remain separate work.
 
-| Condition | Result |
-|-----------|--------|
-| No `file_path` set | Returns defaults (logs warning) |
-| File does not exist | Creates file with defaults, returns defaults |
-| File exists, valid JSON | Loads and deserializes |
-| File exists, invalid JSON | Returns defaults (logs error) |
-| Other I/O error | Raises `SettingsLoadError` |
+## Verification
 
----
-
-#### `save(settings: T) → None`
-
-```
-if no file_path:
-    raise SettingsSaveError
-
-serializer.to_dict(settings) → json.dump to file (indent=2)
-```
-
-- Creates parent directories with `os.makedirs(exist_ok=True)`
-- Raises `SettingsSaveError` on any failure
-
----
-
-#### `exists() → bool`
-
-Returns `True` if `file_path` is set and the file exists on disk.
-
----
-
-## Data Flow
-
-```
-BaseJsonSettingsRepository.load()
-        │
-        ├─ os.path.exists(file_path)?
-        │       No → _write_file(serializer.to_dict(get_default()))
-        │             └─ os.makedirs(parent_dir, exist_ok=True)
-        │                json.dump(data, fh, indent=2)
-        │
-        ├─ open(file_path, "r") → json.load(fh) → data: dict
-        │
-        └─ serializer.from_dict(data) → T
-
-BaseJsonSettingsRepository.save(settings)
-        │
-        ├─ serializer.to_dict(settings) → data: dict
-        │
-        └─ _write_file(data)
-                └─ os.makedirs(parent_dir, exist_ok=True)
-                   json.dump(data, fh, indent=2)
-```
-
----
-
-## Usage Example
-
-```python
-from src.engine.repositories.json.base_json_settings_repository import BaseJsonSettingsRepository
-from src.engine.robot.configuration.robot_settings import RobotSettings, RobotSettingsSerializer
-
-repo = BaseJsonSettingsRepository(
-    serializer=RobotSettingsSerializer(),
-    file_path="/path/to/storage/robot_config.json",
-)
-
-# Load (auto-creates file with defaults if absent)
-config: RobotSettings = repo.load()
-print(config.robot_ip)
-
-# Modify and save
-config.robot_ip = "192.168.1.50"
-repo.save(config)
-
-print("File exists:", repo.exists())
-```
-
----
-
-## Design Notes
-
-- **Pretty-printed JSON**: Files are written with `indent=2` for human readability and easy manual editing.
-- **Atomic file creation on first load**: When the file is missing, `load()` creates it before returning. This means the platform always produces a complete, editable settings file on first run, even with no prior configuration.
-- **Graceful JSON error fallback**: If the settings file is corrupted (invalid JSON), the platform logs an error and continues with defaults rather than crashing. This is important for robustness in production environments.
-- **`Generic[T]` on both bases**: Both `ISettingsRepository[T]` and `BaseJsonSettingsRepository` carry the type parameter, enabling mypy/pyright to verify type correctness when a specific serializer is paired with a repository.
-
-<!-- source-navigation:start -->
-## Source navigation
-
-[Module reference](MODULES.md) — signatures, fields, imports and source links for every Python file in this directory.
-
-[Complete source index](../../../SOURCE_INDEX.md).
-<!-- source-navigation:end -->
+Fault-injection and concurrency tests live in `tests/engine/core/test_durable_files.py`
+and `tests/engine/repositories/test_json_persistence_failures.py`, with repository,
+workpiece, choreography and updater regression suites alongside them. Tests use
+temporary files and fake services; no hardware operation is needed.

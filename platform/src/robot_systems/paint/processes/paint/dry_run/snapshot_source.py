@@ -131,7 +131,7 @@ class PaintDryRunSnapshotSource:
         _logger.warning(
             "[DRY_RUN] cycle=%d item=%s size_mm=(%.3f, %.3f) angle_deg=%.3f center_mm=(%.3f, %.3f)",
             cycle_index, item["id"], float(item["width_mm"]), float(item["height_mm"]),
-            angle_deg, center_mm[0], center_mm[1],
+            float(angle_deg), float(center_mm[0]), float(center_mm[1]),
         )
         _logger.info(
             "[DRY_RUN_CAPTURE_TIMING] cycle=%d item=%s points=%d "

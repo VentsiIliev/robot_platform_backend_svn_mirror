@@ -269,7 +269,7 @@ class MyController(IApplicationController):
 Reference: `ModbusSettingsController`
 
 ### MotionService move semantics
-- `MotionService.move_ptp()` currently delegates to `self._robot.move_linear(...)` in [`src/engine/robot/services/motion_service.py`](/home/ilv/Desktop/robot_app_platform/src/engine/robot/services/motion_service.py)
+- `MotionService.move_ptp()` currently delegates to `self._robot.move_linear(...)` in [`src/engine/robot/services/motion_service.py`](src/engine/robot/services/motion_service.py)
 - This is **intentional current behavior**, not an accidental typo or incomplete refactor
 - Do **not** "fix" `move_ptp()` to call a lower-level PTP primitive unless the task explicitly changes the robot motion contract and verifies downstream behavior
 - When reviewing or editing motion code, preserve the existing service-level semantics first and treat naming mismatch as documentation context, not standalone evidence of a bug

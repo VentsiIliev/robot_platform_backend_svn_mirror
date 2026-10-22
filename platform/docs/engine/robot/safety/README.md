@@ -1,6 +1,6 @@
 # `src/engine/robot/safety/` — Safety Checker
 
-The `safety` package implements workspace bounds enforcement plus opt-in motion corridors. `SafetyChecker` is the concrete implementation of `ISafetyChecker` and is called by `MotionService` before forwarding any position to the robot SDK; `MotionCorridor` / `MotionCorridorRegistry` provide a narrower, per-move constraint used by `MotionService.move_linear_in_corridor()`.
+The `safety` package implements workspace bounds enforcement plus opt-in motion corridors. `SafetyChecker` is the concrete implementation of `ISafetyChecker` and is called by `MotionService` for PTP, LIN, standard/custom sequences, step jog and Fast LIN admission; `MotionCorridor` / `MotionCorridorRegistry` provide a narrower, per-move constraint used by `MotionService.move_linear_in_corridor()`.
 
 ---
 
@@ -11,7 +11,7 @@ ISafetyChecker (ABC)
        │
        └── SafetyChecker
                  │
-                 │ reads from (optional)
+                 │ reads from (required)
                  └── ISettingsService → RobotSettings.safety_limits
 
 MotionCorridor (frozen dataclass)  ← validate() / contains_xy() / contains_xyz()
@@ -32,41 +32,24 @@ MotionService._motion_corridors     ← register_motion_corridor() / move_linear
 
 ```python
 class SafetyChecker(ISafetyChecker):
-    def __init__(self, settings_service=None): ...
+    def __init__(self, settings_key, settings_service=None): ...
+    def get_violations(self, position: List[float]) -> List[str]: ...
     def is_within_safety_limits(self, position: List[float]) -> bool: ...
+    def is_escape_move(self, current: List[float], target: List[float]) -> bool: ...
 ```
 
-#### `is_within_safety_limits(position) → bool`
+`settings_key` must be an Enum. Missing settings service raises at construction.
+Each admission reads the current settings and validates finite numeric XYZ bounds,
+with minimum ≤ maximum. Missing limits, invalid bounds, malformed/nonfinite poses,
+and settings read failures raise; they never mean that a command is allowed.
+All supplied pose coordinates must be finite numbers, but only XYZ is compared
+against configured bounds. Rotation bounds are not enforced here.
 
-Checks whether the target Cartesian position is within the configured workspace bounds.
-
-**Logic:**
-
-```
-if position is empty or has fewer than 3 elements:
-    return False            ← invalid position
-
-if settings_service is None:
-    return True             ← no settings → fail-safe (motion allowed)
-
-config = settings_service.get("robot_config")
-limits = config.safety_limits
-
-if limits is None:
-    return True             ← no limits configured → motion allowed
-
-x, y, z = position[0], position[1], position[2]
-return (
-    limits.x_min <= x <= limits.x_max and
-    limits.y_min <= y <= limits.y_max and
-    limits.z_min <= z <= limits.z_max
-)
-
-on any exception:
-    log warning → return True   ← exception → fail-safe (motion allowed)
-```
-
-Only the translational axes (x, y, z) are checked. Rotation axes (rx, ry, rz) are not checked even if `SafetyLimits` contains rotation bounds.
+`get_violations()` returns an empty list only after a successful check; ordinary
+out-of-bounds positions return human-readable violations. `is_within_safety_limits()`
+uses the same check and propagates errors. `is_escape_move()` returns False:
+this checker does not authorize generic escapes. Explicit recovery policies live
+in `MotionService`.
 
 ---
 
@@ -151,29 +134,20 @@ Optional blocking: with `wait_to_reach=True` the success flag additionally requi
 
 ## Data Flow
 
-```
-MotionService.move_ptp(position, ...)
-        │
-        │  safety.is_within_safety_limits(position)
-        ▼
-SafetyChecker
-        │
-        ├─ settings_service is None? → return True (motion allowed)
-        │
-        ├─ settings_service.get("robot_config") → RobotSettings
-        │       └─ .safety_limits → SafetyLimits
-        │
-        ├─ x_min ≤ x ≤ x_max?
-        ├─ y_min ≤ y ≤ y_max?
-        └─ z_min ≤ z ≤ z_max?
-                │
-                ├─ all True → return True (motion allowed)
-                └─ any False → return False (motion blocked)
+`MotionService._motion_violations()` distinguishes an unavailable check (`None`)
+from a completed check (a list of violations). It logs exceptions and rejects
+malformed checker results. Every caller rejects `None` before any recovery
+filter or bypass can run:
 
-MotionService (on False):
-    log warning "move_ptp blocked by safety limits"
-    return False                        ← no motion command sent to robot
-```
+| Caller | Unavailable-check result |
+|---|---|
+| `move_ptp`, `move_linear` | `False` |
+| `move_sequence`, `move_custom_sequence` | `False`, before tool selection or sequence submission |
+| `start_jog` | `-1`; also rejects missing current position |
+| `move_fast_linear` | `success=False`, `accepted=False`, `result=-1`, `error="platform_safety_unavailable"` |
+
+Recovery exceptions can still apply to known violations after a successful check.
+They cannot authorize a command when the checker is unavailable or its inputs are invalid.
 
 ---
 
@@ -192,46 +166,26 @@ From `SafetyLimits` defaults in `robot_settings.py`:
 ## Usage Example
 
 ```python
+from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.robot.safety.safety_checker import SafetyChecker
 
-# Without settings (fail-safe mode — all positions allowed)
-checker = SafetyChecker()
-print(checker.is_within_safety_limits([0.0, 0.0, 300.0, 180.0, 0.0, 0.0]))  # True
-
-# With settings
-checker = SafetyChecker(settings_service=settings_service)
-print(checker.is_within_safety_limits([0.0, 0.0, 50.0, 0.0, 0.0, 0.0]))   # False (z < 100)
-print(checker.is_within_safety_limits([0.0, 0.0, 300.0, 0.0, 0.0, 0.0]))  # True
+checker = SafetyChecker(CommonSettingsID.ROBOT_CONFIG, settings_service)
+# Direct callers must reject the operation if either query raises.
+violations = checker.get_violations([0.0, 0.0, 300.0, 180.0, 0.0, 0.0])
 ```
 
----
+## Scope and verification
 
-## Design Notes
+This change covers the existing checker callers. Corridor LIN uses its explicit
+corridor policy; trajectories, ordered chains and continuous Servo do not gain
+this workspace checker through this change. Backend constraints remain separate.
+Rotation bounds, joint limits and velocity/acceleration limits are not checked by
+`SafetyChecker`. Bounds are validated on admission, not by the settings serializer.
 
-### Fail-Safe Behavior
-
-`SafetyChecker` is intentionally **permissive** when configuration is unavailable:
-
-- No `settings_service` → **motion allowed** (useful for test environments and standalone runners)
-- `safety_limits` attribute missing → **motion allowed**
-- Exception during limit check → **motion allowed** (logs a warning)
-
-This is the correct fail-safe for a development platform where the safety system is optional and the physical robot is not always connected.
-
-### What Is Not Checked
-
-- **Rotation bounds** (rx, ry, rz): `SafetyLimits` stores rotation min/max values, but `SafetyChecker` only validates x, y, z.
-- **Joint limits**: These are enforced by the robot firmware (FairinoRobot SDK), not by this layer.
-- **Velocity/acceleration limits**: `GlobalMotionSettings` has these values, but they are not enforced here.
-
-### Two independent safety layers
-
-- `SafetyChecker` is the **global** gate: one workspace box applied to every position by `MotionService`.
-- `MotionCorridor` is the **per-move** gate: an opt-in tunnel declared by the robot system for a specific constrained passage, plus motion-class and lid control rules. Registering nothing changes nothing — corridors never replace the global check.
-
-### Singleton-Free
-
-`SafetyChecker` has no singleton or class-level state. Each `MotionService` receives its own instance, configured with (or without) a settings service.
+Run `tests.engine.robot.test_safety_checker`,
+`tests.engine.robot.test_safety_admission_failures`, and
+`tests.engine.robot.test_motion_service` for boundary checks, injected settings and
+checker failures, zero driver submissions, and existing valid/recovery behavior.
 
 <!-- source-navigation:start -->
 ## Source navigation

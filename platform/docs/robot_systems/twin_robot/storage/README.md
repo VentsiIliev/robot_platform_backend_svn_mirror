@@ -11,3 +11,7 @@ This page follows the source directory. The reference below records its modules 
 
 [Complete source index](../../../SOURCE_INDEX.md).
 <!-- source-navigation:end -->
+
+## Durable JSON persistence
+
+JSON publication uses the shared engine durable-file helper. Read failures are not silently converted to empty production data. See the repository-wide persistence contract in `docs/engine/repositories/json/README.md` for failure states and recovery. Paint retains its staged JSON/thumbnail transaction and blocks incomplete records; its UI listing may log and omit unusable records.

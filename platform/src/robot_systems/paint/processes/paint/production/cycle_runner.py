@@ -3,11 +3,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 import logging
-import json
-from hashlib import sha256
 from time import monotonic
 
-from src.engine.diagnostics.events import diagnostic_context, observe
+from src.engine.diagnostics.events import current_context, diagnostic_context, observe
+from src.engine.diagnostics.actions import ActionRecorder
+from src.robot_systems.paint.diagnostics.cycle_evidence import publish_cycle_settings, publish_execution_plan
 
 _logger = logging.getLogger(__name__)
 
@@ -45,38 +45,49 @@ def run_paint_cycle(
         "pickup_only" if context.process_config is not None
         and context.process_config.stop_after_calibration_pickup else "cycle")
     started = monotonic()
-    configuration = None if context.process_config is None else asdict(context.process_config)
-    configuration_revision = None if configuration is None else sha256(
-        json.dumps(configuration, sort_keys=True, default=str).encode()).hexdigest()[:16]
-    with diagnostic_context(cycle_id=context.diagnostic_cycle_id,
-                            cycle_index=context.cycle_index, operation=operation,
-                            configuration_revision=configuration_revision):
-        observe(_logger, "paint.cycle.started", metrics={f"paint.{operation}.attempts": 1},
-                initial_state=initial_state.name, magazine_group=context.magazine_group,
-                adjustment=context.adjustment_session is not None,
-                configuration=configuration)
+    token = {**current_context(), **context.diagnostic_context}
+    if not token.get('operation_id'):
+        token = {**ActionRecorder().operation_context(), **token}
+    with diagnostic_context(**token), diagnostic_context(cycle_id=context.diagnostic_cycle_id,
+                            cycle_index=context.cycle_index, operation=operation):
         try:
-            machine = PaintExecutionMachineFactory().build(context, initial_state=initial_state)
-            machine.start_execution()
-            machine_error = machine.get_snapshot().last_error
-            result = context.result
-            if machine_error is not None and result.failure is None:
-                result = PaintOperationResult.failed(PaintFailureCode.INTERNAL, "paint_cycle", machine_error)
+            context.diagnostic_evidence.update(publish_cycle_settings(context))
+            if context.execution_plan is not None:
+                publish_execution_plan(context)
         except Exception:
-            observe(_logger, "paint.cycle.exception", level=logging.ERROR,
-                    metrics={f"paint.{operation}.exceptions": 1},
-                    duration_s=monotonic() - started)
-            _logger.exception("Paint cycle raised before returning an outcome")
-            raise
-        metrics = {f"paint.{operation}.outcome.{result.outcome.value}": 1,
-                   f"paint.{operation}.duration_seconds": monotonic() - started}
-        if result.failure is not None:
-            metrics[f"paint.failure.{result.failure.code.value}"] = 1
-        observe(_logger, "paint.cycle.ended",
-                level=logging.ERROR if result.failure else logging.INFO,
-                metrics=metrics, outcome=result.outcome.value, message=result.message,
-                stop_reason=None if result.stop_reason is None else result.stop_reason.value,
-                planned_waypoints=result.planned_waypoints,
-                failure=None if result.failure is None else asdict(result.failure),
-                machine_error=machine_error)
-        return PaintCycleExecution(result, machine_error)
+            pass
+        configuration_revision = context.diagnostic_evidence.get('effective_process_settings', {}).get('sha256')
+        context.diagnostic_context = {**current_context(), 'configuration_revision': configuration_revision}
+        with diagnostic_context(configuration_revision=configuration_revision):
+            observe(_logger, "paint.cycle.started", metrics={f"paint.{operation}.attempts": 1},
+                    initial_state=initial_state.name, magazine_group=context.magazine_group,
+                    adjustment=context.adjustment_session is not None,
+                    configuration_revision=configuration_revision,
+                    evidence=context.diagnostic_evidence)
+            try:
+                machine = PaintExecutionMachineFactory().build(context, initial_state=initial_state)
+                machine.start_execution()
+                machine_error = machine.get_snapshot().last_error
+                result = context.result
+                if machine_error is not None and result.failure is None:
+                    result = PaintOperationResult.failed(PaintFailureCode.INTERNAL, "paint_cycle", machine_error)
+            except Exception:
+                observe(_logger, "paint.cycle.exception", level=logging.ERROR,
+                        metrics={f"paint.{operation}.exceptions": 1},
+                        duration_s=monotonic() - started)
+                _logger.exception("Paint cycle raised before returning an outcome")
+                raise
+            metrics = {f"paint.{operation}.outcome.{result.outcome.value}": 1,
+                       f"paint.{operation}.duration_seconds": monotonic() - started}
+            if result.failure is not None:
+                metrics[f"paint.failure.{result.failure.code.value}"] = 1
+            observe(_logger, "paint.cycle.ended",
+                    level=logging.ERROR if result.failure else logging.INFO,
+                    metrics=metrics, outcome=result.outcome.value, message=result.message,
+                    stop_reason=None if result.stop_reason is None else result.stop_reason.value,
+                    planned_waypoints=result.planned_waypoints,
+                    failure=None if result.failure is None else asdict(result.failure),
+                    evidence=context.diagnostic_evidence,
+                    workpiece_evidence=context.diagnostic_evidence.get('workpiece', {}).get('availability', 'not_captured'),
+                    machine_error=machine_error)
+            return PaintCycleExecution(result, machine_error)

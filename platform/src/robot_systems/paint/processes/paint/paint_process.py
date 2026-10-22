@@ -4,7 +4,9 @@ import threading
 import logging
 from uuid import uuid4
 from contextvars import copy_context
-from src.engine.diagnostics.events import diagnostic_context, observe
+from src.engine.diagnostics.events import current_context, diagnostic_context, observe
+from src.engine.diagnostics.actions import ActionRecorder
+from dataclasses import asdict
 from time import monotonic, time
 from typing import Callable, Optional
 
@@ -53,6 +55,8 @@ class PaintProcess(BaseProcess):
         self._vacuum_pump = vacuum_pump
         self._paint_process_config_service = paint_process_config_service
         self._diagnostic_run_id: str | None = None
+        self._diagnostic_run_context: dict = {}
+        self._diagnostic_started_at: float | None = None
         self._last_result: PaintOperationResult | None = None
         self._last_failure: TrayFailure | PaintFailure | None = None
         self._thread: Optional[threading.Thread] = None
@@ -72,6 +76,26 @@ class PaintProcess(BaseProcess):
     def last_failure(self) -> TrayFailure | PaintFailure | None:
         """Machine-readable operation or tray failure from the most recent start or cycle."""
         return self._last_failure
+
+    def start(self) -> None:
+        self._request_start()
+
+    def start_with_diagnostics(self, context: dict) -> dict:
+        """Report admission under the process lock, independently of completion."""
+        with diagnostic_context(**context):
+            return self._request_start()
+
+    def _request_start(self) -> dict:
+        with self._lock:
+            previous_thread, previous_state = self._thread, self._state
+            self._transition(ProcessState.RUNNING,
+                             self._on_resume if previous_state == ProcessState.PAUSED else self._on_start)
+            accepted = self._state == ProcessState.RUNNING and (
+                self._thread is not previous_thread or previous_state == ProcessState.PAUSED)
+            return {'accepted': accepted, 'state': self._state.value,
+                    'kind': 'resume' if previous_state == ProcessState.PAUSED else 'start',
+                    'run_id': self._diagnostic_run_id if accepted else None,
+                    'operation_id': self._diagnostic_run_context.get('operation_id') if accepted else None}
 
     @property
     def consecutive_completed_cycles(self) -> int:
@@ -198,12 +222,20 @@ class PaintProcess(BaseProcess):
         self._stopping = False
         self._preserve_vacuum.clear()
         self._diagnostic_run_id = uuid4().hex
+        token = current_context()
+        if not token.get('operation_id'):
+            token = {**ActionRecorder().operation_context(), **token}
+        self._diagnostic_run_context = {**token, 'run_id': self._diagnostic_run_id}
+        self._diagnostic_started_at = monotonic()
         self._run_stop_event = threading.Event()
         self._stop_started_at = None
         self._adjustment_session = self._pending_adjustment_session
+        with diagnostic_context(**self._diagnostic_run_context):
+            worker_context = copy_context()
         self._thread = threading.Thread(
-            target=self._run_in_background,
+            target=worker_context.run,
             args=(
+                self._run_in_background,
                 self._manual_single_cycle_requested,
                 self._pending_adjustment_session,
                 self._retry_unmatched_workpiece_requested,
@@ -278,7 +310,7 @@ class PaintProcess(BaseProcess):
     def _request_hardware_stop(self, *, release_vacuum: bool = True) -> None:
         if self._stop_thread is not None and self._stop_thread.is_alive():
             return
-        with diagnostic_context(run_id=self._diagnostic_run_id):
+        with diagnostic_context(**{**self._diagnostic_run_context, 'run_id': self._diagnostic_run_id}):
             context = copy_context()
         thread = threading.Thread(
             target=context.run,
@@ -376,7 +408,9 @@ class PaintProcess(BaseProcess):
         return isinstance(interlock, dict) and bool(interlock.get("active", False))
 
     def _run_in_background(self, *args, **kwargs) -> None:
-        with diagnostic_context(run_id=self._diagnostic_run_id or uuid4().hex):
+        context = self._diagnostic_run_context or {**ActionRecorder().operation_context(),
+                                                  'run_id': self._diagnostic_run_id or uuid4().hex}
+        with diagnostic_context(**context):
             observe(self._logger, "paint.run.started", metrics={"paint.runs.attempts": 1})
             self._run_in_background_impl(*args, **kwargs)
 
@@ -396,9 +430,10 @@ class PaintProcess(BaseProcess):
         failure: TrayFailure | PaintFailure | None = None
         collision_watch_started_at = time()
         collision_event = None
+        watcher_context = copy_context()
         collision_watcher = threading.Thread(
-            target=self._watch_for_collision,
-            args=(collision_watch_started_at, collision_abort, collision_watch_done, collision_holder),
+            target=watcher_context.run,
+            args=(self._watch_for_collision, collision_watch_started_at, collision_abort, collision_watch_done, collision_holder),
             daemon=True,
             name="PaintCollisionWatcher",
         )
@@ -456,6 +491,8 @@ class PaintProcess(BaseProcess):
                 level=logging.ERROR if result.failure else logging.INFO,
                 metrics={f"paint.runs.outcome.{effective_outcome.value}": 1},
                 outcome=effective_outcome.value, returned_outcome=result.outcome.value,
+                duration_s=None if self._diagnostic_started_at is None else monotonic() - self._diagnostic_started_at,
+                failure=None if failure is None else asdict(failure),
                 stop_requested=run_stop_event.is_set(), message=result.message,
                 stop_reason=None if result.stop_reason is None else result.stop_reason.value)
         msg = result.message

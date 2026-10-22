@@ -121,12 +121,15 @@ Selection rules, in order:
 
 **Channels** — one HTTP command plane plus three WebSocket streams, each in its own thread:
 
-| Channel | Default URL | Override env var | Staleness threshold |
-|---|---|---|---|
-| State | `ws://<host>:5001/ws/state` | `ROBOT_STATE_WS_URL` | `_STATE_WS_STALE_AFTER_S = 1.0` |
-| Execution status | `ws://<host>:5002/ws/execution` | `ROBOT_EXECUTION_WS_URL` | `_EXECUTION_WS_STALE_AFTER_S = 1.0` |
-| Sensors (publish) | `ws://<host>:5003/ws/sensors` | `ROBOT_SENSOR_WS_URL` | — |
-| Commands | `POST` against `server_url` (`http://localhost:5000` default) | — | — |
+| Channel | Shared configuration field | Staleness threshold |
+|---|---|---|
+| State | `state_ws_port`, path `/ws/state` | `_STATE_WS_STALE_AFTER_S = 1.0` |
+| Execution status | `execution_ws_port`, path `/ws/execution` | `_EXECUTION_WS_STALE_AFTER_S = 1.0` |
+| Sensors (publish) | `sensor_ws_port`, path `/ws/sensors` | — |
+| Commands | `client_host` and `http_port` | — |
+
+Addresses and ports come from [backend network configuration](../backend_network.md).
+The former per-channel URL environment overrides are rejected.
 
 If the state WebSocket goes stale, an HTTP snapshot fallback runs every `_STATE_HTTP_FALLBACK_INTERVAL_S = 0.5`.
 

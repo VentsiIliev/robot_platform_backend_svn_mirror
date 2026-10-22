@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from time import perf_counter
+from src.robot_systems.paint.diagnostics.cycle_evidence import publish_workpiece
 
 from src.robot_systems.paint.processes.paint.match.results import NoMatch
 from src.robot_systems.paint.processes.paint.results import Failed, PaintOperationResult, PaintOutcome
@@ -49,6 +50,7 @@ def handle_prepare_workpiece(ctx: PaintExecutionContext) -> PaintExecutionState:
     else:
         ctx.raw_workpiece = prepared.value.raw
         ctx.workpiece_description = prepared.value.description
+    publish_workpiece(ctx)
     service._log_phase_timing("workpiece_preparation", phase_start, cycle=ctx.cycle_index)
     if ctx.should_stop():
         ctx.set_outcome(PaintOperationResult(PaintOutcome.CANCELLED, "Paint process stopped"))

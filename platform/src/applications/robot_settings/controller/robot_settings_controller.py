@@ -37,6 +37,8 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
         self._config_bridge.changed.connect(self._on_robot_config_changed)
 
         self._view.save_requested.connect(self._on_save)
+        self._view.settings_tab_opened.connect(self._on_settings_tab_opened)
+        self._view.collision_active_response_edited.connect(self._on_collision_active_response_edited)
         self._view.discard_requested.connect(self._on_discard)
         self._view.remove_group_requested.connect(self._on_remove_group)
         self._view.set_current_requested.connect(self._on_set_current)
@@ -80,12 +82,23 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
     def _on_discard(self) -> None:
         self.load()
 
+    def _on_settings_tab_opened(self, tab_id: str) -> None:
+        self._model.record_ui_action('navigation.settings_tab', {'tab': tab_id, 'outcome': 'selected'})
+
+    def _on_collision_active_response_edited(self, previous: bool, enabled: bool) -> None:
+        self._model.record_ui_action('settings.collision.edited', {
+            'field': 'active_stop_enabled', 'before': previous, 'after': enabled,
+            'persisted': False, 'applied': False,
+        })
+
     def stop(self) -> None:
         if self._stopped:
             return
         self._stopped = True
         self._stop_threads()
         try:
+            self._view.settings_tab_opened.disconnect(self._on_settings_tab_opened)
+            self._view.collision_active_response_edited.disconnect(self._on_collision_active_response_edited)
             self._view.rviz_status_refresh_requested.disconnect(self._on_rviz_refresh)
             self._view.rviz_enabled_requested.disconnect(self._on_rviz_enabled)
             self._view.collision_config_refresh_requested.disconnect(
@@ -245,9 +258,12 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
         self._view.set_rviz_state(None, message)
 
     def _on_collision_config_save(self, config: dict) -> None:
+        config = dict(config)
+        action_context = self._model.record_ui_action('settings.collision.save_requested',
+                                                     {'requested': dict(config), 'outcome': 'started'})
         self._view.set_collision_config_busy(True)
         self._run_in_thread(
-            fn=lambda: self._model.save_collision_monitor_config(config),
+            fn=lambda: self._model.save_collision_monitor_config(config, action_context),
             on_done=self._on_collision_config_saved,
             on_error=self._on_collision_config_error,
         )

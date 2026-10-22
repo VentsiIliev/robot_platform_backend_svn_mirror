@@ -1,5 +1,7 @@
 # REST Reorganization Plan
 
+> Historical reorganization plan. REST now has four route blueprints and typed API contracts. Proposed layouts and old commands below are retained for context; use [current architecture](ARCHITECTURE.md) and [API contracts](runtime_api_architecture.md).
+
 ## Goal
 
 Move REST-specific code into one folder without changing endpoint behavior, JSON shapes, launch behavior, or the runtime gateway architecture.

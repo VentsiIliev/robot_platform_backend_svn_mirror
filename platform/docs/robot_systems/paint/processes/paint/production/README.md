@@ -1,5 +1,13 @@
 # Paint execution runtime and cycles
 
+Production/cycle diagnostics now create an outer request boundary before settings
+or readiness checks. Operation identity is inherited from the caller or allocated
+with an explicit unknown actor. Each cycle request allocates its ID before an
+execution context exists. Prepared contexts retain these identities and engine
+snapshot references; a failed new preparation cannot reuse the preceding part's
+failure-register/bundle ownership. See [Paint diagnostics](../../../diagnostics/README.md)
+for the snapshot format, event meanings, limits and export guarantees.
+
 `execution_dependencies.py` declares composition inputs. `PaintExecutionRuntime` in `execution_runtime.py` owns per-execution state, runtime configuration, and operation composition. It no longer implements the editor interface; the editor adapter owns that contract.
 
 `prepared_cycle.py` adapts an already prepared workpiece to the shared cycle runner. Both editor-triggered execution and production use the same workflow, preserving typed outcomes, cleanup, and motion behavior.

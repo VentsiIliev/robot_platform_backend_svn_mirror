@@ -1,13 +1,14 @@
 """Shared immutable API settings and transport-neutral result helpers."""
 from dataclasses import dataclass, field
+from backend_network import load_backend_network
 from runtime_api.contracts import to_jsonable
 from runtime_api.motion.requests import MotionDefaults
 
 
 @dataclass(frozen=True)
 class ApiSettings:
-    port: int = 5000
-    execution_ws_port: int = 5002
+    port: int = field(default_factory=lambda: load_backend_network().http_port)
+    execution_ws_port: int = field(default_factory=lambda: load_backend_network().execution_ws_port)
     drive_verify_timeout_s: float = 5.0
     motion_defaults: MotionDefaults = field(default_factory=MotionDefaults)
 

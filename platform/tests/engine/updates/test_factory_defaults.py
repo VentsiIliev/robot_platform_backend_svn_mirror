@@ -99,3 +99,10 @@ class FactoryDefaultsTests(unittest.TestCase):
         seed_factory_defaults(self.resources, self.data, self.identity)
         self.assertTrue((self.data / 'paint_tray_dry/storage/settings/hardware/peripherals.json').exists())
         self.assertFalse((self.data / 'paint').exists())
+
+    def test_missing_file_in_established_storage_is_not_reseeded(self):
+        seed_factory_defaults(self.resources, self.data, self.identity)
+        self.destination.unlink()
+        with self.assertRaisesRegex(RuntimeError, 'restore from backup'):
+            seed_factory_defaults(self.resources, self.data, self.identity)
+        self.assertFalse(self.destination.exists())

@@ -20,8 +20,8 @@ def start_sensor_websocket_server(*, supervisor, config, fallback_host: str, fal
         logger.error("Sensor WebSocket unavailable: %s", exc)
         return
 
-    ws_host = str(getattr(config, "REST_WS_SENSOR_HOST", fallback_host) or fallback_host)
-    ws_port = int(getattr(config, "REST_WS_SENSOR_PORT", int(fallback_port) + 3))
+    ws_host = config.REST_WS_SENSOR_HOST
+    ws_port = config.REST_WS_SENSOR_PORT
 
     async def sensor_handler(connection):
         request_obj = getattr(connection, "request", None)

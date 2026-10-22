@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QL
 from PyQt6.QtCore import QTimer, Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 import config
+from backend_network import load_backend_network
 from status.robot_monitor import RobotMonitor
 from utils.work_object import WorkObject
 
@@ -466,7 +467,7 @@ class SimpleMonitorGUI(QWidget):
 
     def _current_pose_in_user_frame(self, user_id):
         try:
-            response = requests.get('http://localhost:5000/position/current', timeout=2.0)
+            response = requests.get(f"{load_backend_network().http_url}/position/current", timeout=2.0)
             response.raise_for_status()
             payload = response.json()
             position = payload.get('position')
@@ -586,7 +587,7 @@ class SimpleMonitorGUI(QWidget):
         def send_linear():
             try:
                 response = requests.post(
-                    'http://localhost:5000/move/linear',
+                    f"{load_backend_network().http_url}/move/linear",
                     json={
                         'position': target.tolist(),
                         'tool': tool_id,

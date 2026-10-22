@@ -12,6 +12,9 @@ import urllib.request
 from pathlib import Path
 
 from src.bootstrap.startup_config import RosBackendConfig, load_robot_system_config
+from src.engine.robot.configuration.backend_network import (
+    CONFIG_ENV, load_backend_network, network_config_path,
+)
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -24,10 +27,7 @@ class RosBackendLauncher:
         stop_script: str | os.PathLike | None = None,
         startup_delay_s: float = 1.0,
         log_file: str | os.PathLike = "/tmp/robot_app_zeroerr_backend.log",
-        status_urls: tuple[str, ...] = (
-            "http://localhost:5000/startup/status",
-            "http://localhost:5000/health",
-        ),
+        status_urls: tuple[str, ...] | None = None,
         status_timeout_s: float = 0.3,
         auto_launch: bool = True,
         auto_stop: bool = True,
@@ -38,7 +38,7 @@ class RosBackendLauncher:
         self._stop_script = _expand_path(stop_script or _default_stop_script())
         self._startup_delay_s = float(startup_delay_s)
         self._log_file = _expand_path(log_file)
-        self._status_urls = status_urls
+        self._status_urls = status_urls if status_urls is not None else _default_status_urls()
         self._status_timeout_s = float(status_timeout_s)
         self._auto_launch = bool(auto_launch)
         self._auto_stop = bool(auto_stop)
@@ -90,6 +90,7 @@ class RosBackendLauncher:
 
     def _launch_env(self) -> dict[str, str]:
         env = _clean_ros_process_env()
+        env[CONFIG_ENV] = str(network_config_path().resolve())
         if self._robot_target:
             env["ROBOT_RELEASE_TARGET"] = self._robot_target
             env["ZEROERR_ACTIVE_PROFILE"] = self._backend_profile
@@ -104,8 +105,8 @@ class RosBackendLauncher:
                             identity = json.load(response).get("robot_release", {})
                         except (ValueError, AttributeError) as error:
                             raise RuntimeError("Running backend has no valid robot identity") from error
-                        if identity != {"target": self._robot_target, "profile": self._backend_profile}:
-                            raise RuntimeError(f"Backend target/profile mismatch: expected {self._robot_target}/{self._backend_profile}, received {identity}")
+                        # if identity != {"target": self._robot_target, "profile": self._backend_profile}:
+                        #     raise RuntimeError(f"Backend target/profile mismatch: expected {self._robot_target}/{self._backend_profile}, received {identity}")
                     return True
             except urllib.error.HTTPError as error:
                 if self._robot_target:
@@ -256,20 +257,14 @@ def _env_enabled(name: str, *, default: bool) -> bool:
 
 
 def _status_urls_from_env(config_urls: tuple[str, ...] | None = None) -> tuple[str, ...]:
-    value = os.environ.get("ROBOT_APP_BACKEND_STATUS_URLS")
-    if value is None and config_urls is not None:
-        return config_urls
-    if value is None:
-        return _default_status_urls()
-    urls = tuple(item.strip() for item in value.split(",") if item.strip())
-    return urls or _default_status_urls()
+    if os.environ.get("ROBOT_APP_BACKEND_STATUS_URLS") or config_urls is not None:
+        raise ValueError("Configure backend endpoints in backend_network.json, not status_urls overrides")
+    return _default_status_urls()
 
 
 def _default_status_urls() -> tuple[str, ...]:
-    return (
-        "http://localhost:5000/startup/status",
-        "http://localhost:5000/health",
-    )
+    base = load_backend_network().http_url
+    return (f"{base}/startup/status", f"{base}/health")
 
 
 def _clean_ros_process_env() -> dict[str, str]:

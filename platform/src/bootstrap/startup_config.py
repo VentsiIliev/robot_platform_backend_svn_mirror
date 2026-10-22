@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
-from src.engine.diagnostics.events import observe
+from src.engine.diagnostics.config import DiagnosticsConfig
 import re
 from dataclasses import dataclass, field
 from importlib import import_module
@@ -52,6 +51,7 @@ class StartupConfig:
     ros_backend: RosBackendConfig = field(default_factory=RosBackendConfig)
     ui: UiStartupConfig = field(default_factory=UiStartupConfig)
     system_config: dict = field(default_factory=dict)
+    diagnostics: DiagnosticsConfig = field(default_factory=DiagnosticsConfig)
 
 
 def load_startup_config(config_path: Path = DEFAULT_CONFIG_PATH) -> StartupConfig:
@@ -85,18 +85,13 @@ def load_startup_config(config_path: Path = DEFAULT_CONFIG_PATH) -> StartupConfi
         )
 
     selected = load_robot_system_config(payload, robot_system)
-    observe(logging.getLogger(__name__), "platform.configuration_loaded",
-            robot_system=robot_system,
-            build_info={key: selected[key] for key in (
-                "release_version", "platform_version", "backend_version",
-                "robot_driver", "backend", "backend_profile")})
-
     return StartupConfig(
         robot_system=robot_system,
         system_config=selected,
         supported_robot_systems=supported_robot_systems,
         ros_backend=_load_ros_backend_config(payload.get("ros_backend")),
         ui=_load_ui_startup_config(payload.get("ui")),
+        diagnostics=DiagnosticsConfig.from_mapping(payload.get('diagnostics')),
     )
 
 
@@ -280,7 +275,7 @@ def build_configured_robot(config: StartupConfig):
     """Both supported ROS backends expose the same platform bridge contract."""
     load_robot_system_config({"robot_systems": {config.robot_system: config.system_config}}, config.robot_system)
     from src.engine.robot.drivers.ros2_robot import Ros2Robot
-    return Ros2Robot(server_url="http://localhost:5000")
+    return Ros2Robot()
 
 
 def _read_password_path(payload: dict) -> str:

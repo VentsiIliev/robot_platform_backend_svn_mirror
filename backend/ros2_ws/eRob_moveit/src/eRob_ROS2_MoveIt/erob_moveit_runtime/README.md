@@ -1,88 +1,58 @@
-# `fairino5_v6_moveit2_config`
+# `erob_moveit_runtime`
 
-ROS2 + MoveIt2 bridge package for the Fairino 5 v6 robot.
+Shared ROS 2/MoveIt runtime used by ZeroErr and Fairino configuration packages.
+It contains the Python controller, backend facade, motion planning/execution,
+state publication, API adapters and C++ planning/trajectory helpers. Robot models,
+launch composition and profile values belong to the robot configuration package.
 
-This package contains:
-- the Python control node that owns planning, execution, queueing, safety walls, monitoring, and REST exposure
-- helper Python modules for motion planning, execution, safety, status, and transforms
-- C++ helper nodes for time-parameterization and robot-state publishing
-- the custom `ApplyIPP.srv` service used by trajectory optimization helpers
+## Entry points and responsibilities
 
-## Main Entry Points
-
-- `scripts/main.py`
-  - desktop/dev entrypoint that starts `RobotController`, creates the configured backend through `backend_factory.py`, and launches the REST server in the same process
-- `scripts/robot_controller.py`
-  - the main ROS node (`erob_runtime_controller`) that owns MoveIt service clients, motion queueing, safety walls, and monitoring state
-- `scripts/rest/main.py`
-  - REST process entry point used by `scripts/main.py` when the REST server runs in a separate process
-- `scripts/rest/server.py`
-  - Flask REST bridge exposing motion, stop, status, safety-wall control, and reachability validation
-- `scripts/rest/api_support.py`
-  - REST-only helpers for motion error mapping, jog payload parsing, and pose reachability validation
-- `scripts/rest/openapi.py`
-  - OpenAPI spec and Swagger HTML served at `/openapi.json` and `/docs`
-- `scripts/backend/moveit_robot_backend.py`
-  - robot-style backend used by the REST layer; converts workobject/user/tool inputs into node execution requests
-
-## High-Level Architecture
+- `scripts/main.py`: starts HTTP with asynchronous runtime initialization;
+  `EROB_RUNTIME_HEADLESS` selects operation without the Qt event loop.
+- `scripts/runtime_initializer.py`: initializes ROS, `RobotController` and the
+  backend selected by the active package/profile.
+- `scripts/robot_controller.py`: owns ROS clients, motion coordination, state,
+  workspace safety and the motion interlock.
+- `scripts/rest/main.py`: standalone REST entry point.
+- `scripts/rest/server.py`: HTTP startup, readiness gate and API composition.
+- `scripts/rest/routes/`: thin routes for Configuration, Motion, State and Control.
+- `scripts/runtime_api/`: typed requests/responses, validation and error mapping.
+- `scripts/runtime_gateway/`: transport-independent contract, local implementation
+  and ROS/diagnostic adapters.
+- `scripts/configuration/`: profile validation, revisions, atomic YAML storage and
+  runtime application; saving and applying are separate outcomes.
+- `scripts/backend/`: robot-style backend facade used behind the gateway.
+- `scripts/motion/`: planning, execution, Servo and stop strategies.
+- `scripts/runtime_websockets/`: state, execution and sensor streams.
 
 ```text
-REST client
-  -> rest/server.py
-    -> rest/api_support.py for request parsing / validation helpers
-    -> MoveItRobotBackend
-      -> RobotController
-        -> motion.strategies
-          -> motion.planning
-            -> MoveIt services
-          -> motion.execution
-            -> FollowJointTrajectory action
+HTTP client -> rest/routes -> ConfigurationApi / MotionApi / StateApi / ControlApi
+                          -> RuntimeGateway -> LocalRuntimeGateway
+                          -> configuration services / backend / RobotController
+                          -> ROS services, actions and controllers
 ```
 
-Supporting subsystems:
-- `safety/`
-  - safety walls, workspace validation, collision-object publishing
-- `status/`
-  - joint/cartesian state store, monitoring, ROS status publishing
-- `utils/`
-  - transforms, workobjects, workspace extraction
+All four API groups follow this boundary. The legacy `RuntimeApi` facade delegates
+to them. WebSocket servers retain their own stream implementations in the same
+process; a remote ROS gateway and API process separation are future work.
 
-## Key Behaviors
+Configuration persists per robot profile. The backend can start and load those
+files without the platform. A UI save uses the backend configuration API and must
+check `pending_application`; it does not automatically restart or recalibrate.
 
-- Point-to-point and path moves are planned in Cartesian space and then time-parameterized before controller execution.
-- Motion requests can be queued; queued and immediate commands share one execution/ownership path.
-- Workspace safety exists in two layers:
-  - local precheck against extracted workspace bounds
-  - remote MoveIt planning-scene safety walls
-- The REST server exposes wall enable/disable/status APIs and a planning-only pose reachability check.
+Motion acceptance does not prove completion. Nonblocking/queued requests return
+202; blocking completions return 200. Inspect typed `error_info` and execution
+state when commands fail or have an unknown outcome. Collision reset keeps motion
+interlocked until fresh matching observer readiness is confirmed.
 
-## Reachability Validation
-
-`POST /reachability/pose` is intended for simulation/precheck workflows such as platform grid verification.
-
-Current semantics:
-- solve IK for the supplied start pose
-- solve IK for the target pose, seeded from the start solution
-- run `check_state_validity` on the target joint state
-
-This keeps:
-- target-pose reachability
-- joint-limit checks
-- endpoint collision checks
-
-It does **not** guarantee that the full Cartesian path between start and target is collision-free. Actual robot execution still uses the full motion planning path.
-
-## Docs
+## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
-- [REST API](docs/REST_API.md)
-- [Motion And Safety](docs/MOTION_AND_SAFETY.md)
+- [API/gateway contracts and extension rules](docs/runtime_api_architecture.md)
+- [REST routes](docs/REST_API.md) and [request flows](docs/API_ENDPOINT_FLOWS.md)
+- [Profile configuration API](docs/backend_configuration.md)
+- [Motion and safety](docs/MOTION_AND_SAFETY.md)
+- [Build and launch](../../../../BUILD_SCRIPTS_README.md)
+- [Backend documentation index](../../../../../docs/README.md)
 
-## Profile configuration API
-
-See [Backend profile configuration](docs/backend_configuration.md) for ownership,
-revision-checked edits, saved/applied status, and standalone operation.
-
-See [Runtime API architecture](docs/runtime_api_architecture.md) for the four API
-groups, gateway contract, typed failures, HTTP/OpenAPI contracts and extension/testing rules.
+The running backend serves `/docs`, `/api/docs` and `/openapi.json`.

@@ -280,6 +280,19 @@ def _load_runtime_config() -> dict[str, Any]:
 
 
 _CONFIG = _load_runtime_config()
+# Transport endpoints are installation-level settings, never robot/profile overrides.
+from backend_network import load_backend_network
+_NETWORK = load_backend_network()
+_CONFIG.update({
+    'REST_HOST': _NETWORK.bind_host,
+    'REST_PORT': _NETWORK.http_port,
+    'REST_WS_STATE_HOST': _NETWORK.bind_host,
+    'REST_WS_STATE_PORT': _NETWORK.state_ws_port,
+    'REST_WS_EXECUTION_HOST': _NETWORK.bind_host,
+    'REST_WS_EXECUTION_PORT': _NETWORK.execution_ws_port,
+    'REST_WS_SENSOR_HOST': _NETWORK.bind_host,
+    'REST_WS_SENSOR_PORT': _NETWORK.sensor_ws_port,
+})
 globals().update(_CONFIG)
 
 

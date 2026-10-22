@@ -471,6 +471,7 @@ class TestMotionService(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_start_jog_delegates_to_robot(self):
+        self.robot.get_current_position.return_value = [0, 0, 300, 0, 0, 0]
         self.robot.start_jog.return_value = 0
         result = self.service.start_jog(RobotAxis.Z, Direction.PLUS, 5.0)
         self.assertEqual(result, 0)

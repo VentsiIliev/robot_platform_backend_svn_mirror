@@ -1,5 +1,7 @@
 # Refactor: Remove Node-Passing Anti-Pattern from Motion Subsystem
 
+> Historical extraction plan. Proposed phases and node-passing examples are design context; use the [current runtime architecture](../eRob_moveit/src/eRob_ROS2_MoveIt/erob_moveit_runtime/docs/ARCHITECTURE.md) for implemented ownership.
+
 **Status:** Core extraction complete — `PlannerContext` / `MotionCoordinator` / `TrajectoryExecutor` / `RobotStateStore` / `PlannerSupportService` / `TrajectoryOptimizer` are all in place.
 Phase 3 (full `TrajectoryPlanner` class consolidation) is deprioritised — see notes below.
 **Scope:** `scripts/motion/` + `scripts/robot_controller.py`

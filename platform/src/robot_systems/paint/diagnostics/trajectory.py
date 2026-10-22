@@ -9,6 +9,8 @@ import re
 from time import perf_counter
 
 import numpy as np
+from src.engine.diagnostics.work_budget import WorkBudget
+from src.engine.diagnostics.events import observe
 
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 from src.robot_systems.paint.processes.paint.configuration.models import (
@@ -36,6 +38,25 @@ _TRAJECTORY_EXPORT_EXECUTOR = ThreadPoolExecutor(
     max_workers=1,
     thread_name_prefix="platform_trajectory_export",
 )
+_TRAJECTORY_EXPORT_BUDGET = WorkBudget(max_jobs=2, max_units=100000)
+_CART_PATH_DIAG_BUDGET = WorkBudget(max_jobs=2, max_units=100000)
+
+
+def _path_rows(path):
+    if type(path) not in (list, tuple):
+        raise ValueError('Diagnostic paths must be lists or tuples')
+    return len(path)
+
+
+def _copy_path(path):
+    rows = []
+    for pose in path:
+        if type(pose) not in (list, tuple) or len(pose) > 6:
+            raise ValueError('Diagnostic points must contain at most six primitive coordinates')
+        if any(type(value) not in (int, float, np.float32, np.float64, np.int32, np.int64) for value in pose):
+            raise ValueError('Diagnostic coordinates must be primitive numbers')
+        rows.append(tuple(float(value) for value in pose))
+    return tuple(rows)
 
 
 def elapsed_s(start: float) -> float:
@@ -83,34 +104,63 @@ def write_platform_command_path_csv(
     pipeline_stages: dict[str, list[list[float]]] | None = None,
 ) -> Future[ExportResult]:
     """Queue optional diagnostics; the future reports completion without blocking motion."""
-    if not command_path:
-        return _completed_export(ExportSkipped(stage, "empty command path"))
+    reservation = None
     try:
-        snapshot = tuple(tuple(float(value) for value in pose[:6]) for pose in command_path)
+        rows = _path_rows(command_path)
+        if not rows:
+            return _completed_export(ExportSkipped(stage, "empty command path"))
+        pipeline = pipeline_stages if pipeline_stages is not None else {}
+        if type(pipeline) is not dict or len(pipeline) > 16:
+            raise ValueError('Diagnostic pipeline must contain at most sixteen paths')
+        if any(type(name) is not str or len(name) > 128 for name in pipeline):
+            raise ValueError('Invalid diagnostic path name')
+        rows += sum(_path_rows(points) for points in pipeline.values())
+        reservation = _TRAJECTORY_EXPORT_BUDGET.reserve(rows)
+        if reservation is None:
+            observe(_logger, 'diagnostics.artifact.skipped',
+                    metrics={'diagnostics.artifact.skipped': 1},
+                    artifact='trajectory_export', reason='work_budget', stage=stage)
+            return _completed_export(ExportSkipped(stage, 'diagnostic work budget exhausted'))
+        snapshot = _copy_path(command_path)
         pipeline_snapshot = {
-            str(name): tuple(tuple(float(value) for value in point) for point in points)
-            for name, points in (pipeline_stages or {}).items()
+            name: _copy_path(points)
+            for name, points in pipeline.items()
             if points
         }
         velocity, acceleration = float(vel), float(acc)
     except (TypeError, ValueError, OverflowError) as exc:
+        if reservation is not None:
+            reservation.release()
         return _completed_export(_export_failure(
             exc, phase="snapshot", stage=stage, code=ExportFailureCode.INVALID_INPUT,
         ))
     except Exception as exc:
+        if reservation is not None:
+            reservation.release()
         # This is the optional-diagnostics boundary, not a motion failure handler.
         return _completed_export(_export_failure(exc, phase="snapshot", stage=stage))
+    except BaseException:
+        if reservation is not None:
+            reservation.release()
+        raise
     try:
-        return _TRAJECTORY_EXPORT_EXECUTOR.submit(
+        future = _TRAJECTORY_EXPORT_EXECUTOR.submit(
             _write_platform_command_path_artifacts,
             snapshot, velocity, acceleration, str(pattern_type), str(stage), pipeline_snapshot,
         )
+        future.add_done_callback(reservation.release)
+        return future
     except RuntimeError as exc:
+        reservation.release()
         return _completed_export(_export_failure(
             exc, phase="submit", stage=stage, code=ExportFailureCode.UNAVAILABLE,
         ))
     except Exception as exc:
+        reservation.release()
         return _completed_export(_export_failure(exc, phase="submit", stage=stage))
+    except BaseException:
+        reservation.release()
+        raise
 
 
 def _write_platform_command_path_artifacts(
@@ -376,11 +426,25 @@ def _set_equal_3d_axes(axis, xyz: np.ndarray) -> None:
 
 
 def _log_cartesian_command_path_diagnostics(command_path: list[list[float]]) -> None:
-    snapshot = [list(pose) for pose in command_path or []]
-    _CART_PATH_DIAG_EXECUTOR.submit(
-        _run_cartesian_command_path_diagnostics,
-        snapshot,
-    )
+    reservation = None
+    try:
+        reservation = _CART_PATH_DIAG_BUDGET.reserve(_path_rows(command_path))
+        if reservation is None:
+            observe(_logger, 'diagnostics.artifact.skipped',
+                    metrics={'diagnostics.artifact.skipped': 1},
+                    artifact='cartesian_path_analysis', reason='work_budget')
+            return
+        snapshot = _copy_path(command_path)
+        future = _CART_PATH_DIAG_EXECUTOR.submit(_run_cartesian_command_path_diagnostics, snapshot)
+        future.add_done_callback(reservation.release)
+    except Exception:
+        if reservation is not None:
+            reservation.release()
+        # Optional analysis never changes the submitted robot path/result.
+    except BaseException:
+        if reservation is not None:
+            reservation.release()
+        raise
 
 
 def _run_cartesian_command_path_diagnostics(command_path: list[list[float]]) -> None:

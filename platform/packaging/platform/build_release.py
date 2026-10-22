@@ -86,6 +86,10 @@ def main():
                 target.add(source / "src/engine/updates", arcname=f"{updater_prefix}/src/engine/updates", filter=exclude_updater_cache)
                 target.add(source / "src/__init__.py", arcname=f"{updater_prefix}/src/__init__.py")
                 target.add(source / "src/engine/__init__.py", arcname=f"{updater_prefix}/src/engine/__init__.py")
+            for name in ("__init__.py", "durable_files.py"):
+                relative = f"installation/updater/src/engine/core/{name}"
+                if not (bundle / relative).is_file():
+                    target.add(source / f"src/engine/core/{name}", arcname=f"platform/{relative}")
             if args.migrations:
                 target.add(args.migrations, arcname="migrations")
     with archive.open("rb") as stream:
@@ -114,6 +118,8 @@ def main():
             def exclude_cache(member):
                 return None if "__pycache__" in Path(member.name).parts else member
             target.add(source / "src/engine/updates", arcname=f"{kit_prefix}/tools/src/engine/updates", filter=exclude_cache)
+            for name in ("__init__.py", "durable_files.py"):
+                target.add(source / f"src/engine/core/{name}", arcname=f"{kit_prefix}/tools/src/engine/core/{name}")
             target.add(source / "src/__init__.py", arcname=f"{kit_prefix}/tools/src/__init__.py")
             target.add(source / "src/engine/__init__.py", arcname=f"{kit_prefix}/tools/src/engine/__init__.py")
     print(archive)

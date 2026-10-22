@@ -119,7 +119,8 @@ class TestStartupSequenceOrder(unittest.TestCase):
 
         with (
             patch("src.bootstrap.run_main.EngineContext.build",
-                  side_effect=lambda: (call_order.append("engine"), fake_ctx)[1]),
+                  side_effect=lambda **kwargs: (call_order.append("engine"), fake_ctx)[1]),
+            patch("src.bootstrap.run_main.build_diagnostics_service"),
             patch("src.bootstrap.run_main.load_startup_config",
                   return_value=MagicMock(ui=MagicMock(kiosk_mode=False))),
             patch("src.bootstrap.run_main.load_bootstrap_provider",
@@ -187,6 +188,7 @@ class TestStartupAbortOnFailure(unittest.TestCase):
         qt_called = []
 
         with (
+            patch("src.bootstrap.run_main.build_diagnostics_service"),
             patch("src.bootstrap.run_main.load_startup_config",
                   return_value=MagicMock(ui=MagicMock(kiosk_mode=False))),
             patch(
@@ -212,6 +214,7 @@ class TestKioskStartup(unittest.TestCase):
         import src.bootstrap.run_main as m
         config = MagicMock(ui=MagicMock(kiosk_mode=True, kiosk_password_file='/missing/kiosk-password.json'))
         with (patch.object(m, 'load_startup_config', return_value=config),
+              patch.object(m, 'build_diagnostics_service'),
               patch.object(m, 'load_bootstrap_provider'),
               patch.object(m, 'EngineContext') as engine,
               patch.object(m, 'build_ros_backend_launcher_from_env') as backend):

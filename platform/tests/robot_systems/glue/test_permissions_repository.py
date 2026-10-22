@@ -10,6 +10,7 @@ import tempfile
 import unittest
 
 from src.engine.auth.json_permissions_repository import JsonPermissionsRepository
+from src.engine.repositories.json.json_store import JsonStoreError
 
 
 class TestJsonPermissionsRepository(unittest.TestCase):
@@ -22,7 +23,10 @@ class TestJsonPermissionsRepository(unittest.TestCase):
         self._path = self._tmp.name
 
     def tearDown(self):
-        os.unlink(self._path)
+        if os.path.exists(self._path):
+            os.unlink(self._path)
+        if os.path.exists(self._path + ".lock"):
+            os.unlink(self._path + ".lock")
 
     # ── helpers ────────────────────────────────────────────────────────────────
 
@@ -38,11 +42,11 @@ class TestJsonPermissionsRepository(unittest.TestCase):
         repo = self._make_repo({"dashboard": ["Admin", "Operator"]})
         self.assertEqual(repo.get_allowed_role_values("dashboard"), ["Admin", "Operator"])
 
-    def test_creates_empty_file_when_missing(self):
+    def test_missing_file_requires_explicit_setup_or_recovery(self):
         os.unlink(self._path)
-        repo = JsonPermissionsRepository(self._path)
-        self.assertTrue(os.path.exists(self._path))
-        self.assertEqual(repo.get_all(), {})
+        with self.assertRaises(JsonStoreError):
+            JsonPermissionsRepository(self._path)
+        self.assertFalse(os.path.exists(self._path))
 
     def test_handles_empty_json_file(self):
         with open(self._path, "w") as f:

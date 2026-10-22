@@ -78,7 +78,7 @@ class TestBuildFromSpecsDirectoryNaming(unittest.TestCase):
                 settings_root=tmp,
                 system_class=FakeSystem,
             )
-            service.get(SettingsIDTestEnum.A)  # triggers file creation
+            service.save(SettingsIDTestEnum.A, _Cfg())  # explicit initialization
 
             expected = os.path.join(tmp, "fakesystem", "cfg.json")
             self.assertTrue(os.path.exists(expected))
@@ -88,8 +88,8 @@ class TestBuildFromSpecsDirectoryNaming(unittest.TestCase):
             svc_a = build_from_specs([SettingsSpec(SettingsIDTestEnum.A, _Ser(), "cfg.json")], tmp, FakeSystem)
             svc_b = build_from_specs([SettingsSpec(SettingsIDTestEnum.A, _Ser(), "cfg.json")], tmp, AnotherSystem)
 
-            svc_a.get(SettingsIDTestEnum.A)
-            svc_b.get(SettingsIDTestEnum.A)
+            svc_a.save(SettingsIDTestEnum.A, _Cfg())
+            svc_b.save(SettingsIDTestEnum.A, _Cfg())
 
             self.assertTrue(os.path.exists(os.path.join(tmp, "fakesystem", "cfg.json")))
             self.assertTrue(os.path.exists(os.path.join(tmp, "anothersystem", "cfg.json")))
@@ -101,7 +101,7 @@ class TestBuildFromSpecsDirectoryNaming(unittest.TestCase):
                 settings_root=tmp,
                 system_class=FakeSystem,
             )
-            service.get(SettingsIDTestEnum.A)
+            service.save(SettingsIDTestEnum.A, _Cfg())
 
             expected = os.path.join(tmp, "fakesystem", "sub", "dir", "cfg.json")
             self.assertTrue(os.path.exists(expected))
@@ -119,6 +119,7 @@ class TestBuildFromSpecsMultipleSpecs(unittest.TestCase):
             service = build_from_specs(specs, tmp, FakeSystem)
 
             for name in (SettingsIDTestEnum.A, SettingsIDTestEnum.B, SettingsIDTestEnum.C):
+                service.save(name, _Cfg())
                 result = service.get(name)
                 self.assertIsInstance(result, _Cfg)
 
@@ -129,8 +130,8 @@ class TestBuildFromSpecsMultipleSpecs(unittest.TestCase):
                 SettingsSpec(SettingsIDTestEnum.B, _Ser(), "b.json"),
             ]
             service = build_from_specs(specs, tmp, FakeSystem)
-            service.get(SettingsIDTestEnum.A)
-            service.get(SettingsIDTestEnum.B)
+            service.save(SettingsIDTestEnum.A, _Cfg())
+            service.save(SettingsIDTestEnum.B, _Cfg())
 
             base = os.path.join(tmp, "fakesystem")
             self.assertTrue(os.path.exists(os.path.join(base, "a.json")))
