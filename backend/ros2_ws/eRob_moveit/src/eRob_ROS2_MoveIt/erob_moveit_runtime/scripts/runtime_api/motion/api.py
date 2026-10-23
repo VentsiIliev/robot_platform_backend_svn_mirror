@@ -152,6 +152,7 @@ class MotionApi:
             blocking=payload["blocking"],
             trajectory_optimizer=payload["trajectory_optimizer"],
             allow_collision_recovery=payload["allow_collision_recovery"],
+            recovery_jog=payload["recovery_jog"],
         )
         return self._motion_result(result, blocking=payload["blocking"])
 

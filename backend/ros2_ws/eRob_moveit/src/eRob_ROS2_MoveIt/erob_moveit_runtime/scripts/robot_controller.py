@@ -486,8 +486,8 @@ class RobotController(Node):
             self._collision_detection_suppressed = suppressed
         if changed:
             self.get_logger().warning(
-                '[CollisionRecovery] Recovery-only motion mode %s',
-                'ENABLED' if suppressed else 'disabled',
+                '[CollisionRecovery] Recovery-only motion mode '
+                + ('ENABLED' if suppressed else 'disabled')
             )
 
     def _acknowledge_collision_callback(
@@ -1078,15 +1078,17 @@ class RobotController(Node):
             self.get_logger().warning(f"Could not get TCP transform from tf: {e}")
             return np.eye(4)
 
-    def execute(self, strategy, queue_if_busy=True):
+    def execute(self, strategy, queue_if_busy=True, *, recovery_jog=False):
         if not self.is_drive_operation_enabled_for_motion():
             self.get_logger().error(
                 f'[DriveEnable] Rejecting motion: {self.get_drive_enable_fault_reason()}'
             )
             return MOTION_ERROR_DRIVE_NOT_ENABLED
-        if not self.is_hardware_ready_for_motion():
+        readiness_check = (self.is_hardware_ready_for_collision_recovery
+                           if recovery_jog else self.is_hardware_ready_for_motion)
+        if not readiness_check():
             self.get_logger().error(
-                f'[EtherCAT] Rejecting motion: {self.get_hardware_fault_reason()}'
+                f'[Motion] Rejecting motion: {self.get_hardware_fault_reason()}'
             )
             return MOTION_ERROR_HARDWARE_NOT_READY
         if not self.is_motion_stack_ready():
@@ -1489,7 +1491,14 @@ class RobotController(Node):
             was_active = self._motion_interlock_active
             reason = self._motion_interlock_reason
             previous_event = self.last_collision_event
-            collision_reset = recalibrate or (was_active and isinstance(previous_event, dict))
+            # A drive fault can rearm the observer without latching a collision
+            # stop (for example in logging-only mode). An explicit reset must
+            # recover that observer too, through the same guarded handshake.
+            observer_reset = not bool(getattr(self, '_fake_hardware', False)) and (
+                not self._collision_monitor_ready
+                or time.monotonic() - self._collision_monitor_state_ts > 0.5
+            )
+            collision_reset = recalibrate or observer_reset or (was_active and isinstance(previous_event, dict))
             previous_acknowledgements = self._collision_monitor_acknowledgements
             full_calibration = (
                 recalibrate
@@ -1594,9 +1603,10 @@ class RobotController(Node):
         if was_active:
             self.get_logger().warning(f'[MotionInterlock] Motion interlock reset by operator: {reason}')
         return {
-            "success": True, "reset": bool(was_active or recalibrate), "previous_reason": reason,
+            "success": True, "reset": bool(was_active or recalibrate or observer_reset), "previous_reason": reason,
             "message": ("Collision monitor recalibrated" if recalibrate else
-                        "Collision interlock acknowledged" if was_active else "No motion interlock was active"),
+                        "Collision interlock acknowledged" if was_active else
+                        "Collision monitor rearmed" if observer_reset else "No motion interlock was active"),
         }
 
     def _interlock_reset_unsafe_reason(self) -> str | None:
@@ -1629,6 +1639,7 @@ class RobotController(Node):
                 "active": bool(self._motion_interlock_active or self._collision_recovery_hold),
                 "reason": reason,
                 "collision_monitor_ready": bool(self._collision_monitor_ready),
+                "collision_monitor_required": not self._fake_hardware,
                 "recovery_hold": bool(self._collision_recovery_hold),
             }
 

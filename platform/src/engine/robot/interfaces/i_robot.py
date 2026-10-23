@@ -31,6 +31,7 @@ class IRobot(ABC):
         blend_radius: float = 0.0,
         blocking: bool = True,
         allow_collision_recovery: bool = False,
+        recovery_jog: bool = False,
     ) -> int:
         """Straight-line TCP motion. Returns 0 on success."""
         ...
@@ -210,6 +211,10 @@ class IRobot(ABC):
 
     def get_execution_status(self):
         """Optional execution/queue status from the underlying robot bridge."""
+        return None
+
+    def get_current_position_sample(self) -> dict | None:
+        """Optional pose with ROS source and observation timestamps in nanoseconds."""
         return None
 
     def get_last_trajectory_command_info(self):

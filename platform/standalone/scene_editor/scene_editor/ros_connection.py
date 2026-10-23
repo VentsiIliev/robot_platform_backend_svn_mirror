@@ -25,6 +25,7 @@ class RosOptions:
     scene_service: str = '/get_planning_scene'
     apply_service: str = '/apply_planning_scene'
     description_topic: str = '/robot_description'
+    preview_topic: str = '/ordered_motion/preview'
     tf_topic: str = '/tf'
     tf_static_topic: str = '/tf_static'
     marker_topics: tuple = ('/rviz_visual_tools', '/safety_walls', '/active_tool_markers')
@@ -219,7 +220,7 @@ class RosConnection(QObject):
         arguments = ['--cache', directory]
         if self.package_root:
             arguments.extend(['--mesh-root',str(self.package_root)])
-        for name in ('fixed_frame', 'scene_topic', 'scene_service', 'description_topic', 'tf_topic', 'tf_static_topic'):
+        for name in ('fixed_frame', 'scene_topic', 'scene_service', 'description_topic', 'tf_topic', 'tf_static_topic','preview_topic'):
             arguments.extend(['--'+name.replace('_', '-'), getattr(options, name)])
         arguments.extend(['--marker-topics', *options.marker_topics])
         return ros_command(options, 'ros_helper.py', arguments)

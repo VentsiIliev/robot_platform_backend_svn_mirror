@@ -359,7 +359,7 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
                     label=label
                 )
             )
-            show_warning(self._view, self._t(label), msg)
+            show_warning(self._view, self._t(label), self._t(msg))
         else:
             self._logger.info("%s completed successfully", label)
 

@@ -118,6 +118,10 @@ private:
   JointVector residual_{};
   JointVector filtered_residual_{};
   JointVector expected_torque_{};
+  JointVector observer_auxiliary_torque_{};
+  JointVector sample_position_{};
+  JointVector sample_torque_{};
+  bool training_sample_valid_{false};
   JointVector friction_correction_{};
   JointVector position_correction_{};
   JointVector motion_correction_{};

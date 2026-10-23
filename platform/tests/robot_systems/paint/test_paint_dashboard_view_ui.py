@@ -109,6 +109,34 @@ class _FakeDashboardWidget(QWidget):
 
 
 class TestPaintDashboardUi(unittest.TestCase):
+    def test_observer_recovery_dialog_actions_match_recovery_mode_in_both_languages(self):
+        import json
+        import tempfile
+        from pathlib import Path
+        from src.engine.localization.localization_service import LocalizationService
+
+        app = QApplication.instance() or QApplication([])
+        catalogs = Path(__file__).resolve().parents[3] / "src/robot_systems/paint_tray_dry/storage/translations"
+        with tempfile.TemporaryDirectory() as directory:
+            service = LocalizationService(str(catalogs), state_file=Path(directory) / "language.json")
+            try:
+                for lang in ("en", "bg", "en"):
+                    service.set_language(lang)
+                    catalog = json.loads((catalogs / f"{lang}.json").read_text())["PaintDashboard"]
+                    view = SimpleNamespace(_translate_text=PaintDashboardView._translate_text)
+                    for observer in (False, True):
+                        with self.subTest(lang=lang, observer=observer), patch(
+                            "src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view.show_styled_warning",
+                            return_value="acknowledge",
+                        ) as dialog:
+                            self.assertTrue(PaintDashboardView.ask_collision_acknowledgement(
+                                view, "title", "message", observer_recovery=observer))
+                            actions = dialog.call_args.kwargs["actions"]
+                            expected = ("Keep Motion Held", "Reset observer") if observer else ("Keep Hold", "Acknowledge and Clear Hold")
+                            self.assertEqual([catalog[key] for key in expected], [action.text for action in actions])
+            finally:
+                service._remove_installed_translator(app)
+
     def test_paint_head_buttons_remain_available_when_settings_are_locked(self) -> None:
         drawer = PaintControlsDrawer([])
         requests = []

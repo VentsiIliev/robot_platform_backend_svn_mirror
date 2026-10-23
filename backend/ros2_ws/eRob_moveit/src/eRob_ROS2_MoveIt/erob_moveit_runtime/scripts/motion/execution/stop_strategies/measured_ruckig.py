@@ -38,6 +38,10 @@ class MeasuredRuckigStop:
                 raise ValueError('joint state aged out during collision brake generation')
             dispatch_deadline = time.monotonic() + max_age - max(age, source_age)
             traj = JointTrajectory()
+            # The real controller treats this as a bounded collision request and
+            # regenerates from its outgoing command at the RT takeover cycle.
+            # The measured preview remains the dispatch/freshness guard only.
+            traj.header.frame_id = "zeroerr_command_brake_v1"
             traj.joint_names = list(generator.names)
             # Zero header stamp: start on receipt, without a past absolute timestamp.
             for row in rows:
@@ -53,7 +57,7 @@ class MeasuredRuckigStop:
                 raise ValueError('invalid standstill velocity tolerance')
             return StopPlan(traj, server_timeout_s=0.0, dispatch_deadline=dispatch_deadline,
                             goal_velocity_tolerance=velocity_tolerance), (
-                f'generator=measured_ruckig state_age_s={age:.4f} duration={rows[-1][0]:.4f}s '
+                f'generator=measured_ruckig_preview takeover=controller_command state_age_s={age:.4f} duration={rows[-1][0]:.4f}s '
                 f'points={len(rows)} initial_positions={list(rows[0][1:7])} '
                 f'initial_velocities={list(rows[0][7:13])} '
                 f'initial_accelerations={list(rows[0][13:19])} travel_rad={travel} held_joints=[]')

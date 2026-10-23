@@ -72,6 +72,10 @@ class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
     def get_execution_status(self):
         return None
 
+    def get_current_position_sample(self) -> dict | None:
+        """Return timestamped feedback when supported; never fabricate freshness."""
+        return None
+
     def get_last_trajectory_command_info(self):
         return None
 

@@ -11,7 +11,7 @@ class IRobotBackend(ABC):
     def set_workobject(self, workobject: Any, user_id: int = 0) -> None: ...
 
     @abstractmethod
-    def move_liner(self, position, tool=0, user=0, vel=30, acc=30, blendR=0, blocking=True, trajectory_optimizer=None): ...
+    def move_liner(self, position, tool=0, user=0, vel=30, acc=30, blendR=0, blocking=True, trajectory_optimizer=None, allow_collision_recovery=False, planning_strategy="configured", recovery_jog=False): ...
 
     @abstractmethod
     def move_ptp(self, position, tool=0, user=0, vel=30, acc=30, blendR=0, blocking=True, trajectory_optimizer=None): ...
@@ -66,6 +66,10 @@ class IRobotBackend(ABC):
 
     @abstractmethod
     def get_current_position(self): ...
+
+    def get_current_position_sample(self):
+        """Optional timestamped feedback, in the active user frame."""
+        return None
 
     @abstractmethod
     def get_current_flange_position(self): ...

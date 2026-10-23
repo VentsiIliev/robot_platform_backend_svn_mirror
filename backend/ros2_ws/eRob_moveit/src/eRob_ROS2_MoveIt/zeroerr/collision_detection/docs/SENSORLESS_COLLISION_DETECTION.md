@@ -927,3 +927,44 @@ For older external configurations only, the deprecated
 strategy if the named setting is absent. The named setting takes precedence.
 Other robot packages without either setting retain `planned_path`. Strategy
 selection does not alter the regular operator/process Stop profile.
+
+
+### Command-continuous collision takeover
+
+Real hardware uses `zeroerr/CommandCollisionTrajectoryController`, a standard
+JointTrajectoryController subclass. Ordinary trajectories and operator Stop use
+unchanged base-controller behavior. The `measured_ruckig` runtime strategy still
+checks fresh complete measured state and previews the brake, then marks the goal
+with `header.frame_id=zeroerr_command_brake_v1`.
+
+The controller regenerates that marked brake once, inside its update cycle, from
+`last_commanded_state_` (position, velocity and acceleration). It checks current
+hardware position against the profile tracking tolerance. Joint velocity,
+acceleration/deceleration and jerk limits come from the active profile's
+`joint_limits.yaml`, or its package default; position bounds come from the exact
+controller URDF. Duration and travel limits remain profile-owned. Travel is
+bounded relative to current measured position, including command tracking error.
+
+A time-zero first point now equals the outgoing command, avoiding the previous
+jump back to delayed measured position. The controller uses fixed-size storage,
+no heap allocation in the generator, and preallocated alternating ROS buffers.
+The dense trajectory has 1201 points with at most 0.5 ms between points. Bounds
+are conservatively checked between samples. Installed-JTC interpolation tests
+cover all three recorded fault cases with deliberately offset measured feedback.
+
+`[CollisionCommandBrake]` reports acceptance, generation time, initial command
+tracking error, start position discontinuity, actual duration and actual endpoint.
+It is formatted on a non-RT timer. Python's measured-preview endpoint is not the
+regenerated controller endpoint. The action result reports `controller_error`;
+use the controller record for authoritative stop geometry. If takeover generation
+fails, the controller returns ERROR rather than executing the old measured-origin
+trajectory. Controller-manager error handling applies and the backend collision
+interlock remains latched. This is not a safety-rated drive stop.
+
+Rebuild **both zeroerr and erob_moveit_runtime** and restart the complete backend
+to load the matching plugin/configuration and request marker. Do not run the new
+Python marker path with an older standard-JTC configuration. No collision model,
+threshold, sensitivity or confirmation setting is changed by this correction.
+Offline tests establish software continuity, not physical stopping performance:
+validate the new handoff and drive/power behavior at reduced speed before further
+contact tests. Existing undervoltage faults still require hardware investigation.

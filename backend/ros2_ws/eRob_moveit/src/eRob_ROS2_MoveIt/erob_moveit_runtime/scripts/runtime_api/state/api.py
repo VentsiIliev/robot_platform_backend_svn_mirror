@@ -26,6 +26,13 @@ class StateApi:
         except KeyError as exc:
             return response_error(str(exc), 404)
 
+    @api_operation("state.current_position_sample")
+    def current_position_sample(self) -> ApiResponse[StateResponse]:
+        sample = self._gateway.get_current_position_sample()
+        if sample is None:
+            return response_error("timestamped position feedback unavailable", 503)
+        return ApiResponse({"success": True, **sample})
+
     @api_operation("state.current_position")
     def current_position(self) -> ApiResponse[StateResponse]:
         pos = self._gateway.get_current_position()

@@ -17,9 +17,10 @@ def callbacks():
     cls = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "RobotController")
     methods = [node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name in {
         "_collision_runtime_context", "_collision_monitor_stop_callback", "_collision_monitor_state_callback",
+        "_collision_monitor_config_callback",
         "reset_motion_interlock", "_startup_auto_enable_drives_loop",
         "is_hardware_ready_for_drive_enable",
-        "is_hardware_ready_for_motion", "get_hardware_fault_reason",
+        "is_hardware_ready_for_motion", "get_hardware_fault_reason", "get_motion_interlock_status",
     }]
     module = ast.fix_missing_locations(ast.Module(body=methods, type_ignores=[]))
     namespace = {"json": json, "time": time, "String": SimpleNamespace, "DynamicJointState": SimpleNamespace,
@@ -45,6 +46,29 @@ class TestCollisionRuntimeLogging(unittest.TestCase):
             collision_stop=MagicMock(return_value={"success": True}),
         )
         self.robot._collision_runtime_context = lambda: self.methods["_collision_runtime_context"](self.robot)
+
+    def test_recovery_config_changes_use_ros_logger_signature(self):
+        # Autospec the actual ROS signature so MagicMock cannot hide a callback crash.
+        from rclpy.impl.rcutils_logger import RcutilsLogger
+        from unittest.mock import create_autospec
+        self.logger = create_autospec(RcutilsLogger, instance=True)
+        callback = self.methods["_collision_monitor_config_callback"]
+        for suppressed, label in ((True, "ENABLED"), (False, "disabled")):
+            with self.subTest(suppressed=suppressed):
+                callback(self.robot, SimpleNamespace(data=json.dumps({
+                    "collision_detection_suppressed": suppressed,
+                })))
+                self.assertEqual(self.robot._collision_detection_suppressed, suppressed)
+                self.logger.warning.assert_called_with(
+                    "[CollisionRecovery] Recovery-only motion mode " + label)
+        self.assertEqual(self.logger.warning.call_count, 2)
+
+    def test_unchanged_or_invalid_recovery_config_does_not_log(self):
+        callback = self.methods["_collision_monitor_config_callback"]
+        for data in ('{}', '{"collision_detection_suppressed": false}', '[]', 'bad json'):
+            callback(self.robot, SimpleNamespace(data=data))
+        self.assertFalse(self.robot._collision_detection_suppressed)
+        self.logger.warning.assert_not_called()
 
     def prepare_startup(self):
         self.robot._fake_hardware = False
@@ -318,6 +342,17 @@ class TestCollisionRuntimeLogging(unittest.TestCase):
         self.assertTrue(self.robot._motion_interlock_active)
         self.robot.runtime_adapter.set_drive_operation_enabled.assert_not_called()
 
+    def test_interlock_status_distinguishes_real_and_fake_observer_requirement(self):
+        self.robot._motion_interlock_reason = ""
+        self.robot._collision_monitor_ready = False
+        for fake in (False, True):
+            with self.subTest(fake=fake):
+                self.robot._fake_hardware = fake
+                result = self.methods["get_motion_interlock_status"](self.robot)
+                self.assertFalse(result["active"])
+                self.assertFalse(result["collision_monitor_ready"])
+                self.assertEqual(not fake, result["collision_monitor_required"])
+
     def test_motion_requires_fresh_ready_monitor_on_real_hardware(self):
         self.robot._fake_hardware = False
         self.robot._ethercat_fault_lock = threading.Lock()
@@ -341,6 +376,72 @@ class TestCollisionRuntimeLogging(unittest.TestCase):
         self.methods["_collision_monitor_state_callback"](self.robot, sample)
         self.assertEqual(self.robot._collision_monitor_acknowledgements, 3)
         self.assertTrue(self.robot._collision_monitor_baseline_valid)
+
+    def test_explicit_reset_rearms_unready_observer_without_latched_collision(self):
+        for stale_only in (False, True):
+            with self.subTest(stale_only=stale_only):
+                self.setUp()
+                self.prepare_reset()
+                self.robot._motion_interlock_active = False
+                self.robot._motion_interlock_reason = ""
+                self.robot.last_collision_event = None
+                self.robot._fake_hardware = False
+                self.robot._collision_monitor_ready = stale_only
+                self.robot._collision_monitor_state_ts = -1.0
+
+                def on_sleep(now):
+                    self.assertTrue(self.robot._collision_recovery_hold)
+                    self.robot._collision_monitor_ready = True
+                    self.robot._collision_monitor_state_ts = now
+                    self.robot._collision_monitor_acknowledgements = 1
+
+                self.fake_clock(on_sleep)
+                result = self.methods["reset_motion_interlock"](self.robot)
+                self.assertTrue(result["success"], result)
+                self.assertTrue(result["reset"])
+                self.assertEqual("Collision monitor rearmed", result["message"])
+                self.robot._collision_acknowledged_pub.publish.assert_called_once()
+                self.assertFalse(self.robot._motion_interlock_active)
+                self.assertFalse(self.robot._collision_recovery_hold)
+
+    def test_unready_observer_reset_stays_blocked_without_confirmed_ready_ack(self):
+        self.prepare_reset()
+        self.robot._motion_interlock_active = False
+        self.robot._motion_interlock_reason = ""
+        self.robot.last_collision_event = None
+        self.robot._fake_hardware = False
+        self.robot._collision_monitor_ready = False
+        self.fake_clock(lambda now: None)
+        result = self.methods["reset_motion_interlock"](self.robot)
+        self.assertFalse(result["success"])
+        self.assertTrue(self.robot._motion_interlock_active)
+        self.robot._collision_acknowledged_pub.publish.assert_called_once()
+
+    def test_idle_ready_monitor_reset_remains_a_noop(self):
+        self.prepare_reset()
+        self.robot._motion_interlock_active = False
+        self.robot._motion_interlock_reason = ""
+        self.robot.last_collision_event = None
+        self.robot._fake_hardware = False
+        self.robot._collision_monitor_ready = True
+        self.fake_clock(lambda now: None)
+        self.robot._collision_monitor_state_ts = 0.0
+        result = self.methods["reset_motion_interlock"](self.robot)
+        self.assertTrue(result["success"])
+        self.assertFalse(result["reset"])
+        self.robot._collision_acknowledged_pub.publish.assert_not_called()
+        self.robot.runtime_adapter.set_drive_operation_enabled.assert_not_called()
+
+    def test_unready_observer_reset_retains_unsafe_state_check(self):
+        self.prepare_reset()
+        self.robot._motion_interlock_active = False
+        self.robot.last_collision_event = None
+        self.robot._collision_monitor_ready = False
+        self.robot._interlock_reset_unsafe_reason = lambda: "robot joints are still moving"
+        result = self.methods["reset_motion_interlock"](self.robot)
+        self.assertFalse(result["success"])
+        self.robot._collision_acknowledged_pub.publish.assert_not_called()
+        self.robot.runtime_adapter.set_drive_operation_enabled.assert_not_called()
 
     def test_explicit_recalibration_uses_same_hold_and_sends_distinct_request(self):
         self.prepare_reset()

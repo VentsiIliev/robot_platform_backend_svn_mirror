@@ -193,6 +193,25 @@ class TestGetSlotInfo(unittest.TestCase):
 
 
 class TestMoveToGroup(unittest.TestCase):
+    def test_backend_validation_reason_is_preserved_for_all_navigation_actions(self):
+        robot, nav = MagicMock(), MagicMock()
+        reason = "vel must be greater than zero and at most 100 percent"
+        robot.get_last_motion_error.return_value = reason
+        nav.move_to_group.return_value = False
+        nav.move_linear_group.return_value = False
+        nav.move_to_position.return_value = False
+        service = _make_svc(robot=robot, nav=nav)
+        self.assertEqual((False, reason), service.move_to_group("HOME"))
+        self.assertEqual((False, reason), service.execute_group("HOME"))
+        self.assertEqual((False, reason), service.move_to_point("HOME", "[0,0,0,0,0,0]"))
+
+    def test_unknown_failure_does_not_claim_workspace_violation(self):
+        nav = MagicMock()
+        nav.move_to_group.return_value = False
+        ok, reason = _make_svc(nav=nav).move_to_group("HOME")
+        self.assertFalse(ok)
+        self.assertEqual("Motion failed. Check the robot status and movement settings.", reason)
+
 
     def test_returns_false_without_navigation(self):
         ok, _ = _make_svc().move_to_group("HOME")

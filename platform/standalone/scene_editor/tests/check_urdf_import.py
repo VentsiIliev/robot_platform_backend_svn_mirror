@@ -142,6 +142,22 @@ def main():
                 assert not window.objects.item(1).isHidden()
                 window._workspace.filters['Robot'].click()
                 assert not window.objects.item(0).isHidden() and not window.objects.item(1).isHidden()
+                preview = SceneObject('Plan segment 2: approach [failed]',make_box((10,10,100)),id='preview/test/1')
+                summary = 'Plan test · planning_failed\nFailure at segment 2: IK failed\nExact failure location unavailable.'
+                window._ros_status_changed(dict(type='status',robot=True,planning=True,objects=3,preview=summary))
+                assert 'IK failed' in window.preview_status.text()
+                assert 'segment 2' in window._ros_details
+                with patch.object(window._ros,'take_latest',return_value=Scene([visual,collision,preview])):
+                    window._poll_ros()
+                    assert preview.visible
+                    window.planned_path_action.setChecked(False)
+                    assert not preview.visible
+                    window._poll_ros()
+                    assert not preview.visible
+                    window.planned_path_action.setChecked(True)
+                window._select(preview.id)
+                assert 'Planned-motion visualization only' in window._workspace.collision_info.text()
+                assert not window.add_collision_action.isEnabled()
                 window._ros_stopped('')
                 assert window.scene.objects[1].visible
             print('URDF GUI checks passed: workspace lookup, remembered folder, async import and failed-import recovery')

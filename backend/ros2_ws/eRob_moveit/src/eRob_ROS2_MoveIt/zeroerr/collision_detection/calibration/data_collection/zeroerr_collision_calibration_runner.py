@@ -112,6 +112,9 @@ class CalibrationRunner(Node):
         self._training_csv_file = None
         self._training_csv_writer = None
         self._last_training_write = 0.0
+        self._training_samples = 0
+        self._training_rejected_samples = 0
+        self._training_rejection_reason = ""
         self._last_training_flush = 0.0
 
         self.validator = self.create_client(
@@ -334,6 +337,9 @@ class CalibrationRunner(Node):
             self._collision_events = []
             self._collision_active_joints = set()
             self._last_training_write = 0.0
+            self._training_samples = 0
+            self._training_rejected_samples = 0
+            self._training_rejection_reason = ""
         threading.Thread(target=self._run, daemon=True).start()
         response.success = True
         response.message = f'{run_type} started (dry_run={self.dry_run and not live_run})'
@@ -366,6 +372,9 @@ class CalibrationRunner(Node):
                 'dynamic_profile': self._dynamic_profile,
                 'accepted_motions': self._accepted, 'rejected_motions': self._rejected,
                 'coverage_points': len(self._coverage_points),
+                'training_samples': self._training_samples,
+                'training_rejected_samples': self._training_rejected_samples,
+                'training_rejection_reason': self._training_rejection_reason,
                 'drive_fault': self._drive_fault_reason,
                 'collision_events': len(self._collision_events),
                 'run_directory': str(getattr(self, '_run_directory', '')),
@@ -614,12 +623,18 @@ class CalibrationRunner(Node):
             motion_results = list(self._motion_results)
             run_type = self._run_type
             collision_events = list(self._collision_events)
+            training_samples = self._training_samples
+            training_rejected = self._training_rejected_samples
+            training_reason = self._training_rejection_reason
         if run_dir is None:
             return None
         voxel = max(0.001, float(self.get_parameter('coverage_voxel_size_m').value))
         occupied = {tuple(math.floor(v / voxel) for v in p) for p in points}
         summary = {
             'dry_run': self.dry_run, 'run_type': run_type,
+            'training_samples': training_samples,
+            'training_rejected_samples': training_rejected,
+            'training_rejection_reason': training_reason,
             'accepted_motions': accepted,
             'rejected_motions': rejected, 'point_count': len(points),
             'voxel_size_m': voxel, 'occupied_voxel_count': len(occupied),
@@ -777,6 +792,10 @@ class CalibrationRunner(Node):
                 self._training_csv_file.close()
                 self._training_csv_file = None
                 self._training_csv_writer = None
+            if self._run_type == 'external_motion' and self._training_samples == 0:
+                self.get_logger().error(
+                    'No torque training samples recorded; inspect training_rejection_reason '
+                    'and /zeroerr/collision_monitor/state before collecting again')
             path = self._write_summary()
             if path:
                 self.get_logger().info(f'Calibration coverage summary: {path}')
@@ -806,16 +825,27 @@ class CalibrationRunner(Node):
         required = (
             'position', 'velocity', 'acceleration', 'torque_sensor',
             'measured_torque', 'expected_torque', 'observer_auxiliary_torque',
-            'external_torque', 'following_error_actual', 'observer_ready',
+            'external_torque', 'observer_ready',
         )
-        if any(joint_name not in by_joint for joint_name in self.joint_names):
+        reason = ''
+        for joint_name in self.joint_names:
+            fields = by_joint.get(joint_name, {})
+            missing = [name for name in required
+                       if not math.isfinite(float(fields.get(name, math.nan)))]
+            if missing:
+                reason = f'{joint_name}: missing/non-finite ' + ', '.join(missing)
+                break
+            if fields['observer_ready'] < 0.5:
+                reason = f'{joint_name}: observer not ready'
+                break
+        if reason or not math.isfinite(timestamp) or timestamp <= 0.0:
+            reason = reason or 'invalid source timestamp'
+            self._training_rejected_samples += 1
+            if reason != self._training_rejection_reason:
+                self.get_logger().warning(f'Training sample rejected: {reason}')
+            self._training_rejection_reason = reason
             return
-        if any(
-            fields.get('observer_ready', 0.0) < 0.5
-            or any(not math.isfinite(float(fields.get(name, math.nan))) for name in required)
-            for fields in (by_joint[joint_name] for joint_name in self.joint_names)
-        ):
-            return
+        self._training_rejection_reason = ''
         for joint_name in self.joint_names:
             fields = by_joint[joint_name]
             writer.writerow([
@@ -835,6 +865,7 @@ class CalibrationRunner(Node):
         if flush_period == 0.0 or now - self._last_training_flush >= flush_period:
             handle.flush()
             self._last_training_flush = now
+        self._training_samples += 1
         self._last_training_write = now
 
 

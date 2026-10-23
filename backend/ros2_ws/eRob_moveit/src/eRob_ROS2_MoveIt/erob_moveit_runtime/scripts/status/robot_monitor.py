@@ -7,6 +7,7 @@ from geometry_msgs.msg import TwistStamped, PoseStamped
 from std_msgs.msg import Float64MultiArray
 from utils.transformation_utils import TransformationUtils
 import time
+from threading import RLock
 import config
 from status.servo_stop_timing import observe_joint_velocity
 
@@ -64,6 +65,8 @@ class RobotMonitor:
 
         self.T_tcp = tcp_transform if tcp_transform is not None else np.eye(4)
         self._last_source_transform = None
+        self._cartesian_lock = RLock()
+        self._cartesian_source_stamp_ns = None
 
         self.cart_pos_sub = self.node.create_subscription(
             PoseStamped,
@@ -150,12 +153,29 @@ class RobotMonitor:
         T_ee[:3, :3] = ee_rot_matrix
         T_ee[:3, 3] = ee_pos
 
-        self._last_source_transform = T_ee
-        self._update_cartesian_from_source()
+        source_ns = int(msg.header.stamp.sec) * 1_000_000_000 + int(msg.header.stamp.nanosec)
+        with self._cartesian_lock:
+            if self._cartesian_source_stamp_ns is not None and source_ns <= self._cartesian_source_stamp_ns:
+                return
+            self._last_source_transform = T_ee
+            self._update_cartesian_from_source()
+            self._cartesian_source_stamp_ns = source_ns
 
     def set_tcp_transform(self, tcp_transform):
-        self.T_tcp = tcp_transform if tcp_transform is not None else np.eye(4)
-        self._update_cartesian_from_source()
+        with self._cartesian_lock:
+            self.T_tcp = tcp_transform if tcp_transform is not None else np.eye(4)
+            self._update_cartesian_from_source()
+
+    def get_cartesian_sample(self):
+        """Return a coherent pose/source-stamp pair; missing feedback stays missing."""
+        with self._cartesian_lock:
+            if self._cartesian_source_stamp_ns is None:
+                return None
+            return {
+                'position': self.latest_data['cartesian'].copy(),
+                'sample_timestamp_ns': self._cartesian_source_stamp_ns,
+                'observation_timestamp_ns': self.node.get_clock().now().nanoseconds,
+            }
 
     def _update_cartesian_from_source(self):
         if self._last_source_transform is None:

@@ -1,4 +1,5 @@
 import logging
+import math
 from copy import deepcopy
 from typing import List, Tuple
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
@@ -284,3 +285,63 @@ class ToolSettingsApplicationService(IToolSettingsService):
         if transform is None or len(transform) != 6:
             raise RuntimeError(f"Tool {tool_id} is missing from the robot registry")
         return [float(value) for value in transform]
+
+    def execute_sequence(self, slot_id: int, steps: list[dict], cancelled) -> Tuple[bool, str]:
+        """Preview the current draft without saving it or changing slot occupancy."""
+        if self._robot is None:
+            return False, "Robot sequence execution is not configured"
+        try:
+            sequence = [ToolChangeStep.from_dict(step) for step in deepcopy(steps)]
+            if not sequence:
+                return False, "Capture positions before running the sequence"
+            slot = next((slot for slot in self._load().slots if slot.id == slot_id), None)
+            if slot is None:
+                return False, f"Slot {slot_id} not found"
+            # Validate the whole draft before moving; the editor has no confirmation handler.
+            for step in sequence:
+                if step.kind == "operator_confirm":
+                    return False, "This sequence requires operator confirmation; remove that saved action before running here"
+                if step.kind == "attach" and slot.tool_id is None:
+                    return False, "Assign a tool to the slot before running an attach action"
+                numbers = step.pose + [step.velocity, step.acceleration, step.blend_radius, step.wait_seconds]
+                if not all(math.isfinite(value) for value in numbers):
+                    return False, "Sequence contains non-finite values"
+                if step.kind == "motion" and (step.motion_type not in {"linear", "ptp"} or step.velocity <= 0 or step.acceleration <= 0):
+                    return False, "Invalid sequence motion settings"
+            if not self._robot.is_healthy():
+                return False, "Robot is unavailable"
+            self._require_stationary_robot()
+            config = self._settings.get(CommonSettingsID.ROBOT_CONFIG)
+            for index, step in enumerate(sequence):
+                if cancelled.is_set():
+                    return False, "Sequence stopped"
+                if step.kind == "motion":
+                    mover = self._robot.move_ptp if step.motion_type == "ptp" else self._robot.move_linear
+                    kwargs = dict(position=step.pose, tool=config.robot_tool, user=config.robot_user,
+                                  velocity=step.velocity, acceleration=step.acceleration, wait_to_reach=True)
+                    if step.motion_type == "linear":
+                        kwargs["blendR"] = step.blend_radius
+                    if not mover(**kwargs):
+                        return False, "Sequence stopped" if cancelled.is_set() else f"Sequence step {index + 1} failed"
+                elif step.kind == "wait":
+                    if cancelled.wait(max(0.0, step.wait_seconds)):
+                        return False, "Sequence stopped"
+                elif step.kind in {"attach", "detach"}:
+                    tool_id = slot.tool_id if step.kind == "attach" else 0
+                    if not self._robot.set_active_tool(tool_id):
+                        return False, f"Failed to activate tool {tool_id}"
+                    config.robot_tool = int(tool_id)
+            return (False, "Sequence stopped") if cancelled.is_set() else (True, "Sequence completed")
+        except Exception as exc:
+            _logger.exception("Failed to run taught tool sequence")
+            return False, str(exc)
+
+    def stop_sequence_motion(self) -> Tuple[bool, str]:
+        if self._robot is None:
+            return False, "Robot sequence execution is not configured"
+        try:
+            if not self._robot.stop_motion():
+                return False, "Robot rejected the stop request"
+            return True, "Stop requested"
+        except Exception as exc:
+            return False, str(exc)

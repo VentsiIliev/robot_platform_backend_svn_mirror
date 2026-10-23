@@ -1401,17 +1401,17 @@ class PaintDashboardView(IApplicationView):
     def ask_production_start_confirmation(self, title: str, message: str) -> bool:
         return ask_yes_no(self, title, message, default_no=True)
 
-    def ask_collision_acknowledgement(self, title: str, message: str) -> bool:
+    def ask_collision_acknowledgement(self, title: str, message: str, *, observer_recovery: bool = False) -> bool:
         action = show_styled_warning(
             self,
             title,
             message,
             heading=self._translate_text("Robot motion is held"),
             actions=(
-                DialogAction("keep_hold", self._translate_text("Keep Hold")),
+                DialogAction("keep_hold", self._translate_text("Keep Motion Held" if observer_recovery else "Keep Hold")),
                 DialogAction(
                     "acknowledge",
-                    self._translate_text("Acknowledge and Clear Hold"),
+                    self._translate_text("Reset observer" if observer_recovery else "Acknowledge and Clear Hold"),
                     primary=True,
                 ),
             ),

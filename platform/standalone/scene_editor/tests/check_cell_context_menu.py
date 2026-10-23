@@ -74,6 +74,27 @@ def main():
             restored=next(obj for obj in window.scene.objects if obj.id==first.id)
             assert restored.name==first.name and not restored.locked
             assert client.set_enabled.call_args.args==('cell_fixture_tray_01',True)
+            # A save can succeed before the backend can verify its applied state.
+            # ROS may already have removed the geometry when that reply arrives.
+            unverified=deepcopy(disabled)
+            unverified['applied']=None
+            unverified['pending_application']=True
+            client.set_enabled.return_value=unverified
+            window._select(first.id)
+            window.disable_selected_cell_collision()
+            window._ros.take_latest.return_value=Scene([second,surface])
+            window._poll_ros()
+            wait()
+            window._poll_ros()
+            ghost=next((obj for obj in window.scene.objects if obj.id==first.id),None)
+            assert ghost is not None,'Unverified application discarded disabled restore geometry'
+            assert ghost.visible and ghost.locked
+            assert 'unverified' in ghost.name
+            window._select(first.id)
+            client.set_enabled.return_value=initial
+            window.enable_selected_cell_collision()
+            wait()
+            assert window.selected().name==first.name
             client.set_enabled.side_effect=RuntimeError('Configuration changed; reload')
             window.disable_selected_cell_collision()
             wait()

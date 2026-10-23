@@ -65,7 +65,9 @@
     "A local calibration profile requires a reference frame and matrix path.": "A local calibration profile requires a reference frame and matrix path.",
     "Collision settings applied and confirmed": "Collision settings applied and confirmed",
     "Collision monitor unavailable: {message}": "Collision monitor unavailable: {message}",
-    "PlotJuggler opened with live observer diagnostics": "PlotJuggler opened with live observer diagnostics"
+    "PlotJuggler opened with live observer diagnostics": "PlotJuggler opened with live observer diagnostics",
+    "Motion failed. Check the robot status and movement settings.": "Motion failed. Check the robot status and movement settings.",
+    "vel must be greater than zero and at most 100 percent": "vel must be greater than zero and at most 100 percent"
   },
   "SensorlessCollisionTab": {
     "Configure the ZeroErr torque-based collision monitor. Changes are applied to the running ROS2 backend and persisted there.": "Configure the ZeroErr torque-based collision monitor. Changes are applied to the running ROS2 backend and persisted there.",

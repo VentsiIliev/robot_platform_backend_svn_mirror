@@ -64,6 +64,7 @@ class PaintAdjustmentService(IPaintAdjustmentService):
         if not self.get_dial_config().enabled:
             return None
         device, _more_sign, _enabled, _register = self._build_device()
+        self._logger.log(logging.DEBUG - 1, "Reading paint-head position from register")
         return device.read_position()
 
     def start_single_paint_cycle(self) -> bool:
@@ -218,9 +219,18 @@ class PaintAdjustmentService(IPaintAdjustmentService):
         if not 0 <= register <= 65535:
             raise ValueError("Paint-head register address is invalid")
         if not 0 <= minimum <= maximum <= 65535:
-            raise ValueError("Paint-head register range is invalid")
+            raise ValueError(
+                f"Paint-head register range is invalid: min_value={minimum}, "
+                f"max_value={maximum}; require 0 <= min_value <= max_value <= 65535"
+            )
         if not 1 <= count <= 24 or spacing < 1 or minimum + spacing * (count - 1) != maximum:
-            raise ValueError("Paint-head preset calibration is invalid")
+            raise ValueError(
+                f"Paint-head preset calibration is invalid: min_value={minimum}, "
+                f"preset_spacing={spacing}, preset_count={count}, max_value={maximum}; "
+                "require preset_count in 1..24, preset_spacing >= 1 and "
+                "min_value + preset_spacing * (preset_count - 1) = max_value "
+                f"(calculated {minimum + spacing * (count - 1)})"
+            )
         if degree_numerator < 1 or degree_denominator < 1:
             raise ValueError("Paint-head degree calibration is invalid")
         return (

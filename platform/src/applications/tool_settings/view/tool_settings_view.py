@@ -13,6 +13,7 @@ from pl_gui.settings.settings_view.styles import (
     TERTIARY_TEXT, TEXT_COLOR,
 )
 from src.applications.base.i_application_view import IApplicationView
+from .sequence_editor import SequenceEditor
 
 _logger = logging.getLogger(__name__)
 _ACCENT = PRIMARY
@@ -72,6 +73,12 @@ class ToolSettingsView(IApplicationView):
     reset_calibration_requested = pyqtSignal()
     solve_calibration_requested = pyqtSignal(int)
     edit_sequences_requested = pyqtSignal(int)
+    sequence_capture_requested = pyqtSignal(int, dict)
+    sequence_save_requested = pyqtSignal(list, list)
+    sequence_cancel_requested = pyqtSignal()
+    sequence_reverse_requested = pyqtSignal(list)
+    sequence_execute_requested = pyqtSignal(int, list)
+    sequence_stop_requested = pyqtSignal()
 
 
     def __init__(self, parent=None):
@@ -100,7 +107,18 @@ class ToolSettingsView(IApplicationView):
         self._tabs.addTab(self._build_calibration_panel(), "")
         root.addWidget(self._tabs, 1)
 
+        self._sequence_editor = SequenceEditor(self)
+        self._sequence_editor.capture_requested.connect(self._on_sequence_capture)
+        self._sequence_editor.save_requested.connect(self._on_sequence_save)
+        self._sequence_editor.cancel_requested.connect(self._on_sequence_cancel)
+        self._sequence_editor.reverse_requested.connect(self._on_sequence_reverse)
+        self._sequence_editor.execute_requested.connect(self._on_sequence_execute)
+        self._sequence_editor.stop_requested.connect(self._on_sequence_stop)
+        root.addWidget(self._sequence_editor, 1)
+        self._sequence_editor.hide()
+
         footer = QFrame()
+        self._footer = footer
         footer.setObjectName("toolFooter")
         footer.setStyleSheet(
             f"QFrame#toolFooter {{ background: white; border: 1px solid {_BORDER};"
@@ -132,6 +150,51 @@ class ToolSettingsView(IApplicationView):
         self._candidate_samples = 0
         self.retranslateUi()
         self.set_calibration_progress(reference_captured=False, candidate_samples=0)
+
+    def show_sequence_editor(self, slot) -> None:
+        self._sequence_editor.set_slot(slot)
+        self._tabs.hide()
+        self._footer.hide()
+        self._sequence_editor.show()
+
+    def hide_sequence_editor(self) -> None:
+        self._sequence_editor.hide()
+        self._tabs.show()
+        self._footer.show()
+
+    def set_sequence_capture_busy(self, busy: bool) -> None:
+        self._sequence_editor.set_busy(busy)
+
+    def set_sequence_message(self, message: str) -> None:
+        self._sequence_editor.set_message(message)
+
+    def append_sequence_step(self, page: int, step: dict) -> None:
+        self._sequence_editor.append_step(page, step)
+
+    def set_sequence_executing(self, executing: bool) -> None:
+        self._sequence_editor.set_executing(executing)
+        self._jog_widget.setEnabled(not executing)
+
+    def set_sequence_dropoff(self, steps: list) -> None:
+        self._sequence_editor.set_dropoff(steps)
+
+    def _on_sequence_reverse(self, steps: list) -> None:
+        self.sequence_reverse_requested.emit(steps)
+
+    def _on_sequence_execute(self, page: int, steps: list) -> None:
+        self.sequence_execute_requested.emit(page, steps)
+
+    def _on_sequence_stop(self) -> None:
+        self.sequence_stop_requested.emit()
+
+    def _on_sequence_capture(self, page: int, settings: dict) -> None:
+        self.sequence_capture_requested.emit(page, settings)
+
+    def _on_sequence_save(self, pickup: list, dropoff: list) -> None:
+        self.sequence_save_requested.emit(pickup, dropoff)
+
+    def _on_sequence_cancel(self) -> None:
+        self.sequence_cancel_requested.emit()
 
     @staticmethod
     def _page() -> tuple[QWidget, QVBoxLayout]:

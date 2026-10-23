@@ -177,7 +177,7 @@ def generate_launch_description():
         respawn=True,
         parameters=[
             moveit_config.robot_description,
-            {"publish_frequency": 15.0},
+            {"publish_frequency": float(runtime_value(package_path, "TF_PUBLISH_RATE_HZ", 15.0))},
         ],
     )
     demo_ld.add_action(robot_state_publisher)
@@ -561,6 +561,7 @@ def generate_launch_description():
             {
                 "cartesian_source_link": runtime_value(package_path, "CARTESIAN_SOURCE_LINK", "ee_link"),
                 "publish_hz": float(runtime_value(package_path, "STATE_PUBLISH_RATE_HZ", 50.0)),
+                "use_tf_source_timestamps": bool(runtime_value(package_path, "STATE_USE_TF_SOURCE_TIMESTAMPS", False)),
                 "joint_publish_hz": float(runtime_value(package_path, "JOINT_DERIVATIVE_PUBLISH_RATE_HZ", 0.0)),
                 "joint_input_hz": float(runtime_value(package_path, "JOINT_STATE_INPUT_RATE_HZ", 0.0)),
             },

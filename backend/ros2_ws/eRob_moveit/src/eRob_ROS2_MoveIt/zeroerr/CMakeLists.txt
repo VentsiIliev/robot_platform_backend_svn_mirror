@@ -7,6 +7,9 @@ ament_python_install_package(zeroerr_configuration)
 find_package(ament_index_cpp REQUIRED)
 find_package(control_msgs REQUIRED)
 find_package(controller_interface REQUIRED)
+find_package(joint_trajectory_controller REQUIRED)
+find_package(ruckig REQUIRED)
+find_package(urdf REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(moveit_msgs REQUIRED)
 find_package(moveit_servo REQUIRED)
@@ -35,6 +38,7 @@ ament_target_dependencies(zeroerr_servo_node
 
 add_library(zeroerr_realtime_collision_controller SHARED
   collision_detection/runtime/src/realtime_collision_controller.cpp
+  collision_detection/runtime/src/command_collision_trajectory_controller.cpp
 )
 target_include_directories(zeroerr_realtime_collision_controller PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/collision_detection/runtime/include>
@@ -44,6 +48,8 @@ ament_target_dependencies(zeroerr_realtime_collision_controller
   ament_index_cpp
   control_msgs
   controller_interface
+  joint_trajectory_controller
+  urdf
   kdl_parser
   pluginlib
   rclcpp
@@ -52,7 +58,7 @@ ament_target_dependencies(zeroerr_realtime_collision_controller
   std_msgs
 )
 target_compile_features(zeroerr_realtime_collision_controller PUBLIC cxx_std_17)
-target_link_libraries(zeroerr_realtime_collision_controller nlohmann_json::nlohmann_json yaml-cpp)
+target_link_libraries(zeroerr_realtime_collision_controller nlohmann_json::nlohmann_json yaml-cpp ruckig::ruckig)
 pluginlib_export_plugin_description_file(
   controller_interface collision_detection/runtime/zeroerr_controllers.xml)
 
@@ -68,7 +74,7 @@ install(TARGETS zeroerr_realtime_collision_controller
 install(DIRECTORY collision_detection/runtime/include/ DESTINATION include)
 
 ament_export_targets(export_zeroerr_realtime_collision_controller HAS_LIBRARY_TARGET)
-ament_export_dependencies(ament_index_cpp controller_interface kdl_parser pluginlib realtime_tools)
+ament_export_dependencies(ament_index_cpp controller_interface joint_trajectory_controller ruckig urdf kdl_parser pluginlib realtime_tools)
 
 install(PROGRAMS
   scripts/zeroerr_state_publisher.py
@@ -111,6 +117,28 @@ install(DIRECTORY meshes DESTINATION share/${PROJECT_NAME})
 install(FILES .setup_assistant DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
+  find_package(hardware_interface REQUIRED)
+  find_package(lifecycle_msgs REQUIRED)
+  add_executable(test_command_collision_brake
+    collision_detection/test/test_command_collision_brake.cpp)
+  target_include_directories(test_command_collision_brake PRIVATE collision_detection/runtime/include)
+  ament_target_dependencies(test_command_collision_brake joint_trajectory_controller rclcpp trajectory_msgs)
+  target_link_libraries(test_command_collision_brake ruckig::ruckig)
+  target_compile_features(test_command_collision_brake PRIVATE cxx_std_17)
+  # These regression assertions must also run in Release builds.
+  target_compile_options(test_command_collision_brake PRIVATE -UNDEBUG)
+  add_test(NAME command_collision_brake COMMAND test_command_collision_brake)
+  add_executable(test_command_collision_controller
+    collision_detection/test/test_command_collision_controller.cpp)
+  ament_target_dependencies(test_command_collision_controller
+    controller_interface hardware_interface pluginlib rclcpp trajectory_msgs lifecycle_msgs)
+  target_compile_features(test_command_collision_controller PRIVATE cxx_std_17)
+  target_compile_options(test_command_collision_controller PRIVATE -UNDEBUG)
+  add_test(NAME command_collision_controller COMMAND ${CMAKE_COMMAND} -E env
+    ROS_DOMAIN_ID=121 ROS_LOCALHOST_ONLY=1
+    ROS_LOG_DIR=${CMAKE_CURRENT_BINARY_DIR}/test_ros_log
+    $<TARGET_FILE:test_command_collision_controller>)
+
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(sensorless_configuration test/test_sensorless_configuration.py
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR})

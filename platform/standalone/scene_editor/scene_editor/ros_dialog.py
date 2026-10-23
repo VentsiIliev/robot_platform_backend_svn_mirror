@@ -42,6 +42,7 @@ class RosDialog(QDialog):
         for key, title in [('fixed_frame', 'Fixed frame'), ('scene_topic', 'Planning scene topic'),
                            ('scene_service', 'Initial scene service'), ('apply_service', 'Apply planning scene service'), ('description_topic', 'Robot description topic'),
                            ('tf_topic', 'TF topic'), ('tf_static_topic', 'Static TF topic'),
+                           ('preview_topic','Ordered-motion preview topic'),
                            ('marker_topics', 'MarkerArray topics (comma separated)'), ('python', 'ROS Python executable'),
                            ('ros_setup', 'ROS setup.bash (optional)'), ('workspace_setup', 'Workspace setup.bash (optional)')]:
             value = getattr(self.options, key)
@@ -123,7 +124,7 @@ class RosDialog(QDialog):
         for key in ('python', 'ros_setup', 'workspace_setup'):
             if values[key] and not Path(values[key]).is_file():
                 raise ValueError(f'File does not exist: {values[key]}')
-        for key in ('scene_topic', 'scene_service', 'apply_service', 'description_topic', 'tf_topic', 'tf_static_topic'):
+        for key in ('scene_topic', 'scene_service', 'apply_service', 'description_topic', 'tf_topic', 'tf_static_topic','preview_topic'):
             if not values[key]:
                 raise ValueError('ROS topic and service names cannot be empty.')
         return replace(self.options, **values)

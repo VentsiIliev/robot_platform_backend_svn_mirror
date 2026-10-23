@@ -95,6 +95,7 @@ class RuntimeGateway(ABC):
         blocking: bool = True,
         trajectory_optimizer: str | None = None,
         allow_collision_recovery: bool = False,
+        recovery_jog: bool = False,
     ) -> int:
         raise NotImplementedError
 
@@ -240,6 +241,9 @@ class RuntimeGateway(ABC):
         raise NotImplementedError
 
     # --- position / kinematics queries ------------------------------------
+
+    def get_current_position_sample(self) -> dict | None:
+        return None
 
     @abstractmethod
     def get_current_position(self) -> Any:

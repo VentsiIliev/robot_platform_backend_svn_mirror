@@ -42,7 +42,7 @@ CELL_COLLISION_OBJECTS:
     - 0.0
     - 0.0
   cell_fixture_tray_04:
-    enabled: true
+    enabled: false
     frame: mounting_surface
     size_mm:
     - 11.0
@@ -56,7 +56,7 @@ CELL_COLLISION_OBJECTS:
     - 0.0
     - 0.0
   cell_fixture_tray_05:
-    enabled: true
+    enabled: false
     frame: mounting_surface
     size_mm:
     - 56.3701171875
@@ -70,7 +70,7 @@ CELL_COLLISION_OBJECTS:
     - 0.0
     - 0.0
   cell_fixture_tray_06:
-    enabled: true
+    enabled: false
     frame: mounting_surface
     size_mm:
     - 56.3701171875
@@ -242,7 +242,7 @@ CELL_COLLISION_OBJECTS:
     - 0.0
     - 0.0
   cell_fixture_tray_18:
-    enabled: false
+    enabled: true
     frame: mounting_surface
     size_mm:
     - 53.22877502441406
@@ -270,7 +270,7 @@ CELL_COLLISION_OBJECTS:
     - 0.0
     - 0.0
   cell_fixture_tray_20:
-    enabled: false
+    enabled: true
     frame: mounting_surface
     size_mm:
     - 32.70001220703125
@@ -284,7 +284,7 @@ CELL_COLLISION_OBJECTS:
     - 0.0
     - 0.0
   cell_fixture_tray_21:
-    enabled: false
+    enabled: true
     frame: mounting_surface
     size_mm:
     - 25.0

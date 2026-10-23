@@ -34,6 +34,7 @@ class FairinoRobot(IRobot):
         acc: float,
         blend_radius: float = 0.0,
         blocking: bool = True,
+        recovery_jog: bool = False,
     ) -> int:
         return self.robot.MoveL(position, tool, user, vel=vel, acc=acc, blendR=blend_radius) or 0
 

@@ -41,12 +41,13 @@ class RobotService(IRobotService):
 
     def move_linear(self, position, tool, user, velocity, acceleration, blendR=0.0, wait_to_reach=False,
                     allow_subzero_step_recovery=False, allow_collision_recovery=False,
-                    bypass_safety_limits=False) -> bool:
+                    bypass_safety_limits=False, recovery_jog=False) -> bool:
         return self._motion.move_linear(
             position, tool, user, velocity, acceleration, blendR, wait_to_reach,
             allow_subzero_step_recovery=allow_subzero_step_recovery,
             allow_collision_recovery=allow_collision_recovery,
             bypass_safety_limits=bypass_safety_limits,
+            recovery_jog=recovery_jog,
         )
 
     def register_motion_corridor(self, corridor) -> None:
@@ -237,6 +238,9 @@ class RobotService(IRobotService):
         if not callable(getter):
             getter = self._robot.get_current_position
         return list(getter())
+
+    def get_current_position_sample(self) -> dict | None:
+        return self._robot.get_current_position_sample()
 
     def get_current_flange_position(self) -> List[float]:
         return self._robot.get_current_flange_position()

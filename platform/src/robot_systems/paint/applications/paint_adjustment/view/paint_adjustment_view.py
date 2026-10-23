@@ -79,6 +79,7 @@ class PaintAdjustmentView(IApplicationView):
         self._action_value: int | None = None
         self._action_error = ""
         self._position_error = ""
+        self._configuration_error = ""
         self._position_pending = False
         self._dial_enabled = False
         self._cycle_state = "idle"
@@ -433,11 +434,27 @@ class PaintAdjustmentView(IApplicationView):
         self._position_note.setToolTip(message)
         self._update_position_note()
 
+    def set_configuration_error(self, message: str) -> None:
+        self._configuration_error = message
+        self._update_position_note()
+
     def _update_position_note(self) -> None:
-        if self._position_pending:
+        error = self._configuration_error or self._position_error
+        self._position_note.setToolTip(error)
+        if error:
+            self._position_note.setStyleSheet(f"color: {ERROR_COLOR}; font-size: 9pt; font-weight: bold;")
+        else:
+            self._position_note.setStyleSheet(f"color: {TERTIARY_TEXT}; font-size: 9pt;")
+        if self._configuration_error:
+            text = self.tr("Paint-head configuration error: {error}").format(
+                error=self._configuration_error
+            )
+        elif self._position_pending:
             text = self.tr("Reading paint-head position…")
         elif self._position_error:
-            text = self.tr("Paint-head communication issue. It may be unplugged or missing.")
+            text = self.tr("Paint-head position read failed: {error}").format(
+                error=self._position_error
+            )
         elif self._dial.preview_value is not None:
             text = self.tr("Dry-run preview: {value} (not moved)").format(
                 value=self._dial.format_position(self._dial.preview_value)

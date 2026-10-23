@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 from src.applications.base.i_application_model import IApplicationModel
 from ..service.i_tool_settings_service import IToolSettingsService
 
@@ -30,3 +32,19 @@ class ToolSettingsModel(IApplicationModel):
     def solve_tool_calibration(self, tool_id): return self._service.solve_tool_calibration(tool_id)
     def activate_tool(self, tool_id): return self._service.activate_tool(tool_id)
     def get_current_motion_pose(self): return self._service.get_current_motion_pose()
+
+    @staticmethod
+    def reverse_pickup(steps):
+        reversed_steps = deepcopy(list(reversed(steps)))
+        for step in reversed_steps:
+            if step.get("kind") == "attach":
+                step.update(kind="detach", label="Detach tool")
+            elif step.get("kind") == "detach":
+                step.update(kind="attach", label="Attach tool")
+        return reversed_steps
+
+    def execute_sequence(self, slot_id, steps, cancelled):
+        return self._service.execute_sequence(slot_id, steps, cancelled)
+
+    def stop_sequence_motion(self):
+        return self._service.stop_sequence_motion()

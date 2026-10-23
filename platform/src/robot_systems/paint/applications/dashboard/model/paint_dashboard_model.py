@@ -70,6 +70,9 @@ class PaintDashboardModel(IApplicationModel):
     def collision_acknowledgement_required(self) -> bool:
         return self._service.collision_acknowledgement_required()
 
+    def collision_detected(self) -> bool:
+        return self._service.collision_detected()
+
     def retry_unmatched_workpiece(self) -> bool:
         return self._service.retry_unmatched_workpiece()
 

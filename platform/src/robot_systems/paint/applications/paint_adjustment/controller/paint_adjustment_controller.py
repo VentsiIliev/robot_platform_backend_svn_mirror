@@ -192,9 +192,11 @@ class PaintAdjustmentController(IApplicationController):
             )
 
     def _refresh_preset_configuration(self) -> None:
+        configuration_error = ""
         try:
             config = self._model.get_dial_config()
-        except (KeyError, TypeError, ValueError):
+        except (KeyError, TypeError, ValueError) as error:
+            configuration_error = str(error)
             config = None
         available = config is not None
         if not available:
@@ -202,13 +204,13 @@ class PaintAdjustmentController(IApplicationController):
         if available != self._configuration_available:
             self._view.set_paint_head_available(available)
             self._configuration_available = available
-        if config != self._dial_config:
+        if config is None or config != self._dial_config:
             self._drag_active = False
             self._drag_target = None
             self._last_drag_sent = None
             should_read = (
                 config is not None and config.enabled
-                and self._dial_config is not None and not self._dial_config.enabled
+                and (self._dial_config is None or not self._dial_config.enabled)
             )
             if config is None:
                 self._view.set_dial_config(0, 1, 0, False)
@@ -219,6 +221,7 @@ class PaintAdjustmentController(IApplicationController):
             self._dial_config = config
             if should_read:
                 self._request_position_read()
+        self._view.set_configuration_error(configuration_error)
 
     def _request_position_read(self) -> None:
         if (

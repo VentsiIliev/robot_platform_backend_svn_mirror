@@ -93,6 +93,9 @@ class StubPaintDashboardService(IPaintDashboardService):
     def collision_acknowledgement_required(self) -> bool:
         return False
 
+    def collision_detected(self) -> bool:
+        return False
+
     def retry_unmatched_workpiece(self) -> bool:
         if self._state != "error":
             return False

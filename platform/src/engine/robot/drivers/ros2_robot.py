@@ -28,10 +28,10 @@ class Ros2Robot(IRobot):
         logger.debug("move_ptp ← raw_ret=%s normalised=%s accepted=%s", ret, ret, ret >= 0)
         return ret
 
-    def move_linear(self, position: List[float], tool: int, user: int, vel: float, acc: float, blend_radius: float = 0.0, blocking: bool = True, allow_collision_recovery: bool = False) -> int:
+    def move_linear(self, position: List[float], tool: int, user: int, vel: float, acc: float, blend_radius: float = 0.0, blocking: bool = True, allow_collision_recovery: bool = False, recovery_jog: bool = False) -> int:
         logger.debug("move_linear → pos=%s tool=%s user=%s vel=%s acc=%s blend=%s", position, tool, user, vel, acc, blend_radius)
         ret = self._client.move_liner(position, tool, user, vel, acc, blend_radius, blocking=blocking,
-                                      allow_collision_recovery=allow_collision_recovery)
+                                      allow_collision_recovery=allow_collision_recovery, recovery_jog=recovery_jog)
         ret = ret if isinstance(ret, int) and not isinstance(ret, bool) else -1
         logger.debug("move_linear ← raw_ret=%s accepted=%s", ret, ret >= 0)
         return ret
@@ -219,6 +219,9 @@ class Ros2Robot(IRobot):
         """Bypass websocket/state caches and query the runtime pose endpoint."""
         result = self._client.get_current_position()
         return result if result is not None else []
+
+    def get_current_position_sample(self) -> dict | None:
+        return self._client.get_current_position_sample()
 
     def get_current_flange_position(self) -> List[float] | None:
         return self._client.get_current_flange_position()

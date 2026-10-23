@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import time
 
@@ -90,6 +91,7 @@ class PaintCollisionInterlockMonitor:
             self._dismiss_active_notice()
             return
         collision = status.get("collision_event")
+        observer_unready = not (isinstance(collision, dict) and bool(collision)) and interlock.get("collision_monitor_ready") is False
         timestamp = collision.get("timestamp") if isinstance(collision, dict) else None
         reason = str(
             (interlock or {}).get("reason")
@@ -98,7 +100,8 @@ class PaintCollisionInterlockMonitor:
         )
         event_key = f"{timestamp!r}:{reason}"
         now = time.monotonic()
-        self._turn_vacuum_off_for_collision(event_key, now)
+        if not observer_unready:
+            self._turn_vacuum_off_for_collision(event_key, now)
         if self._release_in_progress.is_set():
             return
         # One actionable notice per backend collision event. Reopening the
@@ -108,7 +111,13 @@ class PaintCollisionInterlockMonitor:
             return
         self._last_event_key = event_key
         self._last_publish_monotonic = now
-        self._publish_collision_notice(reason, event_key)
+        joint = collision.get("joint") if isinstance(collision, dict) else None
+        if not isinstance(joint, str) or re.fullmatch(r"Joint_[1-6]", joint) is None:
+            # Older backend status may expose the joint only in its reason.
+            match = re.search(r"\bJoint_[1-6]\b", reason)
+            joint = match.group(0) if match else None
+        self._publish_collision_notice(
+            reason, event_key, observer_unready=observer_unready, joint=joint)
 
     def _turn_vacuum_off_for_collision(self, event_key: str, now: float) -> None:
         pump = self._vacuum_pump
@@ -134,7 +143,8 @@ class PaintCollisionInterlockMonitor:
         else:
             self._logger.error("Collision response could not turn vacuum pump OFF; retrying")
 
-    def _publish_collision_notice(self, reason: str, event_key: str, *, recovery_failed: bool = False) -> None:
+    def _publish_collision_notice(self, reason: str, event_key: str, *, recovery_failed: bool = False,
+                                  observer_unready: bool = False, joint: str | None = None) -> None:
         self._logger.warning("Collision notice: %s", reason)
         notice_key = f"paint-collision:{event_key}"
         self._active_notice_key = notice_key
@@ -144,14 +154,24 @@ class PaintCollisionInterlockMonitor:
                 source=self.SOURCE,
                 severity=NotificationSeverity.CRITICAL,
                 title_key=("notification.collision.reset_failed_title" if recovery_failed
+                           else "notification.observer.not_ready_title" if observer_unready
                            else "notification.collision.title"),
                 message_key=("notification.collision.reset_failed_message" if recovery_failed
+                             else "notification.observer.not_ready_message" if observer_unready
+                             else "notification.collision.message_joint" if joint
                              else "notification.collision.message"),
-                fallback_title="Reset not completed" if recovery_failed else "Collision Detected",
+                params={"joint": joint} if joint else {},
+                fallback_title=("Reset not completed" if recovery_failed else
+                                "Collision observer not ready" if observer_unready else "Collision Detected"),
                 fallback_message=(
                     "Motion remains held. Check that the robot is clear of obstructions and stationary, "
                     "then try releasing the hold again."
                     if recovery_failed else
+                    "No collision has been confirmed. Keep the robot stationary and clear while resetting the observer. Motion remains held until recovery completes."
+                    if observer_unready else
+                    "Collision detected on {joint}. Robot motion is held. Remove the obstruction, "
+                    "then release the collision hold when it is safe to move again."
+                    if joint else
                     "Robot motion is held. Remove the obstruction, then release the "
                     "collision hold when it is safe to move again."
                 ),
@@ -165,8 +185,8 @@ class PaintCollisionInterlockMonitor:
                     ),
                     NotificationAction(
                         key=self.ACTION_RELEASE,
-                        title_key="notification.collision.release_hold",
-                        fallback_title="Release Collision Hold",
+                        title_key=("notification.observer.reset" if observer_unready else "notification.collision.release_hold"),
+                        fallback_title="Reset observer" if observer_unready else "Release Collision Hold",
                         primary=True,
                     ),
                 ),

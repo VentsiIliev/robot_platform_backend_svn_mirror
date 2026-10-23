@@ -19,6 +19,10 @@ def state_blueprint(api: StateApi):
     def prepared_ordered_motion_chain(plan_id):
         return to_http(api.prepared_ordered_motion_chain_status(plan_id))
 
+    @routes.route('/position/current/sample', methods=['GET'])
+    def get_position_sample():
+        return to_http(api.current_position_sample())
+
     @routes.route('/position/current', methods=['GET'])
     def get_position():
         return to_http(api.current_position())

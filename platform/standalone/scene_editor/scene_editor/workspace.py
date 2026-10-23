@@ -203,6 +203,10 @@ class Workspace(QObject):
         ros_layout.addWidget(heading)
         w.ros_status.setWordWrap(True)
         ros_layout.addWidget(w.ros_status)
+        preview_heading = QLabel('Ordered-motion plan and failures')
+        preview_heading.setObjectName('sectionTitle')
+        ros_layout.addWidget(preview_heading)
+        ros_layout.addWidget(w.preview_status)
         for action in (w.connect_ros_action,w.snapshot_action,w.disconnect_ros_action):
             button = QToolButton()
             button.setDefaultAction(action)
@@ -324,6 +328,7 @@ class Workspace(QObject):
         view_menu = w.menuBar().addMenu('View')
         view_menu.addAction(w.robot_visuals_action)
         view_menu.addAction(w.robot_collisions_action)
+        view_menu.addAction(w.planned_path_action)
         self.origin_action = view_menu.addAction('Show selected object origin')
         self.origin_action.setCheckable(True)
         self.origin_action.setChecked(True)
@@ -627,6 +632,10 @@ class Workspace(QObject):
     def _collision_description(obj):
         if obj is None:
             return 'Select an object to inspect its collision role.'
+        if obj.id.startswith('preview/'):
+            return ('Planned-motion visualization only. Purple: ready; yellow: executing; green: completed; red: failed. '
+                    'A red target marker identifies the requested target, not a confirmed collision point. '
+                    'See Scene Explorer → ROS 2 for the segment and failure reason. ROS apply actions do not modify this preview.')
         if obj.id.startswith('robot/'):
             if '/collision/' in obj.id:
                 return ('Robot link collision geometry, loaded from the URDF <collision> definition. '

@@ -765,12 +765,17 @@ class PaintPickupExecutor:
                     f"vacuum pump OFF also failed: {off_msg}"
                 )
             return False
-        current_pose = self._wait_for_stable_pose()
+        # Allow a bounded settling period after the controller completes. A
+        # one-second deadline can expire mid-window after a transient stale read.
+        current_pose = self._wait_for_stable_pose(
+            timeout_s=3.0 if prepared_plan_id else 1.0,
+            require_feedback_timestamps=bool(prepared_plan_id),
+        )
         if current_pose is None:
             discard_prepared()
-            _logger.error("[PICKUP] Current pose unavailable after servo contact")
+            _logger.error("[PICKUP] Fresh, settled pose could not be verified after servo contact")
             self._last_failure_message = (
-                "Pickup retract verification failed: current robot pose is unavailable"
+                "Pickup retract verification failed: fresh, settled robot feedback was not confirmed"
             )
             return False
         retract_delta = [
@@ -836,13 +841,14 @@ class PaintPickupExecutor:
             error_message="[PICKUP] Failed to read current pose after servo contact",
         )
 
-    def _wait_for_stable_pose(self, timeout_s: float = 1.0) -> list[float] | None:
+    def _wait_for_stable_pose(self, timeout_s: float = 1.0, *, require_feedback_timestamps: bool = False) -> list[float] | None:
         return wait_for_stable_pose(
             self._owner._robot_service,
             logger=_logger,
             read_error_message="[PICKUP] Failed to read current pose after servo contact",
             timeout_message="[PICKUP] Post-retract pose stability timeout",
             timeout_s=timeout_s,
+            require_feedback_timestamps=require_feedback_timestamps,
         )
 
     def _move_waypoint_sequence(self, label: str, waypoints: list[PickupWaypoint]) -> bool:

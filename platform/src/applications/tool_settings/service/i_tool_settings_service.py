@@ -53,3 +53,11 @@ class IToolSettingsService(ABC):
 
     @abstractmethod
     def get_current_motion_pose(self) -> Tuple[bool, str, list[float]]: ...
+
+    @abstractmethod
+    def execute_sequence(self, slot_id: int, steps: list[dict], cancelled) -> Tuple[bool, str]:
+        """Run the supplied draft in order; cancelled is a threading.Event."""
+        ...
+
+    @abstractmethod
+    def stop_sequence_motion(self) -> Tuple[bool, str]: ...

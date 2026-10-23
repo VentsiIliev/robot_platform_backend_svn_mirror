@@ -65,7 +65,9 @@
     "A local calibration profile requires a reference frame and matrix path.": "Локалният профил за калибрация изисква референтна рамка и път до матрицата.",
     "Collision settings applied and confirmed": "Настройките за сблъсък са приложени и потвърдени",
     "Collision monitor unavailable: {message}": "Мониторът за сблъсък не е достъпен: {message}",
-    "PlotJuggler opened with live observer diagnostics": "PlotJuggler е отворен с диагностика на наблюдателя в реално време"
+    "PlotJuggler opened with live observer diagnostics": "PlotJuggler е отворен с диагностика на наблюдателя в реално време",
+    "Motion failed. Check the robot status and movement settings.": "Движението е неуспешно. Проверете състоянието на робота и настройките за движение.",
+    "vel must be greater than zero and at most 100 percent": "Скоростта трябва да е по-голяма от нула и най-много 100 процента."
   },
   "SensorlessCollisionTab": {
     "Configure the ZeroErr torque-based collision monitor. Changes are applied to the running ROS2 backend and persisted there.": "Конфигуриране на безсензорния монитор за сблъсък ZeroErr. Промените се прилагат към работещия ROS2 backend и се запазват там.",

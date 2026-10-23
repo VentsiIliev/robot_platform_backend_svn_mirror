@@ -70,7 +70,7 @@ def execution_payload(robot: IRobotBackend | None, node: RobotController | None,
         get_ordered_status = getattr(robot, "get_ordered_motion_chain_status", None)
         if callable(get_ordered_status):
             ordered_status = _to_jsonable(get_ordered_status())
-            if isinstance(ordered_status, dict) and bool(ordered_status.get("active", False)):
+            if isinstance(ordered_status, dict):
                 status["ordered_motion_chain"] = ordered_status
         status["last_submitted_task_id"] = getattr(node, "last_submitted_task_id", None)
         collision_event = getattr(node, "last_collision_event", None)

@@ -23,6 +23,7 @@ class MoveRequest(TypedDict):
     blocking: bool
     trajectory_optimizer: str | None
     allow_collision_recovery: bool
+    recovery_jog: bool
 
 class PathRequest(TypedDict):
     path: list[list[float]]
@@ -141,7 +142,7 @@ def _typed_request(parser):
         for name in ('axis', 'direction', 'frame'):
             if isinstance(original.get(name), bool):
                 raise ValueError(f'{name} cannot be a boolean')
-        for name in ('blocking', 'allow_collision_recovery', 'disable_collision_checking',
+        for name in ('blocking', 'allow_collision_recovery', 'recovery_jog', 'disable_collision_checking',
                      'restore_collision_checking', 'allow_servo_during_prepare', 'queue_if_busy'):
             if name in original and type(original[name]) is not bool:
                 raise ValueError(f'{name} must be a boolean')
@@ -344,7 +345,7 @@ def parse_move_linear_request(data: dict[str, Any] | None, *, defaults: MotionDe
         trajectory_optimizer = str(trajectory_optimizer).strip().upper()
         if trajectory_optimizer not in {'TOTG', 'RUCKIG'}:
             raise ValueError('Invalid trajectory_optimizer; expected TOTG or RUCKIG')
-    return {'position': position, 'tool': payload.get('tool', 0), 'user': payload.get('user', 0), 'vel': payload.get('vel', defaults.velocity_percent), 'acc': payload.get('acc', defaults.acceleration_percent), 'blocking': payload.get('blocking', True), 'trajectory_optimizer': trajectory_optimizer, 'allow_collision_recovery': bool(payload.get('allow_collision_recovery', False))}
+    return {'position': position, 'tool': payload.get('tool', 0), 'user': payload.get('user', 0), 'vel': payload.get('vel', defaults.velocity_percent), 'acc': payload.get('acc', defaults.acceleration_percent), 'blocking': payload.get('blocking', True), 'trajectory_optimizer': trajectory_optimizer, 'allow_collision_recovery': bool(payload.get('allow_collision_recovery', False)), 'recovery_jog': payload.get('recovery_jog', False)}
 
 @_typed_request
 def parse_execute_path_request(data: dict[str, Any] | None, *, defaults: MotionDefaults=MotionDefaults()) -> PathRequest:

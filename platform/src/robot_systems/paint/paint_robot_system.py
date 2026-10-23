@@ -309,7 +309,12 @@ class PaintRobotSystem(BaseRobotSystem):
             group_type=MovementGroupType.SINGLE_POSITION,
             has_trajectory_execution=True,
         ),
-
+        MovementGroupDefinition(
+            id="Tool Changer",
+            label="Tool Changer",
+            group_type=MovementGroupType.SINGLE_POSITION,
+            has_trajectory_execution=True,
+        ),
 
     ]
 
@@ -372,6 +377,16 @@ class PaintRobotSystem(BaseRobotSystem):
             id="vertical_shaft_alignment",
             label="Vertical Shaft Alignment",
             color="#905BA9",
+            threshold_profile="default",
+            supports_detection_roi=True,
+            supports_brightness_roi=True,
+            supports_height_mapping=False,
+        ),
+
+    WorkAreaDefinition(
+            id="tool_changer",
+            label="Tool Changer",
+            color="#A9A9A9",
             threshold_profile="default",
             supports_detection_roi=True,
             supports_brightness_roi=True,

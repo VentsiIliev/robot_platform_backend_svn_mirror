@@ -812,6 +812,7 @@ class TestSingleCollisionRecoveryDialog(unittest.TestCase):
         controller = PaintDashboardController.__new__(PaintDashboardController)
         controller._model = MagicMock()
         controller._model.collision_acknowledgement_required.return_value = required
+        controller._model.collision_detected.return_value = required
         controller._view = MagicMock()
         controller._dashboard_notice_bridge = MagicMock()
         controller._t = lambda value: value
@@ -821,6 +822,45 @@ class TestSingleCollisionRecoveryDialog(unittest.TestCase):
         controller = self.make_controller(True)
         self.assertIsNone(controller._dashboard_warning_for_event(
             "error", "Magazine pickup approach before servo contact failed"))
+
+    def test_unready_observer_is_not_presented_as_detected_collision(self):
+        controller = self.make_controller(True)
+        controller._model.collision_detected.return_value = False
+        controller._view.ask_collision_acknowledgement.return_value = False
+        controller._on_reset()
+        title, message = controller._view.ask_collision_acknowledgement.call_args.args
+        self.assertEqual("Collision observer not ready", title)
+        self.assertTrue(controller._view.ask_collision_acknowledgement.call_args.kwargs["observer_recovery"])
+        self.assertIn("No collision has been confirmed", message)
+        self.assertEqual(("Process Blocked", "observer not ready"),
+                         controller._dashboard_warning_for_event("error", "observer not ready"))
+
+    def test_observer_recovery_notice_translates_initially_and_after_language_switch(self):
+        import json
+        import tempfile
+        from pathlib import Path
+        from src.engine.localization.localization_service import LocalizationService
+
+        app = QApplication.instance() or QApplication([])
+        root = Path(__file__).resolve().parents[3] / "src/robot_systems"
+        with tempfile.TemporaryDirectory() as directory:
+            for system in ("paint", "paint_tray_dry", "paint_auto_dry"):
+                catalogs = root / system / "storage/translations"
+                service = LocalizationService(str(catalogs), state_file=Path(directory) / f"{system}.json")
+                controller = self.make_controller(True)
+                controller._model.collision_detected.return_value = False
+                controller._view.ask_collision_acknowledgement.return_value = False
+                del controller._t
+                try:
+                    for lang in ("en", "bg", "en"):
+                        service.set_language(lang)
+                        controller._on_reset()
+                        title, message = controller._view.ask_collision_acknowledgement.call_args.args
+                        catalog = json.loads((catalogs / f"{lang}.json").read_text())
+                        self.assertEqual(catalog["PaintDashboard"]["Collision observer not ready"], title)
+                        self.assertIn(message, catalog["PaintDashboard"].values())
+                finally:
+                    service._remove_installed_translator(app)
 
     def test_unrelated_process_errors_remain_visible(self):
         controller = self.make_controller(False)

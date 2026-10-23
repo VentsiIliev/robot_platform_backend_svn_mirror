@@ -97,6 +97,23 @@ is the full inverse-dynamics expectation used by the residual fitter;
 `observer_auxiliary_torque_nm` is recorded separately for momentum-observer
 diagnostics and is not used as the full expected-torque calibration target.
 
+The C++ controller publishes current-cycle training fields alongside readiness on
+`/zeroerr/collision_monitor/state` at its timing telemetry cadence (default 10 ms).
+These are regular samples, independent of the per-joint peak stream. Both raw
+`torque_sensor` and `measured_torque` refer to the same loaned Nm input;
+`expected_torque` is full rigid-body inverse dynamics before fitted corrections.
+Following error is not available from this controller and is optional (NaN in the
+CSV), not an acceptance gate. Required training measurements must all be finite.
+
+While collecting, check `training_samples` on
+`/zeroerr_collision_calibration_runner/status`: it must increase. Rejected batches
+expose `training_rejected_samples` and `training_rejection_reason` there and in
+`coverage_summary.json`. A session with zero training samples logs an error.
+Coverage points alone do not establish that torque data was recorded. Rebuild
+`zeroerr` and restart the controller/backend before collecting with this contract.
+Peak recorder metadata also records source span, maximum source/receipt gaps and
+idle time before close; wall-clock recorder lifetime is not measured coverage.
+
 ## Data acceptance rules
 
 Use a run for fitting only when it is collision-free and representative. Exclude

@@ -144,8 +144,10 @@ controller_interface::CallbackReturn RealtimeCollisionController::on_configure(
     interfaces.interface_names = {
       "observer_ready", "baseline_valid", "observer_initialized", "acknowledgement_count",
       "rearm_settled_sec", "filtered_residual_nm", "release_limit_nm",
-      "velocity_rad_s", "drives_stable_sec"};
-    interfaces.values.resize(9);
+      "velocity_rad_s", "drives_stable_sec",
+      "position", "velocity", "acceleration", "torque_sensor", "measured_torque",
+      "expected_torque", "observer_auxiliary_torque", "external_torque"};
+    interfaces.values.resize(17);
   }
   peak_publisher_->msg_.joint_names = joint_names_;
   peak_publisher_->msg_.interface_values.resize(kJointCount);
@@ -437,6 +439,7 @@ bool RealtimeCollisionController::update_observer(
     auxiliary[axis] -= 0.5 * quadratic;
   }
 
+  observer_auxiliary_torque_ = auxiliary;
   if (!observer_initialized_) {
     if (!recovery_.calibrate(
         measured, auxiliary, velocity, dt_sec, warmup_sec_, warmup_min_samples_,
@@ -501,6 +504,7 @@ controller_interface::return_type RealtimeCollisionController::update(
   const rclcpp::Time & time, const rclcpp::Duration & period)
 {
   const auto started = std::chrono::steady_clock::now();
+  training_sample_valid_ = false;
   const double dt_sec = std::max(period.seconds(), 1.0e-6);
   timing_elapsed_sec_ += dt_sec;
   publish_timing_this_cycle_ = timing_elapsed_sec_ >= timing_period_sec_;
@@ -610,6 +614,9 @@ controller_interface::return_type RealtimeCollisionController::update(
     return controller_interface::return_type::OK;
   }
 
+  sample_position_ = position;
+  sample_torque_ = torque;
+  training_sample_valid_ = observer_initialized_;
   if (observer_initialized_) {
     for (std::size_t index = 0; index < kJointCount; ++index) {
       threshold_[index] = dynamic_threshold(
@@ -855,6 +862,18 @@ void RealtimeCollisionController::publish_diagnostics(
       interfaces.values[6] = threshold_[i];
       interfaces.values[7] = previous_velocity_[i];
       interfaces.values[8] = drives_operational_elapsed_sec_;
+      // Regular current-cycle samples, independent of peak selection. Never
+      // expose a previous cycle as valid after a drive/input/observer failure.
+      const bool valid = training_sample_valid_ && observer_ready_;
+      const double unavailable = std::numeric_limits<double>::quiet_NaN();
+      interfaces.values[9] = valid ? sample_position_[i] : unavailable;
+      interfaces.values[10] = valid ? previous_velocity_[i] : unavailable;
+      interfaces.values[11] = valid ? filtered_acceleration_[i] : unavailable;
+      interfaces.values[12] = valid ? sample_torque_[i] : unavailable;
+      interfaces.values[13] = valid ? sample_torque_[i] : unavailable;
+      interfaces.values[14] = valid ? expected_torque_[i] : unavailable;
+      interfaces.values[15] = valid ? observer_auxiliary_torque_[i] : unavailable;
+      interfaces.values[16] = valid ? filtered_residual_[i] : unavailable;
     }
     state_publisher_->unlockAndPublish();
   }

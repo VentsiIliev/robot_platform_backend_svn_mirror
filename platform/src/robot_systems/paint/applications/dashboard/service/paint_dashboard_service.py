@@ -215,6 +215,9 @@ class PaintDashboardService(IPaintDashboardService):
     def collision_acknowledgement_required(self) -> bool:
         return self._process.collision_acknowledgement_required()
 
+    def collision_detected(self) -> bool:
+        return self._process.collision_detected()
+
     def retry_unmatched_workpiece(self) -> bool:
         return self._process.retry_unmatched_workpiece()
 

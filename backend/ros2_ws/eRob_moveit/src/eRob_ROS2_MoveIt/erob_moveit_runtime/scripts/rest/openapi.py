@@ -19,6 +19,8 @@ OPENAPI_SPEC = {
         "/state/snapshot": {"get": {"tags": ["state"], "summary": "Combined UI state snapshot"}},
         "/state/kinematics": {"get": {"tags": ["state"], "summary": "Current TCP position, velocity, and acceleration"}},
         "/position/current": {"get": {"tags": ["state"], "summary": "Current TCP position in active WorkObject"}},
+        "/position/current/sample": {"get": {"tags": ["state"], "summary": "TCP feedback with ROS source/observation nanosecond timestamps",
+            "description": "Returns position in the active WorkObject, sample_timestamp_ns from the Cartesian publisher, and observation_timestamp_ns from the same ROS clock. Reading does not advance the source stamp. Unavailable feedback returns 503."}},
         "/position/base_tcp": {"get": {"tags": ["state"], "summary": "Current TCP position in robot base"}},
         "/position/flange": {"get": {"tags": ["state"], "summary": "Current flange position"}},
         "/velocity/current": {"get": {"tags": ["state"], "summary": "Current TCP velocity"}},

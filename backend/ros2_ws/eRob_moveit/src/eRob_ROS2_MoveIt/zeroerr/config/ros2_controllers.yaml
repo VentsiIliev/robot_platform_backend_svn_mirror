@@ -5,7 +5,7 @@ controller_manager:
     realtime_priority: 80     # FIFO priority for controller_manager RT thread
     use_sim_time: false
     manipulator_controller:
-      type: joint_trajectory_controller/JointTrajectoryController
+      type: zeroerr/CommandCollisionTrajectoryController
     drive_enable_set_controller:
       type: forward_command_controller/ForwardCommandController
     drive_disable_set_controller:

@@ -1,6 +1,7 @@
 import unittest
 import sys
 import types
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -118,6 +119,11 @@ class _FakeRobot:
 
     def get_current_position_fresh(self):
         return list(self.position)
+
+    def get_current_position_sample(self):
+        stamp = time.time_ns()
+        return {"position": list(self.position), "sample_timestamp_ns": stamp,
+                "observation_timestamp_ns": stamp}
 
     def get_execution_status(self):
         return {
@@ -933,7 +939,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertEqual(prepared_segments[0]["acc"], 60.0)
         self.assertEqual(prepared_segments[0]["blendR"], 20.0)
 
-    def test_xy_rz_servo_pickup_combines_alignment_with_paint_staging(self):
+    def _paint_staging_pickup_case(self):
         robot = _FakeRobot()
         robot.support_prepared = True
         motion = _FakeMotion()
@@ -985,6 +991,10 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         )
 
         robot.position = [1, 2, 20.0, 180, 0, 15]
+        return owner, robot, plan
+
+    def test_xy_rz_servo_pickup_combines_alignment_with_paint_staging(self):
+        owner, robot, plan = self._paint_staging_pickup_case()
         with patch(
             "src.robot_systems.paint.processes.paint.operations.pickup.executor.ServoUntilConditionProcedure.run",
             return_value=SimpleNamespace(
@@ -1004,6 +1014,22 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
             ["Moving to staging offset before first pivot contact pose"],
         )
         self.assertEqual(prepared_segments[0].position, (100.0, 120.0, 150.0, 180.0, 0.0, 0.0))
+
+    def test_prepared_continuation_does_not_execute_without_fresh_distinct_feedback(self):
+        for sample in (None, {"position": [1, 2, 20, 180, 0, 15],
+                              "sample_timestamp_ns": 1_000_000_000,
+                              "observation_timestamp_ns": 1_000_000_000}):
+            with self.subTest(sample=sample):
+                owner, robot, plan = self._paint_staging_pickup_case()
+                robot.get_current_position_sample = lambda: sample
+                with patch(
+                    "src.robot_systems.paint.processes.paint.operations.pickup.executor.ServoUntilConditionProcedure.run",
+                    return_value=SimpleNamespace(success=True, detected=True, timed_out=False,
+                                                 elapsed_s=0.1, message="condition_detected_and_retracted"),
+                ):
+                    self.assertFalse(PaintPickupExecutor(owner)._execute_servo_contact_pickup_sequence(plan))
+                self.assertEqual([], robot.executed_prepared)
+                self.assertEqual(["prepared-1"], robot.discarded_prepared)
 
     def test_dry_run_accepts_minimum_z_as_calibration_pickup_success(self):
         robot = _FakeRobot()

@@ -21,6 +21,7 @@ class OrderedPlanningWorkerHooks:
     apply_workobject: Callable[..., Any]
     tool_transform: Any
     user: int
+    report_planning_failure: Callable[[int, Exception], None] | None = None
 
 
 def build_ordered_planning_worker_factory(
@@ -153,6 +154,8 @@ def execute_ordered_planning_worker(
             error=str(exc),
         )
 
+        if hooks.report_planning_failure is not None:
+            hooks.report_planning_failure(index, exc)
         scheduler_bridge.publish_error(exc)
 
 

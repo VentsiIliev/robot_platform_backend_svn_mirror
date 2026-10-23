@@ -38,6 +38,7 @@ class IMotionService(ABC):
         allow_subzero_step_recovery: bool = False,
         allow_collision_recovery: bool = False,
         bypass_safety_limits: bool = False,
+        recovery_jog: bool = False,
     ) -> bool:
         """
         Linear TCP motion (straight-line in Cartesian space).

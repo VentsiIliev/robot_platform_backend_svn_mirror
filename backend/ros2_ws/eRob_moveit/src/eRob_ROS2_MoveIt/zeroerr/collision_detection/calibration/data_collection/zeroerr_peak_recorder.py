@@ -43,6 +43,11 @@ class PeakRecorder(Node):
         self._rows = 0
         self._started = time.time()
         self._last_flush = time.monotonic()
+        self._first_source_timestamp = None
+        self._last_source_timestamp = None
+        self._max_source_gap_sec = 0.0
+        self._last_received = None
+        self._max_receive_gap_sec = 0.0
         self.create_subscription(
             DynamicJointState,
             "/zeroerr/collision_rt/peak_samples",
@@ -54,6 +59,17 @@ class PeakRecorder(Node):
     def _on_sample(self, message: DynamicJointState) -> None:
         timestamp = float(message.header.stamp.sec) + 1.0e-9 * float(
             message.header.stamp.nanosec)
+        received = time.monotonic()
+        if self._first_source_timestamp is None:
+            self._first_source_timestamp = timestamp
+        if self._last_source_timestamp is not None:
+            self._max_source_gap_sec = max(
+                self._max_source_gap_sec, timestamp - self._last_source_timestamp)
+        if self._last_received is not None:
+            self._max_receive_gap_sec = max(
+                self._max_receive_gap_sec, received - self._last_received)
+        self._last_source_timestamp = timestamp
+        self._last_received = received
         for joint, interfaces in zip(message.joint_names, message.interface_values):
             fields = dict(zip(interfaces.interface_names, interfaces.values))
             required = [
@@ -84,6 +100,16 @@ class PeakRecorder(Node):
             "session_id": self._session_id,
             "started_unix": self._started,
             "stopped_unix": time.time(),
+            "first_source_timestamp": self._first_source_timestamp,
+            "last_source_timestamp": self._last_source_timestamp,
+            "source_span_sec": (
+                self._last_source_timestamp - self._first_source_timestamp
+                if self._first_source_timestamp is not None else 0.0),
+            "max_source_gap_sec": self._max_source_gap_sec,
+            "max_receive_gap_sec": self._max_receive_gap_sec,
+            "idle_before_close_sec": (
+                time.monotonic() - self._last_received
+                if self._last_received is not None else None),
             "messages": self._sequence,
             "rows": self._rows,
             "source_topic": "/zeroerr/collision_rt/peak_samples",

@@ -219,6 +219,14 @@ class EditorWindow(QMainWindow):
         self.robot_visuals_action.setChecked(True)
         self.robot_visuals_action.toggled.connect(self._robot_geometry_visibility_changed)
         self.robot_collisions_action.toggled.connect(self._robot_geometry_visibility_changed)
+        self.planned_path_action = QAction('Show planned trajectory',self)
+        self.planned_path_action.setCheckable(True)
+        self.planned_path_action.setChecked(True)
+        self.planned_path_action.toggled.connect(self._robot_geometry_visibility_changed)
+        ros_menu.addAction(self.planned_path_action)
+        self.preview_status = QLabel('No ordered-motion preview received.')
+        self.preview_status.setWordWrap(True)
+        self.preview_status.setTextFormat(Qt.TextFormat.PlainText)
         self.ros_status = QLabel('Offline — local scene')
         self.ros_status.setMargin(6)
         ros_toolbar.addWidget(self.ros_status)
@@ -1133,12 +1141,18 @@ class EditorWindow(QMainWindow):
 
     def _with_disabled_cell_previews(self, scene, *, live_frame=False):
         applied = ((self._cell_scene_view or {}).get('applied') or {}).get('CELL_COLLISION_OBJECTS', {})
+        saved = ((self._cell_scene_view or {}).get('saved') or {}).get('CELL_COLLISION_OBJECTS', {})
         ghosts = {}
         for object_id, obj in self._cell_fixture_previews.items():
-            definition = applied.get(cell_fixture_identifier(object_id))
+            identifier = cell_fixture_identifier(object_id)
+            definition = applied.get(identifier)
+            unverified = definition is None
+            if unverified:
+                definition = saved.get(identifier)
             if definition is not None and not definition['enabled'] and 'merged_into' not in definition:
-                ghosts[object_id] = replace(obj, name=obj.name+' [collision disabled]',
-                                            color=(.55,.55,.55,.25), locked=True)
+                suffix = ' [saved disabled; application unverified]' if unverified else ' [collision disabled]'
+                ghosts[object_id] = replace(obj, name=obj.name+suffix,
+                                            color=(.55,.55,.55,.45), locked=True, visible=True)
         # A current ROS object takes precedence over a cached configuration view
         # (for example, another editor may have re-enabled it).
         if live_frame:
@@ -1330,6 +1344,8 @@ class EditorWindow(QMainWindow):
 
     def _apply_robot_geometry_visibility(self,scene):
         for obj in scene.objects:
+            if obj.id.startswith('preview/'):
+                obj.visible = self.planned_path_action.isChecked()
             if obj.id.startswith('robot/'):
                 if '/collision/' in obj.id:
                     obj.visible = self.robot_collisions_action.isChecked()
@@ -1348,6 +1364,8 @@ class EditorWindow(QMainWindow):
         if kind == 'ready':
             self.ros_status.setText(f'ROS domain {packet.get("domain")} — waiting for scene data…')
         elif kind == 'status':
+            preview = packet.get('preview','No ordered-motion preview received.')
+            self.preview_status.setText(preview)
             warnings = packet.get('warnings', [])
             state = 'Live' if self._live_received else 'Waiting for scene'
             if packet.get('tf_age') is not None and packet['tf_age'] > 5:
@@ -1365,6 +1383,7 @@ class EditorWindow(QMainWindow):
                                  f'Robot description received: {packet.get("robot")}\n'
                                  f'Initial planning scene received: {packet.get("planning")}\n\n'+
                                  ('\n'.join(warnings) or 'No warnings.'))
+            self._ros_details += '\n\n'+preview
         elif kind in ('warning', 'error'):
             self._ros_details = packet.get('message', 'ROS connection error')
             self.ros_status.setText('ROS: '+self._ros_details[:110])

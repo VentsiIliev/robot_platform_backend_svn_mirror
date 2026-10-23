@@ -29,7 +29,8 @@ class TestRobotWrapper(IRobot):
 
     def move_linear(
         self, position: List[float], tool: int, user: int,
-        vel: float, acc: float, blend_radius: float = 0.0, blocking: bool = True
+        vel: float, acc: float, blend_radius: float = 0.0, blocking: bool = True,
+        recovery_jog: bool = False
     ) -> int:
         _logger.debug(f"TestRobot: move_linear called with {len(position)} points, vel={vel}, acc={acc}, blend_radius={blend_radius}, blocking={blocking}")
         return 0

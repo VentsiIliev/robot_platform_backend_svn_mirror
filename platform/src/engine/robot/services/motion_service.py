@@ -176,6 +176,7 @@ class MotionService(IMotionService):
             allow_subzero_step_recovery: bool = False,
             allow_collision_recovery: bool = False,
             bypass_safety_limits: bool = False,
+            recovery_jog: bool = False,
     ) -> bool:
         self._last_jog_target = []
         violations = self._motion_violations(position)
@@ -198,9 +199,9 @@ class MotionService(IMotionService):
                 violation for violation in violations
                 if "sub-zero" not in violation.lower()
                    and not (
-                        violation.lstrip().startswith("Z=")
-                        and "not in [0," in violation
-                )
+                       violation.lstrip().startswith("Z=")
+                       and "not in [0," in violation
+                   )
             ]
         if violations:
             self._logger.warning("move_linear blocked by safety limits: %s", ", ".join(violations))
@@ -209,8 +210,10 @@ class MotionService(IMotionService):
             self._logger.debug("move_linear → pos=%s tool=%s user=%s vel=%s acc=%s blendR=%s", position, tool, user,
                                velocity, acceleration, blendR)
             driver_kwargs = {"blocking": wait_to_reach}
-            if allow_subzero_step_recovery or allow_collision_recovery:
+            if allow_subzero_step_recovery or allow_collision_recovery or recovery_jog:
                 driver_kwargs["allow_collision_recovery"] = True
+            if recovery_jog:
+                driver_kwargs["recovery_jog"] = True
             ret = self._robot.move_linear(
                 position, tool, user, velocity, acceleration, blendR, **driver_kwargs
             )

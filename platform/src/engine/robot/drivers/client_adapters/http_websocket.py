@@ -783,7 +783,7 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             return -1
 
     def move_liner(self, position, tool=0, user=0, vel=30, acc=30, blendR=0, blocking=True, trajectory_optimizer="TOTG",
-                   allow_collision_recovery=False):
+                   allow_collision_recovery=False, recovery_jog=False):
         if not self.set_active_tool(tool):
             return -1
         if not self._drive_enabled and self.enable() != 0:
@@ -802,6 +802,8 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
         }
         if allow_collision_recovery:
             payload["allow_collision_recovery"] = True
+        if recovery_jog:
+            payload["recovery_jog"] = True
         logger.debug("move_liner → POST /move/linear payload=%s", payload)
         try:
             request_started = self._mark_execution_request_sent("move_liner")
@@ -811,6 +813,7 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
 
             raw = response.json()
             result_code = self._parse_motion_response("move_liner", response, raw, blocking=bool(blocking))
+            self._last_execute_path_response = self._execution_info(response, raw, result_code)
             self._mark_execution_request_response("move_liner", raw, time.monotonic() - request_started)
             logger.debug(
                 "move_liner ← http=%s raw=%s result_code=%s",
@@ -1000,6 +1003,12 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
                 raw,
                 blocking=bool(blocking),
             )
+            if result_code < 0:
+                # A short planning failure can finish between WebSocket frames.
+                # Recovery must read the terminal status, not a cached idle frame.
+                with self._execution_ws_lock:
+                    self._execution_ws_latest = None
+                    self._execution_ws_last_at = 0.0
             self._last_execute_path_response = self._execution_info(response, raw, result_code)
             self._mark_execution_request_response(
                 "execute_ordered_motion_chain",
@@ -1618,6 +1627,16 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             self._mark_unavailable(e)
             logger.error("get_state_snapshot error: %s", e, exc_info=True)
             return None
+
+    def get_current_position_sample(self):
+        """Read pose and source timestamps together without a client cache."""
+        started = time.monotonic()
+        response = requests.get(f"{self.server_url}/position/current/sample", timeout=2)
+        data = response.json()
+        if self._response_failed("get_current_position_sample", response, data):
+            return None
+        # A conservative age bound includes the entire HTTP round trip.
+        return {**data, "transport_elapsed_s": time.monotonic() - started}
 
     def get_current_position(self):
         # logger.debug("get_current_position → GET /position/current")

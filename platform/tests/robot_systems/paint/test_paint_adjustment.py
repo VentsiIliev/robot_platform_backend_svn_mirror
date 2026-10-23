@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import logging
+import json
 import os
 import time
 import unittest
+from pathlib import Path
 from threading import Event
 from unittest.mock import MagicMock
 
@@ -11,10 +13,11 @@ import numpy as np
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6.QtCore import QPoint, Qt
+from PyQt6.QtCore import QEvent, QPoint, Qt
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication
 
+from src.engine.localization.dict_translator import DictTranslator
 from src.robot_systems.paint.applications.paint_adjustment import PaintAdjustmentFactory
 from src.robot_systems.paint.applications.paint_adjustment.service.stub_paint_adjustment_service import (
     StubPaintAdjustmentService,
@@ -111,7 +114,7 @@ class PaintAdjustmentTests(unittest.TestCase):
         self.assertEqual(service.adjust_paint_by_register_units.call_count, call_count)
         view.clean_up()
 
-    def test_invalid_position_read_shows_connection_guidance(self) -> None:
+    def test_invalid_position_read_shows_actual_error(self) -> None:
         service = StubPaintAdjustmentService()
         service.read_current_position = MagicMock(
             side_effect=ValueError("Paint-head position 0 is outside the configured range")
@@ -122,11 +125,66 @@ class PaintAdjustmentTests(unittest.TestCase):
         ):
             view = PaintAdjustmentFactory().build(service, messaging=MagicMock())
             self._wait_for_position_read(view._controller)
-        self.assertIn("communication issue", view._position_note.text())
-        self.assertIn("unplugged or missing", view._position_note.text())
+        self.assertIn("position read failed", view._position_note.text())
+        self.assertIn("position 0 is outside the configured range", view._position_note.text())
         self.assertIn("position 0", view._position_note.toolTip())
         self.assertTrue(view._read_position_button.isEnabled())
         view.clean_up()
+
+    def test_configuration_error_is_visible_and_recovers_after_settings_fix(self) -> None:
+        service = StubPaintAdjustmentService()
+        original_config = service.get_dial_config()
+        service.get_dial_config = MagicMock(side_effect=ValueError("min_value=-1 is invalid"))
+        service.read_current_position = MagicMock(return_value=121)
+        view = PaintAdjustmentFactory().build(service, messaging=MagicMock())
+        try:
+            self.assertIn("configuration error: min_value=-1 is invalid", view._position_note.text())
+            self.assertNotIn("Device disabled", view._position_note.text())
+            self.assertFalse(view._read_position_button.isEnabled())
+            self.assertFalse(view._more_button.isEnabled())
+            service.read_current_position.assert_not_called()
+            service.get_dial_config.side_effect = ValueError("preset calibration mismatch")
+            view._controller._refresh_preset_configuration()
+            self.assertIn("preset calibration mismatch", view._position_note.text())
+            view.retranslateUi()
+            self.assertIn("preset calibration mismatch", view._position_note.text())
+            service.get_dial_config.side_effect = None
+            service.get_dial_config.return_value = original_config
+            view._controller._refresh_preset_configuration()
+            self.assertNotIn("configuration error", view._position_note.text())
+            self.assertTrue(view._read_position_button.isEnabled())
+            self.assertTrue(view._more_button.isEnabled())
+            view._controller._request_position_read()
+            self._wait_for_position_read(view._controller)
+            self.assertEqual(view._dial.actual_value, 121)
+        finally:
+            view.clean_up()
+
+    def test_error_notes_translate_initially_and_on_language_change(self) -> None:
+        catalog_path = Path(__file__).resolve().parents[3] / (
+            "src/robot_systems/paint_tray_dry/storage/translations/bg.json"
+        )
+        translator = DictTranslator(json.loads(catalog_path.read_text()))
+        self._app.installTranslator(translator)
+        service = StubPaintAdjustmentService()
+        service.get_dial_config = MagicMock(side_effect=ValueError("min_value=-1"))
+        view = PaintAdjustmentFactory().build(service, messaging=MagicMock())
+        try:
+            self.assertIn("Грешка в конфигурацията", view._position_note.text())
+            self.assertIn("min_value=-1", view._position_note.text())
+            self._app.removeTranslator(translator)
+            self._app.sendEvent(view, QEvent(QEvent.Type.LanguageChange))
+            self.assertEqual(view._position_note.text(), "Paint-head configuration error: min_value=-1")
+            view.set_configuration_error("")
+            view.set_position_error("position 0; range 45..235")
+            self.assertIn("position read failed: position 0; range 45..235", view._position_note.text())
+            self._app.installTranslator(translator)
+            self._app.sendEvent(view, QEvent(QEvent.Type.LanguageChange))
+            self.assertIn("Неуспешно прочитане", view._position_note.text())
+            self.assertIn("position 0; range 45..235", view._position_note.text())
+        finally:
+            view.clean_up()
+            self._app.removeTranslator(translator)
 
     def test_dragging_dial_sends_positions_before_release(self) -> None:
         service = StubPaintAdjustmentService()

@@ -49,6 +49,44 @@ class TestSensorWebSocketSession(unittest.IsolatedAsyncioTestCase):
 
 
 class TestRobotClientAdapters(unittest.TestCase):
+    @patch("src.engine.robot.drivers.client_adapters.http_websocket.requests.post")
+    def test_move_linear_preserves_backend_velocity_rejection(self, post_mock):
+        reason = "vel must be greater than zero and at most 100 percent"
+        response = MagicMock(status_code=400)
+        response.json.return_value = {"success": False, "error": reason}
+        post_mock.return_value = response
+        client = object.__new__(HttpWebSocketRobotClient)
+        client.server_url = "http://localhost:5000"
+        client._drive_enabled = True
+        client.set_active_tool = MagicMock(return_value=True)
+        client._motion_preflight_error = MagicMock(return_value=None)
+        client._mark_execution_request_sent = MagicMock(return_value=0)
+        client._mark_execution_request_response = MagicMock()
+        client._last_execute_path_response = {"error": "old planning error"}
+        self.assertEqual(-1, client.move_liner([0]*6, vel=0, acc=0))
+        self.assertEqual(reason, client.get_last_motion_error())
+
+
+    @patch("src.engine.robot.drivers.client_adapters.http_websocket.requests.get")
+    def test_timestamped_pose_reaches_service_with_http_duration(self, get_mock):
+        from src.engine.robot.services.robot_service import RobotService
+
+        sample = {"success": True, "position": [120, 430, 30, 180, 0, 0],
+                  "sample_timestamp_ns": 1_000_000_000, "observation_timestamp_ns": 1_010_000_000}
+        get_mock.return_value = MagicMock(status_code=200)
+        get_mock.return_value.json.return_value = sample
+        client = object.__new__(HttpWebSocketRobotClient)
+        client.server_url = "http://localhost:5000"
+        robot = object.__new__(Ros2Robot)
+        robot._client = client
+        service = object.__new__(RobotService)
+        service._robot = robot
+        with patch("src.engine.robot.drivers.client_adapters.http_websocket.time.monotonic", side_effect=[10.0, 10.012]):
+            result = service.get_current_position_sample()
+        self.assertEqual(sample["position"], result["position"])
+        self.assertEqual(sample["sample_timestamp_ns"], result["sample_timestamp_ns"])
+        self.assertAlmostEqual(0.012, result["transport_elapsed_s"])
+        get_mock.assert_called_once_with("http://localhost:5000/position/current/sample", timeout=2)
 
     def test_status_errors_are_throttled_and_reset_after_recovery(self):
         module = "src.engine.robot.drivers.client_adapters.http_websocket"
@@ -302,6 +340,31 @@ class TestRobotClientAdapters(unittest.TestCase):
         self.assertEqual(post_mock.call_args_list[1].args[0], "http://localhost:5000/drive/enable")
         self.assertEqual(post_mock.call_args_list[2].args[0], "http://localhost:5000/move/linear")
 
+    @patch("src.engine.robot.drivers.client_adapters.http_websocket.requests.post")
+    def test_recovery_jog_marker_is_sent_only_for_explicit_recovery(self, post_mock):
+        client = object.__new__(HttpWebSocketRobotClient)
+        client.server_url = "http://localhost:5000"
+        client._drive_enabled = True
+        client.set_active_tool = MagicMock(return_value=True)
+        client._motion_preflight_error = MagicMock(return_value=None)
+        client._mark_execution_request_sent = MagicMock(return_value=0.0)
+        client._mark_execution_request_response = MagicMock()
+        client._parse_motion_response = MagicMock(return_value=0)
+        post_mock.return_value.json.return_value = {"success": True, "result": 0}
+        post_mock.return_value.text = "{}"
+
+        for recovery in (False, True):
+            with self.subTest(recovery=recovery):
+                result = client.move_liner(
+                    [1, 2, 3, 4, 5, 6],
+                    allow_collision_recovery=True, recovery_jog=recovery,
+                )
+                self.assertEqual(result, 0)
+                payload = post_mock.call_args.kwargs["json"]
+                self.assertTrue(payload["allow_collision_recovery"])
+                self.assertEqual(payload.get("recovery_jog", False), recovery)
+                self.assertEqual("recovery_jog" in payload, recovery)
+
     @patch("src.engine.robot.drivers.client_adapters.http_websocket.requests.get")
     def test_current_position_failure_does_not_mark_client_available(self, get_mock):
         health = MagicMock()
@@ -356,6 +419,44 @@ class TestRobotClientAdapters(unittest.TestCase):
         self.assertEqual(result, -1)
         self.assertEqual(client.get_last_execute_path_response()["task_id"], 42)
         self.assertFalse(client.get_last_execute_path_response()["final"])
+
+    @patch("src.engine.robot.drivers.client_adapters.http_websocket.requests.post")
+    @patch("src.engine.robot.drivers.client_adapters.http_websocket.requests.get")
+    def test_ordered_chain_preserves_explicit_ik_planning_rejection(self, get_mock, post_mock):
+        error = "ordered-chain planning failed: Ordered PTP segment 'Plate entry: passage gate to plate center' rejected: no IK candidates found"
+        response = MagicMock(status_code=500)
+        response.json.return_value = {
+            "success": False, "result": -1, "error": error, "detail": error,
+            "error_info": {"code": "motion_error_1", "message": error},
+        }
+        post_mock.return_value = response
+        client = object.__new__(HttpWebSocketRobotClient)
+        client.server_url = "http://localhost:5000"
+        client._drive_enabled = True
+        client._motion_preflight_error = MagicMock(return_value=None)
+        client._mark_execution_request_sent = MagicMock(return_value=0.0)
+        client._mark_execution_request_response = MagicMock()
+        client._execution_ws_lock = threading.Lock()
+        client._execution_ws_latest = {"is_executing": False}
+        client._execution_ws_last_at = 100.0
+        client._mark_available = MagicMock()
+        terminal = {"is_executing": False, "ordered_motion_chain": {
+            "active": False, "phase": "error", "error": error,
+            "planned_segments_count": 0, "executed_segments_count": 0,
+        }}
+        get_mock.return_value = MagicMock(status_code=200)
+        get_mock.return_value.json.return_value = terminal
+
+        with patch("src.engine.robot.drivers.client_adapters.http_websocket.time.monotonic", return_value=100.01):
+            result = client.execute_ordered_motion_chain(
+                [{"type": "ptp", "position": [0, 0, 200, 180, 0, 0]}], blocking=True,
+            )
+            status = client.get_status()
+
+        self.assertEqual(-1, result)
+        self.assertEqual(error, client.get_last_motion_error())
+        self.assertEqual(terminal, status)
+        get_mock.assert_called_once_with("http://localhost:5000/status", timeout=2)
 
     @patch("src.engine.robot.drivers.client_adapters.http_websocket.requests.post")
     @patch("src.engine.robot.drivers.client_adapters.http_websocket.requests.get")

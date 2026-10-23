@@ -224,3 +224,64 @@ def test_nested_nonfinite_motion_values_are_rejected_before_dispatch(setup):
     result = api.motion.execute_sequence({'segments': [{'position': [0]*6, 'vel': float('inf'), 'acc': 10}]})
     assert result.status == 400
     gateway.execute_sequence.assert_not_called()
+
+
+@pytest.mark.parametrize('planned,executed', [(0, 0), (1, 0), (2, 1)])
+def test_ordered_chain_exception_reaches_http_without_resetting_progress(setup, monkeypatch, planned, executed):
+    # Extract the backend entry point so this regression runs without a ROS node.
+    from time import perf_counter
+    from types import MethodType, SimpleNamespace
+    import traceback
+
+    path = SCRIPTS / 'backend/moveit_robot_backend.py'
+    tree = ast.parse(path.read_text())
+    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'MoveItRobotBackend')
+    method = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == 'execute_ordered_motion_chain')
+    namespace = {'perf_counter': perf_counter, 'traceback': traceback,
+                 'config': SimpleNamespace(apply_limit_profiles=Mock(), DEFAULT_VEL_PERCENT=30, DEFAULT_ACC_PERCENT=30)}
+    exec(compile(ast.fix_missing_locations(ast.Module(body=[method], type_ignores=[])), str(path), 'exec'), namespace)
+
+    status_path = SCRIPTS / 'motion/scheduling/status_adapter.py'
+    status_tree = ast.parse(status_path.read_text())
+    functions = [n for n in status_tree.body if isinstance(n, ast.FunctionDef) and n.name in
+                 {'ordered_chain_starting_status', 'ordered_chain_terminal_status'}]
+    status_namespace = {'Any': object}
+    exec(compile(ast.fix_missing_locations(ast.Module(body=functions, type_ignores=[])), str(status_path), 'exec'), status_namespace)
+    monkeypatch.setitem(sys.modules, 'motion.scheduling.status_adapter', SimpleNamespace(
+        **{n.name: status_namespace[n.name] for n in functions}))
+    monkeypatch.setitem(sys.modules, 'motion.move_linear_timing', SimpleNamespace(begin=Mock(), clear=Mock(), mark=Mock()))
+    validation = SimpleNamespace(scheduler_group_status=(), scheduler_group_states={}, scheduler_segment_states={},
+                                 log_message=lambda: 'validated', timing_fields=lambda: {})
+    monkeypatch.setitem(sys.modules, 'motion.scheduling.motion_adapters', SimpleNamespace(
+        OrderedMotionBatchValidationFailure=Mock(), validate_ordered_motion_batch_from_mappings=Mock(return_value=validation)))
+
+    error = "ordered-chain planning failed: Ordered PTP segment 'Plate entry: passage gate to plate center' rejected: no IK candidates found"
+    node = SimpleNamespace(last_motion_error='stale previous error', get_logger=Mock(),
+                           is_hardware_ready_for_motion=lambda: True)
+    status = {}
+
+    def fail_planning(*args, **kwargs):
+        assert node.last_motion_error is None
+        status.update(planned_segments_count=planned, executed_segments_count=executed)
+        raise RuntimeError(error)
+
+    backend = SimpleNamespace(node=node, _reject_if_drive_not_enabled=lambda _: None,
+                              _set_ordered_motion_chain_status=lambda **updates: status.update(updates),
+                              _execute_ordered_motion_chain_pipelined=fail_planning)
+    execute = MethodType(namespace['execute_ordered_motion_chain'], backend)
+    gateway, api, client = setup
+    gateway.execute_ordered_motion_chain.side_effect = execute
+    gateway.last_motion_error.side_effect = lambda: node.last_motion_error
+    response = client.post('/execute/ordered_motion_chain', json={
+        'segments': [{'type': 'ptp', 'position': [0, 0, 200, 180, 0, 0]}], 'blocking': True})
+
+    assert response.status_code == 500
+    assert response.json['result'] == -1
+    assert response.json['error'] == error
+    assert response.json['detail'] == error
+    assert response.json['error_info']['message'] == error
+    assert status['phase'] == 'error'
+    assert status['active'] is False
+    assert status['error'] == error
+    assert status['planned_segments_count'] == planned
+    assert status['executed_segments_count'] == executed

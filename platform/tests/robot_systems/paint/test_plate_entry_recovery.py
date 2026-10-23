@@ -17,6 +17,7 @@ from src.robot_systems.paint.processes.paint.configuration.serializer import Pai
 from src.robot_systems.paint.applications.paint_process_settings.mapper import PaintProcessSettingsMapper
 
 ERROR = "Ordered PTP segment 'Plate entry' rejected: no safe PTP IK candidate: collision contacts=[Link_2<->tool0]"
+NO_IK_ERROR = "ordered-chain planning failed: Ordered PTP segment 'Plate entry: passage gate to plate center' rejected: no IK candidates found"
 BEFORE = [50, 50, 200, 180, 0, 360]
 AFTER = [50, 50, 200, 180, 0, 0]
 RECOVERY = "src.robot_systems.paint.processes.paint.operations.dropoff.strategies.plate_entry_recovery"
@@ -75,12 +76,35 @@ class TestPlateEntryRecovery(unittest.TestCase):
 
     def test_only_explicit_planning_rejections_are_recoverable(self):
         self.assertTrue(is_recoverable_entry_rejection(ERROR))
+        self.assertTrue(is_recoverable_entry_rejection(NO_IK_ERROR))
         self.assertTrue(is_recoverable_entry_rejection("LIN planning failed: NO_IK_SOLUTION"))
         for error in (None, -6, "result=-1", "Pilz LIN planning failed: error_code=99999",
                       "collision sensor protective stop", "controller planning collision",
                       "Planning collision: timed out", "cancelled planning: collision"):
             with self.subTest(error=error):
                 self.assertFalse(is_recoverable_entry_rejection(error))
+
+    def test_no_ik_rejection_retries_only_before_any_planned_or_executed_entry(self):
+        for counts in ((0, 0), (1, 0), (0, 1), (None, 0), (0, None)):
+            with self.subTest(counts=counts):
+                owner = self.owner()
+                owner._motion.last_motion_error = NO_IK_ERROR
+                chain = owner._robot_service.get_execution_status.return_value["ordered_motion_chain"]
+                chain.update(error=NO_IK_ERROR, planned_segments_count=counts[0],
+                             executed_segments_count=counts[1])
+                owner._motion.move_ordered_pickup_sequence.side_effect = [False, True, True]
+                with patch(RECOVERY + ".wait_for_stable_pose", side_effect=[BEFORE, AFTER]):
+                    ok, message = _execute_plate_layout_ordered_release(owner, next_cycle_start=None)
+                if counts == (0, 0):
+                    self.assertTrue(ok, message)
+                    owner._robot_service.unwind_joint6.assert_called_once()
+                    owner._vacuum.turn_vacuum_off.assert_called_once()
+                    self.assertEqual(3, owner._motion.move_ordered_pickup_sequence.call_count)
+                else:
+                    self.assertFalse(ok)
+                    owner._robot_service.unwind_joint6.assert_not_called()
+                    owner._vacuum.turn_vacuum_off.assert_not_called()
+                    owner._motion.move_ordered_pickup_sequence.assert_called_once()
 
     def test_successful_retry_releases_and_commits_only_once(self):
         owner = self.owner()

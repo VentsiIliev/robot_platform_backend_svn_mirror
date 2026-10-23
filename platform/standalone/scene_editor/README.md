@@ -30,6 +30,30 @@ This inspects the URDF geometry; it does not visualize SRDF allowed-collision ru
 or modify the robot model through the world collision-object Apply actions.
 Static URDF import and Load resolved URDF continue to load visuals only.
 
+Live ordered-motion preview uses `/ordered_motion/preview` (`std_msgs/msg/String`,
+versioned JSON snapshot), published by the backend as each finalized segment is
+queued, including preplanning before execution authorization. Configure the topic
+in the ROS connection dialog. Enable **View → Show planned trajectory** to show a
+sampled TCP trace alongside the real robot: purple ready, yellow executing, green
+completed, red failed. It uses planned joint positions and URDF forward kinematics,
+including the selected tool offset; it does not infer the plan from live TF.
+
+The **Scene Explorer → ROS 2** panel shows the plan, segment states, and failure
+reason. On planning failure, valid earlier paths remain visible. A red sphere,
+when available, marks the failed segment's **requested target**. It is not a
+confirmed collision point or the exact IK failure location. Group optimization
+and execution errors may identify only a segment/group; the panel explicitly
+reports when the exact location is unavailable. Preview errors do not stop live
+robot display. A new plan replaces the previous overlay; explicit cancellation
+clears its paths. Display sampling preserves endpoints and does not modify the
+trajectory sent to the controller. The preview is observational and is not a
+collision validator.
+
+The backend additionally publishes standard MoveIt `DisplayTrajectory` messages
+on `/ordered_motion/display_planned_path` for RViz. Both topics retain their
+latest snapshot for late subscribers. This feature requires restarting the
+updated backend after rebuilding `erob_moveit_runtime`, as well as the editor.
+
 Or use a separate environment:
 
 ```bash
@@ -303,6 +327,9 @@ the menu. The fixed table surfaces do not expose equipment enable/disable action
 A disabled fixture remains as a dim, locked, selectable preview during the current
 connection so you can right-click it and enable it again. This preview is not a
 MoveIt obstacle. The backend's removal/restoration is the actual collision change.
+If the backend cannot verify the applied state after a successful save, the grey
+preview is retained with a **saved disabled; application unverified** label. A
+current ROS object takes precedence over this cached preview.
 Previously disabled fixtures after reconnecting can be restored from the saved
 configuration dialog. Failed writes do not change the displayed applied state;
 saved-but-pending results remain pending until the backend can apply them.

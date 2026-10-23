@@ -5,6 +5,8 @@ from runtime_api.contracts import ResponseBody
 
 class StateResponse(ResponseBody, total=False):
     position: list[float]
+    sample_timestamp_ns: int
+    observation_timestamp_ns: int
     velocity: list[float]
     status: str | dict[str, Any]
     runtime_ready: bool

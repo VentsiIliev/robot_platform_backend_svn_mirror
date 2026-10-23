@@ -7,5 +7,10 @@ RUNTIME_INCLUDES:
 URDF_PATH: urdfs/robot.urdf.xacro
 SRDF_PATH: eRobo3.srdf
 CARTESIAN_SOURCE_LINK: ee_link
+# Strict prepared-start verification requires source feedback younger than 50 ms.
+# Keep these overrides local: other profiles retain their rates and timestamps.
+TF_PUBLISH_RATE_HZ: 100.0
+STATE_PUBLISH_RATE_HZ: 100.0
+STATE_USE_TF_SOURCE_TIMESTAMPS: true
 COLLISION_TIP_LINK: tool0
 CALIBRATION_PATH: calibration.yaml

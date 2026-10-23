@@ -1,0 +1,34 @@
+{
+  "model": "forest",
+  "features": 2,
+  "validation": "last frames of each class; references use training frames only",
+  "refit_all": true,
+  "augmentation_variants": 12,
+  "excluded_images": [],
+  "slots": {
+    "slot_1": {
+      "total": 12,
+      "correct": 12,
+      "unknown": 0,
+      "wrong": 0,
+      "training_originals": 31,
+      "saved_training_originals": 43
+    },
+    "slot_2": {
+      "total": 11,
+      "correct": 11,
+      "unknown": 0,
+      "wrong": 0,
+      "training_originals": 31,
+      "saved_training_originals": 42
+    },
+    "slot_3": {
+      "total": 11,
+      "correct": 10,
+      "unknown": 1,
+      "wrong": 0,
+      "training_originals": 31,
+      "saved_training_originals": 42
+    }
+  }
+}

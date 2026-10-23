@@ -429,6 +429,18 @@ class TestMotionService(unittest.TestCase):
         self.assertTrue(
             self.robot.move_linear.call_args.kwargs["allow_collision_recovery"]
         )
+        self.assertNotIn("recovery_jog", self.robot.move_linear.call_args.kwargs)
+
+    def test_explicit_recovery_jog_reaches_driver(self):
+        self.robot.move_linear.return_value = 0
+
+        result = self.service.move_linear(
+            [101, 50, 25, 0, 0, 0], 1, 1, 5, 5, recovery_jog=True,
+        )
+
+        self.assertTrue(result)
+        self.assertTrue(self.robot.move_linear.call_args.kwargs["recovery_jog"])
+        self.assertTrue(self.robot.move_linear.call_args.kwargs["allow_collision_recovery"])
 
 
     # ------------------------------------------------------------------

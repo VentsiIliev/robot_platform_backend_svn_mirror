@@ -81,6 +81,8 @@ class TestMeasuredStrategyContract(unittest.TestCase):
         self.assertEqual(list(plan.trajectory.points[0].velocities), list(self.state.velocity))
         self.assertEqual(list(plan.trajectory.points[-1].velocities), [0.]*6)
         self.assertEqual(plan.trajectory.header.stamp.sec, 0)
+        self.assertEqual(plan.trajectory.header.frame_id, "zeroerr_command_brake_v1")
+        self.assertIn("takeover=controller_command", detail)
         self.assertEqual(plan.held_joint_names, frozenset())
         self.assertEqual(plan.server_timeout_s, 0.)
         self.assertEqual(plan.goal_velocity_tolerance, .02)

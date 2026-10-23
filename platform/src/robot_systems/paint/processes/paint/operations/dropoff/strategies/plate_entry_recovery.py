@@ -21,7 +21,8 @@ def is_recoverable_entry_rejection(error: object) -> bool:
         return False
     planning_rejection = any(word in text for word in ("planning", "planner", "rejected"))
     return planning_rejection and ("collision" in text or "no_ik_solution" in text
-                                   or "no safe ptp ik candidate" in text)
+                                   or "no safe ptp ik candidate" in text
+                                   or "no ik candidates found" in text)
 
 
 def recover_plate_entry_unwind(executor, error, *, idle_checker) -> tuple[bool, str]:

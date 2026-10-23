@@ -160,6 +160,7 @@ def build_ordered_scheduler_runtime(
     scheduler_group_status: Sequence[dict[str, Any]] = (),
     scheduler_segment_states: dict[int, dict[str, Any]] | None = None,
     set_ordered_motion_chain_status: Callable[..., None],
+    preview_planned: Callable[[int, dict[str, Any]], None] | None = None,
 ) -> OrderedSchedulerRuntime:
     """Build ordered scheduler bridge plus status publication callbacks."""
 
@@ -177,6 +178,8 @@ def build_ordered_scheduler_runtime(
             set_ordered_motion_chain_status(**updates)
 
     def _publish_planned(index, planned_segment):
+        if preview_planned is not None:
+            preview_planned(index, planned_segment)
         _publish_scheduler_updates(
             bridge.publish_ready_segment(index, planned_segment)
         )

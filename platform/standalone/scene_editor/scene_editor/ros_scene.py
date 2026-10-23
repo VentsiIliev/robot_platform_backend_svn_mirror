@@ -12,6 +12,7 @@ import numpy as np
 from .geometry import Mesh, make_box, make_cylinder, make_sphere, read_stl, combine_meshes
 from .model import Pose, Scene, SceneObject, euler_degrees
 from .urdf import load_urdf, resolve_mesh
+from .trajectory_preview import TrajectoryPreview,COLORS
 
 
 def pose_matrix(message):
@@ -134,6 +135,10 @@ class SceneAssembler:
         self.cache_directory = Path(cache_directory)
         self.package_resolver = package_resolver
         self.package_root = package_root
+        self.preview = TrajectoryPreview()
+        self._preview_geometry_revision = None
+        self._preview_geometry = []
+        self._preview_path_meshes = {}
         self.frames = FrameGraph()
         self.robot, self.world, self.attached, self.markers = {}, {}, {}, {}
         self.colors, self.mesh_cache = {}, {}
@@ -151,6 +156,48 @@ class SceneAssembler:
         for frame, obj in visuals:
             robot[obj.id] = Framed(obj, frame, obj.pose.matrix())
         self.robot, self.description = robot, xml
+        self.preview.description(xml)
+        self._preview_geometry_revision = None
+
+    def _planned_geometry(self):
+        packet = self.preview.packet
+        if packet is None:
+            return []
+        revision = packet['plan_id'],packet['revision']
+        if revision == self._preview_geometry_revision:
+            return self._preview_geometry
+        geometry = []
+        path_meshes = {}
+        for segment,points in self.preview.paths():
+            key = packet['plan_id'],segment['index']
+            cached = self._preview_path_meshes.get(key)
+            if cached is None or cached[0] is not points:
+                parts = [part for start,end in zip(points[:-1],points[1:]) if (part := _segment(start,end,2.)) is not None]
+                mesh = _combine(parts) if parts else make_sphere(3.,rings=8,segments=12)
+                matrix = np.eye(4)
+                if not parts:
+                    matrix[:3,3] = points[0]
+                cached = points,mesh,matrix
+            _,mesh,matrix = cached
+            path_meshes[key] = cached
+            name = f'Plan segment {segment["index"]+1}: {segment.get("label", "")} [{segment["state"]}]'
+            obj = SceneObject(name,mesh,color=COLORS.get(segment['state'],COLORS['ready']),
+                              id=f'preview/{packet["plan_id"]}/{segment["index"]}')
+            geometry.append(Framed(obj,packet['frame_id'],matrix))
+        failure = packet.get('failure')
+        if failure and failure.get('target_xyz_mm') is not None:
+            target = np.asarray(failure['target_xyz_mm'],dtype=float)
+            if target.shape != (3,) or not np.isfinite(target).all():
+                raise ValueError('Invalid failure target')
+            matrix = np.eye(4)
+            matrix[:3,3] = target
+            obj = SceneObject('Failed segment requested target — exact failure point unknown',
+                              make_sphere(12.,rings=12,segments=16),color=COLORS['failed'],
+                              id=f'preview/{packet["plan_id"]}/failure')
+            geometry.append(Framed(obj,packet['frame_id'],matrix))
+        self._preview_geometry_revision,self._preview_geometry = revision,geometry
+        self._preview_path_meshes = path_meshes
+        return geometry
 
     def _resource(self, uri):
         path = resolve_mesh(uri, self.cache_directory/'description.urdf',self.package_root, package_resolver=self.package_resolver)
@@ -351,6 +398,11 @@ class SceneAssembler:
     def build(self, now=None):
         now = time.monotonic() if now is None else now
         framed, missing = list(self.robot.values()), set()
+        preview_warning = None
+        try:
+            framed.extend(self._planned_geometry())
+        except (ValueError,KeyError,TypeError) as exc:
+            preview_warning = 'Planned preview: '+str(exc)
         for category, store in (('world', self.world), ('attached', self.attached)):
             for key, collision in store.items():
                 color = self.colors.get(key, (.35, .65, .72, .5) if category == 'world' else (.85, .55, .25, 1))
@@ -378,6 +430,8 @@ class SceneAssembler:
                 item.frozen = transform.copy()
             scene.objects.append(replace(item.obj, pose=matrix_pose(transform @ item.local)))
         warnings = sorted(self.warnings)
+        if preview_warning:
+            warnings.append(preview_warning)
         if missing:
             warnings.append('Waiting for TF: '+', '.join(sorted(missing)))
         return scene, warnings

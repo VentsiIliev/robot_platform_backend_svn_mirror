@@ -78,6 +78,28 @@ Apply each once: use the component's geometry origin for its authored mesh frame
 and the profile's macro arguments for the component attachment. TCP calibration
 is a separate working-point transform, not a mesh-placement correction.
 
+## Cartesian feedback timing
+
+`paint_tray_dry` overrides `TF_PUBLISH_RATE_HZ` and `STATE_PUBLISH_RATE_HZ`
+to 100 Hz and enables `STATE_USE_TF_SOURCE_TIMESTAMPS`. The Cartesian pose
+header then retains the TF transform timestamp, including when repeated lookups
+return the same transform. Republishing a cached transform does not establish
+new feedback. The source timestamp is a ROS TF timestamp, not a hardware encoder
+acquisition timestamp.
+
+These are profile-local settings. Other profiles retain the 15 Hz TF launch
+default, their existing Cartesian publication rate, and publication-time pose
+stamps. The shared derivative implementation, joint input/derivative rates,
+10 Hz monitor store, UI WebSocket rates, pose frames, and units are unchanged.
+The tray profile already disables Cartesian and joint derivative topics.
+The diagnostic plot removes duplicate source timestamps before calculating
+its motion profile; calibration coverage logging keeps its own time throttle.
+
+The higher configured rates support the platform's 50 ms feedback-age bound;
+actual scheduling and HTTP latency must still satisfy that bound. They do not
+relax the 200 ms settling window or the prepared-start position/orientation
+limits. Rebuild and restart before measuring deployed timing.
+
 ## Loading and rebuilding
 
 `runtime.yaml` selects the standalone default. `ZEROERR_ACTIVE_PROFILE` takes

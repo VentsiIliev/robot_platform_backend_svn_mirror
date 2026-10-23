@@ -48,6 +48,6 @@ def object_category(obj):
         return 'Robot'
     if obj.collision or obj.id.startswith(('world/','attached/')):
         return 'Collision'
-    if obj.id.startswith('marker/'):
+    if obj.id.startswith(('marker/','preview/')):
         return 'Marker'
     return 'Imported' if obj.mesh.source else 'Visual'

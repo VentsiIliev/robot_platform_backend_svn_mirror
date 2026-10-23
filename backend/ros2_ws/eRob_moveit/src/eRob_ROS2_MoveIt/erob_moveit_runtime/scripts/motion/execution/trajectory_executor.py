@@ -376,6 +376,12 @@ class TrajectoryExecutor:
         joint_trajectory = self._last_sent_trajectory
         if joint_trajectory is None or not joint_trajectory.points:
             return
+        if getattr(getattr(joint_trajectory, 'header', None), 'frame_id', '') == 'zeroerr_command_brake_v1':
+            self._node.get_logger().warning(
+                '[CollisionBrake] Endpoint regenerated inside controller; '
+                'use CollisionCommandBrake end_positions and action controller_error. '
+                'Measured-preview endpoint is not a tracking target.')
+            return
 
         expected = list(joint_trajectory.points[-1].positions)
         actual = self._get_latest_joint_state_in_trajectory_order(joint_trajectory.joint_names)
@@ -1704,7 +1710,9 @@ class TrajectoryExecutor:
                                 f'measured_positions={list(state.position)} '
                                 f'measured_velocities={list(state.velocity)}') if state else 'feedback=unavailable'
                     self._node.get_logger().warning(
-                        f'[CollisionBrake] result error_code={result.error_code} {measured}')
+                        f'[CollisionBrake] result error_code={result.error_code} '
+                        f'controller_error={getattr(result, "error_string", "")} '
+                        f'trajectory_source=controller_command {measured}')
                 except Exception as exc:
                     self._node.get_logger().warning(f'[CollisionBrake] Result diagnostics unavailable: {exc}')
             if active_goal_is_stop and result.error_code == 0:

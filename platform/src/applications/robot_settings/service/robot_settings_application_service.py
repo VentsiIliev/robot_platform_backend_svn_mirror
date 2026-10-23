@@ -150,11 +150,7 @@ class RobotSettingsApplicationService(IRobotSettingsService):
             ok = self._navigation.move_to_group(group_name)
             if ok:
                 return True, ""
-            return False, (
-                "Motion was blocked.\n"
-                "The target position may be outside the configured safety limits.\n"
-                "Open Settings → Safety tab to review and adjust the workspace bounds."
-            )
+            return False, self._motion_failure_reason()
         except Exception as e:
             return False, f"Motion error: {e}"
 
@@ -165,11 +161,7 @@ class RobotSettingsApplicationService(IRobotSettingsService):
             ok = self._navigation.move_linear_group(group_name)
             if ok:
                 return True, ""
-            return False, (
-                "Execution was blocked.\n"
-                "One or more trajectory positions may be outside the configured safety limits.\n"
-                "Open Settings → Safety tab to review and adjust the workspace bounds."
-            )
+            return False, self._motion_failure_reason()
         except Exception as e:
             return False, f"Execution error: {e}"
 
@@ -183,14 +175,17 @@ class RobotSettingsApplicationService(IRobotSettingsService):
             ok = self._navigation.move_to_position(values, group_name)
             if ok:
                 return True, ""
-            return False, (
-                "Motion was blocked.\n"
-                "The target position may be outside the configured safety limits.\n"
-                "Open Settings → Safety tab to review and adjust the workspace bounds."
-            )
+            return False, self._motion_failure_reason()
         except Exception as e:
             return False, f"Motion error: {e}"
 
+
+    def _motion_failure_reason(self) -> str:
+        getter = getattr(self._robot, "get_last_motion_error", None)
+        reason = getter() if callable(getter) else None
+        if isinstance(reason, str) and reason.strip():
+            return reason
+        return "Motion failed. Check the robot status and movement settings."
 
     def jog(self, axis: str, direction: str, step: float) -> None:
         if self._robot is None:

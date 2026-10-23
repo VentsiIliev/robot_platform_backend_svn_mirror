@@ -221,5 +221,86 @@ class TestOrderedPaintContactCommands(unittest.TestCase):
         self.assertEqual(20.0, commands[1].profile.acceleration_percent)
 
 
+
+class TestTimestampedSettling(unittest.TestCase):
+    def settle(self, samples, timeout=0.8):
+        clock = _FakeClock()
+        robot = MagicMock()
+        iterator = iter(samples)
+        last = samples[-1]
+        robot.get_current_position_sample.side_effect = lambda: next(iterator, last)
+        logger = MagicMock()
+        result = wait_for_stable_pose(
+            robot, logger=logger, read_error_message='read failed', timeout_message='timeout',
+            timeout_s=timeout, require_feedback_timestamps=True,
+            monotonic=clock.monotonic, sleep=clock.sleep,
+        )
+        robot.get_current_position_fresh.assert_not_called()
+        return result, robot, logger
+
+    @staticmethod
+    def sample(source, observed=None, x=0):
+        # Offset from zero because a missing/zero ROS stamp is not valid evidence.
+        return {'position': [x, 0, 30, 180, 0, 0],
+                'sample_timestamp_ns': 1_000_000_000 + round(source * 1e9),
+                'observation_timestamp_ns': 1_000_000_000 + round((source if observed is None else observed) * 1e9)}
+
+    def test_post_request_samples_must_be_distinct_and_span_settling_window(self):
+        samples = [self.sample(0, 0.02), self.sample(0, 0.03),
+                   self.sample(0.01, 0.04), self.sample(0.05), self.sample(0.1),
+                   self.sample(0.15), self.sample(0.2), self.sample(0.25)]
+        pose, robot, _ = self.settle(samples)
+        self.assertEqual([0, 0, 30, 180, 0, 0], pose)
+        self.assertEqual(8, robot.get_current_position_sample.call_count)
+
+    def test_repeated_source_stamp_never_establishes_settling(self):
+        pose, _, _ = self.settle([self.sample(0), self.sample(0.1)])
+        self.assertIsNone(pose)
+
+    def test_feedback_older_than_50_ms_is_rejected(self):
+        samples = [self.sample(i * 0.05, i * 0.05 + 0.051) for i in range(20)]
+        self.assertIsNone(self.settle(samples)[0])
+
+    def test_small_incremental_drift_cannot_accumulate_as_stability(self):
+        samples = [self.sample(i * 0.05, x=i * 0.3) for i in range(20)]
+        self.assertIsNone(self.settle(samples)[0])
+
+    def test_http_round_trip_is_included_in_50_ms_age_bound(self):
+        samples = [{**self.sample(i * .05, i * .05 + .03), 'transport_elapsed_s': .025}
+                   for i in range(20)]
+        self.assertIsNone(self.settle(samples)[0])
+
+    def test_delayed_feedback_can_catch_up_before_timeout(self):
+        samples = [self.sample(0, 0.2), self.sample(0.05, 0.25)]
+        samples += [self.sample(0.3 + i * 0.05, x=1) for i in range(6)]
+        self.assertEqual([1, 0, 30, 180, 0, 0], self.settle(samples)[0])
+
+    def test_transient_late_reset_needs_full_settling_window_before_authorization(self):
+        # Reproduce a fresh final reading and three comparisons at the one-second
+        # deadline, but less than 200 ms since the latest stale-feedback reset.
+        samples = [self.sample(i * .05, i * .05 + .051) for i in range(16)]
+        samples += [self.sample(.8 + i * .05) for i in range(8)]
+        result, _, logger = self.settle(samples, timeout=1.0)
+        self.assertIsNone(result)
+        self.assertIn("stable_span_ms", logger.error.call_args.args[0])
+        self.assertEqual([0, 0, 30, 180, 0, 0], self.settle(samples, timeout=3.0)[0])
+
+    def test_longer_deadline_does_not_accept_permanently_stale_feedback(self):
+        samples = [self.sample(i * .05, i * .05 + .051) for i in range(70)]
+        result, _, logger = self.settle(samples, timeout=3.0)
+        self.assertIsNone(result)
+        self.assertEqual("stale_feedback", logger.error.call_args.args[-1])
+
+    def test_missing_or_invalid_metadata_fails_closed(self):
+        for value in (None, {}, {'sample_timestamp_ns': True, 'observation_timestamp_ns': 123}):
+            with self.subTest(value=value):
+                self.assertIsNone(self.settle([value])[0])
+
+    def test_future_or_out_of_order_stamps_do_not_count(self):
+        samples = [self.sample(0), self.sample(0.1), self.sample(0.09),
+                   self.sample(0.2, 0.1), self.sample(0.15)]
+        self.assertIsNone(self.settle(samples)[0])
+
+
 if __name__ == "__main__":
     unittest.main()

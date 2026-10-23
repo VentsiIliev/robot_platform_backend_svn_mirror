@@ -366,7 +366,7 @@ class PaintProcess(BaseProcess):
             isinstance(failure, PaintFailure)
             and failure.stage == "collision_monitor"
         )
-        if not has_collision_failure and not self._backend_collision_interlock_active():
+        if not has_collision_failure and not self._backend_collision_recovery_required():
             # A queued dialog may outlive a successful release from another view.
             return True, "Collision hold already cleared"
         method = getattr(self._robot_service, "acknowledge_collision_interlock", None)
@@ -392,9 +392,27 @@ class PaintProcess(BaseProcess):
         return (
             isinstance(failure, PaintFailure)
             and failure.stage == "collision_monitor"
-        ) or self._backend_collision_interlock_active()
+        ) or self._backend_collision_recovery_required()
 
-    def _backend_collision_interlock_active(self) -> bool:
+    def collision_detected(self) -> bool:
+        """Distinguish confirmed collision evidence from observer availability."""
+        if isinstance(self._last_failure, PaintFailure) and self._last_failure.stage == "collision_monitor":
+            return True
+        if self._robot_service is None:
+            return False
+        try:
+            status = self._robot_service.get_execution_status()
+        except Exception:
+            self._logger.exception("Failed to read collision evidence")
+            return False
+        if not isinstance(status, dict):
+            return False
+        interlock = status.get("motion_interlock")
+        collision = status.get("collision_event")
+        return (isinstance(interlock, dict) and bool(interlock.get("active", False))
+                and isinstance(collision, dict) and bool(collision))
+
+    def _backend_collision_recovery_required(self) -> bool:
         if self._robot_service is None:
             return False
         try:
@@ -405,7 +423,14 @@ class PaintProcess(BaseProcess):
         if not isinstance(status, dict):
             return False
         interlock = status.get("motion_interlock")
-        return isinstance(interlock, dict) and bool(interlock.get("active", False))
+        if not isinstance(interlock, dict):
+            return False
+        # An observer can lose readiness after a drive fault without latching
+        # a collision stop. Explicit recovery must still reach the backend.
+        observer_required = interlock.get("collision_monitor_required") is not False
+        return bool(interlock.get("active", False)) or (
+            observer_required and interlock.get("collision_monitor_ready") is False
+        )
 
     def _run_in_background(self, *args, **kwargs) -> None:
         context = self._diagnostic_run_context or {**ActionRecorder().operation_context(),

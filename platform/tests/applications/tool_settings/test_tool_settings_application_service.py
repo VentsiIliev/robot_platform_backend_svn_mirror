@@ -221,3 +221,68 @@ class TestToolSettingsApplicationServiceCalibration(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSequenceExecution(unittest.TestCase):
+    def setUp(self):
+        from threading import Event
+        from types import SimpleNamespace
+        self.cancelled = Event()
+        self.robot = MagicMock()
+        self.robot.is_healthy.return_value = True
+        self.robot.get_state.return_value = 'idle'
+        self.robot.get_current_velocity.return_value = 0.0
+        self.robot.move_linear.return_value = True
+        self.robot.set_active_tool.return_value = True
+        self.robot.stop_motion.return_value = True
+        self.config = SimpleNamespace(robot_tool=0, robot_user=3)
+        self.settings = MagicMock()
+        tc = _make_tc(slots=[SlotConfig(id=10, tool_id=7)])
+        self.settings.get.side_effect = lambda key: tc if key == CommonSettingsID.TOOL_CHANGER_CONFIG else self.config
+        self.service = ToolSettingsApplicationService(self.settings, robot_service=self.robot)
+        self.steps = [{'kind': 'motion', 'pose': [i] * 6} for i in (1, 2, 3)]
+
+    def test_runs_draft_in_order_and_waits_for_each_move(self):
+        ok, message = self.service.execute_sequence(10, self.steps, self.cancelled)
+        self.assertTrue(ok, message)
+        calls = self.robot.move_linear.call_args_list
+        self.assertEqual([c.kwargs['position'] for c in calls], [[i] * 6 for i in (1, 2, 3)])
+        self.assertTrue(all(c.kwargs['wait_to_reach'] for c in calls))
+        self.assertTrue(all(c.kwargs['user'] == 3 for c in calls))
+        self.settings.save.assert_not_called()
+
+    def test_failed_step_prevents_following_moves(self):
+        self.robot.move_linear.side_effect = [True, False]
+        self.assertFalse(self.service.execute_sequence(10, self.steps, self.cancelled)[0])
+        self.assertEqual(self.robot.move_linear.call_count, 2)
+
+    def test_cancellation_prevents_next_step(self):
+        def move(**kwargs):
+            self.cancelled.set()
+            return True
+        self.robot.move_linear.side_effect = move
+        self.assertFalse(self.service.execute_sequence(10, self.steps, self.cancelled)[0])
+        self.assertEqual(self.robot.move_linear.call_count, 1)
+
+    def test_confirmation_action_is_rejected_before_any_motion(self):
+        self.steps.append({'kind': 'operator_confirm'})
+        self.assertFalse(self.service.execute_sequence(10, self.steps, self.cancelled)[0])
+        self.robot.move_linear.assert_not_called()
+
+    def test_stationary_check_prevents_starting_while_jogging(self):
+        self.robot.get_current_velocity.return_value = 2.0
+        self.assertFalse(self.service.execute_sequence(10, self.steps, self.cancelled)[0])
+        self.robot.move_linear.assert_not_called()
+
+    def test_saved_tcp_changes_apply_to_subsequent_moves(self):
+        steps = [self.steps[0], {'kind': 'attach'}, self.steps[1], {'kind': 'detach'}, self.steps[2]]
+        self.assertTrue(self.service.execute_sequence(10, steps, self.cancelled)[0])
+        self.assertEqual([c.kwargs['tool'] for c in self.robot.move_linear.call_args_list], [0, 7, 0])
+
+    def test_empty_draft_does_not_move(self):
+        self.assertFalse(self.service.execute_sequence(10, [], self.cancelled)[0])
+        self.robot.move_linear.assert_not_called()
+
+    def test_stop_requests_robot_stop(self):
+        self.assertTrue(self.service.stop_sequence_motion()[0])
+        self.robot.stop_motion.assert_called_once()

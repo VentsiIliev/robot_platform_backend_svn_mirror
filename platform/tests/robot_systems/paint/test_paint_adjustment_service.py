@@ -149,6 +149,35 @@ class PaintAdjustmentServiceTests(unittest.TestCase):
             service.adjust_paint_by_register_units("more", 1)
         transport.write_register.assert_not_called()
 
+    def test_move_reports_current_delta_target_and_range(self):
+        service, transport = self._service(sign=-1)
+        transport.read_register.return_value = 45
+        with self.assertRaisesRegex(
+            ValueError,
+            r"target 44.*range 45\.\.235; current position=45, requested delta=-1",
+        ):
+            service.adjust_paint_by_register_units("more", 1)
+        transport.write_register.assert_not_called()
+
+    def test_read_from_zero_reports_position_and_range(self):
+        service, transport = self._service(sign=-1)
+        transport.read_register.return_value = 0
+        with self.assertRaisesRegex(ValueError, r"position 0.*range 45\.\.235"):
+            service.read_current_position()
+        transport.write_register.assert_not_called()
+
+    def test_invalid_calibration_reports_configured_values(self):
+        service, transport = self._service(sign=-1)
+        binding = service._settings.get(SettingsID.PERIPHERALS).peripherals["paint_head"]
+        binding.commands["min_value"] = -1
+        with self.assertRaisesRegex(ValueError, "min_value=-1, max_value=235"):
+            service.get_dial_config()
+        binding.commands["min_value"] = 0
+        with self.assertRaisesRegex(ValueError, r"preset_spacing=38.*calculated 190"):
+            service.get_dial_config()
+        transport.read_register.assert_not_called()
+        transport.write_register.assert_not_called()
+
     def test_disabled_device_logs_calculations_without_hardware_io(self):
         service, transport = self._service(sign=1, enabled=False)
         self.assertTrue(service.is_paint_head_available())

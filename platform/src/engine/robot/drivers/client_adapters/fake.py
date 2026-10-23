@@ -100,7 +100,7 @@ class FakeRobotClient(RobotClientAdapter):
         return self._accept_motion(position, blocking=True)
 
     def move_liner(self, position, tool=0, user=0, vel=30, acc=30, blendR=0, blocking=True, trajectory_optimizer="TOTG",
-                   allow_collision_recovery=False):
+                   allow_collision_recovery=False, recovery_jog=False):
         if not self.set_active_tool(tool):
             return -1
         if not self._drive_enabled and self.enable() != 0:

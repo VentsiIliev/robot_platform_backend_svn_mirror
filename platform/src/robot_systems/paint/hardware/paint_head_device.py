@@ -61,7 +61,8 @@ class PaintHeadDevice:
             raise ValueError("Paint-head target must be a whole register value")
         if not self._min_value <= position <= self._max_value:
             raise PaintHeadRangeError(
-                f"Paint-head target {position} is outside the configured range"
+                f"Paint-head target {position} is outside the configured range "
+                f"{self._min_value}..{self._max_value}"
             )
         return position
 
@@ -82,7 +83,14 @@ class PaintHeadDevice:
         if isinstance(delta_register, bool) or not isinstance(delta_register, int) or delta_register == 0:
             raise ValueError("Paint-head register move must be a nonzero whole number")
         current = self.read_position()
-        return self.go_to_position(current + delta_register)
+        target = current + delta_register
+        try:
+            self.validate_position(target)
+        except PaintHeadRangeError as error:
+            raise PaintHeadRangeError(
+                f"{error}; current position={current}, requested delta={delta_register:+d}"
+            ) from error
+        return self.go_to_position(target)
 
     def register_delta_for_setting_tenths(self, tenths: int) -> int:
         """Convert a positive tenth-of-setting step to register units."""
@@ -113,7 +121,10 @@ class PaintHeadDevice:
         """Read and validate the current register position."""
         current = self._transport.read_register(self._register)
         if not self._min_value <= current <= self._max_value:
-            raise ValueError(f"Paint-head position {current} is outside the configured range")
+            raise ValueError(
+                f"Paint-head position {current} is outside the configured range "
+                f"{self._min_value}..{self._max_value}"
+            )
         return current
 
     def register_delta_for_degrees(self, delta_degrees: int) -> int:

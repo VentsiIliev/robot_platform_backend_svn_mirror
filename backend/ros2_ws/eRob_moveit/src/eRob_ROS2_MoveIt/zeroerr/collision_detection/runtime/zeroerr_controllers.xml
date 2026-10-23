@@ -6,4 +6,10 @@
     base_class_type="controller_interface::ControllerInterface">
     <description>2 kHz in-process sensorless collision observer and decision controller.</description>
   </class>
+  <class
+    name="zeroerr/CommandCollisionTrajectoryController"
+    type="zeroerr::CommandCollisionTrajectoryController"
+    base_class_type="controller_interface::ControllerInterface">
+    <description>Standard trajectory controller with command-continuous collision takeover.</description>
+  </class>
 </library>

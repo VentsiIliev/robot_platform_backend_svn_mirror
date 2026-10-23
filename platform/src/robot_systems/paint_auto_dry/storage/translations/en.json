@@ -41,6 +41,8 @@
     "Paint-head communication issue. It may be unplugged or missing.": "Paint-head communication issue. It may be unplugged or missing.",
     "Dry-run preview: {value} (not moved)": "Dry-run preview: {value} (not moved)",
     "Last confirmed position: {value}": "Last confirmed position: {value}",
+    "Paint-head configuration error: {error}": "Paint-head configuration error: {error}",
+    "Paint-head position read failed: {error}": "Paint-head position read failed: {error}",
     "Device disabled; position not read": "Device disabled; position not read",
     "Position unknown": "Position unknown",
     "Paint Adjustment — Auxiliary Camera": "Paint Adjustment — Auxiliary Camera",
@@ -277,7 +279,11 @@
     "RUNNING": "RUNNING",
     "PAUSED": "PAUSED",
     "STOPPED": "STOPPED",
-    "IDLE": "IDLE"
+    "IDLE": "IDLE",
+    "Collision observer not ready": "Collision observer not ready",
+    "No collision has been confirmed. Keep the robot stationary and clear while resetting the observer. Motion remains held until recovery completes.": "No collision has been confirmed. Keep the robot stationary and clear while resetting the observer. Motion remains held until recovery completes.",
+    "Keep Motion Held": "Keep Motion Held",
+    "Reset observer": "Reset observer"
   },
   "ControlButtonsWidget": {
     "Start": "Start",
@@ -477,9 +483,13 @@
     "Capture Failed": "Capture Failed"
   },
   "Notifications": {
+    "notification.collision.message_joint": "Collision detected on {joint}. Robot motion is held. Remove the obstruction, then release the collision hold when it is safe to move again.",
     "notification.collision.resetting_title": "Resetting collision hold",
     "notification.collision.resetting_message": "Resetting robot protection. Keep the robot stationary and clear of obstructions. Motion remains held until recovery completes.",
     "notification.collision.reset_failed_title": "Reset not completed",
-    "notification.collision.reset_failed_message": "Motion remains held. Check that the robot is clear of obstructions and stationary, then try releasing the hold again."
+    "notification.collision.reset_failed_message": "Motion remains held. Check that the robot is clear of obstructions and stationary, then try releasing the hold again.",
+    "notification.observer.not_ready_title": "Collision observer not ready",
+    "notification.observer.not_ready_message": "No collision has been confirmed. Keep the robot stationary and clear while resetting the observer. Motion remains held until recovery completes.",
+    "notification.observer.reset": "Reset observer"
   }
 }

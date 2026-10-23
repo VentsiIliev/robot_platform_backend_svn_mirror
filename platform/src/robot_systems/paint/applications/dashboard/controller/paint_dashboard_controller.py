@@ -559,7 +559,7 @@ class PaintDashboardController(
         # A motion command can report its generic failure before the collision
         # watcher supplies a collision-specific message. Do not stack that error
         # over the system collision dialog.
-        if event_state == "error" and self._model.collision_acknowledgement_required() is True:
+        if event_state == "error" and self._model.collision_detected() is True:
             return None
         return super()._dashboard_warning_for_event(event_state, message)
 
@@ -567,7 +567,13 @@ class PaintDashboardController(
         if self._model.collision_acknowledgement_required() is not True:
             self._view.apply_dashboard_state(self._model.load())
             return
-        if not self._view.ask_collision_acknowledgement(title, message):
+        observer_recovery = self._model.collision_detected() is not True
+        if observer_recovery:
+            title = self._t("Collision observer not ready")
+            message = self._t(
+                "No collision has been confirmed. Keep the robot stationary and clear while resetting the observer. Motion remains held until recovery completes."
+            )
+        if not self._view.ask_collision_acknowledgement(title, message, observer_recovery=observer_recovery):
             return
         # Use the same coordinator and progress popup as the global Release action.
         self._broker.publish(

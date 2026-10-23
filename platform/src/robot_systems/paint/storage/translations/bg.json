@@ -41,6 +41,8 @@
     "Paint-head communication issue. It may be unplugged or missing.": "Проблем с връзката към бояджийската глава. Може да е изключена или да липсва.",
     "Dry-run preview: {value} (not moved)": "Преглед без запис: {value} (без движение)",
     "Last confirmed position: {value}": "Последна потвърдена позиция: {value}",
+    "Paint-head configuration error: {error}": "Грешка в конфигурацията на бояджийската глава: {error}",
+    "Paint-head position read failed: {error}": "Неуспешно прочитане на позицията на бояджийската глава: {error}",
     "Device disabled; position not read": "Устройството е изключено; позицията не е прочетена",
     "Position unknown": "Позицията е неизвестна",
     "Paint Adjustment — Auxiliary Camera": "Настройка на боядисването — помощна камера",
@@ -279,7 +281,11 @@
     "RUNNING": "РАБОТИ",
     "PAUSED": "ПАУЗА",
     "STOPPED": "СПРЯНО",
-    "IDLE": "ИЗЧАКВАНЕ"
+    "IDLE": "ИЗЧАКВАНЕ",
+    "Collision observer not ready": "Наблюдателят за сблъсъци не е готов",
+    "No collision has been confirmed. Keep the robot stationary and clear while resetting the observer. Motion remains held until recovery completes.": "Няма потвърден сблъсък. Дръжте робота неподвижен и без препятствия, докато нулирате наблюдателя. Движението остава блокирано до приключване на възстановяването.",
+    "Keep Motion Held": "Запази движението блокирано",
+    "Reset observer": "Нулиране на наблюдателя"
   },
   "ControlButtonsWidget": {
     "Start": "Старт",
@@ -519,9 +525,13 @@
     "Capture Failed": "Заснемането е неуспешно"
   },
   "Notifications": {
+    "notification.collision.message_joint": "Открит е сблъсък на {joint}. Движението на робота е блокирано. Отстранете препятствието, след което освободете блокировката, когато движението отново е безопасно.",
     "notification.collision.resetting_title": "Нулиране на блокировката след сблъсък",
     "notification.collision.resetting_message": "Нулиране на защитата на робота. Дръжте робота неподвижен и без препятствия около него. Движението остава блокирано до завършване на възстановяването.",
     "notification.collision.reset_failed_title": "Нулирането не завърши",
-    "notification.collision.reset_failed_message": "Движението остава блокирано. Проверете дали няма препятствия около робота и дали той е неподвижен, след което опитайте отново да освободите блокировката."
+    "notification.collision.reset_failed_message": "Движението остава блокирано. Проверете дали няма препятствия около робота и дали той е неподвижен, след което опитайте отново да освободите блокировката.",
+    "notification.observer.not_ready_title": "Наблюдателят за сблъсъци не е готов",
+    "notification.observer.not_ready_message": "Няма потвърден сблъсък. Дръжте робота неподвижен и без препятствия, докато нулирате наблюдателя. Движението остава блокирано до приключване на възстановяването.",
+    "notification.observer.reset": "Нулиране на наблюдателя"
   }
 }

@@ -1,9 +1,10 @@
 import logging
+from threading import Event
+from functools import partial
 
 from PyQt6.QtCore import QObject, QThread, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
-    QComboBox, QDialog, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QTabWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QComboBox, QDialog, QLabel, QVBoxLayout,
 )
 
 from src.applications.base.app_dialog import (
@@ -50,6 +51,11 @@ class ToolSettingsController(IApplicationController):
         self._active = []
         self._reference_captured = False
         self._candidate_samples = 0
+        self._teaching_slot_id = None
+        self._capture_page = None
+        self._capture_settings = {}
+        self._sequence_cancelled = None
+        self._sequence_stop_pending = False
 
     def load(self) -> None:
         self._connect_signals()
@@ -60,6 +66,9 @@ class ToolSettingsController(IApplicationController):
         return bool(self._active)
 
     def stop(self) -> None:
+        if self._sequence_cancelled is not None:
+            self._sequence_cancelled.set()
+            self._model.stop_sequence_motion()
         for thread, _worker in list(self._active):
             thread.quit()
             if not thread.wait(1000):
@@ -81,6 +90,12 @@ class ToolSettingsController(IApplicationController):
         self._view.reset_calibration_requested.connect(self._on_reset_calibration)
         self._view.solve_calibration_requested.connect(self._on_solve_calibration)
         self._view.edit_sequences_requested.connect(self._on_edit_sequences)
+        self._view.sequence_capture_requested.connect(self._on_capture_sequence_pose)
+        self._view.sequence_save_requested.connect(self._on_save_sequences)
+        self._view.sequence_cancel_requested.connect(self._on_cancel_sequences)
+        self._view.sequence_reverse_requested.connect(self._on_reverse_pickup)
+        self._view.sequence_execute_requested.connect(self._on_execute_sequence)
+        self._view.sequence_stop_requested.connect(self._on_stop_sequence)
 
     def _refresh(self) -> None:
         tools = self._model.get_tools()
@@ -223,16 +238,90 @@ class ToolSettingsController(IApplicationController):
         slot = next((item for item in self._model.get_slots() if item.id == slot_id), None)
         if slot is None:
             return
-        dialog = _SequenceDialog(slot, self._model.get_current_motion_pose, parent=self._view)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
+        self._teaching_slot_id = slot_id
+        self._view.show_sequence_editor(slot)
+
+    def _on_capture_sequence_pose(self, page: int, settings: dict) -> None:
+        if self._teaching_slot_id is None or self._capture_page is not None or self._sequence_cancelled is not None or self._sequence_stop_pending:
             return
-        pickup, dropoff = dialog.get_values()
-        ok, msg = self._model.update_slot_sequences(slot_id, pickup, dropoff)
-        self._view.set_status(msg)
+        self._capture_page = page
+        self._capture_settings = dict(settings)
+        self._view.set_sequence_capture_busy(True)
+        self._run_blocking(self._model.get_current_motion_pose, self._show_sequence_pose)
+
+    def _show_sequence_pose(self, result) -> None:
+        page = self._capture_page
+        self._capture_page = None
+        self._view.set_sequence_capture_busy(False)
+        ok, message = result[:2]
         if not ok:
-            show_warning(self._view, "Teach Sequences", msg)
-        else:
-            self._refresh()
+            self._view.set_sequence_message(message)
+            return
+        self._view.append_sequence_step(page, {
+            "kind": "motion", "label": "", "pose": list(result[2]),
+            "motion_type": "linear", "velocity": self._capture_settings["velocity"],
+            "acceleration": self._capture_settings["acceleration"], "blend_radius": 0.0,
+        })
+
+    def _on_save_sequences(self, pickup: list, dropoff: list) -> None:
+        if self._teaching_slot_id is None or self._capture_page is not None or self._sequence_cancelled is not None or self._sequence_stop_pending:
+            return
+        ok, msg = self._model.update_slot_sequences(self._teaching_slot_id, pickup, dropoff)
+        if not ok:
+            self._view.set_sequence_message(msg)
+            return
+        self._on_cancel_sequences()
+        self._refresh()
+        self._view.set_status(msg)
+
+    def _on_cancel_sequences(self) -> None:
+        if self._capture_page is not None or self._sequence_cancelled is not None or self._sequence_stop_pending:
+            return
+        self._teaching_slot_id = None
+        self._view.hide_sequence_editor()
+
+    def _on_reverse_pickup(self, steps: list) -> None:
+        if not steps:
+            return
+        self._view.set_sequence_dropoff(self._model.reverse_pickup(steps))
+
+    def _on_execute_sequence(self, page: int, steps: list) -> None:
+        if self._teaching_slot_id is None or self._capture_page is not None or self._sequence_cancelled is not None or self._sequence_stop_pending:
+            return
+        cancelled = Event()
+        self._sequence_cancelled = cancelled
+        slot_id = self._teaching_slot_id
+        self._view.set_sequence_executing(True)
+        self._view.set_sequence_message(self._sequence_t("Running pickup…") if page == 0 else self._sequence_t("Running drop-off…"))
+        self._run_blocking(
+            lambda: self._model.execute_sequence(slot_id, steps, cancelled),
+            self._show_sequence_execution,
+        )
+
+    def _show_sequence_execution(self, result) -> None:
+        self._sequence_cancelled = None
+        if not self._sequence_stop_pending:
+            self._view.set_sequence_executing(False)
+        self._view.set_sequence_message(self._sequence_t(result[1]))
+
+    def _on_stop_sequence(self) -> None:
+        if self._sequence_cancelled is None or self._sequence_stop_pending:
+            return
+        self._sequence_cancelled.set()
+        self._sequence_stop_pending = True
+        self._run_blocking(self._model.stop_sequence_motion, self._show_sequence_stop)
+
+    def _show_sequence_stop(self, result) -> None:
+        self._sequence_stop_pending = False
+        if self._sequence_cancelled is None:
+            self._view.set_sequence_executing(False)
+        if not result[0]:
+            self._view.set_sequence_message(self._sequence_t(result[1]))
+
+    @staticmethod
+    def _sequence_t(text):
+        from PyQt6.QtCore import QCoreApplication
+        return QCoreApplication.translate("SequenceEditor", text) or text
 
     def _show_simple_result(self, result) -> None:
         ok, msg = result[:2]
@@ -288,7 +377,8 @@ class ToolSettingsController(IApplicationController):
         thread.started.connect(worker.run)
         worker.finished.connect(on_done)
         worker.finished.connect(thread.quit)
-        worker.finished.connect(lambda _result, t=thread, w=worker: self._release_worker(t, w))
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(partial(self._release_worker, thread, worker))
         self._active.append((thread, worker))
         thread.start()
 
@@ -297,7 +387,6 @@ class ToolSettingsController(IApplicationController):
             self._active.remove((thread, worker))
         except ValueError:
             pass
-        worker.deleteLater()
         thread.deleteLater()
 
 
@@ -401,114 +490,3 @@ class _ToolGeometryDialog(AppDialog):
     def get_values(self):
         xyz = [field.value() for field in self._offsets]
         return xyz + [0.0, 0.0, 0.0], self._collision.text().strip()
-
-
-class _SequencePage(QWidget):
-    def __init__(self, steps, pose_provider, parent=None):
-        super().__init__(parent)
-        self._pose_provider = pose_provider
-        root = QVBoxLayout(self)
-        self._table = QTableWidget(0, 3)
-        self._table.setHorizontalHeaderLabels(["Step", "Type", "Pose / Details"])
-        self._table.horizontalHeader().setStretchLastSection(True)
-        root.addWidget(self._table)
-        buttons = QHBoxLayout()
-        for label, callback in (
-            ("Capture Motion", self._capture_motion),
-            ("Attach", self._add_attach),
-            ("Detach", self._add_detach),
-            ("Confirm", self._add_confirm),
-            ("Remove", self._remove),
-        ):
-            button = QPushButton(label)
-            button.setCursor(Qt.CursorShape.PointingHandCursor)
-            button.clicked.connect(callback)
-            buttons.addWidget(button)
-        root.addLayout(buttons)
-        for step in steps:
-            self._append(step.to_dict() if hasattr(step, "to_dict") else dict(step))
-
-    def _capture_motion(self):
-        ok, message, pose = self._pose_provider()
-        if not ok:
-            show_warning(self, "Capture Motion", message)
-            return
-        self._append({
-            "kind": "motion", "label": f"Motion {self._table.rowCount() + 1}",
-            "pose": pose, "motion_type": "linear", "velocity": 10.0,
-            "acceleration": 10.0, "blend_radius": 0.0,
-        })
-
-    def _add_attach(self): self._append({"kind": "attach", "label": "Attach tool"})
-    def _add_detach(self): self._append({"kind": "detach", "label": "Detach tool"})
-    def _add_confirm(self): self._append({"kind": "operator_confirm", "label": "Confirm tool state"})
-
-    def _remove(self):
-        row = self._table.currentRow()
-        if row >= 0:
-            self._table.removeRow(row)
-            self._renumber()
-
-    def _append(self, step):
-        row = self._table.rowCount()
-        self._table.insertRow(row)
-        self._table.setItem(row, 0, QTableWidgetItem(str(row + 1)))
-        self._table.setItem(row, 1, QTableWidgetItem(str(step.get("kind", "motion"))))
-        label = str(step.get("label", ""))
-        if step.get("kind") == "motion":
-            pose = ", ".join(f"{float(value):.3f}" for value in step.get("pose", []))
-            details = f"{label} | {pose}"
-        else:
-            details = label
-        item = QTableWidgetItem(details)
-        item.setData(Qt.ItemDataRole.UserRole, step)
-        self._table.setItem(row, 2, item)
-
-    def _renumber(self):
-        for row in range(self._table.rowCount()):
-            self._table.setItem(row, 0, QTableWidgetItem(str(row + 1)))
-
-    def values(self):
-        return [
-            dict(self._table.item(row, 2).data(Qt.ItemDataRole.UserRole))
-            for row in range(self._table.rowCount())
-        ]
-
-    def set_values(self, steps):
-        self._table.setRowCount(0)
-        for step in steps:
-            self._append(step)
-
-
-class _SequenceDialog(AppDialog):
-    def __init__(self, slot, pose_provider, parent=None):
-        super().__init__(f"Teach Slot {slot.id} Sequences", min_width=850, parent=parent)
-        root = QVBoxLayout(self)
-        root.setContentsMargins(20, 20, 20, 20)
-        root.addWidget(QLabel(
-            "Capture poses in execution order. Insert Attach/Detach exactly where the physical tool state changes."
-        ))
-        tabs = QTabWidget()
-        self._pickup = _SequencePage(slot.pickup_sequence, pose_provider)
-        self._dropoff = _SequencePage(slot.dropoff_sequence, pose_provider)
-        tabs.addTab(self._pickup, "Pickup")
-        tabs.addTab(self._dropoff, "Drop-off")
-        root.addWidget(tabs)
-        reverse = QPushButton("Generate Drop-off by Reversing Pickup")
-        reverse.clicked.connect(self._reverse_pickup)
-        root.addWidget(reverse)
-        root.addWidget(self._build_button_row(ok_label="Save Sequences"))
-
-    def _reverse_pickup(self):
-        reversed_steps = []
-        for step in reversed(self._pickup.values()):
-            copied = dict(step)
-            if copied.get("kind") == "attach":
-                copied.update(kind="detach", label="Detach tool")
-            elif copied.get("kind") == "detach":
-                copied.update(kind="attach", label="Attach tool")
-            reversed_steps.append(copied)
-        self._dropoff.set_values(reversed_steps)
-
-    def get_values(self):
-        return self._pickup.values(), self._dropoff.values()

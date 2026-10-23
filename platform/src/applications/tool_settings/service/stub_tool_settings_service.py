@@ -86,3 +86,9 @@ class StubToolSettingsService(IToolSettingsService):
 
     def get_current_motion_pose(self):
         return True, "Current pose captured", [100.0, 200.0, 300.0, 180.0, 0.0, 90.0]
+
+    def execute_sequence(self, slot_id, steps, cancelled):
+        return (False, "Sequence stopped") if cancelled.is_set() else (True, "Sequence completed")
+
+    def stop_sequence_motion(self):
+        return True, "Stop requested"

@@ -260,6 +260,7 @@ class LocalRuntimeGateway(RuntimeGateway):
         blocking=True,
         trajectory_optimizer=None,
         allow_collision_recovery=False,
+        recovery_jog=False,
     ) -> int:
         try:
             from motion.move_linear_timing import begin as begin_move_linear_timing
@@ -275,6 +276,7 @@ class LocalRuntimeGateway(RuntimeGateway):
             blocking=blocking,
             trajectory_optimizer=trajectory_optimizer,
             allow_collision_recovery=allow_collision_recovery,
+            recovery_jog=recovery_jog,
         )
 
     def move_fast_lin(
@@ -452,6 +454,9 @@ class LocalRuntimeGateway(RuntimeGateway):
         return self.robot.servo_jog_to_z(**kwargs)
 
     # --- position / kinematics queries ------------------------------------
+
+    def get_current_position_sample(self):
+        return self.robot.get_current_position_sample()
 
     def get_current_position(self):
         return self.robot.get_current_position()

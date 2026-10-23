@@ -35,6 +35,10 @@ class ZeroErrStatePublisher(CartesianPublisherBase):
 
     def __init__(self) -> None:
         super().__init__('zeroerr_state_publisher')
+        self.declare_parameter('use_tf_source_timestamps', False)
+        self._use_tf_source_timestamps = bool(
+            self.get_parameter('use_tf_source_timestamps').value
+        )
         self.declare_parameter('cartesian_source_link', _DEFAULT_SOURCE_FRAME)
         self._source_frame = str(
             self.get_parameter('cartesian_source_link').value
@@ -59,7 +63,12 @@ class ZeroErrStatePublisher(CartesianPublisherBase):
             self._tf_warn_logged = False
 
             pose = PoseStamped()
-            pose.header.stamp = self.get_clock().now().to_msg()
+            # Strict feedback consumers need the TF measurement time. Keep
+            # legacy publication-time stamps unless the profile opts in.
+            pose.header.stamp = (
+                t.header.stamp if self._use_tf_source_timestamps
+                else self.get_clock().now().to_msg()
+            )
             pose.header.frame_id = _BASE_FRAME
             tr = t.transform.translation
             ro = t.transform.rotation

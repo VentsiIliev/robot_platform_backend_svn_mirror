@@ -85,6 +85,7 @@ def run(args):
             self.create_subscription(TFMessage, args.tf_static_topic, self.transforms,
                                      QoSProfile(depth=100, durability=DurabilityPolicy.TRANSIENT_LOCAL))
             self.create_subscription(PlanningScene, args.scene_topic, self.planning, 10)
+            self.create_subscription(String,args.preview_topic,self.preview,transient)
             self.marker_subs = []
             for topic in args.marker_topics:
                 # Store each bound callback strongly; no Qt objects cross here.
@@ -111,6 +112,13 @@ def run(args):
 
         def description(self, message):
             self.guarded(assembler.robot_description, message.data)
+
+        def preview(self,message):
+            try:
+                assembler.preview.update(json.loads(message.data))
+                self.errors.pop('preview',None)
+            except Exception as exc:
+                self.errors['preview'] = 'Planned trajectory: '+str(exc)
 
         def transforms(self, message):
             self.guarded(assembler.frames.update, message.transforms)
@@ -160,6 +168,7 @@ def run(args):
                     self.last_payload = objects
                 if now-self.last_status >= 1:
                     emit('status', objects=len(objects), robot=bool(assembler.robot),
+                         preview=assembler.preview.summary(),
                          planning=self.initial_scene, warnings=warnings[:20],
                          tf_age=None if self.last_tf is None else round(now-self.last_tf, 1),
                          domain=os.environ.get('ROS_DOMAIN_ID', '0'))
@@ -193,6 +202,7 @@ def run(args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--mesh-root',help='Local mesh package or workspace folder')
+    parser.add_argument('--preview-topic',default='/ordered_motion/preview')
     parser.add_argument('--cache', required=True)
     parser.add_argument('--fixed-frame', default='base_link')
     parser.add_argument('--scene-topic', default='/monitored_planning_scene')

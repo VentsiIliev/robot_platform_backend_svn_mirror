@@ -14,5 +14,5 @@ manipulator_fast:
   # Speed mode returns immediately on ordinary samples. Keep the full timeout
   # as a worst-case reliability budget for difficult poses near singularities.
   kinematics_solver_timeout: 0.02
-  solve_type: Speed
+  solve_type: Distance
   kinematics_solver_attempts: 3
