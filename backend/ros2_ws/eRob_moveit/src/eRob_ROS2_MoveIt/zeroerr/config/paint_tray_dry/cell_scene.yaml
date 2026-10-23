@@ -1,0 +1,347 @@
+CELL_COLLISION_OBJECTS:
+  cell_fixture_tray_01:
+    enabled: true
+    frame: mounting_surface
+    size_mm:
+    - 540.0
+    - 29.0
+    - 9.79998779296875
+    pose:
+    - 0.0
+    - -147.3000030517578
+    - 4.899993896484375
+    - 0.0
+    - 0.0
+    - 0.0
+  cell_fixture_tray_02:
+    enabled: true
+    frame: mounting_surface
+    size_mm:
+    - 3.048004150390625
+    - 105.00000286102295
+    - 134.85599517822266
+    pose:
+    - -224.0
+    - 44.80000162124634
+    - 75.77599716186523
+    - 0.0
+    - 0.0
+    - 0.0
+  cell_fixture_tray_03:
+    enabled: true
+    frame: mounting_surface
+    size_mm:
+    - 35.0
+    - 234.0
+    - 6.095999479293823
+    pose:
+    - -221.5
+    - 44.80000305175781
+    - 5.299999833106995
+    - 0.0
+    - 0.0
+    - 0.0
+  cell_fixture_tray_04:
+    enabled: true
+    frame: mounting_surface
+    size_mm:
+    - 11.0
+    - 48.00000071525574
+    - 12.029998779296875
+    pose:
+    - -249.5
+    - -25.200000405311584
+    - 155.31500244140625
+    - 0.0
+    - 0.0
+    - 0.0
+  cell_fixture_tray_05:
+    enabled: true
+    frame: mounting_surface
+    size_mm:
+    - 56.3701171875
+    - 5.0
+    - 5.0
+    pose:
+    - -278.18505859375
+    - -46.70000076293945
+    - 156.8000030517578
+    - 0.0
+    - 0.0
+    - 0.0
+  cell_fixture_tray_06:
+    enabled: true
+    frame: mounting_surface
+    size_mm:
+    - 56.3701171875
+    - 4.999999761581421
+    - 5.0
+    pose:
+    - -278.18505859375
+    - -3.6999999284744263
+    - 156.8000030517578
+    - 0.0
+    - 0.0
+    - 0.0
+  cell_fixture_tray_07:
+    enabled: true
+    frame: mounting_surface
+    size_mm:
+    - 11.0
+    - 48.000003814697266
+    - 12.029998779296875
+    pose:
+    - -249.5
+    - 49.80000114440918
+    - 155.31500244140625
+    - 0.0
+    - 0.0
+    - 0.0
+  cell_fixture_tray_08:
+    enabled: true
+    frame: mounting_surface
+    size_mm:
+    - 56.3701171875
+    - 5.0
+    - 5.0
+    pose:
+    - -278.18505859375
+    - 28.299999237060547
+    - 156.8000030517578
+    - 0.0
+    - 0.0
+    - 0.0
+  cell_fixture_tray_09:
+    enabled: true
+    frame: mounting_surface
+    size_mm:
+    - 56.3701171875
+    - 5.0
+    - 5.0
+    pose:
+    - -278.18505859375
+    - 71.30000305175781
+    - 156.8000030517578
+    - 0.0
+    - 0.0
+    - 0.0
+  cell_fixture_tray_10:
+    enabled: true
+    frame: mounting_surface
+    size_mm:
+    - 11.0
+    - 48.0
+    - 12.029998779296875
+    pose:
+    - -249.5
+    - 124.80000305175781
+    - 155.31500244140625
+    - 0.0
+    - 0.0
+    - 0.0
+  cell_fixture_tray_11:
+    enabled: true
+    frame: mounting_surface
+    size_mm:
+    - 56.3701171875
+    - 5.0
+    - 5.0
+    pose:
+    - -278.18505859375
+    - 103.30000305175781
+    - 156.8000030517578
+    - 0.0
+    - 0.0
+    - 0.0
+  cell_fixture_tray_12:
+    enabled: true
+    frame: mounting_surface
+    size_mm:
+    - 56.3701171875
+    - 5.0
+    - 5.0
+    pose:
+    - -278.18505859375
+    - 146.3000030517578
+    - 156.8000030517578
+    - 0.0
+    - 0.0
+    - 0.0
+  cell_fixture_tray_13:
+    enabled: false
+    frame: mounting_surface
+    size_mm:
+    - 115.25
+    - 90.00000762939453
+    - 36.0
+    pose:
+    - 246.875
+    - -17.450000762939453
+    - 137.14996337890625
+    - 0.0
+    - 0.0
+    - 0.0
+    merged_into: cell_fixture_paint_head_base
+  cell_fixture_tray_14:
+    enabled: false
+    frame: mounting_surface
+    size_mm:
+    - 94.0
+    - 116.0
+    - 50.0
+    pose:
+    - 252.0
+    - -18.199996948242188
+    - 27.29998779296875
+    - 0.0
+    - 0.0
+    - 0.0
+    merged_into: cell_fixture_paint_head_base
+  cell_fixture_tray_15:
+    enabled: false
+    frame: mounting_surface
+    size_mm:
+    - 58.0
+    - 84.75000762939453
+    - 73.25
+    pose:
+    - 230.25
+    - -18.075000762939453
+    - 88.52496337890625
+    - 0.0
+    - 0.0
+    - 0.0
+    merged_into: cell_fixture_paint_head_base
+  cell_fixture_tray_16:
+    enabled: false
+    frame: mounting_surface
+    size_mm:
+    - 45.0
+    - 84.75000762939453
+    - 88.3499755859375
+    pose:
+    - 281.75
+    - -18.075000762939453
+    - 95.9749755859375
+    - 0.0
+    - 0.0
+    - 0.0
+    merged_into: cell_fixture_paint_head_base
+  cell_fixture_tray_17:
+    enabled: false
+    frame: mounting_surface
+    size_mm:
+    - 53.199981689453125
+    - 56.0
+    - 20.0
+    pose:
+    - 256.4987335205078
+    - 3.05609130859375
+    - 325.14996337890625
+    - 0.0
+    - 0.0
+    - 0.0
+  cell_fixture_tray_18:
+    enabled: false
+    frame: mounting_surface
+    size_mm:
+    - 53.22877502441406
+    - 53.22877502441406
+    - 56.0999755859375
+    pose:
+    - 264.2457809448242
+    - 32.303138732910156
+    - 242.0999755859375
+    - 0.0
+    - 0.0
+    - 0.0
+  cell_fixture_tray_19:
+    enabled: false
+    frame: mounting_surface
+    size_mm:
+    - 75.12452697753906
+    - 75.1245346069336
+    - 8.334716796875
+    pose:
+    - 235.0340805053711
+    - 3.020740509033203
+    - 316.31732177734375
+    - 0.0
+    - 0.0
+    - 0.0
+  cell_fixture_tray_20:
+    enabled: false
+    frame: mounting_surface
+    size_mm:
+    - 32.70001220703125
+    - 39.99999237060547
+    - 13.199951171875
+    pose:
+    - 302.6000061035156
+    - -10.60000228881836
+    - 239.70001220703125
+    - 0.0
+    - 0.0
+    - 0.0
+  cell_fixture_tray_21:
+    enabled: false
+    frame: mounting_surface
+    size_mm:
+    - 25.0
+    - 12.997085571289062
+    - 9.699951171875
+    pose:
+    - 312.75
+    - -38.80000305175781
+    - 124.39996337890625
+    - 0.0
+    - 0.0
+    - 0.0
+  cell_fixture_paint_head_base:
+    enabled: true
+    frame: mounting_surface
+    parts:
+    - size_mm:
+      - 115.25
+      - 90.00000762939453
+      - 36.0
+      pose:
+      - 246.875
+      - -17.450000762939453
+      - 137.14996337890625
+      - 0.0
+      - 0.0
+      - 0.0
+    - size_mm:
+      - 94.0
+      - 116.0
+      - 50.0
+      pose:
+      - 252.0
+      - -18.199996948242188
+      - 27.29998779296875
+      - 0.0
+      - 0.0
+      - 0.0
+    - size_mm:
+      - 58.0
+      - 84.75000762939453
+      - 73.25
+      pose:
+      - 230.25
+      - -18.075000762939453
+      - 88.52496337890625
+      - 0.0
+      - 0.0
+      - 0.0
+    - size_mm:
+      - 45.0
+      - 84.75000762939453
+      - 88.3499755859375
+      pose:
+      - 281.75
+      - -18.075000762939453
+      - 95.9749755859375
+      - 0.0
+      - 0.0
+      - 0.0

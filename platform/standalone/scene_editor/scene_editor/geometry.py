@@ -42,6 +42,12 @@ class Mesh:
         return data
 
 
+def combine_meshes(parts):
+    """Retain every triangle under its transform; do not fill gaps or form a hull."""
+    triangles = [mesh.vertices @ matrix[:3, :3].T + matrix[:3, 3] for mesh, matrix in parts]
+    return Mesh(np.concatenate(triangles)) if triangles else None
+
+
 def read_stl(path):
     path = Path(path).resolve()
     with path.open('rb') as stream:

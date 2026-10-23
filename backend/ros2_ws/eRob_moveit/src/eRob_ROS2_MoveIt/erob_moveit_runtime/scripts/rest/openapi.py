@@ -365,7 +365,7 @@ SWAGGER_HTML = """<!doctype html>
 
 def _configuration_openapi():
     section = {"name": "section", "in": "path", "required": True,
-               "schema": {"type": "string", "enum": ["calibration", "sensorless_collision"]}}
+               "schema": {"type": "string", "enum": ["calibration", "sensorless_collision", "cell_scene"]}}
     mutation = {"required": True, "content": {"application/json": {"schema": {
         "type": "object", "additionalProperties": False, "required": ["expected_revision", "changes"],
         "properties": {"expected_revision": {"type": "string"}, "changes": {"type": "object"}},

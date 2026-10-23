@@ -34,6 +34,7 @@ from backend.runtime_adapter import create_runtime_adapter
 from utils.transformation_utils import TransformationUtils
 from safety.safety_wall_manager import SafetyWallManager
 from safety.motion_passage_manager import MotionPassageManager
+from safety.cell_scene_manager import CellSceneManager
 from status.robot_monitor import RobotMonitor
 from status.robot_state_store import RobotStateStore
 from status.robot_status_publisher import RobotStatusPublisher
@@ -139,6 +140,12 @@ class RobotController(Node):
             getattr(config, "TOPIC_PLANNING_SCENE", "/planning_scene"),
             10,
         )
+        self.cell_scene_manager = None
+        if getattr(config, 'CELL_SCENE_PATH', None):
+            self.cell_scene_manager = CellSceneManager(
+                self, {'CELL_COLLISION_OBJECTS': config.CELL_COLLISION_OBJECTS},
+                surface_mesh=getattr(config, 'CELL_SURFACE_MESH', None))
+            self._cell_scene_timer = self.create_timer(0.5, self._initialize_cell_scene)
         self.motion_passage_manager = MotionPassageManager(
             self,
             self.active_tool_collision_pub,
@@ -177,7 +184,9 @@ class RobotController(Node):
         self.tcp_load_timer = self.create_timer(1.0, self.load_tcp_transform)
 
         t1 = time.time()
-        workspace = _extract_workspace_from_urdf(self, max_retries=WS_EXTRACT_MAX_RETRIES, retry_delay=WS_EXTRACT_RETRY_DELAY)
+        workspace = _extract_workspace_from_urdf(
+            self, max_retries=WS_EXTRACT_MAX_RETRIES, retry_delay=WS_EXTRACT_RETRY_DELAY,
+            mesh_override=getattr(config, 'MOUNTING_SURFACE_WORKSPACE_MESH', None))
 
         self.get_logger().info(f'[Init] Workspace extraction took {time.time() - t1:.2f}s')
 
@@ -519,6 +528,10 @@ class RobotController(Node):
     @last_submitted_task_id.setter
     def last_submitted_task_id(self, value):
         self._motion.last_submitted_task_id = value
+
+    def _initialize_cell_scene(self):
+        if self.cell_scene_manager.initialize():
+            self._cell_scene_timer.cancel()
 
     def _delayed_safety_init(self):
         """Publish safety walls after a short delay to speed up initialization."""
@@ -1096,6 +1109,10 @@ class RobotController(Node):
         return
 
     def joint_state_callback(self, msg):
+        # Safety feedback must retain the input rate even when monitor/runtime work is throttled.
+        if len(msg.position) >= 6:
+            self.current_joint_state = msg
+
         if self._runtime_joint_input_period > 0.0:
             now = time.monotonic()
             if now - self._last_runtime_joint_input_ts < self._runtime_joint_input_period:
@@ -1111,8 +1128,6 @@ class RobotController(Node):
         with self.lock:
             if len(msg.position) < 6:
                 return
-
-            self.current_joint_state = msg
 
             if self.monitor is None:
                 return
@@ -1364,6 +1379,9 @@ class RobotController(Node):
         return result["value"]
 
     def is_hardware_ready_for_motion(self) -> bool:
+        manager = getattr(self, 'cell_scene_manager', None)
+        if manager is not None and not manager.is_ready():
+            return False
         if self._fake_hardware:
             with self._motion_interlock_lock:
                 return (
@@ -1385,6 +1403,9 @@ class RobotController(Node):
 
     def is_hardware_ready_for_collision_recovery(self) -> bool:
         """Permit only explicitly flagged recovery motion while suppression is active."""
+        manager = getattr(self, 'cell_scene_manager', None)
+        if manager is not None and not manager.is_ready():
+            return False
         with self._motion_interlock_lock:
             if not self._collision_detection_suppressed:
                 return False
@@ -1408,6 +1429,9 @@ class RobotController(Node):
             return not self._ethercat_motion_fault
 
     def get_hardware_fault_reason(self) -> str:
+        manager = getattr(self, 'cell_scene_manager', None)
+        if manager is not None and not manager.is_ready():
+            return 'Cell collision configuration has not been confirmed by MoveIt'
         with self._motion_interlock_lock:
             if self._motion_interlock_active:
                 return self._motion_interlock_reason or 'motion interlock active'

@@ -15,7 +15,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from scene_editor.geometry import make_box, export_stl
 from scene_editor.window import EditorWindow
 from scene_editor.model import Scene,SceneObject
-from scene_editor.ros_connection import RobotDescriptionUnavailable
+from scene_editor.ros_connection import RobotDescriptionUnavailable,RosConnection,RosOptions
 
 
 def main():
@@ -77,7 +77,7 @@ def main():
             def robot():
                 return Scene([SceneObject('Robot visual',make_box((20,30,40)),id='robot/resolved/0')])
             # The resolved action loads directly; neither picker may open.
-            with patch('scene_editor.window.resolved_robot_snapshot',side_effect=lambda options:robot()), \
+            with patch('scene_editor.window.resolved_robot_snapshot',side_effect=lambda options, **kwargs:robot()) as snapshot, \
                  patch.object(QFileDialog,'getOpenFileName',side_effect=AssertionError('Unexpected file picker')):
                 window.resolved_urdf_action.trigger()
                 wait()
@@ -85,10 +85,29 @@ def main():
                 window.resolved_urdf_action.trigger()
                 wait()
                 assert len(window.scene.objects) == 3,'Automatic reload duplicated the robot'
+                assert snapshot.call_args.kwargs['package_root'] == str(workspace)
             assert [obj.id for obj in window.scene.objects if not obj.id.startswith('robot/resolved/')] == local_ids
             window.history.undo()
             assert len(window.scene.objects) == 3
             window.history.undo()
+            assert [obj.id for obj in window.scene.objects] == local_ids
+            # Missing meshes offer a package picker and retry the automatic load.
+            with patch('scene_editor.window.resolved_robot_snapshot',
+                       side_effect=[FileNotFoundError('Cannot resolve package://description/meshes/part.stl'),robot()]) as snapshot, \
+                 patch.object(QFileDialog,'getExistingDirectory',return_value=str(workspace)) as folder, \
+                 patch.object(QFileDialog,'getOpenFileName',side_effect=AssertionError('Unexpected URDF picker')):
+                window.resolved_urdf_action.trigger()
+                wait()
+                assert len(window.scene.objects) == 3
+                folder.assert_called_once()
+                assert snapshot.call_count == 2
+                assert snapshot.call_args.kwargs['package_root'] == str(workspace)
+            window.history.undo()
+            assert [obj.id for obj in window.scene.objects] == local_ids
+            with patch('scene_editor.window.resolved_robot_snapshot',side_effect=FileNotFoundError('Missing mesh')), \
+                 patch.object(QFileDialog,'getExistingDirectory',return_value=''):
+                window.resolved_urdf_action.trigger()
+                wait()
             assert [obj.id for obj in window.scene.objects] == local_ids
             # Missing ROS opens the manual picker with the reason in its title.
             with patch('scene_editor.window.resolved_robot_snapshot',side_effect=RobotDescriptionUnavailable('No publisher')), \
@@ -100,6 +119,31 @@ def main():
                 assert 'manually' in picker.call_args.args[1]
             assert [obj.id for obj in window.scene.objects] == local_ids
             assert window.resolved_urdf_action.isEnabled()
+            # Live URDF collision display remains separate from ROS authoring.
+            visual = SceneObject('base / visual 1',make_box((20,30,40)),id='robot/base/visual/0')
+            collision = SceneObject('base / collision 1',make_box((10,20,30)),id='robot/base/collision/0')
+            with patch.object(RosConnection,'start'),patch.object(RosConnection,'stop'):
+                window.begin_ros(RosOptions())
+                with patch.object(window._ros,'take_latest',return_value=Scene([visual,collision])):
+                    window._poll_ros()
+                    assert visual.visible and not collision.visible
+                    window.robot_collisions_action.setChecked(True)
+                    window.robot_visuals_action.setChecked(False)
+                    assert collision.visible and not visual.visible
+                    window._poll_ros()
+                    assert collision.visible and not visual.visible,'Next live frame reset display choice'
+                window._select(collision.id)
+                assert 'URDF <collision>' in window._workspace.collision_info.text()
+                assert not window.add_collision_action.isEnabled()
+                assert not window.update_collision_action.isEnabled()
+                assert not window.remove_collision_action.isEnabled()
+                window._workspace.filters['Collision'].click()
+                assert window.objects.item(0).isHidden()
+                assert not window.objects.item(1).isHidden()
+                window._workspace.filters['Robot'].click()
+                assert not window.objects.item(0).isHidden() and not window.objects.item(1).isHidden()
+                window._ros_stopped('')
+                assert window.scene.objects[1].visible
             print('URDF GUI checks passed: workspace lookup, remembered folder, async import and failed-import recovery')
     finally:
         if previous is None:

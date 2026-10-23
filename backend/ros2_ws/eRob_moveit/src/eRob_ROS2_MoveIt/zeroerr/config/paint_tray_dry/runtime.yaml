@@ -1,6 +1,7 @@
 RUNTIME_INCLUDES:
 - ../shared/motion/paint.yaml
 - cell.yaml
+- cell_scene.yaml
 - tools.yaml
 - calibration.yaml
 URDF_PATH: urdfs/robot.urdf.xacro

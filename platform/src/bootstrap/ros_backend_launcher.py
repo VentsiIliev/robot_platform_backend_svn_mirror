@@ -269,7 +269,10 @@ def _default_status_urls() -> tuple[str, ...]:
 
 def _clean_ros_process_env() -> dict[str, str]:
     env = dict(os.environ)
-    for name in ("VIRTUAL_ENV", "PYTHONHOME", "PYTHONPATH"):
+    # OpenCV/PyQt plugin paths belong to the platform's Qt runtime. Native ROS
+    # GUI children such as PlotJuggler must discover their own system Qt plugins.
+    for name in ("VIRTUAL_ENV", "PYTHONHOME", "PYTHONPATH",
+                 "QT_PLUGIN_PATH", "QT_QPA_PLATFORM_PLUGIN_PATH", "QT_QPA_FONTDIR"):
         env.pop(name, None)
     env["PATH"] = _clean_path(env.get("PATH", ""))
     return env

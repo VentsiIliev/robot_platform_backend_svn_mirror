@@ -69,7 +69,7 @@ def run(args):
         except PackageNotFoundError as exc:
             raise LookupError(name) from exc
 
-    assembler = SceneAssembler(args.fixed_frame, args.cache, package)
+    assembler = SceneAssembler(args.fixed_frame, args.cache, package,package_root=args.mesh_root)
     writer = SceneWriter(args.cache)
     rclpy.init(args=[])
 
@@ -192,6 +192,7 @@ def run(args):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--mesh-root',help='Local mesh package or workspace folder')
     parser.add_argument('--cache', required=True)
     parser.add_argument('--fixed-frame', default='base_link')
     parser.add_argument('--scene-topic', default='/monitored_planning_scene')

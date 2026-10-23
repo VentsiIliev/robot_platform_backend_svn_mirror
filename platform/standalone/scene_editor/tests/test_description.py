@@ -3,11 +3,14 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from scene_editor.ros_connection import RosOptions,RobotDescriptionUnavailable,resolved_robot_snapshot
+from scene_editor.geometry import export_stl,make_box
+import numpy as np
 
 
 class DescriptionTests(unittest.TestCase):
@@ -35,6 +38,24 @@ class DescriptionTests(unittest.TestCase):
         with patch('scene_editor.ros_connection.subprocess.run',side_effect=subprocess.TimeoutExpired([],12)):
             with self.assertRaises(RobotDescriptionUnavailable):
                 resolved_robot_snapshot(RosOptions())
+
+    def test_selected_package_resolves_mesh_missing_from_ros_install(self):
+        xml = ('<robot name="robot"><link name="base"><visual><geometry>'
+               '<mesh filename="package://zeroerr/meshes/robots/zeroerr/common/Link_1.stl"/>'
+               '</geometry></visual></link></robot>')
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mesh = root/'zeroerr/meshes/robots/zeroerr/common/Link_1.stl'
+            mesh.parent.mkdir(parents=True)
+            export_stl(make_box((1,2,3)),np.eye(4),mesh)
+            packet = self.result(success=True,xml=xml,packages={'zeroerr':str(root/'stale_install')})
+            with patch('scene_editor.ros_connection.subprocess.run',return_value=packet), \
+                 patch.dict('os.environ',{'AMENT_PREFIX_PATH':'','COLCON_PREFIX_PATH':''}):
+                with self.assertRaises(FileNotFoundError):
+                    resolved_robot_snapshot(RosOptions())
+                scene = resolved_robot_snapshot(RosOptions(),package_root=str(root/'zeroerr'))
+            self.assertEqual(scene.objects[0].mesh.source,mesh)
+            self.assertEqual(scene.objects[0].id,'robot/resolved/0')
 
     def test_invalid_description_is_not_reported_as_missing_ros(self):
         with patch('scene_editor.ros_connection.subprocess.run',return_value=self.result(success=False,unavailable=False,message='Malformed robot description')):

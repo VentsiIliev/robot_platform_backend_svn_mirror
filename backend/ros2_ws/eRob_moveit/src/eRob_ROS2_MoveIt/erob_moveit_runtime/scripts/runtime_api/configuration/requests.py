@@ -2,11 +2,11 @@
 from dataclasses import dataclass
 from typing import Any, Literal
 
-Section = Literal['calibration', 'sensorless_collision']
+Section = Literal['calibration', 'sensorless_collision', 'cell_scene']
 
 
 def section_name(value: str) -> Section:
-    if value not in ('calibration', 'sensorless_collision'):
+    if value not in ('calibration', 'sensorless_collision', 'cell_scene'):
         raise ValueError(f'Unknown configuration section: {value}')
     return value
 

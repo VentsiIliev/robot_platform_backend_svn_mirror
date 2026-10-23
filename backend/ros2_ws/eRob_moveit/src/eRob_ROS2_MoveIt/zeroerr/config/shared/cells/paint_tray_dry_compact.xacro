@@ -13,14 +13,7 @@
           <color rgba="0.65 0.65 0.65 1.0" />
         </material>
       </visual>
-      <!-- Include the simplified fixtures and equipment above the stepped
-           surfaces; the surface-only mesh omits these collision obstacles. -->
-      <collision>
-        <origin xyz="0 0 0" rpy="0 0 0" />
-        <geometry>
-          <mesh filename="package://zeroerr/meshes/cells/paint_tray_dry_compact/paint_tray_dry_compact.surface_3levels_above.stl" scale="0.001 0.001 0.001" />
-        </geometry>
-      </collision>
+      <!-- Cell collision geometry is profile-owned MoveIt world objects. -->
     </link>
     <joint name="mounting_surface_joint" type="fixed">
       <parent link="base_link" />

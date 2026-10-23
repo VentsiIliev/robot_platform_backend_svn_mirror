@@ -16,6 +16,24 @@ from src.bootstrap.startup_config import RosBackendConfig
 
 
 class TestRosBackendLauncher(unittest.TestCase):
+    def test_backend_does_not_inherit_platform_qt_plugins(self) -> None:
+        inherited = {
+            "QT_PLUGIN_PATH": "/tmp/app/.venv/PyQt6/plugins",
+            "QT_QPA_PLATFORM_PLUGIN_PATH": "/tmp/app/.venv/cv2/qt/plugins",
+            "QT_QPA_FONTDIR": "/tmp/app/.venv/cv2/qt/fonts",
+            "DISPLAY": ":1",
+            "XAUTHORITY": "/run/user/1000/gdm/Xauthority",
+            "ROS_DOMAIN_ID": "42",
+            "LD_LIBRARY_PATH": "/opt/ros/jazzy/lib",
+        }
+        with patch.dict(os.environ, inherited, clear=True):
+            env = _clean_ros_process_env()
+            for name in ("QT_PLUGIN_PATH", "QT_QPA_PLATFORM_PLUGIN_PATH", "QT_QPA_FONTDIR"):
+                self.assertNotIn(name, env)
+                self.assertEqual(os.environ[name], inherited[name])
+        for name in ("DISPLAY", "XAUTHORITY", "ROS_DOMAIN_ID", "LD_LIBRARY_PATH"):
+            self.assertEqual(env[name], inherited[name])
+
     def _script(self, directory: Path, name: str) -> Path:
         path = directory / name
         path.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")

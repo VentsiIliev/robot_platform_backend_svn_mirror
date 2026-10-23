@@ -1,3 +1,4 @@
-# Profile-owned sensorless collision configuration. Override individual nested values here.
 RUNTIME_INCLUDES:
 - ../shared/sensorless_collision.yaml
+monitor:
+  active_stop_enabled: false

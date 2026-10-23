@@ -12,6 +12,7 @@ It does not start ROS, restart the backend, release a collision hold, or move th
 | Absolute TCP calibration, relative tool geometry, reference tool, tool collision binding | Backend profile `calibration.yaml` |
 | USER / work-object transforms | Backend profile `calibration.yaml` |
 | Sensorless controller, monitor/model, collision stop and recovery settings | Backend profile `sensorless_collision.yaml` |
+| Cell fixture box definitions and collision-enabled states | Backend profile `cell_scene.yaml` |
 | Tool display names, magazine slots, pickup/dropoff procedures, selected IDs, process/UI settings | Platform robot-system storage |
 | Calibration measurements and timestamps | Platform history; evidence, never replayed configuration |
 
@@ -34,6 +35,7 @@ All routes are relative to the configured backend URL.
 | GET | `/configuration` | Active profile and supported sections |
 | GET | `/configuration/calibration` | Saved and applied frame configuration, resolved tools, revision |
 | GET | `/configuration/sensorless_collision` | Saved/effective profile values, observed controller values, revision |
+| GET | `/configuration/cell_scene` | Saved/applied cell fixtures and enabled states, revision |
 | PATCH | `/configuration/<section>` | Validated partial changes |
 | PATCH | `/configuration/calibration/tools/<id>` | Explicit absolute or relative tool edit |
 | PATCH | `/configuration/calibration/workobjects/<id>` | Explicit work-object edit |
@@ -149,3 +151,75 @@ LocalRuntimeGateway → ConfigurationService. The legacy `configuration.http` mo
 is an import shim for the thin route adapter; it does not accept a service getter.
 See [Runtime API architecture](runtime_api_architecture.md) for typed errors,
 correlation IDs, the four groups, and future ROS 2 gateway mapping.
+
+## Cell scene configuration
+
+Profiles declaring `CELL_SCENE_PATH` expose the `cell_scene` section. It contains
+`CELL_COLLISION_OBJECTS`, keyed by stable `cell_fixture_…` IDs. Each definition has
+`enabled` (boolean), `frame`, and either `size_mm` plus `pose` for one box, or
+`parts` for a compound. Each part contains `size_mm` (three full box dimensions)
+and `pose` ([x, y, z, rx, ry, rz] in mm/degrees), expressed in the object frame. PATCH can change individual enabled flags
+without replacing other definitions. The API uses the same profile-bound revisions,
+atomic YAML saves, pending-application reporting, and explicit apply retries as
+other sections. Saved states are loaded on restart.
+
+The runtime publishes only enabled fixtures as independent MoveIt world boxes.
+Immutable table surfaces are a separate world mesh and remain enabled. Cell geometry
+is absent from the robot URDF collision layer, avoiding duplicate obstacles and
+fixed-table/fixture self contacts. Workspace extraction uses the unchanged cell
+envelope. Motion is held until MoveIt confirms initial scene application; it is
+also held while an application result is unknown. Application changes only these
+owned world IDs in a planning-scene diff, preserving robot state and collision rules.
+
+Scene Editor exposes **Collision objects → Cell collision configuration…** with
+an explicit backend URL, active profile, saved settings and applied states. Its
+visibility checkboxes remain local. **Save and apply** is the persistent mutation;
+**Apply saved configuration** retries a durable save that could not be applied.
+The editor never writes backend profile files directly or restarts the backend.
+
+### Persistent fixture merge
+
+`PATCH /configuration/cell_scene` also accepts a merge command:
+
+```json
+{
+  "expected_revision": "revision from GET",
+  "changes": {
+    "merge": {
+      "ids": ["cell_fixture_tray_15", "cell_fixture_tray_16"],
+      "name": "dispenser"
+    }
+  }
+}
+```
+
+The result includes `merged_object_id` (here `cell_fixture_dispenser`). The new
+fixture stores the selected boxes as a flat `parts` list with unchanged poses
+and sizes. Sources are saved as disabled definitions with `merged_into` pointing
+to the new object; they cannot be re-enabled independently or merged a second time.
+The scene diff removes old IDs and adds one multi-primitive CollisionObject.
+Startup removes the old IDs again and restores the compound. Intermediate groups
+are retained when merging groups recursively, while the active parts remain flat.
+
+The operation requires at least two distinct, unmerged object IDs, a unique name,
+a common reference frame, and a common enabled state. Revision conflicts and all
+validation failures occur before persistence. There is no geometry approximation.
+The same stationarity gate, pending-application handling, and motion readiness hold
+apply to merge operations. Scene Editor combines only their display triangles so
+one configured compound has one selectable object; MoveIt retains each box shape.
+
+### Idempotent cell scene application
+
+The cell manager reads current world object IDs before initial application and
+before applying saved changes. REMOVE is emitted only for an existing object:
+MoveIt reports failure when asked to remove an already absent object, including
+fixtures saved disabled before startup and obsolete merged-member IDs. Enabled
+objects and table surfaces are still installed in the same scene diff. Query or
+application failures never acknowledge scene readiness. A rejected apply may have
+partially changed the scene; readiness remains unknown until a later confirmed apply.
+
+Motion result `-12` means hardware readiness rejected the request. It is not proof
+of an EtherCAT OP fault. The motion API reports the runtime's current readiness
+reason (cell-scene confirmation, collision interlock, EtherCAT fault, etc.) and
+uses a neutral message if the reason cannot be read. No failed readiness check
+implicitly releases an interlock or enables motion.

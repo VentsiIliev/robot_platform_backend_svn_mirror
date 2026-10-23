@@ -8,7 +8,7 @@ import unittest
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from scene_editor.geometry import Mesh
+from scene_editor.geometry import Mesh,export_stl,make_box
 from scene_editor.model import Pose, Scene, SceneObject, load_scene, save_scene
 from scene_editor.ros_scene import SceneAssembler, FrameGraph, pose_matrix
 from scene_editor.ros_helper import SceneWriter
@@ -51,6 +51,24 @@ def marker(ns='axes', marker_id=1, **changes):
 
 
 class RosSceneTests(unittest.TestCase):
+    def test_compound_cell_fixture_is_one_selectable_object_without_filling_gaps(self):
+        message = collision(name='cell_fixture_dispenser')
+        message.primitives.append(NS(type=1, dimensions=[.1,.2,.3]))
+        message.primitive_poses.append(pose(.5, yaw=np.pi/2))
+        self.scene.planning_scene(planning([message]))
+        scene, _ = self.scene.build()
+        self.assertEqual(len(scene.objects),1)
+        obj = scene.objects[0]
+        self.assertEqual(obj.id,'world/cell_fixture_dispenser/0')
+        self.assertEqual(len(obj.mesh.vertices),24)
+        np.testing.assert_allclose(obj.mesh.bounds, [[-50,-100,-150],[600,100,150]],atol=1e-4)
+        self.assertIs(self.scene.build()[0].objects[0].mesh,obj.mesh)
+        appended = collision(name='cell_fixture_dispenser',operation=2,x=1)
+        self.scene.planning_scene(planning([appended],diff=True))
+        changed = self.scene.build()[0].objects[0]
+        self.assertEqual(len(changed.mesh.vertices),36)
+        self.assertIsNot(changed.mesh,obj.mesh)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -247,7 +265,9 @@ class RosSceneTests(unittest.TestCase):
     def test_setup_paths_are_separate_arguments_and_no_ros_write_services(self):
         options = RosOptions(ros_setup='/tmp/space name; do not execute/setup.bash',
                              workspace_setup='/tmp/$(literal)/local_setup.bash')
-        command = RosConnection(options)._command(str(self.root))
+        mesh_root = str(self.root/'mesh package; literal')
+        command = RosConnection(options,package_root=mesh_root)._command(str(self.root))
+        self.assertEqual(command[command.index('--mesh-root')+1],mesh_root)
         self.assertIn(options.ros_setup, command)
         self.assertIn(options.workspace_setup, command)
         shell = command[4]
@@ -263,6 +283,52 @@ class RosSceneTests(unittest.TestCase):
                    and isinstance(node.func, ast.Attribute) and node.func.attr == 'create_client']
         self.assertFalse(publishers)
         self.assertEqual(clients, ['GetPlanningScene'])
+
+    def test_live_robot_and_resource_use_selected_mesh_folder(self):
+        mesh = self.root/'zeroerr/meshes/robots/zeroerr/common/Link_1.stl'
+        mesh.parent.mkdir(parents=True)
+        export_stl(make_box((1,2,3)),np.eye(4),mesh)
+        uri = 'package://zeroerr/meshes/robots/zeroerr/common/Link_1.stl'
+        cache = self.root/'cache'
+        cache.mkdir()
+        assembler = SceneAssembler('base_link',cache,lambda name:str(self.root/'stale_install'),
+                                   package_root=self.root/'zeroerr')
+        xml = ('<robot name="test"><link name="base_link"><visual><geometry>'
+               f'<mesh filename="{uri}"/></geometry></visual></link></robot>')
+        assembler.robot_description(xml)
+        self.assertEqual(assembler.description,xml)
+        self.assertEqual(len(assembler.robot),1)
+        self.assertEqual(assembler._resource(uri).source,mesh)
+
+    def test_robot_collision_geometry_has_independent_origins_scales_and_live_tf(self):
+        mesh = self.root/'collision.stl'
+        export_stl(make_box((1,2,3)),np.eye(4),mesh)
+        xml = ('<robot name="test"><link name="wrist">'
+               '<visual><origin xyz="0 0 .1"/><geometry><box size=".1 .2 .3"/></geometry></visual>'
+               '<collision><origin xyz=".2 0 0" rpy="0 0 1.5707963267948966"/>'
+               '<geometry><box size=".01 .02 .03"/></geometry></collision>'
+               '<collision><origin xyz="0 .3 0"/><geometry><cylinder radius=".02" length=".1"/></geometry></collision>'
+               '<collision><geometry><sphere radius=".04"/></geometry></collision>'
+               f'<collision><geometry><mesh filename="{mesh}" scale="2 3 4"/></geometry></collision>'
+               '</link></robot>')
+        self.scene.robot_description(xml)
+        self.scene.frames.update([transform('base','wrist',0,0,.5)])
+        objects = {obj.id:obj for obj in self.scene.build()[0].objects}
+        self.assertEqual(len(objects),5)
+        visual = objects['robot/wrist/visual/0']
+        box = objects['robot/wrist/collision/0']
+        np.testing.assert_allclose(visual.pose.translation,(0,0,600))
+        np.testing.assert_allclose(box.pose.translation,(200,0,500))
+        np.testing.assert_allclose(box.pose.rotation,(0,0,90),atol=1e-10)
+        np.testing.assert_allclose(box.mesh.vertices.max(axis=(0,1))-box.mesh.vertices.min(axis=(0,1)),(10,20,30))
+        self.assertEqual(objects['robot/wrist/collision/1'].mesh.primitive['kind'],'cylinder')
+        self.assertEqual(objects['robot/wrist/collision/2'].mesh.primitive['kind'],'sphere')
+        self.assertEqual(objects['robot/wrist/collision/3'].unit_scale,(2000,3000,4000))
+        self.assertIsNone(box.collision,'URDF collision must not become an authored world collision')
+        self.scene.frames.update([transform('base','wrist',0,0,.8)])
+        moved = {obj.id:obj for obj in self.scene.build()[0].objects}
+        np.testing.assert_allclose(moved[box.id].pose.translation,(200,0,800))
+        self.assertIs(moved[box.id].mesh,box.mesh)
 
 
 if __name__ == '__main__':

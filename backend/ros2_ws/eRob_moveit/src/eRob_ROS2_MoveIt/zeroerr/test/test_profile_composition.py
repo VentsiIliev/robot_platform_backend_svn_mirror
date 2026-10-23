@@ -80,30 +80,47 @@ class ProfileCompositionTests(unittest.TestCase):
     def test_tray_profile_uses_compact_cell_without_changing_arm_or_calibration(self):
         tray_path, tray = self.profile('paint_tray_dry')
         old_path, old = self.profile('paint_short_links')
-        self.assertEqual(tray['TOOL_REGISTRY'], old['TOOL_REGISTRY'])
+        # Profiles own independent, user-calibrated tool values.
+        self.assertEqual(set(tray['TOOL_ID_MAP']), set(old['TOOL_ID_MAP']))
         tray_root = ET.parse(resolve_robot_description(tray_path, tray)).getroot()
         old_root = ET.parse(resolve_robot_description(old_path, old)).getroot()
         cell = tray_root.find("link[@name='mounting_surface']")
         mount = tray_root.find("joint[@name='mounting_surface_joint']/origin")
         self.assertEqual(mount.get('rpy'), '0 0 1.5707963267948966')
-        meshes = {'visual': 'paint_tray_dry_compact.stl',
-                  'collision': 'paint_tray_dry_compact.surface_3levels_above.stl'}
-        for kind, filename in meshes.items():
-            mesh = cell.find(f'{kind}/geometry/mesh')
-            self.assertTrue(mesh.get('filename').endswith('/' + filename))
-            self.assertEqual(mesh.get('scale'), '0.001 0.001 0.001')
-        # A surface-only mesh would resolve successfully but drop the raised
-        # fixtures from collision checking. Verify the selected asset has
-        # geometry above the 9 mm front surface as well as the lower dryer.
-        mesh = cell.find('collision/geometry/mesh')
-        asset = PACKAGE / mesh.get('filename').removeprefix('package://zeroerr/')
+        mesh = cell.find('visual/geometry/mesh')
+        self.assertTrue(mesh.get('filename').endswith('/paint_tray_dry_compact.stl'))
+        self.assertEqual(mesh.get('scale'), '0.001 0.001 0.001')
+        self.assertIsNone(cell.find('collision'), 'Do not duplicate disabled world fixtures in the robot model')
+        fixtures = tray['CELL_COLLISION_OBJECTS']
+        self.assertEqual(len(fixtures), 21)
+        self.assertEqual(tray['CELL_SCENE_PATH'], 'cell_scene.yaml')
+        asset = PACKAGE / 'meshes/cells/paint_tray_dry_compact/paint_tray_dry_compact.surface_3levels_above.stl'
         data = asset.read_bytes()
         facets = struct.unpack_from('<I', data, 80)[0]
-        self.assertEqual(len(data), 84 + 50 * facets)
-        z = [struct.unpack_from('<f', data, 84 + 50 * face + 12 + vertex * 12 + 8)[0]
-             for face in range(facets) for vertex in range(3)]
-        self.assertGreater(max(z), 300.0)
-        self.assertAlmostEqual(min(z), -26.0)
+        self.assertEqual(facets, 262)
+        vertices = [struct.unpack_from('<fff', data, 84 + 50*face + 12 + vertex*12)
+                    for face in range(facets) for vertex in range(3)]
+        # The original first 10 triangles are the unchanged table surfaces.
+        surface = PACKAGE / tray['CELL_SURFACE_MESH'].removeprefix('package://zeroerr/')
+        surface_data = surface.read_bytes()
+        self.assertEqual(struct.unpack_from('<I', surface_data, 80)[0], 10)
+        surface_vertices = [struct.unpack_from('<fff', surface_data, 84 + 50*face + 12 + vertex*12)
+                            for face in range(10) for vertex in range(3)]
+        self.assertEqual(sorted(surface_vertices), sorted(vertices[:30]))
+        for index, (identifier, item) in enumerate(fixtures.items()):
+            self.assertEqual(identifier, f'cell_fixture_tray_{index+1:02d}')
+            self.assertTrue(item['enabled'])
+            self.assertEqual(item['frame'], 'mounting_surface')
+            self.assertEqual(item['pose'][3:], [0.,0.,0.])
+            box_vertices = vertices[30 + index*36:30 + (index+1)*36]
+            for axis in range(3):
+                low = min(v[axis] for v in box_vertices)
+                high = max(v[axis] for v in box_vertices)
+                self.assertAlmostEqual(item['size_mm'][axis], high-low)
+                self.assertAlmostEqual(item['pose'][axis], (high+low)/2)
+                self.assertTrue(all(v[axis] in (low,high) for v in box_vertices))
+        self.assertEqual(tray['MOUNTING_SURFACE_WORKSPACE_MESH'],
+                         'package://zeroerr/meshes/cells/paint_tray_dry_compact/paint_tray_dry_compact.surface_3levels_above.stl')
         self.assertIsNotNone(old_root.find("link[@name='mounting_surface']/collision/geometry/box"))
         for name in ('Joint_1', 'Joint_2', 'Joint_3', 'Joint_4', 'Joint_5', 'Joint_6'):
             self.assertEqual(normalized(tray_root.find(f"joint[@name='{name}']")),

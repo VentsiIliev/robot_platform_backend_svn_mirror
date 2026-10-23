@@ -61,6 +61,7 @@ class Viewport(QOpenGLWidget):
     mounting_point_picked = pyqtSignal(object)
     camera_view_changed = pyqtSignal(str)
     selected = pyqtSignal(object)
+    context_requested = pyqtSignal(object)
     selection_changed = pyqtSignal(object, object)
     pose_dragged = pyqtSignal(object, object, int)
     group_dragged = pyqtSignal(object, int)
@@ -566,6 +567,11 @@ class Viewport(QOpenGLWidget):
             if not self._surface_hover_timer.isActive():
                 self._surface_hover_timer.start()
         if self._drag is None: return
+        if self._drag['button'] == Qt.MouseButton.RightButton:
+            distance = (event.position().toPoint()-self._drag['start']).manhattanLength()
+            if distance < QApplication.startDragDistance() and not self._drag.get('context_moved'):
+                return
+            self._drag['context_moved'] = True
         point=event.position().toPoint();last=self._drag['last'];delta=point-last;self._drag['last']=point
         button=self._drag['button']
         obj=self.current_object()
@@ -701,8 +707,17 @@ class Viewport(QOpenGLWidget):
                     self.surface_picked.emit(hit)
             self.update()
             return
-        self._drag=None
+        drag, self._drag = self._drag, None
         self.unsetCursor()
+        if (event.button() == Qt.MouseButton.RightButton and drag is not None
+                and drag['button'] == Qt.MouseButton.RightButton and not drag.get('context_moved')
+                and (event.position().toPoint()-drag['start']).manhattanLength() < QApplication.startDragDistance()):
+            point = event.position().toPoint()
+            picked = self._pick(point)
+            if picked is not None and picked not in self.selection_ids():
+                self.set_selected(picked)
+                self.selected.emit(picked)
+            self.context_requested.emit(point)
 
     def wheelEvent(self, event):
         self.distance=float(np.clip(self.distance*math.exp(-event.angleDelta().y()/120*.15),.01,1e10))

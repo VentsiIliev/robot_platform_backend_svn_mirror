@@ -1,3 +1,7 @@
 RUNTIME_INCLUDES:
 - ../shared/cells/paint_runtime.yaml
 MOTION_PASSAGES: []
+CELL_SCENE_PATH: cell_scene.yaml
+MOUNTING_SURFACE_WORKSPACE_MESH: package://zeroerr/meshes/cells/paint_tray_dry_compact/paint_tray_dry_compact.surface_3levels_above.stl
+
+CELL_SURFACE_MESH: package://zeroerr/meshes/cells/paint_tray_dry_compact/paint_tray_dry_compact.surface_3levels.stl

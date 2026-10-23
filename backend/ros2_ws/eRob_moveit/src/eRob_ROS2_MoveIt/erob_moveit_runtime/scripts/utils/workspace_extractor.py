@@ -102,7 +102,7 @@ def _bounds_from_boxes(collision_elements, link_transform):
 
 
 
-def _extract_workspace_from_urdf(robot_controller, max_retries=3, retry_delay=0.1):
+def _extract_workspace_from_urdf(robot_controller, max_retries=3, retry_delay=0.1, *, mesh_override=None):
     """Extract workspace boundaries from mounting_surface collision geometry in URDF.
     Supports both mesh and box primitive collision geometry.
     """
@@ -152,13 +152,20 @@ def _extract_workspace_from_urdf(robot_controller, max_retries=3, retry_delay=0.
 
             for link in root.findall('.//link[@name="mounting_surface"]'):
                 all_collisions = link.findall('collision')
+                if mesh_override:
+                    # Workspace bounds stay tied to the fixed cell envelope,
+                    # independent of enabled world fixtures.
+                    proxy = ET.Element('collision')
+                    geometry = ET.SubElement(proxy, 'geometry')
+                    ET.SubElement(geometry, 'mesh', filename=mesh_override, scale='0.001 0.001 0.001')
+                    all_collisions = [proxy]
 
                 # ── Strategy 1: mesh geometry (original URDF) ─────────────────
                 for coll in all_collisions:
                     mesh_elem = coll.find('.//mesh')
                     if mesh_elem is None:
                         continue
-                    mesh_filename = mesh_elem.get('filename', '')
+                    mesh_filename = mesh_override or mesh_elem.get('filename', '')
                     if not mesh_filename.startswith('package://'):
                         continue
                     parts = mesh_filename.replace('package://', '').split('/', 1)

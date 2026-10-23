@@ -1,6 +1,7 @@
 """Import a resolved URDF as a static scene at zero joint positions. No ROS."""
 from pathlib import Path
 import os
+import logging
 from urllib.parse import unquote, urlparse
 import xml.etree.ElementTree as ET
 
@@ -8,6 +9,8 @@ import numpy as np
 
 from .geometry import make_box, make_cylinder, make_sphere, read_stl
 from .model import Pose, Scene, SceneObject, euler_degrees, vector
+
+logger = logging.getLogger(__name__)
 
 
 def _numbers(value, default, label):
@@ -56,7 +59,12 @@ def resolve_mesh(uri, urdf_path, package_root=None, package_resolver=None, *, se
         for root in roots:
             candidates.extend(_package_candidates(root,package,relative))
         for candidate in candidates:
-            if candidate.is_file(): return candidate.resolve()
+            logger.debug('Mesh candidate for %s: %s',uri,candidate)
+            if candidate.is_file():
+                resolved = candidate.resolve()
+                logger.info('Resolved mesh %s -> %s',uri,resolved)
+                return resolved
+        logger.warning('Mesh not found: %s (checked %d paths; enable DEBUG for candidates)',uri,len(candidates))
         raise FileNotFoundError(f'Cannot resolve {uri}. Select the {package} package directory, its ROS install directory, '
                                 'or workspace root in the mesh-folder picker. You can also configure Workspace setup '
                                 'in ROS 2 connection settings or launch from a sourced ROS environment.')
@@ -67,8 +75,11 @@ def resolve_mesh(uri, urdf_path, package_root=None, package_resolver=None, *, se
     return (Path(urdf_path).parent/uri).resolve()
 
 
-def load_urdf(path, package_root=None, *, local_visuals=False, package_resolver=None, search_roots=()):
-    """Load static visuals, or return (link, local visual) pairs for a live TF view."""
+def load_urdf(path, package_root=None, *, local_visuals=False, package_resolver=None, search_roots=(), include_collisions=False):
+    """Load static geometry, or (link, local geometry) pairs for a live TF view.
+
+    Collision geometry is optional and remains separate from authored world objects.
+    """
     path = Path(path).resolve()
     root = ET.parse(path).getroot()
     if any(element.tag.startswith('{http://www.ros.org/wiki/xacro}') for element in root.iter()):
@@ -102,7 +113,9 @@ def load_urdf(path, package_root=None, *, local_visuals=False, package_resolver=
     scene,cache,visuals = Scene(),{},[]
     for name,link in links.items():
         link_matrix = np.eye(4) if local_visuals else world(name)
-        for index,visual in enumerate(link.findall('visual')):
+        elements = ((kind,index,element) for kind in (('visual','collision') if include_collisions else ('visual',))
+                    for index,element in enumerate(link.findall(kind)))
+        for kind,index,visual in elements:
             geometry = visual.find('geometry')
             if geometry is None: continue
             unit_scale = (1.,1.,1.)
@@ -127,10 +140,12 @@ def load_urdf(path, package_root=None, *, local_visuals=False, package_resolver=
             if material is not None:
                 color_spec = material.find('color')
                 color = vector(color_spec.get('rgba','').split(),'URDF color',4) if color_spec is not None else materials.get(material.get('name'),color)
-            obj = SceneObject(f'{name} / visual {index+1}',mesh,
+            if kind == 'collision':
+                color = (1.,0.55,0.15,0.45)
+            obj = SceneObject(f'{name} / {kind} {index+1}',mesh,
                 pose=Pose(tuple(matrix[:3,3]),euler_degrees(matrix)),unit_scale=unit_scale,color=color,
-                **({'id':f'robot/{name}/visual/{index}'} if local_visuals else {}))
+                **({'id':f'robot/{name}/{kind}/{index}'} if local_visuals else {}))
             scene.objects.append(obj)
             visuals.append((name, obj))
-    if not scene.objects: raise ValueError('This URDF contains no supported visual geometry.')
+    if not scene.objects: raise ValueError('This URDF contains no supported geometry.' if include_collisions else 'This URDF contains no supported visual geometry.')
     return visuals if local_visuals else scene

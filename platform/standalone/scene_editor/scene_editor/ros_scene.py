@@ -9,7 +9,7 @@ import time
 
 import numpy as np
 
-from .geometry import Mesh, make_box, make_cylinder, make_sphere, read_stl
+from .geometry import Mesh, make_box, make_cylinder, make_sphere, read_stl, combine_meshes
 from .model import Pose, Scene, SceneObject, euler_degrees
 from .urdf import load_urdf, resolve_mesh
 
@@ -89,6 +89,7 @@ class Collision:
     frame: str
     origin: np.ndarray
     parts: list = field(default_factory=list)
+    combined: Mesh | None = None
 
 
 def _operation(message):
@@ -124,15 +125,15 @@ def _segment(start, end, radius):
 
 
 def _combine(parts):
-    triangles = [mesh.vertices @ matrix[:3, :3].T + matrix[:3, 3] for mesh, matrix in parts]
-    return Mesh(np.concatenate(triangles)) if triangles else None
+    return combine_meshes(parts)
 
 
 class SceneAssembler:
-    def __init__(self, fixed_frame, cache_directory, package_resolver=None):
+    def __init__(self, fixed_frame, cache_directory, package_resolver=None, *, package_root=None):
         self.fixed_frame = fixed_frame.lstrip('/')
         self.cache_directory = Path(cache_directory)
         self.package_resolver = package_resolver
+        self.package_root = package_root
         self.frames = FrameGraph()
         self.robot, self.world, self.attached, self.markers = {}, {}, {}, {}
         self.colors, self.mesh_cache = {}, {}
@@ -145,14 +146,14 @@ class SceneAssembler:
             return
         path = self.cache_directory/'description.urdf'
         path.write_text(xml, encoding='utf-8')
-        visuals = load_urdf(path, local_visuals=True, package_resolver=self.package_resolver)
+        visuals = load_urdf(path, self.package_root,local_visuals=True, package_resolver=self.package_resolver,include_collisions=True)
         robot = {}
         for frame, obj in visuals:
             robot[obj.id] = Framed(obj, frame, obj.pose.matrix())
         self.robot, self.description = robot, xml
 
     def _resource(self, uri):
-        path = resolve_mesh(uri, self.cache_directory/'description.urdf', package_resolver=self.package_resolver)
+        path = resolve_mesh(uri, self.cache_directory/'description.urdf',self.package_root, package_resolver=self.package_resolver)
         if path.suffix.lower() != '.stl':
             raise ValueError(f'Unsupported mesh resource: {path.name} (STL required)')
         key = str(path)
@@ -209,6 +210,7 @@ class SceneAssembler:
                 if len(poses) != len(previous.parts):
                     raise ValueError(f'MOVE pose count mismatch for {key}')
                 previous.parts = [(part[0], pose_matrix(pose)) for part, pose in zip(previous.parts, poses)]
+                previous.combined = None
             return
         parts = self._collision_parts(message)
         if operation == 2 and previous:  # APPEND
@@ -217,6 +219,7 @@ class SceneAssembler:
                 raise ValueError(f'Cannot append geometry across unresolved frames for {key}')
             adjustment = np.linalg.inv(previous.origin) @ transform @ origin
             previous.parts.extend((mesh, adjustment @ pose) for mesh, pose in parts)
+            previous.combined = None
         elif operation in (0, 2):
             store[key] = Collision(frame, origin, parts)
         else:
@@ -225,8 +228,8 @@ class SceneAssembler:
     def planning_scene(self, message):
         # Keep the last complete scene if one malformed geometry message fails.
         previous = self.world, self.attached, self.colors, self.frames.edges
-        self.world = {key: Collision(item.frame, item.origin, list(item.parts)) for key, item in self.world.items()}
-        self.attached = {key: Collision(item.frame, item.origin, list(item.parts)) for key, item in self.attached.items()}
+        self.world = {key: Collision(item.frame, item.origin, list(item.parts), item.combined) for key, item in self.world.items()}
+        self.attached = {key: Collision(item.frame, item.origin, list(item.parts), item.combined) for key, item in self.attached.items()}
         self.colors, self.frames.edges = dict(self.colors), dict(self.frames.edges)
         try:
             self._apply_planning_scene(message)
@@ -351,7 +354,12 @@ class SceneAssembler:
         for category, store in (('world', self.world), ('attached', self.attached)):
             for key, collision in store.items():
                 color = self.colors.get(key, (.35, .65, .72, .5) if category == 'world' else (.85, .55, .25, 1))
-                for index, (mesh, local) in enumerate(collision.parts):
+                parts = collision.parts
+                if category == 'world' and key.startswith('cell_fixture_') and len(parts) > 1:
+                    if collision.combined is None:
+                        collision.combined = combine_meshes(parts)
+                    parts = [(collision.combined, np.eye(4))]
+                for index, (mesh, local) in enumerate(parts):
                     obj = SceneObject(f'{category.title()}: {key} / {index+1}', mesh,
                                       color=color, id=f'{category}/{key}/{index}')
                     framed.append(Framed(obj, collision.frame, collision.origin @ local))

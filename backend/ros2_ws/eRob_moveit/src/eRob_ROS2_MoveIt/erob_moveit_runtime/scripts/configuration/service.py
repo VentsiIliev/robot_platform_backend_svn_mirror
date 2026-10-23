@@ -76,6 +76,9 @@ class ConfigurationService:
                 if profile and profile not in self.collision_profiles:
                     raise ConfigurationError(f'Unknown tool collision profile: {profile}')
             return candidate
+        if section == 'cell_scene':
+            from .cell_scene import validate_cell_scene
+            return validate_cell_scene(candidate)
         if section == 'sensorless_collision':
             validate_sensorless(candidate, previous)
             return candidate
@@ -90,7 +93,13 @@ class ConfigurationService:
             previous = self.repository.read(section)
             if self._revision(section, previous) != expected_revision:
                 raise Conflict('Configuration changed; reload it before saving')
-            if tool_id is not None:
+            merged_id = None
+            if section == 'cell_scene' and 'merge' in changes:
+                if set(changes) != {'merge'}:
+                    raise ConfigurationError('A merge command cannot include other changes')
+                from .cell_scene import merge_cell_scene
+                candidate, merged_id = merge_cell_scene(previous, changes['merge'])
+            elif tool_id is not None:
                 candidate = edit_tool(previous, tool_id, changes)
             elif user_id is not None:
                 candidate = edit_workobject(previous, user_id, changes)
@@ -112,7 +121,10 @@ class ConfigurationService:
             # Never alter runtime state until the entire candidate is durable.
             self.repository.write(section, candidate, revision(previous))
             reason = self._apply(section, candidate)
-            return self._view(section, candidate, reason=reason)
+            result = self._view(section, candidate, reason=reason)
+            if merged_id is not None:
+                result['merged_object_id'] = merged_id
+            return result
 
     def retry_application(self, section, expected_revision):
         with self.repository.transaction(section):

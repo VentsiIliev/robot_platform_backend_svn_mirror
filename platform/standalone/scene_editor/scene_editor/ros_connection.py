@@ -1,12 +1,15 @@
 """Optional subprocess transport. Importing this module does not import ROS."""
 from dataclasses import dataclass
 import json
+import logging
 import os
 from pathlib import Path
 import subprocess
 import tempfile
 import threading
 import weakref
+
+logger = logging.getLogger(__name__)
 
 import numpy as np
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
@@ -78,32 +81,43 @@ class RobotDescriptionUnavailable(RuntimeError):
     """No running description publisher or usable ROS environment was found."""
 
 
-def resolved_robot_snapshot(options):
+def resolved_robot_snapshot(options, *, package_root=None):
     """Read the running resolved URDF once and load static zero-joint visuals."""
     from .urdf import load_urdf
     command = ros_command(options,'description_helper.py',
                           ['--description-topic',options.description_topic,'--timeout','5'])
+    logger.info('Reading robot description: topic=%s domain=%s python=%s',
+                options.description_topic,ros_environment(options).get('ROS_DOMAIN_ID','0'),options.python)
+    logger.info('ROS setup=%s; workspace setup=%s; mesh folder=%s',
+                options.ros_setup or '(inherited)',options.workspace_setup or '(inherited)',package_root or '(automatic)')
+    logger.debug('Description helper command: %r',command)
     try:
         completed = subprocess.run(command,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
                                    text=True,encoding='utf-8',errors='replace',
                                    env=ros_environment(options),timeout=12)
     except (subprocess.TimeoutExpired,OSError) as exc:
+        logger.warning('Description helper failed: %s',exc)
         raise RobotDescriptionUnavailable('Cannot read robot_description: '+str(exc)) from exc
+    logger.info('Description helper exited with code %s',completed.returncode)
     packet = None
     for line in reversed(completed.stdout.splitlines()):
         try:
             candidate = json.loads(line)
         except ValueError:
+            logger.debug('Description helper output: %s',line)
             continue
         if isinstance(candidate,dict) and candidate.get('protocol') == 'scene-editor-description-v1':
             packet = candidate
             break
     if packet is None:
+        logger.warning('Description helper returned no result: %s',completed.stdout[-1500:])
         raise RobotDescriptionUnavailable('ROS description helper unavailable: '+completed.stdout[-1500:])
     if not packet.get('success'):
+        logger.warning('Description read failed: %s',packet.get('message'))
         error = RobotDescriptionUnavailable if packet.get('unavailable') else RuntimeError
         raise error(packet.get('message','Cannot resolve the running robot description.'))
     packages = packet.get('packages',{})
+    logger.info('Received robot description (%d characters); ROS package paths=%s',len(packet['xml']),packages)
     def package(name):
         if name not in packages:
             raise LookupError(name)
@@ -112,9 +126,10 @@ def resolved_robot_snapshot(options):
     with tempfile.TemporaryDirectory(prefix='scene-editor-description-') as directory:
         path = Path(directory)/'robot.urdf'
         path.write_text(packet['xml'],encoding='utf-8')
-        scene = load_urdf(path,package_resolver=package,search_roots=roots)
+        scene = load_urdf(path,package_root=package_root,package_resolver=package,search_roots=roots)
     for index,obj in enumerate(scene.objects):
         obj.id = f'robot/resolved/{index}'
+    logger.info('Resolved URDF loaded: %d visual objects',len(scene.objects))
     return scene
 
 
@@ -154,9 +169,10 @@ class RosConnection(QObject):
     status = pyqtSignal(object)
     stopped = pyqtSignal(str)
 
-    def __init__(self, options, parent=None):
+    def __init__(self, options, parent=None, *, package_root=None):
         super().__init__(parent)
         self.options = options
+        self.package_root = package_root
         self._lock = threading.Lock()
         self._latest = None
         self._process = None
@@ -167,6 +183,7 @@ class RosConnection(QObject):
         if self._thread is not None:
             raise RuntimeError('A ROS connection can only be started once')
         self._thread = threading.Thread(target=self._read, name='scene-editor-ros', daemon=True)
+        logger.info('Starting live ROS reader thread')
         self._thread.start()
 
     def take_latest(self):
@@ -176,6 +193,7 @@ class RosConnection(QObject):
         return scene
 
     def stop(self):
+        logger.info('Stopping live ROS reader')
         self._stop.set()
         with self._lock:
             process = self._process
@@ -199,6 +217,8 @@ class RosConnection(QObject):
     def _command(self, directory):
         options = self.options
         arguments = ['--cache', directory]
+        if self.package_root:
+            arguments.extend(['--mesh-root',str(self.package_root)])
         for name in ('fixed_frame', 'scene_topic', 'scene_service', 'description_topic', 'tf_topic', 'tf_static_topic'):
             arguments.extend(['--'+name.replace('_', '-'), getattr(options, name)])
         arguments.extend(['--marker-topics', *options.marker_topics])
@@ -212,9 +232,14 @@ class RosConnection(QObject):
                 environment = ros_environment(self.options)
                 if self._stop.is_set():
                     return
-                process = subprocess.Popen(self._command(directory), stdout=subprocess.PIPE,
+                command = self._command(directory)
+                logger.info('Launching live ROS helper: domain=%s; fixed frame=%s',
+                            environment.get('ROS_DOMAIN_ID','0'),self.options.fixed_frame)
+                logger.debug('Live ROS helper command: %r',command)
+                process = subprocess.Popen(command, stdout=subprocess.PIPE,
                                            stderr=subprocess.STDOUT, text=True, encoding='utf-8',
                                            errors='replace', bufsize=1, env=environment)
+                logger.info('Live ROS helper started: pid=%d',process.pid)
                 with self._lock:
                     self._process = process
                 if self._stop.is_set():
@@ -225,6 +250,7 @@ class RosConnection(QObject):
                     try:
                         packet = json.loads(line)
                     except json.JSONDecodeError:
+                        logger.warning('Live ROS helper output: %s',line.rstrip())
                         logs.append(line.strip())
                         logs = logs[-8:]
                         continue
@@ -237,16 +263,25 @@ class RosConnection(QObject):
                             with self._lock:
                                 self._latest = scene
                         except Exception as exc:
+                            logger.exception('Could not decode live scene geometry')
                             self.status.emit({'type': 'warning', 'message': 'Scene geometry: '+str(exc)})
                     else:
+                        if packet['type'] in ('warning','error'):
+                            logger.warning('Live ROS %s: %s',packet['type'],packet.get('message',''))
+                        elif packet['type'] == 'ready':
+                            logger.info('Live ROS helper ready: %s',packet)
+                        else:
+                            logger.debug('Live ROS status: %s',packet)
                         if packet['type'] == 'error':
                             error = packet['message']
                         self.status.emit(packet)
                 process.stdout.close()
                 returncode = process.wait(timeout=3)
+                logger.info('Live ROS helper exited with code %s',returncode)
                 if returncode and not error:
                     error = '\n'.join(logs) or f'ROS helper exited with code {returncode}'
         except Exception as exc:
+            logger.exception('Live ROS reader failed')
             error = str(exc)
         finally:
             with self._lock:

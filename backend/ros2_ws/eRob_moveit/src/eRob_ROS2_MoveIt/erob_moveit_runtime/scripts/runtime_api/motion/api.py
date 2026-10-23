@@ -37,6 +37,20 @@ class MotionApi:
         self._settings = settings
         self._port = settings.port
 
+    def _motion_error(self, result, **extra):
+        if result == -12:
+            # -12 covers every hardware-readiness gate, including scene setup
+            # and interlocks. Do not infer an EtherCAT fault from the result code.
+            extra['detail'] = 'Hardware not ready for motion'
+            try:
+                state = self._gateway.runtime_state_snapshot()
+                reason = state.get('hardware_fault') if isinstance(state, dict) else None
+                if isinstance(reason, str) and reason:
+                    extra['detail'] = reason
+            except Exception:
+                logger.warning('Could not read the motion readiness reason', exc_info=True)
+        return motion_error(result, **extra)
+
     def _task_id(self):
         return self._gateway.last_submitted_task_id()
 
@@ -61,15 +75,15 @@ class MotionApi:
                 "final": bool(blocking),
                 "task_id": task_id,
             }, 200 if blocking else 202)
-        return motion_error(result, **({"detail": self._gateway.last_motion_error()} if self._gateway.last_motion_error() else {}))
+        return self._motion_error(result, **({"detail": self._gateway.last_motion_error()} if self._gateway.last_motion_error() else {}))
 
     def _fast_lin_result(self, result: int, *, blocking: bool) -> ApiResponse[MotionResponse]:
         gateway = self._gateway
         task_id = gateway.last_submitted_task_id()
         if result < 0:
             detail = gateway.last_motion_error()
-            outcome_unknown = bool(detail and "eventual outcome is unknown" in detail)
-            return motion_error(
+            outcome_unknown = bool(result != -12 and detail and "eventual outcome is unknown" in detail)
+            return self._motion_error(
                 result,
                 queued=False,
                 task_id=task_id,
@@ -256,7 +270,7 @@ class MotionApi:
                 "status_ws_port": self._settings.execution_ws_port,
                 "message": "sequence accepted; planning/execution completes asynchronously, subscribe to /ws/execution for final result",
             }, 202)
-        return motion_error(result, accepted=False, final=True, state="REJECTED", queued=False, task_id=task_id)
+        return self._motion_error(result, accepted=False, final=True, state="REJECTED", queued=False, task_id=task_id)
 
     @api_operation("motion.execute_ordered_motion_chain")
     def execute_ordered_motion_chain(self, data: dict[str, Any] | None) -> ApiResponse[MotionResponse]:
@@ -439,7 +453,7 @@ class MotionApi:
         )
         if result == 0:
             return ApiResponse({"result": result, "success": True})
-        return motion_error(result)
+        return self._motion_error(result)
 
     @api_operation("motion.joint_jog")
     def joint_jog(self, data: dict[str, Any] | None) -> ApiResponse[MotionResponse]:
@@ -457,7 +471,7 @@ class MotionApi:
         )
         if result == 0:
             return ApiResponse({"result": result, "success": True})
-        return motion_error(result)
+        return self._motion_error(result)
 
     @api_operation("motion.servo_jog_start")
     def servo_jog_start(self, data: dict[str, Any] | None) -> ApiResponse[MotionResponse]:
@@ -479,7 +493,7 @@ class MotionApi:
         )
         if result == 0:
             return ApiResponse({"result": result, "success": True, "state": "running"})
-        return motion_error(result)
+        return self._motion_error(result)
 
     @api_operation("motion.servo_jog_stop")
     def servo_jog_stop(self, data: dict[str, Any] | None = None) -> ApiResponse[MotionResponse]:
@@ -521,7 +535,7 @@ class MotionApi:
                 "timing_trace_id": trace_id,
                 "timing": timing,
             })
-        return motion_error(result)
+        return self._motion_error(result)
 
     @api_operation("motion.conditional_servo_start")
     def conditional_servo_start(self, data: dict[str, Any] | None) -> ApiResponse[MotionResponse]:

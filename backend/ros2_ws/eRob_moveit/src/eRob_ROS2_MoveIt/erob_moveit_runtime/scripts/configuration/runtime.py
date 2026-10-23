@@ -28,6 +28,10 @@ class LocalConfigurationRuntime:
         self.monitor_apply = monitor_apply
 
     def snapshot(self, section):
+        if section == 'cell_scene':
+            node = self.node_getter()
+            manager = getattr(node, 'cell_scene_manager', None) if node is not None else None
+            return manager.snapshot() if manager is not None else None
         if section == 'calibration':
             if self.node_getter() is None or self.robot_getter() is None:
                 return None
@@ -86,11 +90,19 @@ class LocalConfigurationRuntime:
                 return ApplicationFailure('configuration_joint_state_incomplete', 'Saved; joint velocity state is incomplete', retryable=False)
             if any(not math.isfinite(float(v)) or abs(float(v)) > 0.01 for v in values):
                 return ApplicationFailure('configuration_robot_moving', 'Saved; robot must be stationary before applying calibration', retryable=True)
-            self._apply_calibration(node, robot, document)
+            if section == 'cell_scene':
+                manager = getattr(node, 'cell_scene_manager', None)
+                if manager is None:
+                    return ApplicationFailure('cell_scene_unavailable', 'Saved; cell scene is unavailable', retryable=True)
+                manager.apply(document)
+                self.config.CELL_COLLISION_OBJECTS = deepcopy(document['CELL_COLLISION_OBJECTS'])
+                self.config._CONFIG['CELL_COLLISION_OBJECTS'] = deepcopy(document['CELL_COLLISION_OBJECTS'])
+            else:
+                self._apply_calibration(node, robot, document)
             return None
         except Exception as error:
             logger.exception('Saved calibration could not be fully applied')
-            return ApplicationFailure.from_exception(error, prefix='Saved; calibration application failed. Restart the backend before moving')
+            return ApplicationFailure.from_exception(error, prefix='Saved; configuration application failed. Reload before moving')
         finally:
             lock.release()
 

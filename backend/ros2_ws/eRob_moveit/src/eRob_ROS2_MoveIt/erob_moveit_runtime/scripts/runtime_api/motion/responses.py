@@ -37,7 +37,7 @@ MOTION_ERROR_DESCRIPTIONS = {
     -9:  "Near-singularity detected",
     -10: "Collision detected during Jacobian check",
     -11: "Cartesian path planning failed: target unreachable, collision, or joint-limit constraint",
-    -12: "Hardware not ready: EtherCAT slave not in OP",
+    -12: "Hardware not ready for motion",
     -13: "Drive operation is not enabled; call POST /drive/enable before motion",
     -14: "Controller execution failed: trajectory tolerance or controller action error",
 }

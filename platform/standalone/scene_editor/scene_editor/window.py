@@ -3,6 +3,7 @@ from dataclasses import replace
 from math import isclose
 from pathlib import Path
 import uuid
+import logging
 
 from PyQt6.QtCore import QObject, QRunnable, QThreadPool, QTimer, QSettings, QItemSelectionModel, Qt, QSignalBlocker, pyqtSignal
 from PyQt6.QtGui import QAction, QActionGroup, QColor, QKeySequence, QUndoCommand, QUndoStack
@@ -12,21 +13,23 @@ from PyQt6.QtWidgets import (
     QLabel, QComboBox, QFileDialog, QMessageBox, QInputDialog, QColorDialog,
     QGroupBox, QScrollArea,
     QApplication,
-    QSizePolicy,
+    QSizePolicy, QMenu,
 )
 
-from .geometry import STL_UNITS, read_stl, make_box, make_cylinder, mesh_from_primitive, export_stl
+from .geometry import STL_UNITS, read_stl, make_box, make_cylinder, mesh_from_primitive, export_stl, combine_meshes
 from .model import Scene, SceneObject, Pose, load_scene, save_scene, translated_poses
 from .urdf import load_urdf
 from .viewport import Viewport
 from .ros_connection import RosConnection, collision_operation, resolved_robot_snapshot, RobotDescriptionUnavailable
 from .ros_dialog import RosDialog, load_ros_options
 from .collision import make_draft, request_for
+from .backend_configuration import BackendConfigurationClient, default_backend_url, cell_fixture_identifier
 from .collision_dialog import CollisionDialog
 from .object_list import ObjectList, LOCKED_ROLE, LOCK_ENABLED_ROLE
 from .styles import PALETTES, qt_palette, stylesheet, viewport_colors
 from .surface_mating import mate_pose
 
+logger = logging.getLogger(__name__)
 
 
 class _Result(QObject):
@@ -89,6 +92,11 @@ class EditorWindow(QMainWindow):
         self._ros_options = load_ros_options()
         self._ros_details = 'No ROS connection.'
         self._collision_busy = False
+        self._cell_scene_view = None
+        self._cell_fixture_previews = {}
+        self._cell_preview_ids = set()
+        self._cell_group_previews = {}
+        self._pending_cell_selection = None
         self._snap_source = None
         self._ros_timer = QTimer(self)
         self._ros_timer.setInterval(100)
@@ -103,6 +111,7 @@ class EditorWindow(QMainWindow):
         self.viewport = Viewport()
         self.viewport.scene = self.scene
         self.viewport.selected.connect(self._select)
+        self.viewport.context_requested.connect(self._viewport_context_menu)
         self.viewport.selection_changed.connect(self._select_many)
         self.viewport.pose_dragged.connect(self._drag_pose)
         self.viewport.group_dragged.connect(self._drag_group)
@@ -202,6 +211,14 @@ class EditorWindow(QMainWindow):
             ros_toolbar.addAction(action)
         ros_menu.addAction(self._action('Connection details', self.connection_details))
         ros_menu.addAction(self._action('ROS connection settings…', self.ros_settings))
+        self.robot_visuals_action = QAction('Show robot visual geometry',self)
+        self.robot_collisions_action = QAction('Show robot collision geometry',self)
+        for action in (self.robot_visuals_action,self.robot_collisions_action):
+            action.setCheckable(True)
+            ros_menu.addAction(action)
+        self.robot_visuals_action.setChecked(True)
+        self.robot_visuals_action.toggled.connect(self._robot_geometry_visibility_changed)
+        self.robot_collisions_action.toggled.connect(self._robot_geometry_visibility_changed)
         self.ros_status = QLabel('Offline — local scene')
         self.ros_status.setMargin(6)
         ros_toolbar.addWidget(self.ros_status)
@@ -214,6 +231,9 @@ class EditorWindow(QMainWindow):
         self.add_collision_action = self._action('Add to ROS', self.add_collision_ros)
         self.update_collision_action = self._action('Update in ROS', self.update_collision_ros)
         self.remove_collision_action = self._action('Remove from ROS', self.remove_collision_ros)
+        self.cell_scene_action = self._action('Cell collision configuration…', self.configure_cell_scene)
+        collision_menu.addAction(self.cell_scene_action)
+        collision_toolbar.addAction(self.cell_scene_action)
         for action in (self.new_collision_action, self.edit_collision_action, self.add_collision_action,
                        self.update_collision_action, self.remove_collision_action):
             collision_menu.addAction(action)
@@ -798,6 +818,7 @@ class EditorWindow(QMainWindow):
                 self._error(str(exc))
 
     def _submit(self, label, function, callback, changes_scene=False):
+        logger.info('Starting operation: %s',label)
         if self._surface_mate is not None:
             self.cancel_surface_mate()
         self._job_counter += 1
@@ -830,6 +851,7 @@ class EditorWindow(QMainWindow):
         if not hasattr(self, 'new_collision_action'):
             return
         available = not self._jobs and not self._collision_busy and not self._closing
+        self.cell_scene_action.setEnabled(available)
         self.surface_mate_action.setEnabled(available and not self._live and sum(obj.visible for obj in self.scene.objects) >= 2)
         selected = self.selected()
         single = len(self.selected_objects()) == 1
@@ -1004,6 +1026,148 @@ class EditorWindow(QMainWindow):
         if dialog.exec():
             self._ros_options = dialog.selected_options()
 
+    def configure_cell_scene(self):
+        if self._jobs or self._collision_busy or self._closing:
+            return
+        from .cell_scene_dialog import CellSceneDialog
+        self._remember_cell_fixtures(self.scene)
+        selected = self.selected()
+        identifier = selected.id[len('world/'):].rsplit('/', 1)[0] if selected and selected.id.startswith('world/') else None
+        dialog = CellSceneDialog(self, identifier)
+        dialog.exec()
+        dialog.deleteLater()
+
+    def _viewport_context_menu(self, point):
+        if self.selected() is None:
+            return
+        menu = QMenu(self.viewport)
+        menu.addAction('Frame selection', self.frame_selected)
+        self.add_cell_collision_actions(menu)
+        menu.exec(self.viewport.mapToGlobal(point))
+
+    def add_cell_collision_actions(self, menu):
+        selected = self.selected()
+        if selected is None or cell_fixture_identifier(selected.id) is None:
+            return
+        single = len(self.selected_objects()) == 1
+        available = single and not self._jobs and not self._collision_busy and not self._closing
+        menu.addSeparator()
+        enable = menu.addAction('Enable collision checking (save)', self.enable_selected_cell_collision)
+        disable = menu.addAction('Disable collision checking (save)', self.disable_selected_cell_collision)
+        for action in (enable, disable):
+            action.setEnabled(available)
+        merge = menu.addAction('Merge selected collision objects (save)…', self.merge_selected_cell_collisions)
+        members = self.selected_objects()
+        merge.setEnabled(not self._jobs and not self._collision_busy and not self._closing
+                         and len(members) >= 2 and all(cell_fixture_identifier(obj.id) for obj in members))
+        menu.addAction(self.cell_scene_action)
+
+    def merge_selected_cell_collisions(self):
+        members = [replace(obj) for obj in self.selected_objects()]
+        identifiers = [cell_fixture_identifier(obj.id) for obj in members]
+        if (len(members) < 2 or not all(identifiers) or len(set(identifiers)) != len(identifiers)
+                or self._jobs or self._collision_busy or self._closing):
+            return
+        name, accepted = QInputDialog.getText(self, 'Merge collision objects',
+            'New object name (letters, digits and underscores):', text='assembly')
+        if not accepted:
+            return
+        try:
+            url = QSettings('Standalone Scene Editor', 'Scene Editor').value('cell_scene/backend_url', '') or default_backend_url()
+            client = BackendConfigurationClient(url)
+        except (ValueError, KeyError, OSError) as error:
+            self._error(str(error))
+            return
+        self._remember_cell_fixtures(self.scene)
+        self._collision_busy = True
+        self.collision_status.setText('Saving merged collision object…')
+        self._submit('Merging selected cell collisions…',
+                     lambda: (client.merge_fixtures(identifiers, name.strip()), members), self._cell_collisions_merged)
+
+    def _cell_collisions_merged(self, result):
+        view, members = result
+        identifier = view['merged_object_id']
+        object_id = 'world/'+identifier+'/0'
+        mesh = combine_meshes([(obj.mesh, obj.matrix()) for obj in members])
+        obj = SceneObject('World: '+identifier+' / 1', mesh, color=members[0].color, id=object_id)
+        self._cell_group_previews[object_id] = ({member.id for member in members}, obj)
+        self._pending_cell_selection = object_id
+        self._selected_cell_collision_saved(view)
+
+    def enable_selected_cell_collision(self):
+        self._set_selected_cell_collision(True)
+
+    def disable_selected_cell_collision(self):
+        self._set_selected_cell_collision(False)
+
+    def _set_selected_cell_collision(self, enabled):
+        selected = self.selected()
+        if (selected is None or len(self.selected_objects()) != 1 or self._jobs
+                or self._collision_busy or self._closing):
+            return
+        identifier = cell_fixture_identifier(selected.id)
+        if identifier is None:
+            return
+        try:
+            url = QSettings('Standalone Scene Editor', 'Scene Editor').value('cell_scene/backend_url', '') or default_backend_url()
+            client = BackendConfigurationClient(url)
+        except (ValueError, KeyError, OSError) as error:
+            self._error(str(error))
+            return
+        self._remember_cell_fixtures(self.scene)
+        self._collision_busy = True
+        self.collision_status.setText('Saving collision state: '+identifier)
+        self._submit('Saving selected cell collision…', lambda: client.set_enabled(identifier, enabled),
+                     self._selected_cell_collision_saved)
+
+    def _selected_cell_collision_saved(self, view):
+        self.cell_scene_configuration_received(view)
+        message = ('Saved; application pending. '+(view.get('application_error') or 'Use Apply saved configuration.')) if view.get('pending_application') else 'Collision state saved and applied to MoveIt.'
+        self.collision_status.setText(message)
+        self.collision_status.setToolTip(message)
+
+    def _remember_cell_fixtures(self, scene):
+        for obj in scene.objects:
+            if cell_fixture_identifier(obj.id) and obj.id not in self._cell_preview_ids:
+                self._cell_fixture_previews[obj.id] = replace(obj)
+
+    def _with_disabled_cell_previews(self, scene, *, live_frame=False):
+        applied = ((self._cell_scene_view or {}).get('applied') or {}).get('CELL_COLLISION_OBJECTS', {})
+        ghosts = {}
+        for object_id, obj in self._cell_fixture_previews.items():
+            definition = applied.get(cell_fixture_identifier(object_id))
+            if definition is not None and not definition['enabled'] and 'merged_into' not in definition:
+                ghosts[object_id] = replace(obj, name=obj.name+' [collision disabled]',
+                                            color=(.55,.55,.55,.25), locked=True)
+        # A current ROS object takes precedence over a cached configuration view
+        # (for example, another editor may have re-enabled it).
+        if live_frame:
+            for obj in scene.objects:
+                ghosts.pop(obj.id, None)
+        preview_ids = set(ghosts)
+        objects = [ghosts.pop(obj.id, self._cell_fixture_previews.get(obj.id, obj)
+                             if not live_frame and obj.id in self._cell_preview_ids else obj) for obj in scene.objects]
+        objects.extend(ghosts.values())
+        self._cell_preview_ids = preview_ids
+        return Scene(objects, scene.reference_frame)
+
+    def cell_scene_configuration_received(self, view):
+        self._cell_scene_view = view
+        applied = (view.get('applied') or {}).get('CELL_COLLISION_OBJECTS', {})
+        for object_id, (member_ids, obj) in self._cell_group_previews.items():
+            definition = applied.get(cell_fixture_identifier(object_id))
+            if definition is not None and any(item.id in member_ids for item in self.scene.objects):
+                objects = [item for item in self.scene.objects if item.id not in member_ids and item.id != object_id]
+                self.scene = Scene(objects+[replace(obj)], self.scene.reference_frame)
+                self._cell_fixture_previews[object_id] = replace(obj)
+        self.scene = self._with_disabled_cell_previews(self.scene)
+        self.viewport.scene = self.scene
+        self._refresh()
+        if self._pending_cell_selection and any(obj.id == self._pending_cell_selection for obj in self.scene.objects):
+            self._select(self._pending_cell_selection)
+            self._pending_cell_selection = None
+        self.viewport.update()
+
     def new_collision(self, *, shape=None):
         if self._live or self._jobs:
             return
@@ -1073,7 +1237,7 @@ class EditorWindow(QMainWindow):
         collision_request = self._collision_busy
         self._collision_busy = False
         if collision_request and error:
-            self.collision_status.setText('Collision operation failed — local draft retained')
+            self.collision_status.setText('Collision operation failed — inspect backend state before retrying')
             self.statusBar().showMessage('Collision operation failed. '+str(error)[:150])
         self._busy_actions()
         if row and not self._closing:
@@ -1088,23 +1252,41 @@ class EditorWindow(QMainWindow):
             self.close()
 
     def connect_ros(self):
-        if self._ros is not None or self._jobs or not self._confirm_discard():
+        logger.info('Connect to ROS 2 clicked')
+        if self._ros is not None or self._jobs:
+            logger.warning('Connect blocked: connection exists=%s; active jobs=%d',self._ros is not None,len(self._jobs))
+            return
+        if not self._confirm_discard():
+            logger.info('Connect cancelled at unsaved-scene prompt')
             return
         dialog = RosDialog(self._ros_options, self)
+        logger.info('Opening ROS connection settings dialog')
         if dialog.exec():
+            logger.info('ROS connection settings accepted')
             try:
                 self.begin_ros(dialog.selected_options())
             except Exception as exc:
+                logger.exception('Could not begin ROS connection')
                 self._error(str(exc))
+        else:
+            logger.info('ROS connection settings cancelled')
 
     def begin_ros(self, options):
         """Begin an independent reader; callers must resolve local unsaved edits first."""
         if self._ros is not None or self._jobs:
             raise RuntimeError('Finish the current connection or file operation first.')
         self._ros_options = options
+        self._cell_scene_view = None
+        self._cell_fixture_previews.clear()
+        self._cell_preview_ids.clear()
+        self._cell_group_previews.clear()
+        self._pending_cell_selection = None
+        logger.info('Beginning live ROS connection: %s',options)
         self.cancel_snap()
         self._live, self._live_received = True, False
-        self._ros = RosConnection(options, self)
+        package_root = str(QSettings('Standalone Scene Editor','Scene Editor').value('urdf/mesh_root','')) or None
+        logger.info('Live ROS mesh folder: %s',package_root or '(automatic)')
+        self._ros = RosConnection(options, self,package_root=package_root)
         self._ros.status.connect(self._ros_status_changed)
         self._ros.stopped.connect(self._ros_stopped)
         self.mode.setCurrentIndex(0)
@@ -1122,21 +1304,42 @@ class EditorWindow(QMainWindow):
         scene = self._ros.take_latest()
         if scene is None or (not scene.objects and not self._live_received):
             return
+        self._remember_cell_fixtures(scene)
+        scene = self._with_disabled_cell_previews(scene, live_frame=True)
         selection = self.viewport.selected_id
         selection_ids = self.viewport.selection_ids()
         previous_ids = {obj.id for obj in self.scene.objects}
         if not self._live_received:
+            logger.info('First live scene received: %d objects; frame=%s',len(scene.objects),scene.reference_frame)
             self.project_path = None
             self.history.clear()
         self._live_received = True
+        self._apply_robot_geometry_visibility(scene)
         self.scene = scene
         self.viewport.scene = scene
+        if self._pending_cell_selection and any(obj.id == self._pending_cell_selection for obj in scene.objects):
+            selection = self._pending_cell_selection
+            selection_ids = {selection}
+            self._pending_cell_selection = None
         valid = {obj.id for obj in scene.objects} & selection_ids
         self.viewport.set_selected(selection if selection in valid else next(iter(valid),None), valid)
         if previous_ids != {obj.id for obj in scene.objects}:
             self.viewport.fit()
         self._refresh()
         self._busy_actions()
+
+    def _apply_robot_geometry_visibility(self,scene):
+        for obj in scene.objects:
+            if obj.id.startswith('robot/'):
+                if '/collision/' in obj.id:
+                    obj.visible = self.robot_collisions_action.isChecked()
+                elif '/visual/' in obj.id:
+                    obj.visible = self.robot_visuals_action.isChecked()
+
+    def _robot_geometry_visibility_changed(self):
+        self._apply_robot_geometry_visibility(self.scene)
+        self._refresh()
+        self.viewport.update()
 
     def _ros_status_changed(self, packet):
         if not self._live or self._closing:
@@ -1193,6 +1396,7 @@ class EditorWindow(QMainWindow):
         self._title()
 
     def _ros_stopped(self, error):
+        logger.info('ROS connection stopped: %s',error or 'requested disconnect')
         connection = self._ros
         if self._live:
             self.disconnect_ros()
@@ -1228,17 +1432,33 @@ class EditorWindow(QMainWindow):
             return
         self.cancel_snap()
         options = self._ros_options
+        settings = QSettings('Standalone Scene Editor','Scene Editor')
+        package_root = str(settings.value('urdf/mesh_root','')) or None
         def resolve():
             try:
-                return resolved_robot_snapshot(options),None
-            except RobotDescriptionUnavailable as exc:
-                return None,str(exc)
+                return resolved_robot_snapshot(options,package_root=package_root),None
+            except (RobotDescriptionUnavailable,FileNotFoundError) as exc:
+                return None,exc
         self._submit('Resolving the current robot URDF from ROS 2…',resolve,self._resolved_urdf_loaded,True)
 
     def _resolved_urdf_loaded(self,result):
         scene,unavailable = result
         if scene is None:
-            self.statusBar().setToolTip(unavailable)
+            if isinstance(unavailable,FileNotFoundError):
+                logger.warning('Resolved URDF mesh lookup failed: %s',unavailable)
+                self.statusBar().showMessage(str(unavailable))
+                settings = QSettings('Standalone Scene Editor','Scene Editor')
+                package = QFileDialog.getExistingDirectory(self,
+                            'Mesh not found: select mesh package / ROS workspace folder',
+                            str(settings.value('urdf/mesh_root','')))
+                if package:
+                    logger.info('Mesh folder selected: %s; retrying resolved URDF load',package)
+                    settings.setValue('urdf/mesh_root',package)
+                    self.load_resolved_urdf()
+                else:
+                    logger.info('Mesh folder selection cancelled; scene retained')
+                return
+            self.statusBar().setToolTip(str(unavailable))
             self.statusBar().showMessage('ROS 2 is not running or robot_description is unavailable. Cannot resolve URDF; select it manually.')
             self.import_urdf(fallback=True)
             return
@@ -1276,6 +1496,11 @@ class EditorWindow(QMainWindow):
 
     def _replace_scene(self, scene, path=None, dirty=False):
         self.cancel_snap()
+        self._cell_scene_view = None
+        self._cell_fixture_previews.clear()
+        self._cell_preview_ids.clear()
+        self._cell_group_previews.clear()
+        self._pending_cell_selection = None
         self._generation += 1
         self.scene = scene
         self.project_path = Path(path).resolve() if path else None
@@ -1359,6 +1584,7 @@ class EditorWindow(QMainWindow):
         self.statusBar().showMessage('3D renderer: ' + message)
 
     def _error(self, message):
+        logger.error('%s',message)
         QMessageBox.critical(self, 'Scene Editor', message)
 
     def closeEvent(self, event):

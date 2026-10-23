@@ -322,6 +322,8 @@ class Workspace(QObject):
         w.viewport._view_cube.move(max(w.viewport.width()-104,0),82)
         w.viewport._view_cube.show()
         view_menu = w.menuBar().addMenu('View')
+        view_menu.addAction(w.robot_visuals_action)
+        view_menu.addAction(w.robot_collisions_action)
         self.origin_action = view_menu.addAction('Show selected object origin')
         self.origin_action.setCheckable(True)
         self.origin_action.setChecked(True)
@@ -609,6 +611,8 @@ class Workspace(QObject):
         for index,obj in enumerate(w.scene.objects):
             category = object_category(obj)
             counts[category] += 1
+            if category != 'Robot' and obj.id.startswith('robot/'):
+                counts['Robot'] += 1
             item = w.objects.item(index)
             if item is not None and (item.icon().isNull() or self._known_categories.get(obj.id) != category):
                 with QSignalBlocker(w.objects):
@@ -624,13 +628,23 @@ class Workspace(QObject):
         if obj is None:
             return 'Select an object to inspect its collision role.'
         if obj.id.startswith('robot/'):
+            if '/collision/' in obj.id:
+                return ('Robot link collision geometry, loaded from the URDF <collision> definition. '
+                        'It follows the link TF with its own collision origin and mesh scale. '
+                        'Use View → Show robot collision geometry to display it; hide robot visual geometry to inspect it alone. '
+                        'This is an inspection layer. ROS apply actions do not modify the robot model or collision rules.')
             return ('Robot link visual geometry, loaded from the URDF <visual> definition. '
-                    'The link may also have separate URDF <collision> geometry used by MoveIt. '
-                    'This editor does not currently load or inspect those collision definitions. '
+                    'Separate URDF <collision> geometry is also loaded in live view. '
+                    'Enable View → Show robot collision geometry to inspect it. '
                     'Robot links are not world collision objects; these ROS apply actions do not modify the robot model.')
         if obj.id.startswith(('world/','attached/')):
             attached = obj.id.startswith('attached/')
             identifier = obj.id.split('/',1)[1].rsplit('/',1)[0]
+            if not attached and identifier.startswith('cell_fixture_'):
+                return ('Configured equipment collision object\nCollision ID: '+identifier+
+                        '\n\nRight-click the selected box to enable or disable collision checking and save '
+                        'the state in the backend profile. A dim preview can be selected to restore a disabled box. '
+                        'Scene visibility remains separate from collision checking.')
             return (('Attached collision object' if attached else 'Planning-scene world collision object')+
                     '\nCollision ID: '+identifier+
                     '\n\nImported collision geometry from ROS. This object is not currently editable through '
@@ -661,7 +675,9 @@ class Workspace(QObject):
             for index,obj in enumerate(w.scene.objects):
                 item = w.objects.item(index)
                 if item:
-                    item.setHidden((self._category != 'All' and object_category(obj) != self._category) or bool(query and query not in (obj.name+' '+obj.id).casefold()))
+                    matches = (self._category == 'All' or object_category(obj) == self._category
+                               or (self._category == 'Robot' and obj.id.startswith('robot/')))
+                    item.setHidden(not matches or bool(query and query not in (obj.name+' '+obj.id).casefold()))
 
     def _category_changed(self,index):
         self._category = tuple(self.filters)[index]
@@ -735,4 +751,5 @@ class Workspace(QObject):
         duplicate.setEnabled(w.duplicate_button.isEnabled())
         delete = menu.addAction('Delete',w.delete)
         delete.setEnabled(w.delete_button.isEnabled())
+        w.add_cell_collision_actions(menu)
         menu.exec(w.objects.mapToGlobal(point))

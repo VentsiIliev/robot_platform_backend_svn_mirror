@@ -2,6 +2,12 @@
 
 This file provides guidance for AI coding agents (Claude, OpenCode, etc.) when working with code in this repository.
 
+## Task Exploration Scope
+
+- Exclude the platform's root `scripts/` directory (`/home/ilv/Desktop/25488_ZeroErr_git/platform/scripts`) from routine searches, file discovery, code review, and architectural reasoning. It contains testing/helper code and should not be treated as platform implementation or a source of application patterns.
+- Scope searches to relevant platform paths or use `rg -g '!scripts/**'` when searching from the platform root to avoid irrelevant context and wasted tokens.
+- Inspect or modify `scripts/` only when the user explicitly requests work there or a required workflow in this file needs a specific helper, such as `scripts/publish_changes.py` for publication. Keep that exception limited to the required helper.
+
 ## Commands
 
 ```bash

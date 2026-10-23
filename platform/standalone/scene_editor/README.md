@@ -8,6 +8,28 @@ From the repository root, using the existing environment:
 .venv/bin/python standalone/scene_editor/run.py
 ```
 
+Terminal logs are enabled by default. Use `--log-level DEBUG` to include every
+mesh lookup candidate and the ROS description helper command. To save logs:
+
+```bash
+.venv/bin/python standalone/scene_editor/run.py --log-level DEBUG 2>&1 | tee /tmp/scene_editor.log
+```
+
+Live view uses the same remembered mesh folder as URDF import. You can set it
+directly in **ROS 2 → Connection settings… → Mesh package / workspace folder**.
+Reconnect after changing it so the ROS helper uses the new folder.
+
+Live view loads both URDF `<visual>` and `<collision>` geometry. Robot collisions
+are separate orange translucent objects, with each collision's origin, mesh scale,
+and current link TF. Supported geometry is STL, box, cylinder, and sphere.
+They start hidden: enable **View → Show robot collision geometry** and optionally
+disable **View → Show robot visual geometry** to inspect collisions alone.
+The Collision explorer filter includes robot collisions; Robot includes both layers.
+Display choices survive live frame updates and are retained in an editable snapshot.
+This inspects the URDF geometry; it does not visualize SRDF allowed-collision rules
+or modify the robot model through the world collision-object Apply actions.
+Static URDF import and Load resolved URDF continue to load visuals only.
+
 Or use a separate environment:
 
 ```bash
@@ -198,6 +220,9 @@ read-only load of static visual geometry at zero joint positions; use Live view
 for the current joint poses and planning scene. The description wait is bounded
 to five seconds and runs outside the GUI thread. Reloading replaces the robot
 from the previous automatic load while keeping other objects, with Undo support.
+Mesh lookup also uses the package folder remembered by manual import. If a mesh
+cannot be found, the editor asks for a package or workspace folder, remembers it,
+and retries the automatic load. Cancelling leaves the scene unchanged.
 If ROS or its description publisher is unavailable, the editor explains that
 automatic resolution failed and opens a URDF file picker for manual selection.
 Invalid descriptions and missing mesh resources report their specific errors.
@@ -240,3 +265,62 @@ Multi-selection and group movement checks (no ROS required):
 ```bash
 xvfb-run -a .venv/bin/python -B standalone/scene_editor/tests/check_group_move.py
 ```
+
+## Persistent cell collision configuration
+
+Use **Collision objects → Cell collision configuration…** in live view or offline.
+The dialog connects to the backend URL (initially read from the platform's shared
+`backend_network.json`) and identifies the active backend profile. It lists the
+profile's independently managed equipment boxes, their requested enabled states,
+and the states last confirmed by MoveIt. Select a world fixture before opening
+the dialog to select the matching configuration row.
+
+Unchecking **Enable collision checking** stages a configuration change. **Save and
+apply** saves it atomically in the profile's `cell_scene.yaml`, then asks the
+backend to apply a MoveIt scene diff while stationary. This changes actual robot
+collision checking and survives backend restart. Visibility checkboxes remain local
+and never change collision checking. Table surfaces remain enabled.
+
+If a save succeeds but application is blocked, the dialog shows the saved values
+separately from the applied state. Stop motion and use **Apply saved configuration**.
+Concurrent edits produce a revision conflict; reload before editing again. A timeout
+can leave an unknown result; reload rather than assuming nothing changed. No operation
+automatically restarts the backend or moves the robot. The editor never writes
+backend profile files directly. An older backend without the `cell_scene` section
+must be rebuilt and restarted before this dialog can manage the cell.
+
+### Configure equipment from the selected object
+
+Select an equipment collision box in the viewport or Scene Explorer, then
+right-click it. **Enable collision checking (save)** and **Disable collision
+checking (save)** use the same backend configuration URL as the configuration
+dialog, read a fresh revision, and save/apply only that fixture's enabled state.
+These commands work in live view and editable snapshots. **Cell collision
+configuration…** opens the full dialog with the selected equipment row highlighted.
+Right-drag in the viewport still orbits the camera; a stationary right-click opens
+the menu. The fixed table surfaces do not expose equipment enable/disable actions.
+
+A disabled fixture remains as a dim, locked, selectable preview during the current
+connection so you can right-click it and enable it again. This preview is not a
+MoveIt obstacle. The backend's removal/restoration is the actual collision change.
+Previously disabled fixtures after reconnecting can be restored from the saved
+configuration dialog. Failed writes do not change the displayed applied state;
+saved-but-pending results remain pending until the backend can apply them.
+
+### Merge equipment collision objects
+
+Ctrl-click two or more equipment collision objects in the viewport or Scene
+Explorer. Right-click the selection and choose **Merge selected collision objects
+(save)…**, then enter a unique name using letters, digits and underscores.
+The backend saves one compound object containing the original boxes. Their exact
+sizes, positions, rotations and intervening gaps are preserved; no bounding box,
+convex hull or mesh simplification replaces them. The compound is rendered and
+selected as one object and its collision-enabled state controls every part.
+
+All selected objects must belong to the active profile, use the same reference
+frame, and have the same enabled state. Table surfaces and robot links cannot be
+merged through this action. Previously merged groups can be merged again with
+other objects. The source definitions remain in the profile as disabled members,
+so startup removes their old world IDs instead of duplicating the grouped geometry.
+Grouping survives backend restart. A saved-but-pending merge leaves the currently
+applied objects intact until the backend confirms application.

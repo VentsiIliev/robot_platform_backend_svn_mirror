@@ -17,6 +17,9 @@ def build_configuration_service(config, node_getter=lambda: None, robot_getter=l
     sensorless = config._CONFIG.get('SENSORLESS_COLLISION_CONFIG_PATH')
     if sensorless:
         paths['sensorless_collision'] = sensorless
+    cell_path = config._CONFIG.get('CELL_SCENE_PATH')
+    if cell_path:
+        paths['cell_scene'] = root / cell_path
     repository = YamlProfileRepository(profile, paths, root=root)
     startup = config._CONFIG.get('_SENSORLESS_COLLISION_STARTUP')
     runtime = LocalConfigurationRuntime(config, node_getter, robot_getter, sensorless_startup=startup)

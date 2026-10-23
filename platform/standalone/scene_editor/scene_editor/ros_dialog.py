@@ -2,6 +2,7 @@
 from dataclasses import replace
 import json
 import os
+import logging
 from pathlib import Path
 
 from PyQt6.QtCore import QSettings
@@ -11,6 +12,8 @@ from PyQt6.QtWidgets import (
 )
 
 from .ros_connection import RosOptions
+
+logger = logging.getLogger(__name__)
 
 
 def load_ros_options():
@@ -61,6 +64,16 @@ class RosDialog(QDialog):
                 form.addRow(title, row)
             else:
                 form.addRow(title, field)
+        settings = QSettings('Standalone Scene Editor','Scene Editor')
+        self.mesh_root = QLineEdit(str(settings.value('urdf/mesh_root','')))
+        mesh_row = QWidget()
+        mesh_layout = QHBoxLayout(mesh_row)
+        mesh_layout.setContentsMargins(0,0,0,0)
+        mesh_browse = QPushButton('Browse…')
+        mesh_browse.clicked.connect(self._browse_mesh_root)
+        mesh_layout.addWidget(self.mesh_root,1)
+        mesh_layout.addWidget(mesh_browse)
+        form.addRow('Mesh package / workspace folder (optional)',mesh_row)
         self.domain = QSpinBox()
         self.domain.setRange(-1, 232)
         self.domain.setSpecialValueText('Inherit ('+os.environ.get('ROS_DOMAIN_ID', '0')+')')
@@ -81,14 +94,24 @@ class RosDialog(QDialog):
         if path:
             self.fields[key].setText(path)
 
+    def _browse_mesh_root(self):
+        path = QFileDialog.getExistingDirectory(self,'Choose mesh package / ROS workspace folder',self.mesh_root.text())
+        if path:
+            self.mesh_root.setText(path)
+
     def accept(self):
         try:
             options = self.selected_options()
+            mesh_root = self.mesh_root.text().strip()
+            if mesh_root and not Path(mesh_root).is_dir():
+                raise ValueError(f'Mesh folder does not exist: {mesh_root}')
         except ValueError as exc:
+            logger.warning('ROS connection settings rejected: %s',exc)
             QMessageBox.warning(self, 'ROS 2 connection', str(exc))
             return
         from dataclasses import asdict
         QSettings('Standalone Scene Editor', 'Scene Editor').setValue('ros_connection', json.dumps(asdict(options)))
+        QSettings('Standalone Scene Editor', 'Scene Editor').setValue('urdf/mesh_root',mesh_root)
         super().accept()
 
     def selected_options(self):

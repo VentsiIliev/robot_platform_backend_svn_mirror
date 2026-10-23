@@ -5,7 +5,6 @@ import json
 import os
 from pathlib import Path
 
-
 CONFIG_ENV = "ROBOT_BACKEND_NETWORK_CONFIG"
 
 

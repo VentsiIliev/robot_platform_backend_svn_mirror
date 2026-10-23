@@ -12,12 +12,24 @@ Every backend profile owns a robot-description entry point:
 | `development_extended_links` | `development_extended_links/urdfs/robot.urdf.xacro` | `models/zeroerr_extended.yaml` | basic square table / centered disk |
 | `welding` | `welding/urdfs/robot.urdf.xacro` | `models/zeroerr_extended_motor_masses.yaml` | welding table / welding disk |
 
-The tray-dryer uses the corrected detailed compact STL for visualization and
-`paint_tray_dry_compact.surface_3levels_above.stl` (262 triangles) for collision
-geometry. The collision proxy includes the three stepped surfaces plus simplified
-fixtures and equipment above them. The surfaces have zero thickness and do not
-represent a filled volume underneath them; small hardware details remain omitted.
-Both meshes use `scale="0.001 0.001 0.001"` and zero mounting translation.
+The tray-dryer uses the corrected detailed compact STL for visualization.
+Collision geometry consists of the unchanged 10-triangle table-surface mesh plus
+21 independent `cell_fixture_tray_01` … `cell_fixture_tray_21` box objects in MoveIt's
+world scene. The boxes preserve the exact bounds of the original 262-triangle
+`paint_tray_dry_compact.surface_3levels_above.stl` proxy. They are not duplicated
+inside the robot URDF. The surfaces have zero thickness.
+
+Fixture definitions and enabled states live in `paint_tray_dry/cell_scene.yaml`.
+Scene Editor's **Collision objects → Cell collision configuration…** reads and
+saves them through `/configuration/cell_scene`. **Save and apply** writes the
+profile atomically, checks the loaded revision, and applies a world-scene diff
+only when the robot is stationary. Saved-but-pending changes are shown separately;
+use **Apply saved configuration** after stopping motion. Backend restart restores
+the saved enabled states. The table surfaces remain enabled. Workspace bounds
+continue to use the original fixed cell envelope, independent of fixture states.
+Visibility checkboxes never change collision checking.
+
+The mesh assets use `scale="0.001 0.001 0.001"` and zero mounting translation.
 The profile rotates their shared mounting joint +90 degrees about Z (counterclockwise
 viewed from above), so visual, collision and extracted workspace rotate together.
 The asset metadata records its mounting-hole-centred origin and mounting surface

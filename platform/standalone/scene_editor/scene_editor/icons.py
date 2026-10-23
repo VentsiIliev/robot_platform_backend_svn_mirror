@@ -42,6 +42,8 @@ def editor_icon(name, color='#905BA9', size=24):
 
 
 def object_category(obj):
+    if obj.id.startswith('robot/') and '/collision/' in obj.id:
+        return 'Collision'
     if obj.id.startswith('robot/'):
         return 'Robot'
     if obj.collision or obj.id.startswith(('world/','attached/')):
