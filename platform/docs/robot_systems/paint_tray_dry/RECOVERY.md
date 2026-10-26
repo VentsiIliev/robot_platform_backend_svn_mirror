@@ -3,6 +3,14 @@
 Tray release intentionally commits the placement and begins exit after commanding
 vacuum off, without sensor release verification. This behavior is unchanged.
 
+## Start-position recovery
+
+Before normal production navigation, the shared [start recovery module](../paint/processes/paint/start_recovery/README.md)
+checks fresh TCP position against the taught tray polygon. Tray positions must
+follow the configured return route; failure blocks production without a direct
+navigation fallback. The guide covers distributed rotation, typed failures,
+manual-cycle entry, and the limits of region detection.
+
 ## Production lifecycle
 
 The shared paint system requires healthy robot service state before every

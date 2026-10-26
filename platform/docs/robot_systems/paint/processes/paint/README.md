@@ -11,6 +11,7 @@ This is the shared production implementation used by the paint family. System cl
 | [magazine](production/magazine/README.md) | Magazine transfer, exhaustion outcomes, and work-area reservations |
 | [adjustment](adjustment/README.md) | Operator-paced sections, session state, and adjustment settings serializer |
 | [planning](planning/README.md) | Workpiece preparation, contours, pickup plans, and contact projection |
+| [start_recovery](start_recovery/README.md) | Regional Start/restart routing, distributed return rotation, and typed failures |
 | [motion](motion/README.md) | Motion submission/recovery, validated waypoints, pose sampling, and geometry |
 | [operations](operations/README.md) | Pickup, painting, edge cleanup, and dropoff |
 | [workflow](workflow/README.md) | States, transitions, and phase handlers |
