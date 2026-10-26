@@ -149,6 +149,7 @@ def _build_tool_settings_application(robot_system):
     service = ToolSettingsApplicationService(
         robot_system._settings_service,
         robot_service=robot_system.get_optional_service(CommonServiceID.ROBOT),
+        tool_service=robot_system.get_optional_service(CommonServiceID.TOOLS),
         tool_registry_client=RosToolRegistryClient(),
     )
     jog_service = build_robot_system_jog_service(robot_system)

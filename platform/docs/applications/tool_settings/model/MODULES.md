@@ -19,15 +19,11 @@ No top-level functions, classes or public value declarations; inspect the source
 
 Source: [src/applications/tool_settings/model/tool_settings_model.py](../../../../src/applications/tool_settings/model/tool_settings_model.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `..service.i_tool_settings_service`, `src.applications.base.i_application_model`.
-
 ### `ToolSettingsModel`
 
 ```python
 class ToolSettingsModel(IApplicationModel):
 ```
-
-Directly declared public methods and constructor (inherited methods are documented on their base class):
 
 ```python
 def __init__(self, service: IToolSettingsService)
@@ -99,4 +95,17 @@ def activate_tool(self, tool_id)
 
 ```python
 def get_current_motion_pose(self)
+```
+
+```python
+@staticmethod
+def reverse_pickup(steps)
+```
+
+```python
+def execute_sequence(self, slot_id, steps, cancelled)
+```
+
+```python
+def stop_sequence_motion(self)
 ```

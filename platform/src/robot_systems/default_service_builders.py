@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+from threading import Event
+from copy import deepcopy
 
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.common_settings_ids import CommonSettingsID
@@ -53,13 +55,29 @@ def build_tool_service(ctx):
     if not movement_groups.movement_groups and getattr(robot_config, "movement_groups", None):
         movement_groups.movement_groups = dict(robot_config.movement_groups)
         ctx.settings.save(CommonSettingsID.MOVEMENT_GROUPS, movement_groups)
-    tool_changer = ToolChanger(slots=tc_settings.slots, tools=tc_settings.tools)
+
+    def configuration_provider():
+        current = ctx.settings.get(CommonSettingsID.TOOL_CHANGER_CONFIG)
+        return (
+            ToolChanger(slots=deepcopy(current.slots), tools=deepcopy(current.tools)),
+            ctx.settings.get(CommonSettingsID.ROBOT_CONFIG),
+            ctx.settings.get(CommonSettingsID.MOVEMENT_GROUPS),
+        )
+
+    tool_changer = ToolChanger(slots=deepcopy(tc_settings.slots), tools=deepcopy(tc_settings.tools))
+    navigation = ctx.services.get(CommonServiceID.NAVIGATION)
+
+    def move_to_tool_change_group(group_name: str, cancelled: Event, tool: int, user: int) -> bool:
+        return bool(navigation.move_to_group(group_name, wait_cancelled=cancelled.is_set, tool=tool, user=user))
 
     return ToolManager(
         motion_service=ctx.motion,
         tool_changer=tool_changer,
         robot_config=robot_config,
         movement_groups=movement_groups,
+        configuration_provider=configuration_provider,
+        tool_change_group=getattr(ctx.system_class, "tool_change_group", ""),
+        tool_change_mover=move_to_tool_change_group if navigation is not None else None,
         slot_definitions=ctx.system_class.tool_slots,
         tool_activator=ctx.services.get(CommonServiceID.ROBOT),
     )

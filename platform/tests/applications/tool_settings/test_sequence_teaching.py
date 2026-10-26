@@ -164,6 +164,7 @@ class SequenceTeachingTests(unittest.TestCase):
     def test_run_buttons_execute_the_selected_draft_without_saving(self):
         self.service.execute_sequence = MagicMock(return_value=(True, 'Sequence completed'))
         for page, button in ((0, self.editor._run_pickup), (1, self.editor._run_dropoff)):
+            self.editor._tabs.setCurrentIndex(page)
             step = {'kind': 'motion', 'pose': [page + 1] * 6}
             self.editor.append_step(page, step)
             button.click()
@@ -251,3 +252,114 @@ class SequenceTeachingTests(unittest.TestCase):
         self.assertFalse(self.editor._velocity.isEnabled())
         self.editor.set_executing(False)
         self.assertTrue(self.editor._velocity.isEnabled())
+
+    def test_endpoint_options_default_off_and_are_independent_per_sequence(self):
+        for page in (0, 1):
+            self.assertFalse(self.editor._start_at_tool_changer[page].isChecked())
+            self.assertFalse(self.editor._finish_at_tool_changer[page].isChecked())
+        self.editor.append_step(0, {'kind': 'motion', 'pose': [1] * 6})
+        self.editor.append_step(1, {'kind': 'motion', 'pose': [2] * 6})
+        self.editor._start_at_tool_changer[0].setChecked(True)
+        self.editor._finish_at_tool_changer[1].setChecked(True)
+        self.editor._save.click()
+        _, pickup, dropoff = self.service.update_slot_sequences.call_args.args
+        self.assertEqual([s['kind'] for s in pickup], ['start_at_tool_changer', 'motion'])
+        self.assertEqual([s['kind'] for s in dropoff], ['motion', 'finish_at_tool_changer'])
+
+    def test_reload_endpoint_options_and_switching_them_off_preserves_taught_steps(self):
+        slot = self.service.get_slots()[0]
+        slot.pickup_sequence = [ToolChangeStep(kind='start_at_tool_changer'),
+                                ToolChangeStep(pose=[1]*6), ToolChangeStep(kind='finish_at_tool_changer')]
+        self.editor.set_slot(slot)
+        self.assertTrue(self.editor._start_at_tool_changer[0].isChecked())
+        self.assertTrue(self.editor._finish_at_tool_changer[0].isChecked())
+        self.assertEqual(self.editor._tables[0].rowCount(), 1)
+        self.editor._start_at_tool_changer[0].setChecked(False)
+        self.editor._finish_at_tool_changer[0].setChecked(False)
+        self.assertEqual([s['kind'] for s in self.editor._values(0)], ['motion'])
+        self.editor.set_slot(slot)
+        self.assertEqual([s['kind'] for s in self.editor._values(0)],
+                         ['start_at_tool_changer', 'motion', 'finish_at_tool_changer'])
+        self.assertEqual(self.editor._tables[0].rowCount(), 1)
+
+    def test_run_emits_current_unsaved_endpoint_settings_without_saving(self):
+        self.editor.append_step(0, {'kind': 'motion', 'pose': [1] * 6})
+        self.editor._start_at_tool_changer[0].setChecked(True)
+        self.editor._finish_at_tool_changer[0].setChecked(True)
+        calls = []
+        def capture_execution(page, steps):
+            calls.append((page, steps))
+        self.editor.execute_requested.connect(capture_execution)
+        self.editor._run_pickup.click()
+        self.assertEqual([s['kind'] for s in calls[0][1]],
+                         ['start_at_tool_changer', 'motion', 'finish_at_tool_changer'])
+        self.service.update_slot_sequences.assert_not_called()
+        for _ in range(200):
+            QTest.qWait(5)
+            if not self.ctrl._active:
+                break
+
+    def test_reverse_swaps_endpoint_options_as_well_as_taught_steps(self):
+        self.editor.append_step(0, {'kind': 'motion', 'pose': [1] * 6})
+        self.editor._start_at_tool_changer[0].setChecked(True)
+        self.editor._reverse.click()
+        self.assertFalse(self.editor._start_at_tool_changer[1].isChecked())
+        self.assertTrue(self.editor._finish_at_tool_changer[1].isChecked())
+        self.assertEqual([s['kind'] for s in self.editor._values(1)], ['motion', 'finish_at_tool_changer'])
+
+    def test_endpoint_options_cannot_change_during_execution(self):
+        self.editor.set_executing(True)
+        for page in (0, 1):
+            self.assertFalse(self.editor._start_at_tool_changer[page].isEnabled())
+            self.assertFalse(self.editor._finish_at_tool_changer[page].isEnabled())
+        self.editor.set_executing(False)
+        self.assertTrue(self.editor._start_at_tool_changer[0].isEnabled())
+
+    def test_endpoint_options_translate_initially_and_on_language_change(self):
+        from src.applications.tool_settings.view.sequence_editor import SequenceEditor
+        translator = DictTranslator(json.loads(Path('src/applications/tool_settings/localization/bg.json').read_text()))
+        self.app.installTranslator(translator)
+        editor = None
+        try:
+            editor = SequenceEditor()
+            self.assertEqual(editor._start_at_tool_changer[0].text(), 'Начало от позицията за смяна на инструменти')
+            self.app.sendEvent(self.editor, QEvent(QEvent.Type.LanguageChange))
+            self.assertEqual(self.editor._finish_at_tool_changer[0].text(), 'Край на позицията за смяна на инструменти')
+        finally:
+            self.app.removeTranslator(translator)
+            if editor is not None:
+                editor.deleteLater()
+        self.app.sendEvent(self.editor, QEvent(QEvent.Type.LanguageChange))
+        self.assertEqual(self.editor._start_at_tool_changer[0].text(), 'Start from Tool Changer')
+
+    def test_inactive_dropoff_cannot_run_with_visible_pickup_options(self):
+        self.service.execute_sequence = MagicMock(return_value=(True, 'Sequence completed'))
+        self.editor.append_step(0, {'kind': 'motion', 'pose': [1] * 6})
+        self.editor.append_step(1, {'kind': 'motion', 'pose': [2] * 6})
+        self.editor._start_at_tool_changer[0].setChecked(True)
+        self.editor._finish_at_tool_changer[0].setChecked(True)
+        self.assertTrue(self.editor._run_pickup.isEnabled())
+        self.assertFalse(self.editor._run_dropoff.isEnabled())
+        self.editor._run_dropoff.click()
+        self.editor._on_run_dropoff()
+        self.service.execute_sequence.assert_not_called()
+        self.editor._tabs.setCurrentIndex(1)
+        self.assertFalse(self.editor._run_pickup.isEnabled())
+        self.assertTrue(self.editor._run_dropoff.isEnabled())
+        self.assertFalse(self.editor._finish_at_tool_changer[1].isChecked())
+
+    def test_dropoff_run_includes_its_own_enabled_start_and_finish_moves(self):
+        self.service.execute_sequence = MagicMock(return_value=(True, 'Sequence completed'))
+        self.editor.append_step(1, {'kind': 'motion', 'pose': [2] * 6})
+        self.editor._tabs.setCurrentIndex(1)
+        self.editor._start_at_tool_changer[1].setChecked(True)
+        self.editor._finish_at_tool_changer[1].setChecked(True)
+        self.editor._run_dropoff.click()
+        for _ in range(200):
+            QTest.qWait(5)
+            if not self.ctrl._active:
+                break
+        self.assertEqual([step['kind'] for step in self.service.execute_sequence.call_args.args[1]],
+                         ['start_at_tool_changer', 'motion', 'finish_at_tool_changer'])
+        self.assertTrue(self.editor._run_dropoff.isEnabled())
+        self.assertFalse(self.editor._run_pickup.isEnabled())

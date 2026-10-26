@@ -1373,6 +1373,7 @@ def _build_tool_settings_application(robot_app):
     service = ToolSettingsApplicationService(
         robot_app._settings_service,
         robot_service=robot_service,
+        tool_service=robot_app.get_optional_service(CommonServiceID.TOOLS),
         tool_registry_client=RobotToolRegistryClient(robot_service),
     )
     jog_service = build_robot_system_jog_service(robot_app)

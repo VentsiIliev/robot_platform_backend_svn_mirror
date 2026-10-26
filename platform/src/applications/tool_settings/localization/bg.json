@@ -89,6 +89,24 @@
     "Robot rejected the stop request": "Роботът отхвърли заявката за спиране",
     "Velocity (%)": "Скорост (%)",
     "Acceleration (%)": "Ускорение (%)",
-    "Values apply to the selected position and new captures. Save sequences to keep changes.": "Стойностите се прилагат към избраната позиция и новите записи. Запазете последователностите, за да съхраните промените."
+    "Values apply to the selected position and new captures. Save sequences to keep changes.": "Стойностите се прилагат към избраната позиция и новите записи. Запазете последователностите, за да съхраните промените.",
+    "Another tool operation is running": "В момента се изпълнява друга операция с инструмент",
+    "Inspect the tool and confirm its attachment state before continuing": "Проверете инструмента и потвърдете състоянието на закрепване, преди да продължите",
+    "Invalid sequence wait duration": "Невалидна продължителност на изчакване в последователността",
+    "Operator confirmation required; no confirmation handler is configured": "Необходимо е потвърждение от оператор; няма настроен обработчик за потвърждение",
+    "Robot tool activation is not configured": "Активирането на инструмент на робота не е настроено",
+    "Robot must be stationary before tool setup": "Роботът трябва да е неподвижен преди настройване на инструмент",
+    "Sequence failed": "Последователността е неуспешна",
+    "Tool changer contains duplicate slot IDs": "Магазинът за инструменти съдържа повтарящи се номера на гнезда",
+    "Tool changer contains duplicate tool IDs": "Магазинът за инструменти съдържа повтарящи се номера на инструменти",
+    "A tool cannot be assigned to multiple slots": "Един инструмент не може да бъде зададен на няколко гнезда",
+    "Tool-changer position is not configured or is invalid": "Позицията за смяна на инструменти не е настроена или е невалидна",
+    "Cannot verify robot pose at the tool changer": "Не може да се провери позата на робота при магазина за инструменти",
+    "Robot is not at the configured tool-changer position": "Роботът не е на настроената позиция за смяна на инструменти",
+    "Start from Tool Changer": "Начало от позицията за смяна на инструменти",
+    "Finish at Tool Changer": "Край на позицията за смяна на инструменти",
+    "Optional start and finish moves use the Tool Changer position and motion settings.": "Незадължителните начално и крайно движения използват позицията за смяна на инструменти и нейните настройки за движение.",
+    "Tool-changer moves must be at sequence boundaries": "Движенията до позицията за смяна на инструменти трябва да са в началото или края на последователността",
+    "Settings apply only to the selected Pickup or Drop-off sequence.": "Настройките важат само за избраната последователност за вземане или оставяне."
   }
 }

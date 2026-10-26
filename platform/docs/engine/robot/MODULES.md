@@ -523,44 +523,46 @@ def get_slot(self, slot_id: int) -> SlotConfig | None
 
 Source: [src/engine/robot/tool_manager.py](../../../src/engine/robot/tool_manager.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `.interfaces`, `.interfaces.i_motion_service`, `.interfaces.i_tool_changer`, `.interfaces.tool_definition`, `logging`, `src.shared_contracts.declarations`, `threading`, `time`, `typing`.
-
 ### `ToolManager`
 
 ```python
 class ToolManager(IToolService):
 ```
 
-Directly declared public methods and constructor (inherited methods are documented on their base class):
+Execute tool changes with typed outcomes and guarded runtime state.
+
+Expected validation and I/O failures become ToolOperationResult.error.
+Internal guards raise ToolOperationFailure so their codes survive the public
+result boundary. Legacy (ok, message) unpacking remains supported.
 
 ```python
-def __init__(self, motion_service: IMotionService, tool_changer: IToolChanger, robot_config, movement_groups, slot_definitions: List[ToolSlotDefinition] | None=None, tool_activator=None, operator_confirmation=None)
+def __init__(self, motion_service: IMotionService, tool_changer: IToolChanger, robot_config: RobotSettings, movement_groups: MovementGroupSettings, slot_definitions: list[ToolSlotDefinition] | None=None, tool_activator: IRobotService | None=None, operator_confirmation: Callable[[str], bool] | None=None, configuration_provider: Callable[[], tuple[IToolChanger, RobotSettings, MovementGroupSettings]] | None=None, tool_change_group: str='', tool_change_mover: Callable[[str, threading.Event, int, int], bool] | None=None) -> None
 ```
 
 ```python
 @property
-def current_gripper(self) -> Optional[int]
+def current_gripper(self) -> int | None
 ```
 
 ```python
 @property
-def current_tool(self) -> Optional[int]
+def current_tool(self) -> int | None
 ```
 
 ```python
-def pickup_tool(self, tool_id: int, max_retries: int=3) -> Tuple[bool, Optional[str]]
+def pickup_tool(self, tool_id: int, max_retries: int=3, *, cancelled: threading.Event | None=None) -> ToolOperationResult
 ```
 
 ```python
-def drop_off_tool(self, tool_id: int, max_retries: int=3) -> Tuple[bool, Optional[str]]
+def drop_off_tool(self, tool_id: int, max_retries: int=3, *, cancelled: threading.Event | None=None) -> ToolOperationResult
 ```
 
 ```python
-def add_tool(self, name: str, tool) -> None
+def add_tool(self, name: str, tool: object) -> None
 ```
 
 ```python
-def get_tool(self, name: str)
+def get_tool(self, name: str) -> object | None
 ```
 
 ```python
@@ -568,16 +570,45 @@ def verify_gripper_change(self, target_gripper_id: int) -> bool
 ```
 
 ```python
-def pickup_gripper(self, gripper_id: int, max_retries: int=3) -> Tuple[bool, Optional[str]]
+def pickup_gripper(self, gripper_id: int, max_retries: int=3, *, cancelled: threading.Event | None=None) -> ToolOperationResult
+```
+
+Run a saved pickup. Failed robot commands are never automatically replayed.
+
+```python
+def drop_off_gripper(self, gripper_id: int, max_retries: int=3, *, cancelled: threading.Event | None=None) -> ToolOperationResult
+```
+
+Run a saved drop-off; max_retries is retained for caller compatibility.
+
+```python
+@property
+def recovery_required(self) -> bool
 ```
 
 ```python
-def drop_off_gripper(self, gripper_id: int, max_retries: int=3) -> Tuple[bool, Optional[str]]
+def confirm_attached_tool(self, tool_id: int | None) -> ToolOperationResult
 ```
 
+Reconcile after manual physical inspection, including after a failed operation.
+
+This is an operator acknowledgement, not a sensor check. None means the
+flange is empty. Runtime attachment/occupancy is deliberately not persisted.
+
 ```python
-def get_tools(self) -> List[ToolDefinition]
+def execute_sequence(self, slot_id: int, steps: Sequence[ToolChangeStep | dict[str, object]], cancelled: threading.Event | None=None) -> ToolOperationResult
 ```
+
+Run an editor draft through the shared executor, without committing occupancy.
+
+Attach/detach steps select the TCP; they do not actuate a physical coupler.
+Cancellation is cooperative between blocking robot calls. The caller must
+also request stop_motion to interrupt a move already in progress.
+
+```python
+def get_tools(self) -> list[ToolDefinition]
+```
+
 
 ## `tool_transform.py`
 

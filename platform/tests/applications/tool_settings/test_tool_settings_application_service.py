@@ -239,7 +239,13 @@ class TestSequenceExecution(unittest.TestCase):
         self.settings = MagicMock()
         tc = _make_tc(slots=[SlotConfig(id=10, tool_id=7)])
         self.settings.get.side_effect = lambda key: tc if key == CommonSettingsID.TOOL_CHANGER_CONFIG else self.config
-        self.service = ToolSettingsApplicationService(self.settings, robot_service=self.robot)
+        from types import SimpleNamespace
+        from src.engine.robot.tool_changer import ToolChanger
+        from src.engine.robot.tool_manager import ToolManager
+        self.manager = ToolManager(self.robot, ToolChanger(tc.slots, tc.tools), self.config,
+                                   SimpleNamespace(movement_groups={}), tool_activator=self.robot)
+        self.service = ToolSettingsApplicationService(self.settings, robot_service=self.robot,
+                                                     tool_service=self.manager)
         self.steps = [{'kind': 'motion', 'pose': [i] * 6} for i in (1, 2, 3)]
 
     def test_runs_draft_in_order_and_waits_for_each_move(self):
@@ -286,3 +292,34 @@ class TestSequenceExecution(unittest.TestCase):
     def test_stop_requests_robot_stop(self):
         self.assertTrue(self.service.stop_sequence_motion()[0])
         self.robot.stop_motion.assert_called_once()
+
+
+class TestSharedToolServiceDelegation(unittest.TestCase):
+    def test_editor_uses_injected_executor_without_local_robot_calls(self):
+        manager = MagicMock()
+        from src.engine.robot.interfaces.tool_operation_result import ToolOperationResult
+        manager.execute_sequence.return_value = ToolOperationResult(message="Done")
+        robot = MagicMock()
+        service = ToolSettingsApplicationService(MagicMock(), robot_service=robot,
+                                                tool_service=manager)
+        cancelled = object()
+        steps = [{"kind": "wait", "wait_seconds": 1}]
+        self.assertEqual(service.execute_sequence(2, steps, cancelled), (True, "Done"))
+        manager.execute_sequence.assert_called_once_with(2, steps, cancelled)
+        self.assertEqual(robot.mock_calls, [])
+
+    def test_missing_tool_service_fails_closed(self):
+        robot = MagicMock()
+        service = ToolSettingsApplicationService(MagicMock(), robot_service=robot)
+        self.assertFalse(service.execute_sequence(2, [{"pose": [0] * 6}], None)[0])
+        self.assertEqual(robot.mock_calls, [])
+
+
+class TestUniqueSlotAssignments(unittest.TestCase):
+    def test_cannot_assign_the_same_tool_to_two_slots(self):
+        tc = _make_tc(tools=[ToolDefinition(7, "Vacuum")],
+                      slots=[SlotConfig(1, 7), SlotConfig(2, None)])
+        service, settings = _make_svc(tc)
+        self.assertFalse(service.update_slot(2, 7)[0])
+        self.assertFalse(service.add_slot(3, 7)[0])
+        settings.save.assert_not_called()

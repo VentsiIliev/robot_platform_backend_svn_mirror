@@ -72,3 +72,15 @@ class TestToolChanger(unittest.TestCase):
         )
         changer = ToolChanger(slots=[slot], tools=tools)
         self.assertEqual(changer.get_slot(20).pickup_sequence[0].kind, "attach")
+
+    def test_duplicate_slot_ids_are_rejected(self):
+        with self.assertRaises(ValueError):
+            ToolChanger([SlotConfig(1, 1), SlotConfig(1, 2)], tools)
+
+    def test_duplicate_tool_ids_are_rejected(self):
+        with self.assertRaises(ValueError):
+            ToolChanger([], [ToolDefinition(1, "A"), ToolDefinition(1, "B")])
+
+    def test_ambiguous_tool_assignment_is_rejected(self):
+        with self.assertRaises(ValueError):
+            ToolChanger([SlotConfig(1, 1), SlotConfig(2, 1)], tools)

@@ -188,18 +188,14 @@ def get_current_motion_pose(self)
 
 Source: [src/applications/tool_settings/service/tool_settings_application_service.py](../../../../src/applications/tool_settings/service/tool_settings_application_service.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `.i_tool_settings_service`, `logging`, `src.engine.common_settings_ids`, `src.engine.repositories.interfaces.i_settings_service`, `src.engine.robot.configuration`, `src.engine.robot.interfaces.tool_definition`, `src.engine.robot.relative_tool_calibration_service`, `src.engine.robot.tool_activation_service`, `src.engine.robot.tool_changer`, `typing`.
-
 ### `ToolSettingsApplicationService`
 
 ```python
 class ToolSettingsApplicationService(IToolSettingsService):
 ```
 
-Directly declared public methods and constructor (inherited methods are documented on their base class):
-
 ```python
-def __init__(self, settings_service: ISettingsService, robot_service=None, tool_registry_client=None)
+def __init__(self, settings_service: ISettingsService, robot_service=None, tool_registry_client=None, tool_service: IToolService | None=None)
 ```
 
 ```python
@@ -264,4 +260,14 @@ def activate_tool(self, tool_id: int) -> Tuple[bool, str]
 
 ```python
 def get_current_motion_pose(self) -> Tuple[bool, str, list[float]]
+```
+
+```python
+def execute_sequence(self, slot_id: int, steps: list[dict], cancelled) -> Tuple[bool, str]
+```
+
+Run the editor draft using the system's shared tool executor.
+
+```python
+def stop_sequence_motion(self) -> Tuple[bool, str]
 ```

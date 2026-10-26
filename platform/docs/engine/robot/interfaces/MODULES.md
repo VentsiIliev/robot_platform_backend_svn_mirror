@@ -18,6 +18,8 @@ Generated from Python ASTs. Signatures, declared defaults, imports and docstring
 - [i_tool_service.py](#i_tool_servicepy)
 - [tool_definition.py](#tool_definitionpy)
 
+- [tool_operation_result.py](#tool_operation_resultpy)
+
 ## `__init__.py`
 
 Source: [src/engine/robot/interfaces/__init__.py](../../../../src/engine/robot/interfaces/__init__.py).
@@ -726,15 +728,13 @@ def list_tools(self) -> List[ToolDefinition]
 
 Source: [src/engine/robot/interfaces/i_tool_service.py](../../../../src/engine/robot/interfaces/i_tool_service.py).
 
-Imports (including optional/function-local imports; not a startup dependency list): `abc`, `src.engine.robot.interfaces.tool_definition`, `typing`.
-
 ### `IToolService`
 
 ```python
 class IToolService(ABC):
 ```
 
-Directly declared public methods and constructor (inherited methods are documented on their base class):
+Tool commands return typed results; legacy tuple unpacking is supported.
 
 ```python
 @property
@@ -751,12 +751,12 @@ def current_gripper(self) -> Optional[int]
 
 ```python
 @abstractmethod
-def pickup_gripper(self, gripper_id: int) -> Tuple[bool, Optional[str]]
+def pickup_gripper(self, gripper_id: int) -> ToolOperationResult
 ```
 
 ```python
 @abstractmethod
-def drop_off_gripper(self, gripper_id: int) -> Tuple[bool, Optional[str]]
+def drop_off_gripper(self, gripper_id: int) -> ToolOperationResult
 ```
 
 ```python
@@ -765,12 +765,25 @@ def get_tools(self) -> List[ToolDefinition]
 ```
 
 ```python
-def pickup_tool(self, tool_id: int) -> Tuple[bool, Optional[str]]
+def pickup_tool(self, tool_id: int, *, cancelled: Event | None=None) -> ToolOperationResult
 ```
 
 ```python
-def drop_off_tool(self, tool_id: int) -> Tuple[bool, Optional[str]]
+def drop_off_tool(self, tool_id: int, *, cancelled: Event | None=None) -> ToolOperationResult
 ```
+
+```python
+def execute_sequence(self, slot_id: int, steps: Sequence[ToolChangeStep | dict[str, object]], cancelled: Event | None=None) -> ToolOperationResult
+```
+
+Run a taught editor draft without committing physical slot occupancy.
+
+```python
+def confirm_attached_tool(self, tool_id: int | None) -> ToolOperationResult
+```
+
+Acknowledge manually inspected attachment; None means an empty flange.
+
 
 ## `tool_definition.py`
 
@@ -793,4 +806,127 @@ name: str
 reference_tool_id: Optional[int] = None
 relative_transform: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 collision_profile: str = ''
+```
+
+## `tool_operation_result.py`
+
+Source: [src/engine/robot/interfaces/tool_operation_result.py](../../../../src/engine/robot/interfaces/tool_operation_result.py).
+
+### `ToolErrorCode`
+
+```python
+class ToolErrorCode(str, Enum):
+```
+
+Declared fields/defaults:
+
+```python
+BUSY = 'BUSY'
+RECOVERY_REQUIRED = 'RECOVERY_REQUIRED'
+TOOL_NOT_FOUND = 'TOOL_NOT_FOUND'
+SLOT_NOT_FOUND = 'SLOT_NOT_FOUND'
+TOOL_ALREADY_HELD = 'TOOL_ALREADY_HELD'
+TOOL_NOT_HELD = 'TOOL_NOT_HELD'
+SLOT_ASSIGNMENT_CHANGED = 'SLOT_ASSIGNMENT_CHANGED'
+SLOT_OCCUPIED = 'SLOT_OCCUPIED'
+SEQUENCE_NOT_CONFIGURED = 'SEQUENCE_NOT_CONFIGURED'
+INVALID_SEQUENCE = 'INVALID_SEQUENCE'
+CONFIRMATION_REQUIRED = 'CONFIRMATION_REQUIRED'
+CONFIRMATION_DECLINED = 'CONFIRMATION_DECLINED'
+CONFIRMATION_FAILED = 'CONFIRMATION_FAILED'
+ACTIVATION_UNAVAILABLE = 'ACTIVATION_UNAVAILABLE'
+ACTIVATION_FAILED = 'ACTIVATION_FAILED'
+ROBOT_UNAVAILABLE = 'ROBOT_UNAVAILABLE'
+ROBOT_NOT_READY = 'ROBOT_NOT_READY'
+POSITION_NOT_CONFIGURED = 'POSITION_NOT_CONFIGURED'
+POSE_UNAVAILABLE = 'POSE_UNAVAILABLE'
+NOT_AT_TOOL_CHANGER = 'NOT_AT_TOOL_CHANGER'
+CANCELLED = 'CANCELLED'
+MOTION_FAILED = 'MOTION_FAILED'
+CONFIGURATION_ERROR = 'CONFIGURATION_ERROR'
+UNSUPPORTED = 'UNSUPPORTED'
+UNEXPECTED_ERROR = 'UNEXPECTED_ERROR'
+```
+
+### `ToolErrorInfo`
+
+```python
+class ToolErrorInfo:
+```
+
+Declared fields/defaults:
+
+```python
+code: ToolErrorCode
+message: str
+step_number: int | None = None
+detail: str | None = None
+```
+
+### `ToolOperationFailure`
+
+```python
+class ToolOperationFailure(Exception):
+```
+
+Internal validation/execution exception carrying an already classified error.
+
+```python
+def __init__(self, code: ToolErrorCode, message: str, *, step_number: int | None=None, detail: str | None=None) -> None
+```
+
+### `ToolOperationResult`
+
+```python
+class ToolOperationResult:
+```
+
+Declared fields/defaults:
+
+```python
+message: str | None = None
+error: ToolErrorInfo | None = None
+```
+
+```python
+@property
+def success(self) -> bool
+```
+
+```python
+@classmethod
+def failure(cls, code: ToolErrorCode, message: str, *, step_number: int | None=None, detail: str | None=None) -> ToolOperationResult
+```
+
+```python
+def __bool__(self) -> bool
+```
+
+```python
+def as_tuple(self) -> tuple[bool, str | None]
+```
+
+Compatibility boundary for existing (ok, message) callers.
+
+```python
+def __iter__(self) -> Iterator[bool | str | None]
+```
+
+```python
+@overload
+def __getitem__(self, index: Literal[0, -2]) -> bool
+```
+
+```python
+@overload
+def __getitem__(self, index: Literal[1, -1]) -> str | None
+```
+
+```python
+@overload
+def __getitem__(self, index: int) -> bool | str | None
+```
+
+```python
+def __getitem__(self, index: int) -> bool | str | None
 ```

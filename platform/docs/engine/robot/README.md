@@ -66,7 +66,30 @@ RobotService.tools: Optional[IToolService]
             └── IToolChanger → ToolChanger (slot ↔ tool ID registry)
 ```
 
-Tool service is only wired if a `tool_changer` is provided to `create_robot_service()`.
+That diagram describes the legacy `create_robot_service()` path, where a
+`tool_changer` must be supplied. Systems built with `SystemBuilder`, including
+paint and glue, instead register `CommonServiceID.TOOLS: IToolService`. The default
+builder creates one `ToolManager`, separate from `RobotService.tools`, and injects
+it into the Tool Settings application.
+
+`ToolManager` executes both saved pickup/drop-off operations and editor drafts
+through one validated executor. Before each operation the default builder supplies
+current tool, slot, robot-frame, and movement-group settings. Slot occupancy is
+runtime state and is preserved independently of saved configuration.
+
+The manager validates every step before motion, rejects concurrent tool operations,
+and checks robot health and stationarity when the injected robot exposes those
+checks. Failed commands are not replayed automatically (`max_retries` remains a
+compatibility argument). Cancellation is checked between blocking calls and during
+waits; an in-flight move also needs a robot stop request.
+
+Saved operations update attachment at attach/detach boundaries, preserving a
+completed boundary if retreat fails. An interrupted saved operation sets
+`recovery_required` and blocks further execution until the caller manually inspects
+the physical setup and calls `confirm_attached_tool(tool_id)` (`None` for an empty
+flange). Confirmation selects the corresponding TCP. These are software records,
+not hardware sensor verification; state is not restored as physical truth after
+a restart. The editor draft path deliberately does not commit occupancy.
 
 ---
 
@@ -295,3 +318,80 @@ visualization process control. RobotService, MotionService, and Ros2Robot forwar
 to the HTTP client, which uses `GET/POST /visualization/rviz`. Unsupported drivers
 return `rviz_control_unsupported`. These methods never issue robot motion or
 change safety settings; the backend owns the visualization-only process session.
+
+### Tool-change staging position
+
+A robot system can declare `tool_change_group` as the ID of a single-position
+movement group. Paint declares `"Tool Changer"`. The default tool-service builder
+passes this requirement to `ToolManager`; systems with an empty declaration keep
+their existing behavior.
+
+Without an optional start move, the manager compares a fresh robot pose with the
+group's current configured position before a saved operation or editor draft starts. Every X/Y/Z axis
+must be within 10 mm and every RX/RY/RZ axis within 5 degrees, matching the capture
+position guard. Angular differences wrap across +/-180 degrees. The comparison
+uses the configured robot tool/user frame, as does navigation to the group.
+Selecting a work-area label alone does not satisfy this check.
+
+Missing/invalid settings, non-finite coordinates, or unavailable fresh feedback
+reject execution. Without a start move, an out-of-tolerance pose also rejects
+execution before motion or TCP changes. The manager approaches staging only when
+the sequence explicitly includes `start_at_tool_changer`, then verifies arrival.
+A rejected initial staging check does not set `recovery_required`; move to the
+configured position and retry.
+
+### Typed tool-operation outcomes
+
+`IToolService` and `ToolManager` commands return `ToolOperationResult`. The
+immutable result exposes `success`, `message`, and optional `ToolErrorInfo` with a
+`ToolErrorCode`, `message`, one-based `step_number`, and diagnostic `detail`.
+Success is derived from the absence of an error, so a failure always has a typed
+reason. The contract lives in
+[`interfaces/tool_operation_result.py`](../../../src/engine/robot/interfaces/tool_operation_result.py).
+
+```python
+from src.engine.robot.interfaces.tool_operation_result import ToolErrorCode
+
+result = tool_service.pickup_tool(7)
+if result.error is not None:
+    if result.error.code == ToolErrorCode.NOT_AT_TOOL_CHANGER:
+        # The operator must navigate to the staging position before retrying.
+        print(result.message)
+    else:
+        print(result.error.code.value, result.error.step_number, result.error.detail)
+```
+
+Position checks distinguish `POSITION_NOT_CONFIGURED`, `POSE_UNAVAILABLE`, and
+`NOT_AT_TOOL_CHANGER`. Execution distinguishes `CANCELLED`, `MOTION_FAILED`,
+`ACTIVATION_FAILED`, and operator-confirmation failures. `BUSY` and
+`RECOVERY_REQUIRED` are separate outcomes. Invalid sequences and configuration
+load failures have their own codes. Unexpected exceptions return
+`UNEXPECTED_ERROR`; callers must not classify errors by matching message text.
+
+Internal guards raise `ToolOperationFailure` carrying the classified error. Public
+commands convert that exception to a result without losing the code or context;
+robot command exceptions retain the failing step and exception type. Existing
+recovery-state and position guards remain in effect.
+
+Legacy `(ok, message)` unpacking and indexing remain available through the result's
+compatibility view (`as_tuple()` is the explicit form). New engine callers should
+use the typed fields. The application service converts typed outcomes to its
+existing UI tuple contract. Constructor dependencies, cancellation events,
+callbacks, configuration providers, and all `ToolManager` methods have annotations.
+
+### Optional tool-change endpoint moves
+
+`ToolChangeStep` supports `start_at_tool_changer` and `finish_at_tool_changer` as
+symbolic boundary steps. Their pose and motion settings are resolved from the
+current `tool_change_group` before any motion. They must appear at the beginning
+and end respectively, and at least one taught step must remain. Complete
+validation still runs before moving.
+
+The default builder injects the registered navigation service for endpoint moves,
+including configured `fast_lin` navigation and cooperative cancellation. Directly
+constructed managers can execute linear/PTP endpoints through their motion service.
+The start step permits approaching from outside the staging tolerance, then fresh
+feedback must verify arrival before the next step. Finish likewise verifies
+arrival. With no start step, the original initial-position requirement is intact.
+Saved pickup/drop-off failures during endpoint travel preserve completed attachment
+boundaries and use the existing typed error/recovery behavior.

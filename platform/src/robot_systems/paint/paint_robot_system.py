@@ -228,6 +228,7 @@ class PaintRobotSystem(BaseRobotSystem):
     calibration_tool = ToolDefinition(id=1, name="Calibration Tool")
     tools = [calibration_tool]
     tool_slots = []
+    tool_change_group = "Tool Changer"
 
     def build_production_start_guard(self):
         """Return the system-specific guard used before production starts."""

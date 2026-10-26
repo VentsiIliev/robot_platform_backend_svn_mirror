@@ -89,6 +89,24 @@
     "Robot rejected the stop request": "Robot rejected the stop request",
     "Velocity (%)": "Velocity (%)",
     "Acceleration (%)": "Acceleration (%)",
-    "Values apply to the selected position and new captures. Save sequences to keep changes.": "Values apply to the selected position and new captures. Save sequences to keep changes."
+    "Values apply to the selected position and new captures. Save sequences to keep changes.": "Values apply to the selected position and new captures. Save sequences to keep changes.",
+    "Another tool operation is running": "Another tool operation is running",
+    "Inspect the tool and confirm its attachment state before continuing": "Inspect the tool and confirm its attachment state before continuing",
+    "Invalid sequence wait duration": "Invalid sequence wait duration",
+    "Operator confirmation required; no confirmation handler is configured": "Operator confirmation required; no confirmation handler is configured",
+    "Robot tool activation is not configured": "Robot tool activation is not configured",
+    "Robot must be stationary before tool setup": "Robot must be stationary before tool setup",
+    "Sequence failed": "Sequence failed",
+    "Tool changer contains duplicate slot IDs": "Tool changer contains duplicate slot IDs",
+    "Tool changer contains duplicate tool IDs": "Tool changer contains duplicate tool IDs",
+    "A tool cannot be assigned to multiple slots": "A tool cannot be assigned to multiple slots",
+    "Tool-changer position is not configured or is invalid": "Tool-changer position is not configured or is invalid",
+    "Cannot verify robot pose at the tool changer": "Cannot verify robot pose at the tool changer",
+    "Robot is not at the configured tool-changer position": "Robot is not at the configured tool-changer position",
+    "Start from Tool Changer": "Start from Tool Changer",
+    "Finish at Tool Changer": "Finish at Tool Changer",
+    "Optional start and finish moves use the Tool Changer position and motion settings.": "Optional start and finish moves use the Tool Changer position and motion settings.",
+    "Tool-changer moves must be at sequence boundaries": "Tool-changer moves must be at sequence boundaries",
+    "Settings apply only to the selected Pickup or Drop-off sequence.": "Settings apply only to the selected Pickup or Drop-off sequence."
   }
 }

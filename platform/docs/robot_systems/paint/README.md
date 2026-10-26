@@ -354,3 +354,15 @@ for URLs, authentication, trust and migration.
 
 [Complete source index](../../SOURCE_INDEX.md).
 <!-- source-navigation:end -->
+
+## Tool-change position guard
+
+Paint declares `tool_change_group = "Tool Changer"`. Tool pickup, drop-off, and
+Tool Settings editor runs require a fresh robot pose at the configured
+`Tool Changer` movement-group position before taught steps execute. The guard checks all six
+axes with the capture guard's tolerances (10 mm per position axis, 5 degrees per
+rotation axis). Missing configuration or unverifiable feedback blocks execution.
+With **Start from Tool Changer** off, move there through navigation before
+running the sequence. Enabling it adds an initial navigation move and arrival
+check. **Finish at Tool Changer** adds the final navigation move. The switches
+are independent for pickup and drop-off and are saved with each sequence.

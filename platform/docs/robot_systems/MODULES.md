@@ -43,6 +43,7 @@ movement_groups: ClassVar[List[MovementGroupDefinition]] = []
 dispense_channels: ClassVar[List[DispenseChannelDefinition]] = []
 tools: ClassVar[List[ToolDefinition]] = []
 tool_slots: ClassVar[List[ToolSlotDefinition]] = []
+tool_change_group: ClassVar[str] = ""
 target_points: ClassVar[List[RemoteTcpDefinition]] = []
 target_frames: ClassVar[List[TargetFrameDefinition]] = []
 work_area_observers: ClassVar[List[WorkAreaObserverBinding]] = []

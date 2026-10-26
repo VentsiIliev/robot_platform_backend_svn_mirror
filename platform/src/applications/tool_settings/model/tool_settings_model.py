@@ -41,6 +41,10 @@ class ToolSettingsModel(IApplicationModel):
                 step.update(kind="detach", label="Detach tool")
             elif step.get("kind") == "detach":
                 step.update(kind="attach", label="Attach tool")
+            elif step.get("kind") == "start_at_tool_changer":
+                step.update(kind="finish_at_tool_changer")
+            elif step.get("kind") == "finish_at_tool_changer":
+                step.update(kind="start_at_tool_changer")
         return reversed_steps
 
     def execute_sequence(self, slot_id, steps, cancelled):

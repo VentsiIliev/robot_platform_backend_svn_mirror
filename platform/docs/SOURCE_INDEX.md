@@ -171,7 +171,7 @@ Every Python file is parsed without executing it, including vendor code, demos a
 | `src/applications/tool_settings/localization` | [Guide](applications/tool_settings/localization/README.md) | 0 |
 | `src/applications/tool_settings/model` | [Guide](applications/tool_settings/model/README.md) | 2 |
 | `src/applications/tool_settings/service` | [Guide](applications/tool_settings/service/README.md) | 4 |
-| `src/applications/tool_settings/view` | [Guide](applications/tool_settings/view/README.md) | 2 |
+| `src/applications/tool_settings/view` | [Guide](applications/tool_settings/view/README.md) | 3 |
 | `src/applications/user_management` | [Guide](applications/user_management/README.md) | 3 |
 | `src/applications/user_management/controller` | [Guide](applications/user_management/controller/README.md) | 3 |
 | `src/applications/user_management/domain` | [Guide](applications/user_management/domain/README.md) | 7 |
@@ -270,7 +270,7 @@ Every Python file is parsed without executing it, including vendor code, demos a
 | `src/engine/robot/enums` | [Guide](engine/robot/enums/README.md) | 2 |
 | `src/engine/robot/features` | [Guide](engine/robot/features/README.md) | 3 |
 | `src/engine/robot/height_measuring` | [Guide](engine/robot/height_measuring/README.md) | 15 |
-| `src/engine/robot/interfaces` | [Guide](engine/robot/interfaces/README.md) | 11 |
+| `src/engine/robot/interfaces` | [Guide](engine/robot/interfaces/README.md) | 12 |
 | `src/engine/robot/path_interpolation` | [Guide](engine/robot/path_interpolation/README.md) | 1 |
 | `src/engine/robot/path_interpolation/deprecated` | [Guide](engine/robot/path_interpolation/deprecated/README.md) | 8 |
 | `src/engine/robot/path_interpolation/new_interpolation` | [Guide](engine/robot/path_interpolation/new_interpolation/README.md) | 4 |

@@ -1,4 +1,6 @@
-from typing import Optional, Tuple, List
+from typing import Optional, List
+from threading import Event
+from ..interfaces.tool_operation_result import ToolOperationResult
 
 from ..interfaces.i_motion_service import IMotionService
 from ..interfaces.i_tool_service import IToolService
@@ -24,17 +26,17 @@ class RobotToolService(IToolService):
     def current_tool(self) -> Optional[int]:
         return self._manager.current_tool
 
-    def pickup_gripper(self, gripper_id: int) -> Tuple[bool, Optional[str]]:
+    def pickup_gripper(self, gripper_id: int) -> ToolOperationResult:
         return self._manager.pickup_gripper(gripper_id)
 
-    def drop_off_gripper(self, gripper_id: int) -> Tuple[bool, Optional[str]]:
+    def drop_off_gripper(self, gripper_id: int) -> ToolOperationResult:
         return self._manager.drop_off_gripper(gripper_id)
 
-    def pickup_tool(self, tool_id: int) -> Tuple[bool, Optional[str]]:
-        return self._manager.pickup_tool(tool_id)
+    def pickup_tool(self, tool_id: int, *, cancelled: Event | None = None) -> ToolOperationResult:
+        return self._manager.pickup_tool(tool_id, cancelled=cancelled)
 
-    def drop_off_tool(self, tool_id: int) -> Tuple[bool, Optional[str]]:
-        return self._manager.drop_off_tool(tool_id)
+    def drop_off_tool(self, tool_id: int, *, cancelled: Event | None = None) -> ToolOperationResult:
+        return self._manager.drop_off_tool(tool_id, cancelled=cancelled)
 
     def get_tools(self) -> List[ToolDefinition]:
         return self._manager.get_tools()

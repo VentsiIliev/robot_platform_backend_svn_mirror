@@ -4,7 +4,7 @@ from copy import deepcopy
 
 from PyQt6.QtCore import QCoreApplication, QEvent, QSignalBlocker, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
-    QAbstractItemView, QHBoxLayout, QLabel, QPushButton, QTableWidget,
+    QAbstractItemView, QCheckBox, QHBoxLayout, QLabel, QPushButton, QTableWidget,
     QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget,
 )
 
@@ -53,7 +53,26 @@ class SequenceEditor(QWidget):
         self._tabs = QTabWidget()
         self._tabs.setStyleSheet(APP_PHASE_TAB_STYLE)
         self._tables = []
+        self._start_at_tool_changer = []
+        self._finish_at_tool_changer = []
+        self._endpoint_hints = []
         for _ in range(2):
+            page = QWidget()
+            page_layout = QVBoxLayout(page)
+            endpoints = QHBoxLayout()
+            for collection in (self._start_at_tool_changer, self._finish_at_tool_changer):
+                toggle = QCheckBox()
+                toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+                toggle.setMinimumHeight(44)
+                toggle.setStyleSheet(LABEL_STYLE)
+                collection.append(toggle)
+                endpoints.addWidget(toggle)
+            endpoints.addStretch()
+            page_layout.addLayout(endpoints)
+            hint = QLabel()
+            hint.setWordWrap(True)
+            self._endpoint_hints.append(hint)
+            page_layout.addWidget(hint)
             table = QTableWidget(0, 4)
             table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
             table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -66,7 +85,8 @@ class SequenceEditor(QWidget):
             table.verticalHeader().setDefaultSectionSize(44)
             table.itemSelectionChanged.connect(self._on_selection_changed)
             self._tables.append(table)
-            self._tabs.addTab(table, "")
+            page_layout.addWidget(table)
+            self._tabs.addTab(page, "")
         self._tabs.currentChanged.connect(self._on_selection_changed)
         root.addWidget(self._tabs, 1)
         actions = QHBoxLayout()
@@ -94,6 +114,7 @@ class SequenceEditor(QWidget):
         row.addStretch()
         root.addLayout(row)
         self.retranslateUi()
+        self._on_selection_changed()
 
     @staticmethod
     def _motion_field():
@@ -107,6 +128,11 @@ class SequenceEditor(QWidget):
         return field
 
     def _on_selection_changed(self) -> None:
+        page = self._tabs.currentIndex()
+        # The visible endpoint switches must match the sequence being executed.
+        if hasattr(self, "_run_pickup"):
+            self._run_pickup.setEnabled(page == 0 and not self._busy)
+            self._run_dropoff.setEnabled(page == 1 and not self._busy)
         table = self._tables[self._tabs.currentIndex()]
         row = table.currentRow()
         item = table.item(row, 3) if row >= 0 else None
@@ -146,12 +172,24 @@ class SequenceEditor(QWidget):
             self._velocity.setValue(10.0)
             self._acceleration.setValue(10.0)
         for page, steps in enumerate((slot.pickup_sequence, slot.dropoff_sequence)):
-            self._tables[page].setRowCount(0)
-            for step in steps:
-                self.append_step(page, step.to_dict() if hasattr(step, "to_dict") else step)
+            self._set_sequence(page, [step.to_dict() if hasattr(step, "to_dict") else step for step in steps])
         self._tabs.setCurrentIndex(0)
         self.set_message("")
         self.retranslateUi()
+
+    def _set_sequence(self, page: int, steps: list[dict]) -> None:
+        self._tables[page].setRowCount(0)
+        values = deepcopy(steps)
+        start = bool(values and values[0].get("kind") == "start_at_tool_changer")
+        if start:
+            values.pop(0)
+        finish = bool(values and values[-1].get("kind") == "finish_at_tool_changer")
+        if finish:
+            values.pop()
+        self._start_at_tool_changer[page].setChecked(start)
+        self._finish_at_tool_changer[page].setChecked(finish)
+        for step in values:
+            self.append_step(page, step)
 
     def append_step(self, page: int, step: dict) -> None:
         table = self._tables[page]
@@ -199,19 +237,19 @@ class SequenceEditor(QWidget):
         self._stop.setEnabled(executing)
 
     def set_dropoff(self, steps: list) -> None:
-        self._tables[1].setRowCount(0)
-        for step in steps:
-            self.append_step(1, step)
+        self._set_sequence(1, steps)
         self._tabs.setCurrentIndex(1)
 
     def _on_reverse(self) -> None:
         self.reverse_requested.emit(self._values(0))
 
     def _on_run_pickup(self) -> None:
-        self.execute_requested.emit(0, self._values(0))
+        if self._tabs.currentIndex() == 0 and not self._busy:
+            self.execute_requested.emit(0, self._values(0))
 
     def _on_run_dropoff(self) -> None:
-        self.execute_requested.emit(1, self._values(1))
+        if self._tabs.currentIndex() == 1 and not self._busy:
+            self.execute_requested.emit(1, self._values(1))
 
     def _on_stop(self) -> None:
         self.stop_requested.emit()
@@ -221,8 +259,13 @@ class SequenceEditor(QWidget):
 
     def _values(self, page):
         table = self._tables[page]
-        return [deepcopy(table.item(row, 3).data(Qt.ItemDataRole.UserRole))
-                for row in range(table.rowCount())]
+        steps = [deepcopy(table.item(row, 3).data(Qt.ItemDataRole.UserRole))
+                 for row in range(table.rowCount())]
+        if self._start_at_tool_changer[page].isChecked():
+            steps.insert(0, {"kind": "start_at_tool_changer"})
+        if self._finish_at_tool_changer[page].isChecked():
+            steps.append({"kind": "finish_at_tool_changer"})
+        return steps
 
     def _on_capture(self) -> None:
         self.capture_requested.emit(self._tabs.currentIndex(), {
@@ -255,6 +298,15 @@ class SequenceEditor(QWidget):
         self._velocity_label.setText(self._t("Velocity (%)"))
         self._acceleration_label.setText(self._t("Acceleration (%)"))
         self._settings_hint.setText(self._t("Values apply to the selected position and new captures. Save sequences to keep changes."))
+        for hint in self._endpoint_hints:
+            hint.setText(
+                self._t("Settings apply only to the selected Pickup or Drop-off sequence.") + " " +
+                self._t("Optional start and finish moves use the Tool Changer position and motion settings.")
+            )
+        for toggle in self._start_at_tool_changer:
+            toggle.setText(self._t("Start from Tool Changer"))
+        for toggle in self._finish_at_tool_changer:
+            toggle.setText(self._t("Finish at Tool Changer"))
         self._tabs.setTabText(0, self._t("Pickup"))
         self._tabs.setTabText(1, self._t("Drop-off"))
         for table in self._tables:

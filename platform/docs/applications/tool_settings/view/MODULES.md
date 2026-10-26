@@ -9,6 +9,8 @@ Generated from Python ASTs. Signatures, declared defaults, imports and docstring
 - [__init__.py](#__init__py)
 - [tool_settings_view.py](#tool_settings_viewpy)
 
+- [sequence_editor.py](#sequence_editorpy)
+
 ## `__init__.py`
 
 Source: [src/applications/tool_settings/view/__init__.py](../../../../src/applications/tool_settings/view/__init__.py).
@@ -94,6 +96,63 @@ def selected_slot_id(self)
 
 ```python
 def clean_up(self) -> None
+```
+
+```python
+def retranslateUi(self) -> None
+```
+
+```python
+def changeEvent(self, event) -> None
+```
+
+## `sequence_editor.py`
+
+Source: [src/applications/tool_settings/view/sequence_editor.py](../../../../src/applications/tool_settings/view/sequence_editor.py).
+
+### `SequenceEditor`
+
+```python
+class SequenceEditor(QWidget):
+```
+
+Declared fields/defaults:
+
+```python
+capture_requested = pyqtSignal(int, dict)
+save_requested = pyqtSignal(list, list)
+cancel_requested = pyqtSignal()
+reverse_requested = pyqtSignal(list)
+execute_requested = pyqtSignal(int, list)
+stop_requested = pyqtSignal()
+```
+
+```python
+def __init__(self, parent=None)
+```
+
+```python
+def set_slot(self, slot) -> None
+```
+
+```python
+def append_step(self, page: int, step: dict) -> None
+```
+
+```python
+def set_busy(self, busy: bool) -> None
+```
+
+```python
+def set_executing(self, executing: bool) -> None
+```
+
+```python
+def set_dropoff(self, steps: list) -> None
+```
+
+```python
+def set_message(self, message: str) -> None
 ```
 
 ```python

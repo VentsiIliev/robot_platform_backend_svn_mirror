@@ -17,7 +17,8 @@ class ToolChangeStep:
 
     def __post_init__(self) -> None:
         self.kind = str(self.kind or "motion").strip().lower()
-        if self.kind not in {"motion", "attach", "detach", "wait", "operator_confirm"}:
+        if self.kind not in {"motion", "attach", "detach", "wait", "operator_confirm",
+                            "start_at_tool_changer", "finish_at_tool_changer"}:
             raise ValueError(f"Unsupported tool-change step kind: {self.kind}")
         self.pose = [float(value) for value in self.pose]
         if self.kind == "motion" and len(self.pose) != 6:
@@ -64,6 +65,13 @@ class SlotConfig:
 class ToolChanger(IToolChanger):
 
     def __init__(self, slots: List[SlotConfig], tools: List[ToolDefinition]):
+        if len({slot.id for slot in slots}) != len(slots):
+            raise ValueError("Tool changer contains duplicate slot IDs")
+        if len({tool.id for tool in tools}) != len(tools):
+            raise ValueError("Tool changer contains duplicate tool IDs")
+        assigned = [slot.tool_id for slot in slots if slot.tool_id is not None]
+        if len(set(assigned)) != len(assigned):
+            raise ValueError("A tool cannot be assigned to multiple slots")
         self._slots: dict[int, SlotConfig]            = {s.id: s for s in slots}
         self._tools: dict[int, ToolDefinition]        = {t.id: t for t in tools}
 
