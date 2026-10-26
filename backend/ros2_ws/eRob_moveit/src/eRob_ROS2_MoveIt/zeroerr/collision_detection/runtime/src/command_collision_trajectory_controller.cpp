@@ -78,6 +78,30 @@ public:
             d.accepted ? "true" : "false", d.generation_us, d.duration, d.tracking_error,
             d.step[0], d.step[1], d.step[2], d.step[3], d.step[4], d.step[5],
             d.end[0], d.end[1], d.end[2], d.end[3], d.end[4], d.end[5]);
+          if (!d.accepted) {
+            const auto & r = d.rejection;
+            const char * joint = r.joint >= 0 && r.joint < 6 ?
+              params_.joints[r.joint].c_str() : "none";
+            RCLCPP_WARN(get_node()->get_logger(),
+              "[CollisionCommandBrakeReject] reason=%s joint=%s sample=%d time_s=%.9f "
+              "value=%.9f limit=%.9f ruckig_result=%d generated_duration_s=%.9f "
+              "max_duration_s=%.6f max_travel_rad=%.6f tracking_limit_rad=%.6f "
+              "state_sizes=[%zu,%zu,%zu,%zu]",
+              CommandCollisionBrake::failure_name(r.reason), joint, r.sample, r.time,
+              r.value, r.limit, r.generator_result, d.duration,
+              max_duration_, max_travel_, tracking_limit_,
+              d.sizes[0], d.sizes[1], d.sizes[2], d.sizes[3]);
+            // All formatting happens outside the real-time update thread.
+            for (size_t i = 0; i < 6; ++i) {
+              RCLCPP_WARN(get_node()->get_logger(),
+                "[CollisionCommandBrakeState] joint=%s commanded_q=%.12f commanded_v=%.12f "
+                "commanded_a=%.12f measured_q=%.12f velocity_limit=%.9f "
+                "acceleration_limit=%.9f jerk_limit=%.9f lower=%.9f upper=%.9f",
+                params_.joints[i].c_str(), d.q[i], d.v[i], d.a[i], d.measured[i],
+                bounds_.velocity[i], bounds_.acceleration[i], bounds_.jerk[i],
+                bounds_.lower[i], bounds_.upper[i]);
+            }
+          }
         }
       });
     } catch (const std::exception & error) {
@@ -102,6 +126,11 @@ public:
       Diagnostic diagnostic{};
       CommandCollisionBrake::Vector q{}, v{}, a{}, measured{};
       read_state_from_state_interfaces(state_current_);
+      diagnostic.sizes = {last_commanded_state_.positions.size(),
+        last_commanded_state_.velocities.size(), last_commanded_state_.accelerations.size(),
+        state_current_.positions.size()};
+      diagnostic.rejection.reason = pending->joint_names != params_.joints ?
+        CommandCollisionBrake::Failure::joint_order : CommandCollisionBrake::Failure::state_layout;
       bool valid = pending->joint_names == params_.joints &&
         last_commanded_state_.positions.size() == 6 &&
         last_commanded_state_.velocities.size() == 6 &&
@@ -116,7 +145,13 @@ public:
           diagnostic.tracking_error = std::max(diagnostic.tracking_error, std::abs(q[i] - measured[i]));
         }
         valid = brake_.calculate(q, v, a, measured, bounds_, max_duration_, max_travel_, tracking_limit_);
+        diagnostic.rejection = brake_.rejection();
+        diagnostic.duration = brake_.duration();
       }
+      diagnostic.q = q;
+      diagnostic.v = v;
+      diagnostic.a = a;
+      diagnostic.measured = measured;
       diagnostic.accepted = valid;
       if (valid) {
         // Alternating, preallocated buffers stay alive across JTC replacement.
@@ -161,7 +196,9 @@ private:
   struct Diagnostic {
     bool accepted{false};
     double generation_us{0}, duration{0}, tracking_error{0};
-    CommandCollisionBrake::Vector step{}, end{};
+    CommandCollisionBrake::Vector step{}, end{}, q{}, v{}, a{}, measured{};
+    CommandCollisionBrake::Rejection rejection{};
+    std::array<size_t, 4> sizes{};
   };
   CommandCollisionBrake brake_;
   CommandCollisionBrake::Limits bounds_{};

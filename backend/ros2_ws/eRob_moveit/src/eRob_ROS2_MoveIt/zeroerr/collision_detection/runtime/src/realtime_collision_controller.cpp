@@ -519,6 +519,7 @@ controller_interface::return_type RealtimeCollisionController::update(
     return controller_interface::return_type::OK;
   }
   const RuntimeConfig & config = *config_ptr;
+  stop_latch_.set_active_response(config.active_stop_enabled);
   JointVector position{};
   JointVector velocity{};
   JointVector torque{};
@@ -659,11 +660,12 @@ controller_interface::return_type RealtimeCollisionController::update(
         exceedance_sec_[index] = 0.0;
       }
     }
-    if (any_exceeded && !stop_latched_) {
-      stop_latched_ = true;
-      const auto event_id = ++collision_event_sequence_;
+    if (stop_latch_.should_process(any_exceeded)) {
+      const bool first_detection = stop_latch_.begin_event();
+      if (first_detection) {++collision_event_sequence_;}
+      const auto event_id = collision_event_sequence_;
       bool stop_published = false;
-      if (config.active_stop_enabled && stop_publisher_ && stop_publisher_->trylock()) {
+      if (stop_latch_.needs_stop() && stop_publisher_ && stop_publisher_->trylock()) {
         std::array<char, 256> payload{};
         const int length = std::snprintf(
           payload.data(), payload.size(), "%.*s,\"diagnostic_event_id\":%llu}",
@@ -675,13 +677,17 @@ controller_interface::return_type RealtimeCollisionController::update(
           stop_publisher_->msg_.data = stop_payloads_[first_exceeded];
         }
         stop_publisher_->unlockAndPublish();
+        stop_latch_.mark_stop_published();
         stop_published = true;
       }
-      // The stop publication stays first. Diagnostics use only bounded POD copies here.
-      capture_collision_diagnostics(
-        time, dt_sec, config, position, velocity, acceleration, torque,
-        compensated_torque, static_cast<int>(first_exceeded), event_id,
-        config.active_stop_enabled, stop_published);
+      // Retry a busy real-time publisher while exceedance remains confirmed.
+      // Report the first attempt and eventual publication, not every retry cycle.
+      if (first_detection || stop_published) {
+        capture_collision_diagnostics(
+          time, dt_sec, config, position, velocity, acceleration, torque,
+          compensated_torque, static_cast<int>(first_exceeded), event_id,
+          config.active_stop_enabled, stop_published, !first_detection);
+      }
     }
   } else {
     exceedance_sec_.fill(0.0);
@@ -726,7 +732,8 @@ void RealtimeCollisionController::capture_collision_diagnostics(
   const JointVector & position, const JointVector & velocity,
   const JointVector & acceleration, const JointVector & torque,
   const JointVector & compensated_torque, const int triggered_joint,
-  const std::uint64_t event_id, const bool stop_attempted, const bool stop_published)
+  const std::uint64_t event_id, const bool stop_attempted, const bool stop_published,
+  const bool publication_update)
 {
   CollisionEventSnapshot event;
   event.event_id = event_id;
@@ -746,6 +753,7 @@ void RealtimeCollisionController::capture_collision_diagnostics(
   event.dynamic_threshold_enabled = config.dynamic_threshold_enabled;
   event.stop_publish_attempted = stop_attempted;
   event.stop_published = stop_published;
+  event.stop_publication_update = publication_update;
   event.dt_sec = dt_sec;
   event.observer_ready_age_sec = observer_ready_age_sec_;
   event.warmup_elapsed_sec = recovery_.warmup_elapsed_sec;
@@ -824,7 +832,7 @@ void RealtimeCollisionController::rearm_observer(const bool recalibrate)
   have_previous_sample_ = false;
   observer_ready_ = false;
   observer_initialized_ = false;
-  stop_latched_ = false;
+  stop_latch_.reset();
   drives_operational_elapsed_sec_ = 0.0;
   diagnostics_elapsed_sec_ = 0.0;
   peak_samples_.fill(PeakSample{});

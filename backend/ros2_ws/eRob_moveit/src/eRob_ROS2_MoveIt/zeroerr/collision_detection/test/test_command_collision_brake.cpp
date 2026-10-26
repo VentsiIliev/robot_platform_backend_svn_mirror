@@ -81,10 +81,34 @@ int main()
   }
   Brake::Vector zero{},bad{};bad[0]=.21;
   assert(!brake.calculate(bad,zero,zero,zero,limits,.6,.35,.2));
+  assert(brake.rejection().reason == Brake::Failure::tracking_error);
+  assert(brake.rejection().joint == 0);
+  assert(brake.rejection().value == .21 && brake.rejection().limit == .2);
   assert(!brake.calculate(zero,velocities[0],accelerations[0],zero,limits,.01,.35,.2));
+  assert(brake.rejection().reason == Brake::Failure::duration_limit);
+  assert(brake.rejection().value == brake.duration());
+  assert(brake.rejection().value > brake.rejection().limit);
   assert(!brake.calculate(zero,velocities[0],accelerations[0],zero,limits,.6,.001,.2));
+  assert(brake.rejection().reason == Brake::Failure::travel_limit);
+  assert(brake.rejection().joint >= 0 && brake.rejection().sample >= 0);
   bad[0]=NAN;
   assert(!brake.calculate(bad,zero,zero,zero,limits,.6,.35,.2));
+  assert(brake.rejection().reason == Brake::Failure::invalid_state);
+  assert(brake.duration() == 0.0);  // No stale duration from a previous attempt.
   assert(brake.calculate(zero,zero,zero,zero,limits,.6,.35,.2));
+  assert(brake.rejection().reason == Brake::Failure::none);
+  assert(brake.rejection().joint == -1 && brake.rejection().sample == -1);
+  assert(!brake.calculate(zero,zero,zero,zero,limits,.7,.35,.2));
+  assert(brake.rejection().reason == Brake::Failure::invalid_configuration);
+  auto bounded = limits;
+  bounded.upper[0] = 0.0;
+  assert(!brake.calculate(zero,zero,zero,zero,bounded,.6,.35,.2));
+  assert(brake.rejection().reason == Brake::Failure::upper_position_limit);
+  assert(brake.rejection().joint == 0 && brake.rejection().sample == 0);
+  bounded = limits;
+  bounded.velocity[1] = 0.0;
+  assert(!brake.calculate(zero,zero,zero,zero,bounded,.6,.35,.2));
+  assert(brake.rejection().reason == Brake::Failure::invalid_limits);
+  assert(brake.rejection().joint == 1);
   std::cout<<"Tracking, duration, travel, nonfinite rejection and stationary hold passed\n";
 }

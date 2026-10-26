@@ -1,0 +1,42 @@
+{
+  "__meta__": {
+    "display_name": "Български"
+  },
+  "ImageCaptureView": {
+    "Image Capture": "Заснемане на изображения",
+    "Capture": "Заснемане",
+    "Save folder: {detail}": "Папка за запазване: {detail}",
+    "No captured image": "Няма заснето изображение",
+    "Capture an image to preview it.": "Заснемете изображение, за да го прегледате.",
+    "Capturing…": "Заснемане…",
+    "Saving…": "Запазване…",
+    "Saved: {detail}": "Запазено: {detail}",
+    "Operation failed: {detail}": "Неуспешна операция: {detail}",
+    "Vision service is unavailable.": "Услугата за машинно зрение не е достъпна.",
+    "No camera image is available.": "Няма налично изображение от камерата.",
+    "Could not encode the captured image.": "Заснетото изображение не може да бъде кодирано.",
+    "Capture an image before saving.": "Заснемете изображение преди запазване.",
+    "No fresh camera image is available.": "Няма ново изображение от камерата.",
+    "Camera calibration is unavailable.": "Калибрацията на камерата не е налична.",
+    "Calibrated image capture is unavailable.": "Заснемането на калибрирано изображение не е достъпно.",
+    "Detected contours: {detail}": "Открити контури: {detail}",
+    "Contour detection for captured images is unavailable.": "Откриването на контури за заснети изображения не е достъпно.",
+    "Work area changed during contour detection. Capture again.": "Работната зона се промени при откриване на контури. Заснемете отново.",
+    "No active work area. Select a work area before capturing.": "Няма активна работна зона. Изберете работна зона преди заснемане.",
+    "The active work area has no valid detection region. Configure it before capturing.": "Активната работна зона няма валидна област за откриване. Настройте я преди заснемане.",
+    "Capture contours, fit lines and arcs, then save the images and results.": "Заснемете контури, апроксимирайте с линии и дъги и запазете изображенията и резултатите.",
+    "Save capture": "Запазване на заснемането",
+    "Detected contours": "Открити контури",
+    "Lines and arcs": "Линии и дъги",
+    "Lines: red · Arcs: blue/green · Endpoints: yellow": "Линии: червено · Дъги: синьо/зелено · Крайни точки: жълто",
+    "{lines} lines, {arcs} arcs · Outside tolerance: {exceeds} · Failed contours: {failed}": "{lines} линии, {arcs} дъги · Извън допуска: {exceeds} · Неуспешни контури: {failed}",
+    "Robot XY (mm)": "Робот XY (mm)",
+    "Robot-space calibration is unavailable.": "Калибрацията към роботни координати не е налична.",
+    "Work area changed during capture. Capture again.": "Работната зона се промени при заснемане. Заснемете отново.",
+    "Robot mm: detected = gray · Lines = red · Arcs = blue": "Робот mm: открит контур = сиво · Линии = червено · Дъги = синьо",
+    "Detected contour in image pixels": "Открит контур в пиксели",
+    "Pixel fit": "Апроксимация в пиксели",
+    "Sampled path (mm)": "Дискретизиран път (mm)",
+    "1 mm samples on a periodic smooth curve. Diagnostic only; check exported deviations.": "Точки през 1 mm върху периодична гладка крива. Само за диагностика; проверете експортираните отклонения."
+  }
+}

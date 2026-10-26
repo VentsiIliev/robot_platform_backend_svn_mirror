@@ -339,6 +339,43 @@ class VisionSystem:
             self.message_publisher.publish_latest_image(display_image)
         return None, display_image, None
 
+    def capture_corrected_image(self) -> np.ndarray:
+        """Correct a fresh owned frame without contour drawing or mode changes."""
+        snapshot = self.frame_grabber.get_latest_snapshot()
+        if snapshot is None or snapshot.frame is None:
+            raise VisionFrameUnavailableError("No fresh camera image is available.")
+        if self.cameraMatrix is None:
+            raise RuntimeError("Camera calibration is unavailable.")
+        return self.correctImage(snapshot.frame.copy())
+
+    def detect_contours_for_image(self, image: np.ndarray) -> list:
+        """Use configured detection on an already corrected image, without publishing."""
+        # Read authoritative state: _get_active_area_id can retain a previous
+        # area after navigation clears the work-area service's active area.
+        work_areas = self._work_area_service
+        active_area = str(work_areas.get_active_area_id() or "") if work_areas else ""
+        if not active_area:
+            raise RuntimeError("No active work area. Select a work area before capturing.")
+        height, width = image.shape[:2]
+        roi = work_areas.get_detection_roi_pixels(active_area, width, height)
+        if roi is None or len(roi) < 3 or not np.isfinite(roi).all() or cv2.contourArea(roi) <= 0:
+            raise RuntimeError("The active work area has no valid detection region. Configure it before capturing.")
+        contours, _, _ = self._contour_service.detect(
+            image=image,
+            threshold=self._get_thresh_by_area(active_area),
+            is_calibrated=True,
+            correct_image_fn=self._already_corrected_image,
+            spray_area_points=roi,
+            publish_images=False,
+        )
+        if active_area != str(work_areas.get_active_area_id() or ""):
+            raise RuntimeError("Work area changed during contour detection. Capture again.")
+        return list(contours) if contours is not None else []
+
+    @staticmethod
+    def _already_corrected_image(image: np.ndarray) -> np.ndarray:
+        return image
+
     def compute_contours_for_latest_frame(self) -> tuple[np.ndarray | None, list]:
         snapshot = self.frame_grabber.get_latest_snapshot()
         if snapshot is None or snapshot.frame is None:

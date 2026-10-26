@@ -2,12 +2,11 @@ RUNTIME_INCLUDES:
 - ../shared/sensorless_collision.yaml
 monitor:
   confirm_duration_ms: 25.0
-  dynamic_threshold_max_ratio: 5.0
   external_torque_thresholds:
-  - 4.25
   - 5.0
-  - 2.78
-  - 1.59
+  - 5.0
+  - 5.0
+  - 3.0
   - 5.0
   - 3.5
   friction_coulomb_negative_nm:

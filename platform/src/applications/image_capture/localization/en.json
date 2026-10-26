@@ -1,0 +1,42 @@
+{
+  "__meta__": {
+    "display_name": "English"
+  },
+  "ImageCaptureView": {
+    "Image Capture": "Image Capture",
+    "Capture": "Capture",
+    "Save folder: {detail}": "Save folder: {detail}",
+    "No captured image": "No captured image",
+    "Capture an image to preview it.": "Capture an image to preview it.",
+    "Capturing…": "Capturing…",
+    "Saving…": "Saving…",
+    "Saved: {detail}": "Saved: {detail}",
+    "Operation failed: {detail}": "Operation failed: {detail}",
+    "Vision service is unavailable.": "Vision service is unavailable.",
+    "No camera image is available.": "No camera image is available.",
+    "Could not encode the captured image.": "Could not encode the captured image.",
+    "Capture an image before saving.": "Capture an image before saving.",
+    "No fresh camera image is available.": "No fresh camera image is available.",
+    "Camera calibration is unavailable.": "Camera calibration is unavailable.",
+    "Calibrated image capture is unavailable.": "Calibrated image capture is unavailable.",
+    "Detected contours: {detail}": "Detected contours: {detail}",
+    "Contour detection for captured images is unavailable.": "Contour detection for captured images is unavailable.",
+    "Work area changed during contour detection. Capture again.": "Work area changed during contour detection. Capture again.",
+    "No active work area. Select a work area before capturing.": "No active work area. Select a work area before capturing.",
+    "The active work area has no valid detection region. Configure it before capturing.": "The active work area has no valid detection region. Configure it before capturing.",
+    "Capture contours, fit lines and arcs, then save the images and results.": "Capture contours, fit lines and arcs, then save the images and results.",
+    "Save capture": "Save capture",
+    "Detected contours": "Detected contours",
+    "Lines and arcs": "Lines and arcs",
+    "Lines: red · Arcs: blue/green · Endpoints: yellow": "Lines: red · Arcs: blue/green · Endpoints: yellow",
+    "{lines} lines, {arcs} arcs · Outside tolerance: {exceeds} · Failed contours: {failed}": "{lines} lines, {arcs} arcs · Outside tolerance: {exceeds} · Failed contours: {failed}",
+    "Robot XY (mm)": "Robot XY (mm)",
+    "Robot-space calibration is unavailable.": "Robot-space calibration is unavailable.",
+    "Work area changed during capture. Capture again.": "Work area changed during capture. Capture again.",
+    "Robot mm: detected = gray · Lines = red · Arcs = blue": "Robot mm: detected = gray · Lines = red · Arcs = blue",
+    "Detected contour in image pixels": "Detected contour in image pixels",
+    "Pixel fit": "Pixel fit",
+    "Sampled path (mm)": "Sampled path (mm)",
+    "1 mm samples on a periodic smooth curve. Diagnostic only; check exported deviations.": "1 mm samples on a periodic smooth curve. Diagnostic only; check exported deviations."
+  }
+}

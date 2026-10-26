@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QPushButton,
     QScrollArea,
     QSizePolicy,
     QStackedWidget,
@@ -240,7 +241,7 @@ class PaintDashboardView(IApplicationView):
         self._ui_config = ui_config or PaintDashboardUiConfig()
         self._camera_roles = tuple(camera_roles) or ("primary_vision",)
         self._selected_camera = "primary_vision" if "primary_vision" in self._camera_roles else self._camera_roles[0]
-        self._camera_selector: QToolButton | None = None
+        self._camera_selector: QPushButton | None = None
         self._camera_menu: QMenu | None = None
         self._camera_page: QWidget | None = None
         self.SHOW_JOG_WIDGET = self._ui_config.show_jog_widget
@@ -316,13 +317,6 @@ class PaintDashboardView(IApplicationView):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-
-        self._cycle_streak_label = QLabel(self._translate_template(
-            "Consecutive completed cycles: {count}", count=0,
-        ))
-        self._cycle_streak_label.setStyleSheet(_MESSAGE_TITLE_STYLE)
-        self._cycle_streak_label.setContentsMargins(12, 6, 12, 6)
-        layout.addWidget(self._cycle_streak_label)
 
         self._dashboard = DashboardWidget(
             config=self._config,
@@ -429,9 +423,9 @@ class PaintDashboardView(IApplicationView):
         page_layout = QVBoxLayout(page)
         page_layout.setContentsMargins(4, 4, 4, 4)
         page_layout.setSpacing(4)
-        selector = QToolButton()
+        camera.set_responsive(True)
+        selector = QPushButton()
         selector.setCursor(Qt.CursorShape.PointingHandCursor)
-        selector.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         selector.setStyleSheet(GHOST_BTN_STYLE)
         menu = QMenu(selector)
         menu.triggered.connect(self._on_camera_menu_triggered)
@@ -470,7 +464,7 @@ class PaintDashboardView(IApplicationView):
             action = self._camera_menu.addAction(labels.get(role, role.replace("_", " ").title()))
             action.setData(role)
         selected = labels.get(self._selected_camera, self._selected_camera.replace("_", " ").title())
-        self._camera_selector.setText(f"{self._translate_text('Camera')}: {selected} ▾")
+        self._camera_selector.setText(f"{self._translate_text('Camera')}: {selected}")
 
     def is_camera_feed_visible(self) -> bool:
         if self._camera_page is None:
@@ -1594,10 +1588,6 @@ class PaintDashboardView(IApplicationView):
         self.set_state(state.process_state)
         self.set_mode(state.mode_label)
         self.set_active_job(state.active_job_label)
-        self._cycle_streak_label.setText(self._translate_template(
-            "Consecutive completed cycles: {count}",
-            count=getattr(state, "consecutive_completed_cycles", 0),
-        ))
         self.set_notes(state.status_lines)
         self._apply_card_states(getattr(state, "card_states", {}))
         self.set_start_enabled(state.can_start)
@@ -1672,10 +1662,6 @@ class PaintDashboardView(IApplicationView):
             self._last_card_states[card_id] = card_state
 
     def retranslateUi(self) -> None:
-        if hasattr(self, "_cycle_streak_label") and self._last_state is None:
-            self._cycle_streak_label.setText(self._translate_template(
-                "Consecutive completed cycles: {count}", count=0,
-            ))
         if hasattr(self, "_dashboard"):
             self._dashboard.retranslateUi()
             for action in self._action_buttons:

@@ -144,6 +144,12 @@ class VisionService(IVisionService, IHealthCheckable,IExposureControl):
     def get_latest_corrected_frame(self) -> np.ndarray | None:
         return self._vision_system.correctedImage
 
+    def capture_corrected_image(self) -> np.ndarray:
+        return self._vision_system.capture_corrected_image()
+
+    def detect_contours_for_image(self, image: np.ndarray) -> list:
+        return self._vision_system.detect_contours_for_image(image)
+
     def get_latest_raw_frame(self) -> np.ndarray | None:
         return self._vision_system.rawImage
 

@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 from src.robot_systems.paint.contracts.dropoff import IDropoffExecution, DropoffResult
+from src.robot_systems.paint.processes.paint.start_recovery import (
+    StartRecoveryService, StartRecoveryResult, StartRecoveryOutcome,
+)
+from src.robot_systems.paint.processes.paint.start_recovery.errors import RecoveryInternalError
+from src.engine.robot.motion_sequence import OrderedPositionCommand
 
 import logging
 import math
@@ -42,7 +47,7 @@ from src.robot_systems.paint.processes.paint.configuration.models import (
     MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN,
     MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
     DropoffStrategy,
-    PaintProcessConfig,
+    PaintProcessConfig, PaintMagazineLoadConfig,
     PAINT_PROCESS_CONFIG,
     scale_paint_process_accelerations,
 )
@@ -71,6 +76,7 @@ class PaintProductionService:
         plate_layout_service: PlateLayoutService | None = None,
         dry_run_snapshot_source=None,
         failure_artifact_root=None,
+        start_recovery_service: StartRecoveryService | None = None,
     ) -> None:
         """Store the services needed to capture, prepare, plan, and execute one paint cycle."""
         self._workpiece_preparation = workpiece_preparation_service
@@ -78,6 +84,10 @@ class PaintProductionService:
         self._path_preparation_service = path_preparation_service
         self._dropoff_executor: IDropoffExecution = path_executor
         self._path_executor = path_executor
+        self._start_recovery = start_recovery_service or StartRecoveryService(
+            read_pose=self._read_start_recovery_pose,
+            execute_route=self._execute_start_recovery_route,
+        )
         self._plate_layout_service = plate_layout_service
         self.last_failure: TrayFailure | PaintFailure | None = None
         self._vacuum_pump = vacuum_pump
@@ -295,9 +305,9 @@ class PaintProductionService:
         if manual_single_cycle or adjustment_session is not None:
             if magazine_config is None:
                 return PaintOperationResult.failed(PaintFailureCode.UNAVAILABLE, "calibration_navigation", "Paint magazine calibration settings are unavailable")
-            ok, msg = self._move_to_calibration_before_manual_cycle(magazine_config, should_stop)
-            if not ok:
-                return PaintOperationResult.failed(PaintFailureCode.MOTION, 'run_once_result', msg)
+            navigation_result = self._move_to_calibration_before_manual_cycle(magazine_config, should_stop, process_config=process_config)
+            if not navigation_result.completed:
+                return navigation_result
             result = self.run_cycle_result(
                 should_stop,
                 process_config=process_config,
@@ -359,9 +369,9 @@ class PaintProductionService:
             return self._run_manual_loop_result(magazine_config, process_config, should_stop)
 
         if magazine_config is not None:
-            ok, msg = self._move_to_calibration_before_manual_cycle(magazine_config, should_stop)
-            if not ok:
-                return PaintOperationResult.failed(PaintFailureCode.MOTION, 'run_once_result', msg)
+            navigation_result = self._move_to_calibration_before_manual_cycle(magazine_config, should_stop, process_config=process_config)
+            if not navigation_result.completed:
+                return navigation_result
         return self.run_cycle_result(
             should_stop,
             process_config=process_config,
@@ -378,15 +388,15 @@ class PaintProductionService:
         total_start = perf_counter()
         completed_cycles = 0
         while not should_stop():
-            ok, msg = self._move_to_calibration_before_manual_cycle(magazine_config, should_stop)
-            if not ok:
+            navigation_result = self._move_to_calibration_before_manual_cycle(magazine_config, should_stop, process_config=process_config)
+            if not navigation_result.completed:
                 self._log_phase_timing(
                     "manual_loop_total",
                     total_start,
                     success=False,
                     completed_cycles=completed_cycles,
                 )
-                return PaintOperationResult.failed(PaintFailureCode.MOTION, '_run_manual_loop', msg)
+                return navigation_result
             result = self.run_cycle_result(
                 should_stop,
                 process_config=process_config,
@@ -664,11 +674,11 @@ class PaintProductionService:
                     return PaintOperationResult(PaintOutcome.COMPLETED, MAGAZINE_EMPTY, stop_reason=PaintOutcome.NO_WORKPIECE)
                 continue
 
-            ok, message = self._move_to_calibration_before_manual_cycle(
-                magazine_config, should_stop
+            navigation_result = self._move_to_calibration_before_manual_cycle(
+                magazine_config, should_stop, process_config=process_config,
             )
-            if not ok:
-                return PaintOperationResult.failed(PaintFailureCode.MOTION, '_run_magazine_batch_loop', message)
+            if not navigation_result.completed:
+                return navigation_result
             snapshot = self._capture_snapshot_service.capture_snapshot(source="paint_batch_staging")
             contours = list(snapshot.contours or ())
             if not contours:
@@ -877,13 +887,52 @@ class PaintProductionService:
             )
         return dropoff.strategy
 
+    def _read_start_recovery_pose(self) -> list[float]:
+        return read_fresh_pose(
+            self._path_executor._robot_service,
+            error_message="Cannot determine robot area before startup",
+        )
+
+    def _execute_start_recovery_route(self, label: str, segments: list[OrderedPositionCommand]) -> bool:
+        return self._path_executor._motion.move_ordered_pickup_sequence(label, segments)
+
+    def prepare_start_recovery(self, ctx: PaintExecutionContext) -> StartRecoveryResult:
+        """Apply regional routing before unwind or any production navigation."""
+        executor = self._path_executor
+        previous_control = executor._active_execution_control
+        executor._active_execution_control = ctx.control
+        try:
+            config = ctx.process_config or executor._paint_process_config()
+            executor._refresh_runtime_config()
+            return self._start_recovery.prepare(
+                dropoff=config.dropoff,
+                target_provider=lambda: self._production_start_target(ctx),
+                should_stop=ctx.motion_cancel_requested,
+                tool=executor._motion_tool(), user=executor._motion_user(),
+            )
+        except Exception as exc:
+            _logger.exception("Failed to prepare start recovery dependencies")
+            return StartRecoveryResult(
+                StartRecoveryOutcome.FAILED, RecoveryInternalError(str(exc)).failure,
+            )
+        finally:
+            executor._active_execution_control = previous_control
+
     def _next_cycle_start_target(self, ctx: PaintExecutionContext) -> NextCycleTarget | None:
         if not ctx.repeats_after_success:
             return None
+        return self._production_start_target(ctx)
+
+    def _production_start_target(self, ctx: PaintExecutionContext) -> NextCycleTarget | None:
+        """Resolve the first production destination, including single-cycle runs."""
         magazine = ctx.magazine_config
         configured_magazine = magazine or ctx.process_config.magazine_load
         if magazine is not None and magazine.enabled:
-            group_id = ctx.magazine_group
+            group_id = ctx.magazine_group or (
+                magazine.fixed_pickup_group_id
+                if magazine.pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN
+                else magazine.magazine_group_id
+            )
             velocity = float(magazine.move_to_magazine_vel_percent)
             acceleration = float(magazine.move_to_magazine_acc_percent)
             motion_type = magazine.move_to_magazine_motion_type
@@ -1036,36 +1085,45 @@ class PaintProductionService:
 
     def _move_to_calibration_before_manual_cycle(
         self,
-        magazine_config,
+        magazine_config: PaintMagazineLoadConfig,
         should_stop: Callable[[], bool],
-    ) -> tuple[bool, str]:
+        *,
+        process_config: PaintProcessConfig | None = None,
+    ) -> PaintOperationResult:
+        recovery_context = PaintExecutionContext(
+            production_service=self, stop_requested=should_stop, control=self._paint_control,
+            process_config=process_config or PAINT_PROCESS_CONFIG,
+        )
+        recovery = self.prepare_start_recovery(recovery_context)
+        if not recovery.succeeded:
+            return recovery.to_operation_result()
         navigation = self._navigation_service
         if navigation is None:
-            return False, "Navigation service unavailable for calibration move"
+            return PaintOperationResult.failed(PaintFailureCode.UNAVAILABLE, "calibration_navigation", "Navigation service unavailable for calibration move")
         group_id = str(magazine_config.calibration_group_id)
         if self._consume_verified_prepositioned_start_group(group_id):
             self._restore_capture_view("after verifying prepositioned calibration pickup")
-            return True, ""
+            return PaintOperationResult(PaintOutcome.COMPLETED, "")
 
         phase_start = perf_counter()
         ok = bool(navigation.move_to_calibration_position(wait_cancelled=should_stop))
         self._log_phase_timing("move_to_calibration", phase_start, success=ok, cycle=1)
         if should_stop():
-            return False, "Paint process stopped"
+            return PaintOperationResult(PaintOutcome.CANCELLED, "Paint process stopped")
         if not ok:
-            return False, f"Failed to move to calibration position '{group_id}'"
+            return PaintOperationResult.failed(PaintFailureCode.MOTION, "calibration_navigation", f"Failed to move to calibration position '{group_id}'")
         self._restore_capture_view("after reaching calibration pickup")
         settle_s = float(magazine_config.release_settle_s)
         settle_start = perf_counter()
         if not self._wait_for_capture_settle(settle_s, should_stop):
-            return False, "Paint process stopped"
+            return PaintOperationResult(PaintOutcome.CANCELLED, "Paint process stopped")
         self._log_phase_timing(
             "calibration_camera_settle",
             settle_start,
             configured_s=settle_s,
             cycle=1,
         )
-        return True, ""
+        return PaintOperationResult(PaintOutcome.COMPLETED, "")
 
     def _wait_for_capture_settle(
         self,

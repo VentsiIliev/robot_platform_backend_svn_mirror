@@ -1,3 +1,4 @@
+from src.robot_systems.paint.processes.paint.start_recovery import StartRecoveryResult, StartRecoveryOutcome
 from src.robot_systems.paint.processes.paint.operations.dropoff.strategies.configured import ConfiguredDropoffStrategy
 import unittest
 from types import SimpleNamespace
@@ -345,7 +346,7 @@ class TestCalibrationPickupTestMode(unittest.TestCase):
 class TestPaintExecutionMachineScaffold(unittest.TestCase):
     def test_starting_routes_to_capture_when_magazine_load_is_disabled(self):
         ctx = PaintExecutionContext(
-            production_service=MagicMock(),
+            production_service=MagicMock(prepare_start_recovery=MagicMock(return_value=StartRecoveryResult(StartRecoveryOutcome.NOT_REQUIRED))),
             stop_requested=lambda: False,
             control=PaintExecutionControl(),
             process_config=PaintProcessConfig(),
@@ -361,6 +362,7 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
 
     def test_starting_fails_when_magazine_service_is_missing(self):
         service = MagicMock()
+        service.prepare_start_recovery.return_value = StartRecoveryResult(StartRecoveryOutcome.NOT_REQUIRED)
         service._magazine_load_service = None
         ctx = PaintExecutionContext(
             production_service=service,
@@ -381,6 +383,7 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
 
     def test_starting_routes_to_first_fine_magazine_state_for_real_magazine_service(self):
         service = MagicMock()
+        service.prepare_start_recovery.return_value = StartRecoveryResult(StartRecoveryOutcome.NOT_REQUIRED)
         service._magazine_load_service = PaintMagazineLoadService(
             navigation=MagicMock(),
             capture_snapshot_service=MagicMock(),
@@ -432,7 +435,7 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
 
     def test_machine_records_state_timing_when_enabled(self):
         ctx = PaintExecutionContext(
-            production_service=MagicMock(),
+            production_service=MagicMock(prepare_start_recovery=MagicMock(return_value=StartRecoveryResult(StartRecoveryOutcome.NOT_REQUIRED))),
             stop_requested=lambda: False,
             control=PaintExecutionControl(),
             process_config=PaintProcessConfig(enable_execution_state_timing=True),
@@ -450,7 +453,7 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
 
     def test_machine_skips_state_timing_when_disabled(self):
         ctx = PaintExecutionContext(
-            production_service=MagicMock(),
+            production_service=MagicMock(prepare_start_recovery=MagicMock(return_value=StartRecoveryResult(StartRecoveryOutcome.NOT_REQUIRED))),
             stop_requested=lambda: False,
             control=PaintExecutionControl(),
             process_config=PaintProcessConfig(enable_execution_state_timing=False),
@@ -464,6 +467,7 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
 
     def test_machine_executes_mocked_single_cycle_to_completion(self):
         service = MagicMock()
+        service.prepare_start_recovery.return_value = StartRecoveryResult(StartRecoveryOutcome.NOT_REQUIRED)
         service._wait_for_fresh_capture_frame.return_value = (True, "")
         service._capture_snapshot_service.capture_snapshot.return_value = VisionCaptureSnapshot(
             frame="frame",
@@ -506,6 +510,7 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
 
     def test_direct_capture_waits_for_fresh_frame(self):
         service = MagicMock()
+        service.prepare_start_recovery.return_value = StartRecoveryResult(StartRecoveryOutcome.NOT_REQUIRED)
         service._vision_service = object()
         service._wait_for_fresh_capture_frame.return_value = (False, "camera did not become ready")
         ctx = PaintExecutionContext(
@@ -531,6 +536,7 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
 
     def test_machine_records_no_contour_as_error_result(self):
         service = MagicMock()
+        service.prepare_start_recovery.return_value = StartRecoveryResult(StartRecoveryOutcome.NOT_REQUIRED)
         service._wait_for_fresh_capture_frame.return_value = (True, "")
         service._capture_snapshot_service.capture_snapshot.return_value = VisionCaptureSnapshot(
             frame="frame",
@@ -557,6 +563,7 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
     def test_machine_uses_phased_motion_states_for_real_executor_shape(self):
         events = []
         service = MagicMock()
+        service.prepare_start_recovery.return_value = StartRecoveryResult(StartRecoveryOutcome.NOT_REQUIRED)
         service._wait_for_fresh_capture_frame.return_value = (True, "")
         service._capture_snapshot_service.capture_snapshot.return_value = VisionCaptureSnapshot(
             frame="frame",
@@ -613,6 +620,7 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
 class TestMotionFailureMessage(unittest.TestCase):
     def test_uses_backend_error_from_latest_trajectory_response(self):
         service = MagicMock()
+        service.prepare_start_recovery.return_value = StartRecoveryResult(StartRecoveryOutcome.NOT_REQUIRED)
         service.get_last_trajectory_command_info.return_value = {
             "raw": {
                 "error": (
@@ -633,6 +641,7 @@ class TestMotionFailureMessage(unittest.TestCase):
 
     def test_uses_fallback_when_backend_has_no_detail(self):
         service = MagicMock()
+        service.prepare_start_recovery.return_value = StartRecoveryResult(StartRecoveryOutcome.NOT_REQUIRED)
         service.get_last_trajectory_command_info.return_value = {"raw": {"result": -1}}
         service.get_connection_details.return_value = {}
 

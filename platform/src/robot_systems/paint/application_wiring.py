@@ -1637,3 +1637,26 @@ def _build_software_update_application(robot_system):
         return process is not None and process.state in (ProcessState.IDLE, ProcessState.STOPPED)
 
     return SoftwareUpdateApplication(SoftwareUpdateService(can_schedule))
+
+
+def _build_image_capture_application(robot_system):
+    from src.applications.image_capture import ImageCaptureApplication
+    from src.applications.image_capture.service.image_capture_application_service import (
+        ImageCaptureApplicationService,
+    )
+
+    from src.robot_systems.paint.processes.paint.planning.contours.interpolation import resample_contour_xy
+
+    def convert_contour(points):
+        # A separate read-only diagnostic converter; no execution plan or motion.
+        return _build_paint_path_preparation_service(robot_system).convert_contour_to_robot(
+            points, {"height_mm": 0.0},
+        )
+
+    return ImageCaptureApplication(ImageCaptureApplicationService(
+        vision_service=robot_system.get_optional_service(CommonServiceID.VISION),
+        output_directory=robot_system.storage_path("captures"),
+        robot_converter=convert_contour,
+        contour_sampler=resample_contour_xy,
+        work_area_getter=lambda: _get_active_work_area_id(robot_system),
+    ))

@@ -11,5 +11,8 @@ Examples (uncomment to override):
     PAINT_ADJUSTMENT_APP = False
     BYPASS_CONTOUR_PREPARATION = False
 
-Intentionally empty: current behavior is preserved until an override is added.
 """
+
+# Keep image capture available in this profile independently of shared defaults.
+IMAGE_CAPTURE_APP = True
+IMAGE_CAPTURE_FOLDER_ID = 4  # Tests

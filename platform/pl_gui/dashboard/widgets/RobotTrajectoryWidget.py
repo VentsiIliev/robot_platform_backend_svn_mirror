@@ -261,6 +261,7 @@ class RobotTrajectoryWidget(QWidget):
         super().__init__()
 
         self.image_width = image_width
+        self._responsive = False
         self.image_height = image_height
 
         self.estimated_time_value = 0.0
@@ -318,6 +319,27 @@ class RobotTrajectoryWidget(QWidget):
 
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.setFixedSize(self.image_width + 8, self.image_height + 8)
+
+    def set_responsive(self, enabled: bool) -> None:
+        """Fit the preview to its layout while preserving image coordinates and aspect ratio."""
+        self._responsive = bool(enabled)
+        if self._responsive:
+            for widget in (self, self.image_label):
+                widget.setMinimumSize(0, 0)
+                widget.setMaximumSize(16777215, 16777215)
+            self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            self.image_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
+        else:
+            self.image_label.setFixedSize(self.image_width, self.image_height)
+            self.setFixedSize(self.image_width + 8, self.image_height + 8)
+            self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.updateGeometry()
+        self._update_label_from_frame()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self._responsive:
+            self._update_label_from_frame()
 
     def load_placeholder_image(self):
         try:
@@ -396,7 +418,14 @@ class RobotTrajectoryWidget(QWidget):
         rgb_image = cv2.cvtColor(self.current_frame, cv2.COLOR_BGR2RGB)
         h, w, ch = rgb_image.shape
         q_image = QImage(rgb_image.data, w, h, ch * w, QImage.Format.Format_RGB888)
-        self.image_label.setPixmap(QPixmap.fromImage(q_image))
+        pixmap = QPixmap.fromImage(q_image)
+        if self._responsive:
+            pixmap = pixmap.scaled(
+                self.image_label.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        self.image_label.setPixmap(pixmap)
 
     def get_image_dimensions(self):
         return self.image_width, self.image_height

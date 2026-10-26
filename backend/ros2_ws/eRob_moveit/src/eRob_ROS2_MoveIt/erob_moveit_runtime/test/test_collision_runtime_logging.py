@@ -18,7 +18,7 @@ def callbacks():
     methods = [node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name in {
         "_collision_runtime_context", "_collision_monitor_stop_callback", "_collision_monitor_state_callback",
         "_collision_monitor_config_callback",
-        "reset_motion_interlock", "_startup_auto_enable_drives_loop",
+        "reset_motion_interlock", "_recover_collision_controller", "_startup_auto_enable_drives_loop",
         "is_hardware_ready_for_drive_enable",
         "is_hardware_ready_for_motion", "get_hardware_fault_reason", "get_motion_interlock_status",
     }]
@@ -46,6 +46,9 @@ class TestCollisionRuntimeLogging(unittest.TestCase):
             collision_stop=MagicMock(return_value={"success": True}),
         )
         self.robot._collision_runtime_context = lambda: self.methods["_collision_runtime_context"](self.robot)
+        self.robot._MANIPULATOR_CONTROLLER_NAME = 'manipulator_controller'
+        self.robot._recover_collision_controller = MagicMock(return_value=None)
+        self.robot._get_controller_states = MagicMock(return_value={'manipulator_controller': 'active'})
 
     def test_recovery_config_changes_use_ros_logger_signature(self):
         # Autospec the actual ROS signature so MagicMock cannot hide a callback crash.
@@ -197,6 +200,30 @@ class TestCollisionRuntimeLogging(unittest.TestCase):
         self.robot._interlock_reset_unsafe_reason = lambda: None
         self.robot.runtime_adapter = SimpleNamespace(set_drive_operation_enabled=MagicMock(return_value={"success": True}))
         self.robot._collision_acknowledged_pub = SimpleNamespace(publish=MagicMock())
+
+    def test_failed_controller_recovery_keeps_interlock_without_acknowledging(self):
+        self.prepare_reset()
+        self.robot._recover_collision_controller.return_value = 'activation failed'
+        result = self.methods["reset_motion_interlock"](self.robot)
+        self.assertFalse(result['success'])
+        self.assertTrue(self.robot._motion_interlock_active)
+        self.assertFalse(self.robot._collision_recovery_hold)
+        self.robot._collision_acknowledged_pub.publish.assert_not_called()
+        self.robot.runtime_adapter.set_drive_operation_enabled.assert_not_called()
+
+    def test_controller_deactivation_during_rearm_prevents_release(self):
+        self.prepare_reset()
+        self.robot._get_controller_states.return_value = {'manipulator_controller': 'inactive'}
+        def rearm(now):
+            self.robot._collision_monitor_ready = True
+            self.robot._collision_monitor_state_ts = now
+            self.robot._collision_monitor_acknowledgements = 1
+        self.fake_clock(rearm)
+        result = self.methods["reset_motion_interlock"](self.robot)
+        self.assertFalse(result['success'])
+        self.assertIn('controller is not active', result['error'])
+        self.assertTrue(self.robot._motion_interlock_active)
+        self.assertIsNotNone(self.robot.last_collision_event)
 
     def fake_clock(self, on_sleep):
         clock = SimpleNamespace(now=0.0)
@@ -493,6 +520,85 @@ class TestCollisionRuntimeLogging(unittest.TestCase):
                 self.assertTrue(self.methods["reset_motion_interlock"](self.robot)["success"])
                 request = self.robot._collision_acknowledged_pub.publish.call_args.args[0]
                 self.assertTrue(json.loads(request.data)["recalibrate"])
+
+
+class TestControllerReactivation(unittest.TestCase):
+    def setUp(self):
+        from builtin_interfaces.msg import Duration
+        from controller_manager_msgs.srv import SwitchController
+        import numpy as np
+        self.methods = callbacks()
+        self.methods.update(Duration=Duration, SwitchController=SwitchController, np=np, NUM_JOINTS=6)
+        self.measured = SimpleNamespace(position=(0.1,) * 6, velocity=(0.0,) * 6,
+                                       received_at=time.monotonic())
+        self.robot = SimpleNamespace(
+            _MANIPULATOR_CONTROLLER_NAME='manipulator_controller',
+            _get_controller_states=MagicMock(side_effect=[
+                {'manipulator_controller': 'inactive'}, {'manipulator_controller': 'active'}]),
+            switch_controller_client=MagicMock(),
+            _wait_for_service_future=MagicMock(return_value=SimpleNamespace(ok=True)),
+            state_store=SimpleNamespace(get_braking_state=lambda: self.measured),
+            is_executing=False, _interlock_reset_unsafe_reason=lambda: None,
+            is_hardware_ready_for_drive_enable=lambda: True,
+            get_hardware_fault_reason=lambda: 'hardware unavailable',
+            _motion_interlock_lock=threading.Lock(), _collision_recovery_hold=True,
+            _motion_interlock_active=False, get_logger=lambda: MagicMock())
+        self.robot.switch_controller_client.wait_for_service.return_value = True
+
+    def recover(self):
+        return self.methods['_recover_collision_controller'](self.robot)
+
+    def test_inactive_controller_is_activated_and_verified(self):
+        self.assertIsNone(self.recover())
+        request = self.robot.switch_controller_client.call_async.call_args.args[0]
+        self.assertEqual(request.activate_controllers, ['manipulator_controller'])
+        self.assertEqual(request.deactivate_controllers, [])
+        self.assertEqual(request.strictness, request.STRICT)
+        self.assertEqual(self.robot._get_controller_states.call_count, 2)
+        self.assertTrue(self.robot._collision_recovery_hold)
+
+    def test_active_controller_is_not_switched(self):
+        self.robot._get_controller_states.side_effect = [{'manipulator_controller': 'active'}]
+        self.assertIsNone(self.recover())
+        self.robot.switch_controller_client.call_async.assert_not_called()
+
+    def test_missing_and_unconfigured_controller_refused(self):
+        for states in (None, {}, {'manipulator_controller': 'unconfigured'}):
+            with self.subTest(states=states):
+                self.robot._get_controller_states.side_effect = [states]
+                self.assertIsNotNone(self.recover())
+        self.robot.switch_controller_client.call_async.assert_not_called()
+
+    def test_stale_moving_and_incomplete_feedback_refused(self):
+        for measured in (None,
+                SimpleNamespace(position=(0.,)*6, velocity=(0.,)*6, received_at=time.monotonic()-1),
+                SimpleNamespace(position=(0.,)*6, velocity=(.02,)*6, received_at=time.monotonic()),
+                SimpleNamespace(position=(0.,)*5, velocity=(0.,)*6, received_at=time.monotonic()),
+                SimpleNamespace(position=(float('nan'),)*6, velocity=(0.,)*6, received_at=time.monotonic())):
+            with self.subTest(measured=measured):
+                self.measured = measured
+                self.robot._get_controller_states.side_effect = [{'manipulator_controller': 'inactive'}]
+                self.assertIsNotNone(self.recover())
+        self.robot.switch_controller_client.call_async.assert_not_called()
+
+    def test_fault_or_new_collision_prevents_activation(self):
+        self.robot._interlock_reset_unsafe_reason = lambda: 'drive fault'
+        self.assertEqual(self.recover(), 'drive fault')
+        self.robot._interlock_reset_unsafe_reason = lambda: None
+        self.robot._get_controller_states.side_effect = [{'manipulator_controller': 'inactive'}]
+        self.robot._motion_interlock_active = True
+        self.assertIn('interrupted', self.recover())
+        self.robot.switch_controller_client.call_async.assert_not_called()
+
+    def test_switch_failure_or_unconfirmed_activation_returns_error(self):
+        for response in (None, SimpleNamespace(ok=False)):
+            self.robot._get_controller_states.side_effect = [{'manipulator_controller': 'inactive'}]
+            self.robot._wait_for_service_future.return_value = response
+            self.assertIn('failed or timed out', self.recover())
+        self.robot._wait_for_service_future.return_value = SimpleNamespace(ok=True)
+        self.robot._get_controller_states.side_effect = [
+            {'manipulator_controller': 'inactive'}, {'manipulator_controller': 'inactive'}]
+        self.assertIn('not confirmed', self.recover())
 
 
 if __name__ == "__main__":

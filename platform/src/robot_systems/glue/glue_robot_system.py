@@ -250,6 +250,8 @@ class GlueRobotSystem(BaseRobotSystem):
                             factory=application_wiring._build_dispense_channel_settings_application),
             ApplicationSpec(name="WorkAreaSettings", folder_id=2, icon="fa5s-vector-square",
                             factory=application_wiring._build_work_area_settings_application),
+            ApplicationSpec(name="ImageCapture", folder_id=2, icon="fa5s.camera",
+                            factory=application_wiring._build_image_capture_application),
             ApplicationSpec(name="CameraSettings", folder_id=2, icon="fa5s.camera",
                             factory=application_wiring._build_camera_settings_application),
             ApplicationSpec(name="CalibrationSettings", folder_id=2, icon="fa5s.sliders-h",

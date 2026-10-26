@@ -117,6 +117,11 @@ install(DIRECTORY meshes DESTINATION share/${PROJECT_NAME})
 install(FILES .setup_assistant DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
+  add_executable(test_collision_stop_latch collision_detection/test/test_collision_stop_latch.cpp)
+  target_include_directories(test_collision_stop_latch PRIVATE collision_detection/runtime/include)
+  target_compile_features(test_collision_stop_latch PRIVATE cxx_std_17)
+  target_compile_options(test_collision_stop_latch PRIVATE -UNDEBUG)
+  add_test(NAME collision_stop_latch COMMAND test_collision_stop_latch)
   find_package(hardware_interface REQUIRED)
   find_package(lifecycle_msgs REQUIRED)
   add_executable(test_command_collision_brake

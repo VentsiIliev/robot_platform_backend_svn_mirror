@@ -912,3 +912,15 @@ def _build_software_update_application(robot_system):
             return not coordinator._any_running() and not coordinator._preparing_glue
 
     return build_software_update_application(can_schedule)
+
+
+def _build_image_capture_application(robot_system):
+    from src.applications.image_capture import ImageCaptureApplication
+    from src.applications.image_capture.service.image_capture_application_service import (
+        ImageCaptureApplicationService,
+    )
+
+    return ImageCaptureApplication(ImageCaptureApplicationService(
+        vision_service=robot_system.get_optional_service(CommonServiceID.VISION),
+        output_directory=robot_system.storage_path("captures"),
+    ))

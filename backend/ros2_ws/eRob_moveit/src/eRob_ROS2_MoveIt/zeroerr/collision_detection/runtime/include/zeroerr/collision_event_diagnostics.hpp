@@ -50,6 +50,7 @@ struct CollisionEventSnapshot
   bool dynamic_threshold_enabled{false};
   bool stop_publish_attempted{false};
   bool stop_published{false};
+  bool stop_publication_update{false};
   double dt_sec{0.0};
   double observer_ready_age_sec{0.0};
   double warmup_elapsed_sec{0.0};
@@ -131,7 +132,8 @@ inline nlohmann::json collision_event_json(
 {
   nlohmann::json result{
     {"schema_version", 1}, {"event_id", event.event_id},
-    {"event", event.triggered_joint < 0 ? "observer_ready" : "collision_detected"},
+    {"event", event.triggered_joint < 0 ? "observer_ready" :
+      event.stop_publication_update ? "collision_stop_published" : "collision_detected"},
     {"detected_at_ros_ns", event.ros_time_ns},
     {"observer_resets", event.observer_resets}, {"acknowledgements", event.acknowledgements},
     {"observer_ready", event.observer_ready},

@@ -171,15 +171,22 @@ class TotgTrajectoryOptimizer(ITrajectoryOptimizer):
 
 
 class RuckigTrajectoryOptimizer(ITrajectoryOptimizer):
-    def __init__(self, apply_fn=None):
+    def __init__(self, apply_fn=None, *, preserve_timing=False, strict=False):
         self._apply_fn = apply_fn
+        self._preserve_timing = preserve_timing
+        self._strict = strict
 
     def optimize(self, robot_controller, trajectory, vel_scaling, acc_scaling, callback):
         apply_fn = self._apply_fn
         if apply_fn is None:
             from .trajectory_optimization import apply_ruckig_service
             apply_fn = apply_ruckig_service
-        apply_fn(robot_controller, trajectory, vel_scaling, acc_scaling, callback)
+        options = {}
+        if self._preserve_timing:
+            options["preserve_timing"] = True
+        if self._strict:
+            options["strict"] = True
+        apply_fn(robot_controller, trajectory, vel_scaling, acc_scaling, callback, **options)
 
 
 def build_trajectory_optimizer(name, node, fallback_name=None):

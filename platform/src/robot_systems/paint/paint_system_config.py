@@ -92,6 +92,8 @@ WORK_AREA_SETTINGS_APP = True
 
 # Configures camera parameters and provides camera-related test operations.
 CAMERA_SETTINGS_APP = True
+IMAGE_CAPTURE_APP = True
+IMAGE_CAPTURE_FOLDER_ID = 2
 
 # Configures and runs vision and robot calibration-related setup operations.
 CALIBRATION_SETTINGS_APP = True

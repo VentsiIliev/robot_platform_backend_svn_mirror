@@ -19,6 +19,7 @@
 #include <std_msgs/msg/string.hpp>
 #include "zeroerr/collision_event_diagnostics.hpp"
 #include "zeroerr/collision_observer_recovery.hpp"
+#include "zeroerr/collision_stop_latch.hpp"
 
 namespace zeroerr
 {
@@ -80,7 +81,8 @@ private:
     const JointVector & position, const JointVector & velocity,
     const JointVector & acceleration, const JointVector & torque,
     const JointVector & compensated_torque, int triggered_joint,
-    std::uint64_t event_id, bool stop_attempted, bool stop_published);
+    std::uint64_t event_id, bool stop_attempted, bool stop_published,
+    bool publication_update = false);
   void drain_collision_diagnostics();
   void publish_diagnostics(
     const rclcpp::Time & time, std::chrono::nanoseconds elapsed, bool publish_plot);
@@ -176,7 +178,7 @@ private:
   bool have_previous_sample_{false};
   bool observer_ready_{false};
   bool observer_initialized_{false};
-  bool stop_latched_{false};
+  CollisionStopLatch stop_latch_;
   double drives_operational_elapsed_sec_{0.0};
   double diagnostics_elapsed_sec_{0.0};
   double timing_elapsed_sec_{0.0};

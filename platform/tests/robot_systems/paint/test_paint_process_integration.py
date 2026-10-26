@@ -184,7 +184,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             run_while_workpiece_found=True,
         )
         service._get_process_config = MagicMock(return_value=(True, "", config))
-        service._move_to_calibration_before_manual_cycle = MagicMock(return_value=(True, ""))
+        service._move_to_calibration_before_manual_cycle = MagicMock(return_value=PaintOperationResult(PaintOutcome.COMPLETED, ""))
         service.run_cycle_result = MagicMock(return_value=_cycle_result(*(True, "Paint completed")))
         service._run_magazine_loop = MagicMock()
         service._run_manual_loop = MagicMock()
@@ -298,7 +298,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         service = self._make_service()
         service._magazine_load_service = MagicMock()
         service._move_to_calibration_before_manual_cycle = MagicMock(
-            return_value=(True, "")
+            return_value=PaintOperationResult(PaintOutcome.COMPLETED, "")
         )
         contours = [_square(2.0), _square(3.0)]
         snapshot = VisionCaptureSnapshot(

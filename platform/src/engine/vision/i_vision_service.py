@@ -10,6 +10,23 @@ class VisionFrameUnavailableError(RuntimeError):
 
 class IVisionService(ABC):
 
+    def detect_contours_for_image(self, image: np.ndarray) -> list:
+        """Detect on the supplied calibrated image using current vision settings.
+
+        Coordinates refer to this image; do not acquire another frame or mutate
+        the supplied image. Require an active work area with a valid detection
+        region and exclude contours outside it. Raise if unsupported or missing.
+        """
+        raise NotImplementedError("Contour detection for captured images is unavailable.")
+
+    def capture_corrected_image(self) -> np.ndarray:
+        """Return an owned, fresh calibrated image without detection overlays.
+
+        Raise if fresh acquisition or camera calibration is unavailable.
+        Implementations must not change shared camera/processing settings.
+        """
+        raise NotImplementedError("Calibrated image capture is unavailable.")
+
     @abstractmethod
     def start(self) -> None: ...
 

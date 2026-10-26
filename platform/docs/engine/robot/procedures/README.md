@@ -192,6 +192,14 @@ an optional `boundary` for `minimum_z_mm`, plus
 `sensor_stale_timeout_s = max(0.25, poll_interval_s × 10)` and
 `restore_collision_checking: True`.
 
+Both ROS-managed and directly polled sensor-controlled Fast LIN descents request
+TOTG time parameterization. The Pilz backend applies the requested optimizer
+before controller dispatch. TOTG can resample the path and does not guarantee
+bounded jerk; improvement in physical vibration requires a controlled robot
+check. Optimization failure rejects the motion. The configured pickup timeout
+still applies. Restart the platform after changing the requested optimizer;
+installing backend optimizer support also requires a backend restart.
+
 While running, the loop publishes sensor state (on change or every ≥ 100 ms),
 honours cancel/stop-guard/read-failure limits, and polls status. An
 `operation_id` mismatch means another operation took over →

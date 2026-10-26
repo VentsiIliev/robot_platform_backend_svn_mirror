@@ -14,6 +14,7 @@ from moveit_msgs.msg import (
     OrientationConstraint,
     PositionConstraint,
     MoveItErrorCodes,
+    RobotTrajectory,
 )
 from moveit_msgs.srv import GetMotionSequence
 from shape_msgs.msg import SolidPrimitive
@@ -22,6 +23,7 @@ from trajectory_msgs.msg import JointTrajectory
 import config
 from motion.planning.planner_utils import _begin_execution, _is_stale, _set_result, _to_pose_list
 from motion.execution.trajectory_executor import _send_trajectory_to_controller
+from motion.execution.trajectory_optimizer import build_trajectory_optimizer, RuckigTrajectoryOptimizer
 
 
 _MOVEIT_ERROR_NAMES = {
@@ -126,7 +128,7 @@ def _combine_joint_trajectories(trajectories) -> JointTrajectory | None:
     return combined if combined.points else None
 
 
-def _sequence_response(rc, future, generation, started_at):
+def _sequence_response(rc, future, generation, started_at, optimizer=None, optimizer_scaling=(1.0, 1.0)):
     if _is_stale(rc, generation):
         rc.get_logger().info("[Sequence] Stale response discarded (preempted)")
         return
@@ -172,7 +174,32 @@ def _sequence_response(rc, future, generation, started_at):
             if executor is not None:
                 executor.process_next_queued_task()
             return
-        _send_trajectory_to_controller(rc, joint_trajectory)
+        if optimizer is None:
+            _send_trajectory_to_controller(rc, joint_trajectory)
+            return
+        trajectory = RobotTrajectory()
+        trajectory.joint_trajectory = joint_trajectory
+        optimizer_started_at = perf_counter()
+
+        def on_optimized(result):
+            if _is_stale(rc, generation):
+                rc.get_logger().info("[Sequence] Stale optimizer response discarded (preempted)")
+                return
+            if result is None:
+                rc.last_motion_error = "Pilz trajectory optimization failed; motion was not dispatched"
+                rc.get_logger().error(f"[Sequence] {rc.last_motion_error}")
+                _set_result(rc, -7)
+                executor = getattr(rc, "trajectory_executor", None)
+                if executor is not None:
+                    executor.process_next_queued_task()
+                return
+            rc.get_logger().info(
+                f"[Sequence] optimizer={optimizer.__class__.__name__} "
+                f"points={len(result.joint_trajectory.points)} "
+                f"elapsed_s={perf_counter() - optimizer_started_at:.3f}")
+            _send_trajectory_to_controller(rc, result.joint_trajectory)
+
+        optimizer.optimize(rc, trajectory, *optimizer_scaling, on_optimized)
     except Exception as exc:
         message = f"Pilz LIN planning service call failed: {exc}"
         rc.last_motion_error = message
@@ -183,11 +210,23 @@ def _sequence_response(rc, future, generation, started_at):
             executor.process_next_queued_task()
 
 
-def send_motion_sequence(rc, segments, tool_transform=None, planning_group=None) -> int:
+def send_motion_sequence(rc, segments, tool_transform=None, planning_group=None, trajectory_optimizer=None) -> int:
     if not segments:
         rc.last_motion_error = "Pilz LIN request contains no motion segments"
         rc.get_logger().error("[Sequence] Empty motion sequence")
         return -1
+    optimizer = None
+    if trajectory_optimizer is not None:
+        name = str(trajectory_optimizer).strip().upper()
+        try:
+            # Pilz has already supplied timing. Ruckig must smooth that timing,
+            # never reseed it through TOTG or silently execute a fallback.
+            optimizer = (RuckigTrajectoryOptimizer(preserve_timing=True, strict=True)
+                         if name == "RUCKIG" else build_trajectory_optimizer(name, node=rc))
+        except ValueError as exc:
+            rc.last_motion_error = str(exc)
+            rc.get_logger().error(f"[Sequence] {exc}")
+            return -1
     if not rc.wait_for_motion_sequence_service(timeout_sec=1.0):
         rc.last_motion_error = "MoveIt motion-sequence service is unavailable"
         rc.get_logger().error("[Sequence] GetMotionSequence service not available")
@@ -235,7 +274,12 @@ def send_motion_sequence(rc, segments, tool_transform=None, planning_group=None)
     generation = _begin_execution(rc)
     started_at = perf_counter()
     future = rc.request_motion_sequence(req)
-    future.add_done_callback(lambda f: _sequence_response(rc, f, generation, started_at))
+    # Use conservative common limits for an explicitly optimized mixed sequence;
+    # unrequested optimization retains the original Pilz execution behavior.
+    scaling = (min(float(s["vel"]) for s in segments) / 100.0,
+               min(float(s["acc"]) for s in segments) / 100.0)
+    future.add_done_callback(lambda f: _sequence_response(
+        rc, f, generation, started_at, optimizer, scaling))
     return 0
 
 

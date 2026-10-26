@@ -76,6 +76,7 @@ class PilzMoveLinStrategy(_MoveLinStrategyBase):
                 or getattr(config, "PLANNING_GROUP", "manipulator")
                 or "manipulator"
             ),
+            trajectory_optimizer=self.trajectory_optimizer,
         )
 
 

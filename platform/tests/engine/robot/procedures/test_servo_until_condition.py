@@ -826,6 +826,7 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         self.assertEqual(result.message, "condition_detected")
         self.assertEqual(robot.started, [])
         self.assertEqual(robot.request["execution_mode"], "fast_lin")
+        self.assertEqual(robot.request["fast_lin"]["trajectory_optimizer"], "TOTG")
         self.assertEqual(robot.request["fast_lin"]["position"][2], 50.0)
         self.assertEqual([False, True], [event["state"] for event in robot.sensor_events])
         self.assertTrue(robot.sensor_events[-1]["detected_monotonic_ns"] > 0)
@@ -935,6 +936,7 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         self.assertEqual(robot.fast_linear_request["position"], [1.0, 2.0, 50.0, 4.0, 5.0, 6.0])
         self.assertEqual(robot.fast_linear_request["vel"], 10.0)
         self.assertEqual(robot.fast_linear_request["acc"], 10.0)
+        self.assertEqual(robot.fast_linear_request["trajectory_optimizer"], "TOTG")
         self.assertFalse(robot.fast_linear_request["blocking"])
         self.assertEqual(robot.stopped, 1)
 

@@ -26,7 +26,7 @@ from src.robot_systems.paint.processes.paint.configuration.models import PaintPr
 from src.robot_systems.paint.processes.paint.match.results import PreparedWorkpiece
 from src.robot_systems.paint.processes.paint.paint_process import PaintProcess
 from src.robot_systems.paint.processes.paint.production.service import PaintProductionService
-from src.robot_systems.paint.processes.paint.results import Ready, PaintOutcome
+from src.robot_systems.paint.processes.paint.results import PaintOperationResult, PaintOutcome, Ready
 from src.robot_systems.paint.processes.paint.tray_dry.errors import TrayUnavailableError
 
 
@@ -66,7 +66,7 @@ class OperationDiagnosticsTests(unittest.TestCase):
         production = PaintProductionService(workpiece_preparation_service=preparation,
             capture_snapshot_service=camera, path_preparation_service=planning,
             path_executor=executor, paint_process_config_service=settings)
-        production._move_to_calibration_before_manual_cycle = MagicMock(return_value=(True, ''))
+        production._move_to_calibration_before_manual_cycle = MagicMock(return_value=PaintOperationResult(PaintOutcome.COMPLETED, ""))
         process = PaintProcess(production, MagicMock(), paint_process_config_service=settings)
         def stop_workers():
             for worker in (process._thread, process._stop_thread):

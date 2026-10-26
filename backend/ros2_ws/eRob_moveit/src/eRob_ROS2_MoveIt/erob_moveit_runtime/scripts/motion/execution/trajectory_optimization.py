@@ -319,7 +319,7 @@ def _handle_apply_ipp_response(robot_controller, fut, trajectory, callback, tag,
 
 
 def apply_ruckig_service(robot_controller, trajectory, vel_scaling=cfg.DEFAULT_VEL_SCALING, acc_scaling=cfg.DEFAULT_ACC_SCALING, callback=None,
-                         strict=False):
+                         strict=False, preserve_timing=False):
     """Call the Ruckig service for jerk-limited trajectory smoothing (ASYNC).
 
     This uses the C++ ruckig_helper node which leverages MoveIt's built-in Ruckig integration.
@@ -332,6 +332,7 @@ def apply_ruckig_service(robot_controller, trajectory, vel_scaling=cfg.DEFAULT_V
         acc_scaling: Acceleration scaling factor [0.0-1.0]
         callback: Function to call with (trajectory_or_None) when done
     """
+    strict = strict or preserve_timing
     robot_controller.get_logger().info('[Ruckig] Checking if Ruckig service is available...')
 
     def _fallback_to_totg(reason: str):
@@ -363,14 +364,15 @@ def apply_ruckig_service(robot_controller, trajectory, vel_scaling=cfg.DEFAULT_V
         )
 
     # Create client if not exists
-    ruckig_service_name = getattr(cfg, 'SERVICE_APPLY_RUCKIG', '/apply_ruckig')
-    if not hasattr(robot_controller, 'ruckig_client'):
-        robot_controller.ruckig_client = robot_controller.create_client(
-            ApplyIPP,
-            ruckig_service_name,
-        )
+    ruckig_service_name = ('/smooth_ruckig' if preserve_timing else
+                           getattr(cfg, 'SERVICE_APPLY_RUCKIG', '/apply_ruckig'))
+    client_attribute = 'ruckig_smoothing_client' if preserve_timing else 'ruckig_client'
+    if not hasattr(robot_controller, client_attribute):
+        setattr(robot_controller, client_attribute, robot_controller.create_client(
+            ApplyIPP, ruckig_service_name))
+    client = getattr(robot_controller, client_attribute)
 
-    if not robot_controller.ruckig_client.wait_for_service(timeout_sec=cfg.OPT_SERVICE_TIMEOUT_S):
+    if not client.wait_for_service(timeout_sec=cfg.OPT_SERVICE_TIMEOUT_S):
         robot_controller.get_logger().error(f'[Ruckig] ✗ Ruckig service {ruckig_service_name} NOT available after 5s!')
         robot_controller.get_logger().error('[Ruckig]    Is ruckig_helper node running? Check: ros2 node list | grep ruckig')
         _fallback_to_totg(f'{ruckig_service_name} service unavailable')
@@ -397,7 +399,7 @@ def apply_ruckig_service(robot_controller, trajectory, vel_scaling=cfg.DEFAULT_V
             robot_controller, f, trajectory, _callback_with_fallback, '[Ruckig]',
             required_optimizer="RUCKIG" if strict else None)
 
-    future = robot_controller.ruckig_client.call_async(request)
+    future = client.call_async(request)
     future.add_done_callback(_on_done)
 
 

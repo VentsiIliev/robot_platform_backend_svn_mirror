@@ -1464,6 +1464,54 @@ class RobotController(Node):
             self.runtime_adapter.reset_drive_operation_request(self)
         self.get_logger().error(f'[MotionInterlock] Motion interlock active: {reason}')
 
+    def _recover_collision_controller(self) -> str | None:
+        """Reactivate a stopped controller only inside operator-requested recovery."""
+        name = self._MANIPULATOR_CONTROLLER_NAME
+        states = self._get_controller_states()
+        if states is None:
+            return 'controller state unavailable; motion remains held'
+        state = states.get(name)
+        if state == 'active':
+            return None
+        if state != 'inactive':
+            return f'{name} cannot recover from state {state or "missing"}'
+        if not self.switch_controller_client.wait_for_service(timeout_sec=2.0):
+            return 'controller activation service unavailable; motion remains held'
+        # The observer can be rearming here. Use fresh measured feedback to
+        # establish standstill before JTC initializes its hold from that feedback.
+        measured = self.state_store.get_braking_state()
+        if measured is None or not 0.0 <= time.monotonic() - measured.received_at <= 0.5:
+            return 'fresh joint feedback required for controller recovery'
+        if (len(measured.position) != NUM_JOINTS or len(measured.velocity) != NUM_JOINTS
+                or not all(np.isfinite(value) for value in measured.position + measured.velocity)):
+            return 'complete finite joint feedback required for controller recovery'
+        if self.is_executing or max(abs(value) for value in measured.velocity) > 0.01:
+            return 'robot must be stationary before controller recovery'
+        unsafe_reason = self._interlock_reset_unsafe_reason()
+        if unsafe_reason:
+            return unsafe_reason
+        if not self.is_hardware_ready_for_drive_enable():
+            return self.get_hardware_fault_reason()
+        with self._motion_interlock_lock:
+            if not self._collision_recovery_hold or self._motion_interlock_active:
+                return 'controller recovery interrupted; motion remains held'
+        request = SwitchController.Request()
+        request.activate_controllers = [name]
+        request.deactivate_controllers = []
+        request.strictness = SwitchController.Request.STRICT
+        request.activate_asap = True
+        request.timeout = Duration(sec=2, nanosec=0)
+        self.get_logger().warning(f'[CollisionRecovery] Reactivating {name} at measured hold position')
+        response = self._wait_for_service_future(
+            self.switch_controller_client.call_async(request), timeout_s=3.0)
+        if response is None or not response.ok:
+            return f'{name} activation failed or timed out; motion remains held'
+        states = self._get_controller_states()
+        if states is None or states.get(name) != 'active':
+            return f'{name} activation was not confirmed; motion remains held'
+        self.get_logger().warning(f'[CollisionRecovery] {name} is active; awaiting observer readiness')
+        return None
+
     def reset_motion_interlock(self, *, require_safe_state: bool = True, recalibrate: bool = False) -> dict:
         reset_started_ns = time.monotonic_ns()
         self.get_logger().warning(
@@ -1532,6 +1580,13 @@ class RobotController(Node):
                 return {"success": False, "reset": False, "error": str(error)}
 
             try:
+                controller_error = self._recover_collision_controller()
+                if controller_error:
+                    return fail_recovery(controller_error)
+                with self._motion_interlock_lock:
+                    interrupted = self._motion_interlock_active or self.last_collision_event is not previous_event
+                if interrupted:
+                    return fail_recovery('a new collision interrupted controller recovery')
                 enable_result = self.runtime_adapter.set_drive_operation_enabled(self, True)
                 if not bool(enable_result.get('success', False)):
                     return fail_recovery(enable_result.get('error') or 'failed to enable drives for collision monitor recovery')
@@ -1582,8 +1637,20 @@ class RobotController(Node):
                         if blockers:
                             error += ': ' + '; '.join(blockers)
                     return fail_recovery(error)
+                # Drive/observer readiness does not prove the trajectory controller
+                # survived the stop. Never release the hold on a stale activation.
+                states = self._get_controller_states()
+                if states is None or states.get(self._MANIPULATOR_CONTROLLER_NAME) != 'active':
+                    return fail_recovery('motion controller is not active after collision recovery')
+                with self._motion_interlock_lock:
+                    monitor_still_ready = (self._collision_monitor_ready and
+                        0.0 <= time.monotonic() - self._collision_monitor_state_ts <= 0.5)
+                if not monitor_still_ready:
+                    return fail_recovery('collision monitor became unavailable during controller verification')
+                if self.get_drive_operation_status().get('requested_enabled') is False:
+                    return fail_recovery('drives were disabled during controller verification; motion remains held')
             except Exception as exc:
-                return fail_recovery(f'collision observer rearm failed: {exc}')
+                return fail_recovery(f'collision recovery failed: {exc}')
 
             with self._motion_interlock_lock:
                 interrupted = self._motion_interlock_active or self.last_collision_event is not previous_event

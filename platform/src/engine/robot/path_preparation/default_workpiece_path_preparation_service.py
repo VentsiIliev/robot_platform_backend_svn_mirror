@@ -920,6 +920,31 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         except Exception:
             self._logger.debug("[EXECUTE] Failed to save interpolated path debug plot", exc_info=True)
 
+    def convert_contour_to_robot(self, points, settings: dict | None = None) -> dict:
+        """Read-only calibrated conversion for diagnostics; no path processing/motion.
+
+        Unlike legacy execution fallback, diagnostics require a calibrated resolver
+        and must never label unchanged pixel coordinates as millimetres.
+        """
+        points = np.asarray(points, dtype=np.float64).reshape(-1, 2)
+        if not np.isfinite(points).all():
+            raise ValueError("Contour coordinates must be finite.")
+        if self._current_resolver() is None:
+            raise RuntimeError("Robot-space calibration is unavailable.")
+        resolved_settings = dict(self._segment_config.schema.get_defaults())
+        resolved_settings.update(settings or {})
+        resolved_settings.setdefault("height_mm", 0.0)
+        poses = self._transform_to_robot(points, resolved_settings) if len(points) else []
+        if not np.isfinite(np.asarray(poses, dtype=float)).all():
+            raise ValueError("Robot-space conversion produced invalid coordinates.")
+        return {
+            "poses": poses,
+            "conversion_mode": self._pixel_to_mm_mode,
+            "calibration_frame": self._current_calibration_frame_name(),
+            "target_point": self._target_point_name,
+            "settings": resolved_settings,
+        }
+
     def _transform_to_robot(self, pts_px: np.ndarray, settings: dict) -> list:
         """Convert pixel-space contour points to 6-DOF robot poses (X, Y, Z, RX, RY, RZ).
 

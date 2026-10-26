@@ -6,7 +6,7 @@ from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QPoint, Qt
 from PyQt6.QtWidgets import QTabBar
 from PyQt6.QtWidgets import (
     QApplication,
@@ -695,6 +695,46 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertEqual(selected, ["auxiliary"])
         self.assertIn("Auxiliary", view._camera_selector.text())
 
+    def test_camera_preview_fits_beside_status_rail_at_screen_width(self) -> None:
+        import numpy as np
+
+        host = QWidget()
+        layout = QVBoxLayout(host)
+        layout.setContentsMargins(0, 0, 0, 0)
+        view = PaintDashboardView(
+            config=PaintDashboardConfig(),
+            action_buttons=PAINT_DASHBOARD_ACTIONS,
+            cards=PaintCardFactory().build_cards(PAINT_DASHBOARD_CARDS),
+            ui_config=PaintDashboardUiConfig(
+                show_camera_preview=False,
+                show_tray_camera_tab=True,
+                use_collapsible_settings_panel=True,
+            ),
+        )
+        layout.addWidget(view)
+        camera = view._dashboard.trajectory_widget
+        view.set_trajectory_image({"image": np.zeros((450, 800, 3), dtype=np.uint8)})
+        view._expanded_tabs.setCurrentWidget(view._camera_page)
+        try:
+            for width in (1271, 1440, 1180):
+                with self.subTest(width=width):
+                    host.setFixedSize(width, 920)
+                    host.show()
+                    QApplication.processEvents()
+                    camera.update_display()
+                    for widget in (*view._cards_by_id.values(), view._message_rail_button):
+                        right = widget.mapTo(host, QPoint(widget.width(), 0)).x()
+                        self.assertLessEqual(right, host.width() - 10)
+                    pixmap = camera.image_label.pixmap()
+                    self.assertLessEqual(pixmap.width(), camera.image_label.width())
+                    self.assertLessEqual(pixmap.height(), camera.image_label.height())
+                    self.assertAlmostEqual(pixmap.width() / pixmap.height(), 800 / 450, delta=0.01)
+                    self.assertEqual(camera.get_image_dimensions(), (800, 450))
+                    self.assertGreaterEqual(view._camera_selector.height(), 44)
+        finally:
+            host.close()
+            host.deleteLater()
+
     def test_camera_disabled_moves_status_cards_to_exclusive_compact_rail(self) -> None:
         view = PaintDashboardView(
             config=PaintDashboardConfig(),
@@ -881,35 +921,6 @@ class TestPaintDashboardUi(unittest.TestCase):
 
         self.assertEqual(view._dashboard.calls, calls_after_first_apply)
         self.assertIsNone(view.clean_up())
-
-    def test_cycle_streak_updates_without_process_state_change_and_retranslates(self) -> None:
-        from PyQt6.QtCore import QEvent
-        import json
-        from pathlib import Path
-
-        with patch(
-            "src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view.DashboardWidget",
-            _FakeDashboardWidget,
-        ):
-            view = PaintDashboardView(config=SimpleNamespace(), action_buttons=[], cards=[])
-        self.assertEqual(view._cycle_streak_label.text(), "Consecutive completed cycles: 0")
-        view.apply_dashboard_state(DashboardState(consecutive_completed_cycles=12))
-        self.assertEqual(view._cycle_streak_label.text(), "Consecutive completed cycles: 12")
-        view.apply_dashboard_state(DashboardState(consecutive_completed_cycles=13))
-        self.assertEqual(view._cycle_streak_label.text(), "Consecutive completed cycles: 13")
-        catalog = json.loads(Path(
-            "src/robot_systems/paint_tray_dry/storage/translations/bg.json"
-        ).read_text())["PaintDashboard"]
-        view._dashboard.retranslateUi = MagicMock()
-        with patch(
-            "src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view.QCoreApplication.translate",
-            side_effect=lambda context, text: catalog.get(text, text),
-        ):
-            QApplication.sendEvent(view, QEvent(QEvent.Type.LanguageChange))
-            self.assertEqual(view._cycle_streak_label.text(), "Последователни завършени цикли: 13")
-            view.apply_dashboard_state(DashboardState(consecutive_completed_cycles=0))
-            self.assertEqual(view._cycle_streak_label.text(), "Последователни завършени цикли: 0")
-        view.clean_up()
 
     def test_dashboard_view_updates_status_cards_from_state(self) -> None:
         robot_card = MagicMock()

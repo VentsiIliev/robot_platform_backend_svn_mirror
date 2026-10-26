@@ -15,7 +15,6 @@ if TYPE_CHECKING:
 import logging
 import math
 import numpy as np
-from dataclasses import dataclass
 from time import monotonic, sleep
 
 
@@ -28,11 +27,11 @@ from src.robot_systems.paint.processes.paint.motion.pose_sampling import read_fr
 from src.robot_systems.paint.contracts.next_cycle_target import NextCycleTarget
 from src.robot_systems.paint.processes.paint.configuration.models import PAINT_PROCESS_CONFIG, DropoffStrategy
 
-from ..motion import (
-    _ordered_position_command,
-    _parse_motion_type,
+from src.robot_systems.paint.processes.paint.tray_dry.return_route import (
+    plate_motion_profile, plate_ordered_segment,
+    read_return_waypoints, build_return_segments,
+    interpolate_route_rotations as _interpolate_route_rotations,
 )
-
 
 _logger = logging.getLogger(__name__)
 
@@ -115,68 +114,6 @@ class PlateLayoutDropoff(IDropoffStrategy):
 def _completed_rotation_turns(rotation_delta_deg: float) -> int:
     """Count only fully executed 360-degree turns, preserving direction."""
     return int(float(rotation_delta_deg) / 360.0)
-
-
-@dataclass(frozen=True)
-class _PlateMotionProfile:
-    velocity_percent: float
-    acceleration_percent: float
-    blend_radius: float
-    motion_type: OrderedMotionType
-
-
-@dataclass
-class _PlateNextWaypoint:
-    position: list[float]
-    profile: _PlateMotionProfile
-
-
-def _plate_motion_profile(dropoff: object, key: str) -> _PlateMotionProfile:
-    for raw in dropoff.plate_motion_profiles:
-        if not isinstance(raw, dict) or raw.get("key") != key:
-            continue
-        required = {"key", "vel_percent", "acc_percent", "blendR", "motion_type"}
-        missing = required.difference(raw)
-        if missing:
-            raise PaintConfigurationError(
-                f"dropoff.plate_motion_profiles[{key}] is missing {sorted(missing)}",
-                stage="plate_motion_profile",
-            )
-        try:
-            return _PlateMotionProfile(
-                velocity_percent=float(raw["vel_percent"]),
-                acceleration_percent=float(raw["acc_percent"]),
-                blend_radius=max(0.0, float(raw["blendR"])),
-                motion_type=_parse_motion_type(
-                    raw["motion_type"],
-                    field_name=f"dropoff.plate_motion_profiles[{key}]",
-                ),
-            )
-        except (TypeError, ValueError) as exc:
-            raise PaintConfigurationError(
-                f"dropoff.plate_motion_profiles[{key}]: {exc}", stage="plate_motion_profile",
-            ) from exc
-    raise PaintConfigurationError(
-        f"dropoff.plate_motion_profiles has no profile for '{key}'", stage="plate_motion_profile",
-    )
-
-
-def _plate_ordered_segment(
-    label: str,
-    pose: list[float],
-    profile: _PlateMotionProfile,
-    *,
-    stop: bool = False,
-) -> OrderedPositionCommand:
-    return _ordered_position_command(
-        label,
-        pose,
-        profile.velocity_percent,
-        profile.acceleration_percent,
-        profile.motion_type,
-        0.0 if stop else profile.blend_radius,
-        protected=True,
-    )
 
 
 def _wait_for_motion_slot_idle(
@@ -414,59 +351,31 @@ def build_plate_entry_segments_for_paint_chain(
                 (target_release_rz - nominal_release_rz) / 180.0
             )
     segments: list[OrderedPositionCommand] = [
-        _plate_ordered_segment(
+        plate_ordered_segment(
             "Plate entry in paint chain: paint detach to passage gate",
             gate_pose,
-            _plate_motion_profile(dropoff, "entry_gate"),
+            plate_motion_profile(dropoff, "entry_gate"),
         )
     ]
     if use_center:
         center_pose = list(reservation.transit_pose)
         center_pose[5] = (float(gate_pose[5]) + float(release_pose[5])) / 2.0
-        segments.append(_plate_ordered_segment(
+        segments.append(plate_ordered_segment(
             "Plate entry in paint chain: passage gate to plate center",
             center_pose,
-            _plate_motion_profile(dropoff, "entry_center"),
+            plate_motion_profile(dropoff, "entry_center"),
         ))
-    segments.append(_plate_ordered_segment(
+    segments.append(plate_ordered_segment(
         (
             "Plate entry in paint chain: center to calculated dropoff"
             if use_center
             else "Plate entry in paint chain: passage gate to calculated dropoff"
         ),
         release_pose,
-        _plate_motion_profile(dropoff, "center_to_dropoff"),
+        plate_motion_profile(dropoff, "center_to_dropoff"),
         stop=True,
     ))
     return segments, release_pose, ""
-
-
-def _interpolate_route_rotations(
-    start_pose: list[float],
-    route_poses: list[list[float]],
-    *,
-    end_rotation: float,
-    rotation_index: int,
-) -> None:
-    """Interpolate one rotation axis at a constant rate over route distance."""
-    if not route_poses:
-        return
-
-    route = [start_pose, *route_poses]
-    segment_lengths = [
-        math.dist(route[index - 1][:3], route[index][:3])
-        for index in range(1, len(route))
-    ]
-    total_distance = sum(segment_lengths)
-    start_rotation = float(start_pose[rotation_index])
-    travelled = 0.0
-    for index, pose in enumerate(route_poses):
-        travelled += segment_lengths[index]
-        if total_distance > 1e-6:
-            progress = travelled / total_distance
-        else:
-            progress = (index + 1) / len(route_poses)
-        pose[rotation_index] = start_rotation + progress * (end_rotation - start_rotation)
 
 
 def _plate_route_uses_center(dropoff: object, reservation: object) -> bool:
@@ -530,37 +439,10 @@ def _execute_plate_layout_ordered_release(
     exit_gate_pose, error = validate_plate_passage_gate(dropoff.plate_exit_gate_pose)
     if error:
         return False, f"Plate-layout exit gate: {error}"
-    next_waypoints: list[_PlateNextWaypoint] = []
-    if bool(dropoff.plate_next_cycle_midpoint_enabled) and next_cycle_start is not None:
-        configured_waypoints = list(dropoff.plate_next_cycle_waypoints)
-        if not configured_waypoints:
-            return False, "Plate-layout next-cycle waypoints are enabled but none are configured"
-        for index, raw_waypoint in enumerate(configured_waypoints):
-            if not isinstance(raw_waypoint, dict):
-                return False, f"Plate-layout next-cycle waypoint {index + 1}: expected a mapping"
-            required = {"position", "vel_percent", "acc_percent", "motion_type", "blendR"}
-            missing = required.difference(raw_waypoint)
-            if missing:
-                return False, (
-                    f"Plate-layout next-cycle waypoint {index + 1}: "
-                    f"missing {sorted(missing)}"
-                )
-            waypoint_pose, error = validate_plate_passage_gate(raw_waypoint["position"])
-            if error:
-                return False, f"Plate-layout next-cycle waypoint {index + 1}: {error}"
-            try:
-                profile = _PlateMotionProfile(
-                    velocity_percent=float(raw_waypoint["vel_percent"]),
-                    acceleration_percent=float(raw_waypoint["acc_percent"]),
-                    motion_type=_parse_motion_type(
-                        raw_waypoint["motion_type"],
-                        field_name=f"dropoff.plate_next_cycle_waypoints[{index}]",
-                    ),
-                    blend_radius=max(0.0, float(raw_waypoint["blendR"])),
-                )
-            except (TypeError, ValueError):
-                return False, f"Plate-layout next-cycle waypoint {index + 1}: invalid motion settings"
-            next_waypoints.append(_PlateNextWaypoint(waypoint_pose, profile))
+    try:
+        next_waypoints = read_return_waypoints(dropoff) if next_cycle_start is not None else []
+    except PaintConfigurationError as exc:
+        return False, str(exc)
     try:
         use_center_waypoint = _plate_route_uses_center(dropoff, reservation)
     except ValueError as exc:
@@ -628,67 +510,37 @@ def _execute_plate_layout_ordered_release(
             )
             previous_rotation = float(waypoint.position[rotation_index])
     # Validate the complete exit route before entry motion or physical release.
-    exit_segments = []
-    if use_center_waypoint:
-        exit_segments.append(_plate_ordered_segment(
-            "Plate exit: dropoff to plate center",
-            route_poses["exit_center"],
-            _plate_motion_profile(dropoff, "exit_center"),
-        ))
-    exit_segments.append(_plate_ordered_segment(
-        (
-            "Plate exit: plate center to passage gate"
-            if use_center_waypoint
-            else "Plate exit: dropoff to passage gate"
-        ),
-        route_poses["exit_gate"],
-        _plate_motion_profile(dropoff, "exit_gate"),
-        stop=next_cycle_start is None,
-    ))
-    if next_cycle_start is not None:
-        for index, waypoint in enumerate(next_waypoints):
-            exit_segments.append(_plate_ordered_segment(
-                f"Plate exit: next-cycle waypoint {index + 1}/{len(next_waypoints)}",
-                waypoint.position,
-                waypoint.profile,
-            ))
-        exit_segments.append(_plate_ordered_segment(
-            (
-                f"Plate exit: last waypoint to next-cycle start '{next_cycle_start.group_id}'"
-                if next_waypoints
-                else f"Plate exit: passage gate to next-cycle start '{next_cycle_start.group_id}'"
-            ),
-            route_poses["next_start"],
-            _plate_motion_profile(dropoff, "gate_to_next_start"),
-            stop=True,
-        ))
+    exit_segments = build_return_segments(
+        dropoff, route_poses, next_waypoints, next_cycle_start,
+        use_center_waypoint=use_center_waypoint,
+    )
 
     entry_segments = []
     if entry_completed_in_paint_chain:
         _logger.info("[PLATE_LAYOUT] Plate release pose already reached in paint chain")
     elif not entry_gate_is_detach_pose:
-        entry_segments.append(_plate_ordered_segment(
+        entry_segments.append(plate_ordered_segment(
             "Plate entry: paint detach to passage gate",
             route_poses["entry_gate"],
-            _plate_motion_profile(dropoff, "entry_gate"),
+            plate_motion_profile(dropoff, "entry_gate"),
         ))
     else:
         _logger.info("[PLATE_LAYOUT] Entry gate already completed as paint detach pose")
     if use_center_waypoint and not entry_completed_in_paint_chain:
-        entry_segments.append(_plate_ordered_segment(
+        entry_segments.append(plate_ordered_segment(
             "Plate entry: passage gate to plate center",
             route_poses["entry_center"],
-            _plate_motion_profile(dropoff, "entry_center"),
+            plate_motion_profile(dropoff, "entry_center"),
         ))
     if not entry_completed_in_paint_chain:
-        entry_segments.append(_plate_ordered_segment(
+        entry_segments.append(plate_ordered_segment(
             (
                 "Plate entry: center to calculated dropoff"
                 if use_center_waypoint
                 else "Plate entry: passage gate to calculated dropoff"
             ),
             route_poses["dropoff"],
-            _plate_motion_profile(dropoff, "center_to_dropoff"),
+            plate_motion_profile(dropoff, "center_to_dropoff"),
             stop=True,
         ))
         if not _wait_for_motion_slot_idle(executor):

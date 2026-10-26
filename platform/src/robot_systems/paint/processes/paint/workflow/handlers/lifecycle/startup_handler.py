@@ -18,6 +18,11 @@ def handle_starting(ctx: PaintExecutionContext) -> PaintExecutionState:
         resume_state = ctx.resume_state
         ctx.is_resuming = False
         return resume_state
+    recovery = ctx.production_service.prepare_start_recovery(ctx)
+    if not recovery.succeeded:
+        ctx.set_outcome(recovery.to_operation_result())
+        return (PaintExecutionState.STOPPED if ctx.result.outcome is PaintOutcome.CANCELLED
+                else PaintExecutionState.ERROR)
     if not unwind_joint6_at_cycle_start(ctx):
         ctx.set_result(False, "Cycle-start Joint 6 unwind failed before production navigation")
         return PaintExecutionState.ERROR

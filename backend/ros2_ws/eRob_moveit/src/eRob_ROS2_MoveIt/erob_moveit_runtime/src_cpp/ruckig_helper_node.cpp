@@ -634,6 +634,7 @@ public:
 
 private:
     rclcpp::Service<ApplyRuckig>::SharedPtr service_;
+    rclcpp::Service<ApplyRuckig>::SharedPtr smoothing_service_;
     std::shared_ptr<robot_model_loader::RobotModelLoader> loader_;
     moveit::core::RobotModelPtr kinematic_model_;
     moveit::core::RobotStatePtr robot_state_;
@@ -645,7 +646,123 @@ private:
             "/apply_ruckig",
             std::bind(&RuckigHelperNode::applyRuckig, this, std::placeholders::_1, std::placeholders::_2));
 
-        RCLCPP_INFO(this->get_logger(), "Service '/apply_ruckig' created");
+        smoothing_service_ = this->create_service<ApplyRuckig>(
+            "/smooth_ruckig",
+            std::bind(&RuckigHelperNode::smoothTimedTrajectory, this,
+                      std::placeholders::_1, std::placeholders::_2));
+        RCLCPP_INFO(this->get_logger(), "Services '/apply_ruckig' and '/smooth_ruckig' created");
+    }
+
+    void smoothTimedTrajectory(const std::shared_ptr<ApplyRuckig::Request> request,
+                               std::shared_ptr<ApplyRuckig::Response> response)
+    {
+        response->success = false;
+        response->optimizer_applied = "RUCKIG";
+        response->fallback_used = false;
+        try
+        {
+            const double velocity = request->max_velocity_scaling;
+            const double acceleration = request->max_acceleration_scaling;
+            if (!std::isfinite(velocity) || velocity <= 0 || velocity > 1 ||
+                !std::isfinite(acceleration) || acceleration <= 0 || acceleration > 1)
+            {
+                response->message = "Invalid smoothing scaling";
+                return;
+            }
+            moveit_msgs::msg::RobotTrajectory seed;
+            seed.joint_trajectory = request->trajectory;
+            if (seed.joint_trajectory.points.size() < 2 ||
+                !validateTrajectory(seed, kinematic_model_, get_logger(), 60.0))
+            {
+                response->message = "Invalid timed trajectory for smoothing";
+                return;
+            }
+            robot_trajectory::RobotTrajectory rt(kinematic_model_, planning_group_);
+            rt.setRobotTrajectoryMsg(*robot_state_, seed);
+            if (!trajectory_processing::RuckigSmoothing::applySmoothing(
+                    rt, velocity, acceleration, true, 0.001))
+            {
+                response->message = "Ruckig could not smooth the timed trajectory";
+                return;
+            }
+            moveit_msgs::msg::RobotTrajectory result;
+            rt.getRobotTrajectoryMsg(result);
+            const auto & before = seed.joint_trajectory;
+            auto & after = result.joint_trajectory;
+            if (before.joint_names != after.joint_names || before.points.size() != after.points.size())
+            {
+                response->message = "Smoothing changed the planned waypoint structure";
+                return;
+            }
+            // Ruckig may reduce some intervals even when smoothing timed input.
+            // Stretch the entire result uniformly so none becomes faster than Pilz.
+            // A uniform time scale preserves derivative continuity and only reduces
+            // velocity, acceleration and jerk; independent interval changes would not.
+            double stretch = 1.0;
+            for (std::size_t i = 1; i < before.points.size(); ++i)
+            {
+                const double original_dt = (rclcpp::Duration(before.points[i].time_from_start) -
+                    rclcpp::Duration(before.points[i - 1].time_from_start)).seconds();
+                const double smoothed_dt = (rclcpp::Duration(after.points[i].time_from_start) -
+                    rclcpp::Duration(after.points[i - 1].time_from_start)).seconds();
+                if (!std::isfinite(smoothed_dt) || smoothed_dt <= 0.0)
+                {
+                    response->message = "Smoothing produced an invalid segment duration";
+                    return;
+                }
+                stretch = std::max(stretch, original_dt / smoothed_dt);
+            }
+            if (stretch > 1.0)
+            {
+                stretch *= 1.000001;  // Preserve the lower bound after nanosecond rounding.
+                for (auto & point : after.points)
+                {
+                    const double seconds = rclcpp::Duration(point.time_from_start).seconds() * stretch;
+                    point.time_from_start = rclcpp::Duration::from_seconds(seconds);
+                    for (auto & value : point.velocities)
+                        value /= stretch;
+                    for (auto & value : point.accelerations)
+                        value /= stretch * stretch;
+                }
+            }
+            double previous_before = 0.0, previous_after = 0.0;
+            for (std::size_t i = 0; i < before.points.size(); ++i)
+            {
+                const auto & original = before.points[i];
+                const auto & smoothed = after.points[i];
+                if (original.positions != smoothed.positions)
+                {
+                    response->message = "Smoothing changed a planned waypoint position";
+                    return;
+                }
+                const double original_time = original.time_from_start.sec + original.time_from_start.nanosec * 1e-9;
+                const double smoothed_time = smoothed.time_from_start.sec + smoothed.time_from_start.nanosec * 1e-9;
+                if (smoothed_time - previous_after + 1e-8 < original_time - previous_before)
+                {
+                    response->message = "Smoothing shortened a planned segment";
+                    return;
+                }
+                previous_before = original_time;
+                previous_after = smoothed_time;
+            }
+            if (!validateTrajectory(result, kinematic_model_, get_logger(), 60.0))
+            {
+                response->message = "Smoothed trajectory failed validation";
+                return;
+            }
+            response->trajectory = result;
+            response->success = true;
+            response->message = "Smoothed existing timing; waypoints preserved";
+            RCLCPP_INFO(get_logger(), "[PilzSmoothing] points=%zu duration_s=%.6f optimizer=RUCKIG",
+                        after.points.size(), previous_after);
+        }
+        catch (const std::exception & exc)
+        {
+            response->trajectory = moveit_msgs::msg::RobotTrajectory();
+            response->success = false;
+            response->message = std::string("Timed smoothing failed: ") + exc.what();
+            RCLCPP_ERROR(get_logger(), "%s", response->message.c_str());
+        }
     }
 
     void applyRuckig(const std::shared_ptr<ApplyRuckig::Request> request,

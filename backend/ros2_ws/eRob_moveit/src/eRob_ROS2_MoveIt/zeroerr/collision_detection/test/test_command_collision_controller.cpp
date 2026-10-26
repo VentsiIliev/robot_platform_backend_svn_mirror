@@ -27,6 +27,7 @@ int main(int argc,char **argv) {
   rclcpp::Parameter("command_interfaces",std::vector<std::string>{"position"}),
   rclcpp::Parameter("state_interfaces",std::vector<std::string>{"position","velocity"}),
   rclcpp::Parameter("allow_nonzero_velocity_at_trajectory_end",true),
+  rclcpp::Parameter("set_last_command_interface_value_as_state_on_activation",false),
   rclcpp::Parameter("state_publish_rate",0.0)});
  assert(controller->init("offline_collision_controller",urdf,2000,"/stop_fix_test",options)==controller_interface::return_type::OK);
  assert(controller->configure().id()==lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
@@ -89,8 +90,22 @@ int main(int argc,char **argv) {
  const auto before_refusal=command;
  assert(tick()==controller_interface::return_type::ERROR);
  assert(command==before_refusal);
+ // Let the non-RT diagnostic timer drain the rejected takeover snapshot.
+ std::this_thread::sleep_for(std::chrono::milliseconds(25));
  executor.spin_some();
  std::cout<<"Repeated collision, stationary command and excessive tracking-error refusal passed\n";
+ // Reproduce controller-manager deactivation, then operator recovery. Measured
+ // position differs from the last command; activation must hold the measured
+ // position and must not replay the rejected brake or previous trajectory.
+ assert(controller->get_node()->deactivate().id()==lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+ for(int i=0;i<6;i++){q[i]=before_refusal[i]-.02;v[i]=0.;}
+ const auto recovery_hold=q;
+ assert(controller->get_node()->activate().id()==lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE);
+ for(int k=0;k<1200;k++) {
+  assert(tick()==controller_interface::return_type::OK);
+  for(int i=0;i<6;i++){assert(std::abs(command[i]-recovery_hold[i])<1e-9);}
+ }
+ std::cout<<"Controller reactivation holds measured position without replaying stale goals\n";
  controller->get_node()->deactivate();controller->release_interfaces();
  executor.remove_node(controller->get_node()->get_node_base_interface());executor.remove_node(test_node);
  controller.reset();rclcpp::shutdown();
