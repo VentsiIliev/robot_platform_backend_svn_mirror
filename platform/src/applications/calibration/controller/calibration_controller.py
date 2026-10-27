@@ -13,12 +13,10 @@ from src.applications.intrinsic_calibration_capture.service.i_intrinsic_capture_
     IntrinsicCaptureConfig,
 )
 from src.engine.core.i_messaging_service import IMessagingService
-from src.robot_systems.glue.component_ids import ProcessID
 from src.shared_contracts.events.robot_events import RobotCalibrationTopics
 from src.shared_contracts.events.vision_events import VisionTopics
 from src.shared_contracts.events.process_events import ProcessTopics, ProcessState, ProcessStateEvent
 
-_CALIBRATION_PROCESS_ID = ProcessID.ROBOT_CALIBRATION
 
 class _Worker(QObject):
     finished = pyqtSignal(object)
@@ -61,10 +59,11 @@ class _Bridge(QObject):
 class CalibrationController(IApplicationController):
 
     def __init__(self, model: CalibrationModel, view: CalibrationView,
-                 messaging: IMessagingService):
+                 messaging: IMessagingService, *, calibration_process_id: str = "robot_calibration"):
         self._model    = model
         self._view     = view
         self._broker   = messaging
+        self._calibration_process_id = calibration_process_id
         self._bridge   = _Bridge()
         self._subs:    List[Tuple[str, Callable]] = []
         self._threads: List[Tuple[QThread, _Worker]] = []
@@ -146,7 +145,7 @@ class CalibrationController(IApplicationController):
         self._sub(RobotCalibrationTopics.ROBOT_CALIBRATION_IMAGE, self._on_robot_calibration_image_raw)
         self._sub(RobotCalibrationTopics.ROBOT_CALIBRATION_LOG, self._on_calibration_log_raw)
         self._sub(INTRINSIC_CAPTURE_PROGRESS_TOPIC, self._on_intrinsic_capture_log_raw)
-        self._sub(ProcessTopics.state(_CALIBRATION_PROCESS_ID), self._on_calibration_process_state)
+        self._sub(ProcessTopics.state(self._calibration_process_id), self._on_calibration_process_state)
 
     def _on_latest_image_raw(self, msg) -> None:
         if isinstance(msg, dict):

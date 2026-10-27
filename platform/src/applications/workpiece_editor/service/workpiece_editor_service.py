@@ -49,6 +49,7 @@ class WorkpieceEditorServices:
     matching_service: Optional[IWorkpieceMatcher] = None
     workpiece_data_adapter: Optional[IWorkpieceDataAdapter] = None
     process_execution_validator: Optional[Callable[[], tuple[bool, str]]] = None
+    capture_workpiece_preparer: Optional[Callable[[dict], dict]] = None
 
 
 @dataclass(frozen=True)
@@ -81,6 +82,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         self._path_executor = services.path_executor
         self._path_preparation_service = services.path_preparation_service
         self._matching_service = services.matching_service
+        self._capture_workpiece_preparer = services.capture_workpiece_preparer
         self._process_execution_validator = services.process_execution_validator
         self._workpiece_data_adapter = services.workpiece_data_adapter
         self._editing_storage_id = None
@@ -147,6 +149,11 @@ class WorkpieceEditorService(IWorkpieceEditorService):
                 raise
             _logger.error("get_contours failed: %s", exc)
             return []
+
+    def prepare_capture_workpiece(self, workpiece: dict) -> dict:
+        if self._capture_workpiece_preparer is None:
+            return workpiece
+        return self._capture_workpiece_preparer(workpiece)
 
     def save_workpiece(self, data: dict) -> tuple[bool, str]:
         try:

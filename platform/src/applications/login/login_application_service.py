@@ -1,5 +1,6 @@
 from typing import List, Optional, Tuple
 
+from src.applications.login.connection_information_reader import ConnectionInformationReader
 from src.applications.login.i_login_application_service import ILoginApplicationService
 from src.applications.login.i_qr_scanner import IQrScanner
 from src.applications.user_management.domain.i_user_repository import IUserRepository
@@ -38,8 +39,13 @@ class LoginApplicationService(ILoginApplicationService):
         self._scanner       = qr_scanner
         self._login_pos     = login_position
         self._admin_role_value = str(admin_role_value)
+        self._connection_information = ConnectionInformationReader()
 
     # ── ILoginApplicationService ───────────────────────────────────────────────
+
+    def get_connection_information(self) -> dict:
+        """Read connection identifiers without accessing credentials or hardware."""
+        return self._connection_information.read()
 
     def authenticate(self, user_id: str, password: str) -> Optional[IAuthenticatedUser]:
         return self._auth.authenticate(user_id, password)

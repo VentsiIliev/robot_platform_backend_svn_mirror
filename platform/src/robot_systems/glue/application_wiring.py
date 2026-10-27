@@ -6,7 +6,7 @@ from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.robot.configuration.robot_settings import SafetyLimits
 from src.robot_systems.glue.domain.workpieces.schemas import build_glue_workpiece_form_schema, \
     build_glue_segment_settings_schema
-from src.robot_systems.glue.component_ids import ServiceID
+from src.robot_systems.glue.component_ids import ProcessID, ServiceID
 from src.robot_systems.glue.component_ids import SettingsID
 
 _logger = logging.getLogger(__name__)
@@ -564,6 +564,7 @@ def _build_calibration_application(robot_system):
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(
         widget_factory=lambda ms: CalibrationFactory(
+            calibration_process_id=ProcessID.ROBOT_CALIBRATION,
             work_area_definitions=robot_system.get_work_area_definitions()
         ).build(service, messaging=ms, jog_service=jog_service)
     )

@@ -16,11 +16,13 @@ class CalibrationFactory(ApplicationFactory):
         *,
         show_laser_tab: bool = True,
         show_height_mapping_tab: bool = True,
+        calibration_process_id: str = "robot_calibration",
     ):
         self._messaging = None
         self._work_area_definitions = list(work_area_definitions or [])
         self._show_laser_tab = show_laser_tab
         self._show_height_mapping_tab = show_height_mapping_tab
+        self._calibration_process_id = calibration_process_id
 
     def _create_model(self, service: ICalibrationService) -> CalibrationModel:
         return CalibrationModel(service)
@@ -35,7 +37,10 @@ class CalibrationFactory(ApplicationFactory):
     def _create_controller(self, model: IApplicationModel, view: IApplicationView) -> IApplicationController:
         assert isinstance(model, CalibrationModel)
         assert isinstance(view, CalibrationView)
-        return CalibrationController(model, view, self._messaging)
+        return CalibrationController(
+            model, view, self._messaging,
+            calibration_process_id=self._calibration_process_id,
+        )
 
     def build(self, service, messaging=None, jog_service=None):
         self._messaging = messaging

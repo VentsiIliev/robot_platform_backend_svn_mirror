@@ -8,6 +8,7 @@ from src.applications.calibration.model.calibration_model import CalibrationMode
 from src.applications.calibration_settings.calibration_settings_data import CalibrationSettingsData
 from src.applications.intrinsic_calibration_capture.service.i_intrinsic_capture_service import IntrinsicCaptureConfig
 from src.shared_contracts.events.vision_events import VisionTopics
+from src.shared_contracts.events.process_events import ProcessTopics
 from src.engine.robot.configuration import RobotCalibrationSettings
 from src.engine.robot.height_measuring.settings import HeightMeasuringModuleSettings
 from src.engine.vision.calibration_vision_settings import CalibrationVisionSettings
@@ -99,6 +100,20 @@ class TestCalibrationControllerLoad(unittest.TestCase):
         ctrl.load()
         subscribed_topics = [c[0][0] for c in broker.subscribe.call_args_list]
         self.assertIn(VisionTopics.LATEST_IMAGE, subscribed_topics)
+
+    def test_uses_owning_system_calibration_process_and_unsubscribes(self):
+        from src.robot_systems.paint.component_ids import ProcessID
+
+        broker = _make_broker()
+        ctrl = CalibrationController(
+            _make_model(), _make_view(), broker,
+            calibration_process_id=ProcessID.ROBOT_CALIBRATION,
+        )
+        ctrl.load()
+        topic = ProcessTopics.state(ProcessID.ROBOT_CALIBRATION)
+        broker.subscribe.assert_any_call(topic, ctrl._on_calibration_process_state)
+        ctrl.stop()
+        broker.unsubscribe.assert_any_call(topic, ctrl._on_calibration_process_state)
 
     def test_wires_destroyed_signal(self):
         ctrl, _, view, _ = _make_ctrl()

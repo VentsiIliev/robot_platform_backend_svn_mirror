@@ -17,7 +17,7 @@ WORKOBJECT_REGISTRY:
   - 185.34320570175686
   - -264.64316555402525
   - 11.327073452127967
-  - 0.24303199828253948
+  - 0.2430319982825395
   - -0.29161271612450756
   - 1.3980370695301718
 WORKOBJECT_ID_MAP:
@@ -48,12 +48,13 @@ TOOL_DEFINITIONS:
     - -90
     collision_profile: calibration_tool
   TOOL_2:
-    transform:
-    - 0
-    - 0
-    - 0
-    - 0
-    - 0
-    - 0
+    reference_tool_id: 1
+    relative_transform:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
     collision_profile: ''
 REFERENCE_TOOL_ID: 1

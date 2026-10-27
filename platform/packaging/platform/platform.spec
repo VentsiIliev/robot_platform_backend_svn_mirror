@@ -7,7 +7,7 @@ from PyInstaller.utils.hooks import collect_data_files
 
 ROOT = Path.cwd().resolve()
 sys.path.insert(0, str(ROOT / "packaging/platform"))
-from targets import load_target
+from targets import application_asset_data, load_target
 
 target = load_target(os.environ.get("ROBOT_PLATFORM_BUILD_TARGET", "paint"))
 config_dir = ROOT / "build/platform-config" / target["target"]
@@ -24,6 +24,7 @@ for resource in ("src/applications/base/resources", "src/applications/localizati
     datas.append((str(ROOT / resource), resource))
 for translations in sorted((ROOT / "src/applications").glob("*/localization")):
     datas.append((str(translations), str(translations.relative_to(ROOT))))
+datas += application_asset_data(target)
 for package in target["packages"]:
     package_root = ROOT / "src/robot_systems" / package
     for translations in sorted(package_root.rglob("translations")):

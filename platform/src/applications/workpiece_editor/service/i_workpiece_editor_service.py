@@ -9,6 +9,10 @@ from src.applications.workpiece_editor.service.i_workpiece_path_executor import 
 
 class IWorkpieceEditorService(ABC):
 
+    def prepare_capture_workpiece(self, workpiece: dict) -> dict:
+        """Return captured geometry ready for editing, without robot motion."""
+        return workpiece
+
     @abstractmethod
     def get_workpiece_data_adapter(self) -> IWorkpieceDataAdapter: ...
 

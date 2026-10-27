@@ -11,6 +11,10 @@ class LoginModel:
 
     # ── Delegation ──────────────────────────────────────────────────────────
 
+    def get_connection_information(self) -> dict:
+        """Return a read-only connection snapshot for the login screen."""
+        return self._svc.get_connection_information()
+
     def is_first_run(self) -> bool:
         return self._svc.is_first_run()
 

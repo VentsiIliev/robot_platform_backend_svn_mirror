@@ -4,7 +4,7 @@ from time import perf_counter
 from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.common_settings_ids import CommonSettingsID
-from src.robot_systems.paint.component_ids import ServiceID, SettingsID
+from src.robot_systems.paint.component_ids import ProcessID, ServiceID, SettingsID
 from src.robot_systems.paint import paint_system_config
 from src.robot_systems.paint.processes.paint.configuration.models import (
     PAINT_PROCESS_CONFIG,
@@ -480,6 +480,8 @@ def _build_paint_path_preparation_service(robot_system):
 
     def _paint_source_contour_processor(pts_px, settings):
         started_at = perf_counter()
+        if settings.get("paint_contour_prepared"):
+            return np.asarray(pts_px, dtype=float)[:, :2].copy()
         if settings.get("closed_path") is False:
             _logger.info(
                 "[PAINT_OPEN_SEGMENT] Preserving %d selected source points as an open path",
@@ -514,6 +516,9 @@ def _build_paint_path_preparation_service(robot_system):
 
     def _paint_mm_contour_processor(path_pts, settings):
         started_at = perf_counter()
+        if settings.get("paint_contour_prepared"):
+            xy = np.asarray(path_pts, dtype=float)[:, :2].tolist()
+            return {"method": "editable_prepared_contour", "prepared_xy": xy, "curve_xy": xy}
         if settings.get("closed_path") is False:
             open_xy = resample_contour_xy(
                 np.asarray(path_pts, dtype=float)[:, :2],
@@ -732,6 +737,7 @@ def _build_paint_workpiece_editor_service(robot_system):
     from src.robot_systems.paint.processes.paint.adapters.workpiece_editor import PaintWorkpiecePathExecutor
 
     from src.robot_systems.paint.visualization.paint_preview_geometry import PaintPreviewGeometry
+    from src.robot_systems.paint.domain.paint_capture_contour_preparation import PaintCaptureContourPreparation
 
     runtime = _build_paint_path_executor(robot_system)
     path_executor = PaintWorkpiecePathExecutor(
@@ -764,6 +770,9 @@ def _build_paint_workpiece_editor_service(robot_system):
             path_preparation_service=path_preparation_service,
             matching_service=matching_service,
             workpiece_data_adapter=PaintWorkpieceEditorAdapter(),
+            capture_workpiece_preparer=PaintCaptureContourPreparation(
+                _build_paint_path_preparation_service(robot_system)
+            ),
             process_execution_validator=lambda: _validate_current_capture_state(robot_system),
         ),
         form_schema=build_paint_contour_form_schema(),
@@ -1235,6 +1244,7 @@ def _build_calibration_application(robot_system):
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(
         widget_factory=lambda ms: CalibrationFactory(
+            calibration_process_id=ProcessID.ROBOT_CALIBRATION,
             work_area_definitions=robot_system.get_work_area_definitions(),
             show_laser_tab=False,
             show_height_mapping_tab=False,

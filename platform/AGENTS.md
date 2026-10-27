@@ -19,6 +19,14 @@ python src/applications/<name>/example_usage.py      # standalone app dev runner
 
 No `pyproject.toml`, `setup.py`, or `requirements.txt` — dependencies are managed via the `.venv` directory.
 
+## Release workflow
+
+For release builds, machine update delivery, or update-feed diagnosis, read
+[`skills/robot-releases/SKILL.md`](skills/robot-releases/SKILL.md) first. It covers
+the questions to resolve, component/version compatibility, kiosk confirmation,
+clean source snapshots, build verification, and LAN/SVN/GitHub delivery. Preserve
+answers and authorization already supplied in the current conversation.
+
 ---
 
 ## Git Workflow Rules

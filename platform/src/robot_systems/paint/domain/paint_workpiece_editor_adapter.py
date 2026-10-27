@@ -32,18 +32,25 @@ class PaintWorkpieceEditorAdapter(IWorkpieceDataAdapter):
 
     _PROCESS_KEY = "sprayPattern"
     _MAIN_SETTING_KEYS = (
+        "paint_contour_prepared",
         "velocity",
         "acceleration",
         "offset",
         "edge_cleanup_z_offset_mm",
     )
 
+    def get_persistent_metadata(self, raw: dict) -> dict:
+        if raw.get("paint_contour_prepared"):
+            return {"paint_contour_prepared": True}
+        return {}
+
     @staticmethod
     def _initial_process_contours(main_contour, process_contours):
         """Return saved paint sections or a complete editable contour copy.
 
-        The main contour remains independently stored in ``contour`` for
-        matching.  Legacy workpieces without paint sections receive an editor
+        The editable main contour is stored in ``contour``; the untouched
+        camera boundary is stored separately in ``matchingContour``. Legacy
+        workpieces without paint sections receive an editor
         copy in the Paint layer; saving then establishes the initial complete
         RTCP process contour under ``sprayPattern.Contour``.
         """

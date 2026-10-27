@@ -5,7 +5,7 @@ from functools import partial
 
 from PyQt6 import sip
 
-from PyQt6.QtCore import QEvent, QMargins, QPoint, QRect, Qt, QTimer
+from PyQt6.QtCore import QCoreApplication, QEvent, QMargins, QPoint, QRect, Qt, QTimer
 from PyQt6.QtGui import QCursor, QMouseEvent
 from PyQt6.QtWidgets import (
     QAbstractScrollArea,
@@ -26,6 +26,7 @@ from src.applications.base.config.virtual_keyboard_config import (
     is_custom_virtual_keyboard_enabled,
     register_virtual_keyboard_policy_listener,
 )
+from pl_gui.settings.settings_view.styles import PRIMARY, PRIMARY_DARK, TEXT_ON_PRIMARY
 
 
 _KEYBOARD_BG = "#FFFFFF"
@@ -76,6 +77,9 @@ class _PopupKeyboardDialog(QDialog):
         super().__init__(parent)
         self._target = target
         self._numeric_only = bool(numeric_only)
+        self._caps_lock = False
+        self._caps_lock_button: Optional[QPushButton] = None
+        self._letter_buttons: list[tuple[QPushButton, str]] = []
         self.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)
         self.setModal(False)
@@ -100,6 +104,14 @@ class _PopupKeyboardDialog(QDialog):
                 background-color: {_KEYBOARD_KEY_HOVER};
                 border: 1px solid {_KEYBOARD_BORDER};
             }}
+            QPushButton:checked {{
+                background-color: {PRIMARY};
+                color: {TEXT_ON_PRIMARY};
+                border: 1px solid {PRIMARY};
+            }}
+            QPushButton:checked:hover {{
+                background-color: {PRIMARY_DARK};
+            }}
             QPushButton#actionKey {{
                 background-color: {_KEYBOARD_ACTION};
                 color: white;
@@ -116,6 +128,17 @@ class _PopupKeyboardDialog(QDialog):
             """
         )
         self._build_ui()
+        self._retranslate()
+
+    def changeEvent(self, event) -> None:
+        if event.type() == QEvent.Type.LanguageChange:
+            self._retranslate()
+        super().changeEvent(event)
+
+    def _retranslate(self) -> None:
+        if self._caps_lock_button is not None:
+            label = QCoreApplication.translate("_PopupKeyboardDialog", "Caps Lock") or "Caps Lock"
+            self._caps_lock_button.setText(label)
 
     def closeEvent(self, event) -> None:
         self._restore_target_scroll_space()
@@ -223,6 +246,9 @@ class _PopupKeyboardDialog(QDialog):
 
         nav = QHBoxLayout()
         nav.setSpacing(8)
+        if not self._numeric_only:
+            self._caps_lock_button = self._button("", self._set_caps_lock, checkable=True)
+            nav.addWidget(self._caps_lock_button)
         nav.addWidget(self._button("←", self._move_cursor_left, action=True))
         nav.addWidget(self._button("→", self._move_cursor_right, action=True))
         layout.addLayout(nav)
@@ -238,11 +264,14 @@ class _PopupKeyboardDialog(QDialog):
         row = QHBoxLayout()
         row.setSpacing(8)
         for label in labels:
+            value = " " if label == "Space" else label.lower()
+            btn = self._button(value if label.isalpha() and len(label) == 1 else label,
+                               self._on_character_clicked)
+            btn.setProperty("keyboardValue", value)
+            if len(value) == 1 and value.isalpha():
+                self._letter_buttons.append((btn, value))
             if label == "Space":
-                btn = self._button(label, lambda _checked=False, value=" ": self._append(value))
                 btn.setMinimumWidth(220)
-            else:
-                btn = self._button(label, lambda _checked=False, value=label: self._append(value))
             if stretch:
                 row.addStretch(1)
             row.addWidget(btn)
@@ -250,13 +279,29 @@ class _PopupKeyboardDialog(QDialog):
                 row.addStretch(1)
         return row
 
-    def _button(self, label: str, callback, *, action: bool = False) -> QPushButton:
+    def _on_character_clicked(self) -> None:
+        button = self.sender()
+        if isinstance(button, QPushButton):
+            value = button.property("keyboardValue")
+            self._append(value.upper() if self._caps_lock else value)
+
+    def _set_caps_lock(self, enabled: bool) -> None:
+        self._caps_lock = enabled
+        for button, letter in self._letter_buttons:
+            button.setText(letter.upper() if enabled else letter)
+
+    def _button(self, label: str, callback, *, action: bool = False,
+                checkable: bool = False) -> QPushButton:
         btn = QPushButton(label, self)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         if action:
             btn.setObjectName("actionKey")
-        btn.clicked.connect(callback)
+        if checkable:
+            btn.setCheckable(True)
+            btn.toggled.connect(callback)
+        else:
+            btn.clicked.connect(callback)
         return btn
 
     def _target_line_edit(self) -> Optional[QLineEdit]:

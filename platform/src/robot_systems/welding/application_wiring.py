@@ -4,6 +4,7 @@ import os
 
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.common_settings_ids import CommonSettingsID
+from src.robot_systems.welding.component_ids import ProcessID
 from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
 
 
@@ -387,6 +388,7 @@ def _build_calibration_application(robot_system):
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(
         widget_factory=lambda ms: CalibrationFactory(
+            calibration_process_id=ProcessID.ROBOT_CALIBRATION,
             work_area_definitions=robot_system.get_work_area_definitions()
         ).build(service, messaging=ms, jog_service=jog_service)
     )

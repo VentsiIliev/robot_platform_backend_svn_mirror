@@ -6,6 +6,17 @@ ROOT = Path(__file__).resolve().parents[2]
 CATALOG = ROOT / "config/release_targets.json"
 
 
+def application_asset_data(target: dict, root: Path = ROOT) -> list[tuple[str, str]]:
+    """Collect application-owned assets only from the selected system packages."""
+    data = []
+    for package in target["packages"]:
+        applications = root / "src/robot_systems" / package / "applications"
+        for assets in sorted(applications.glob("*/assets")):
+            if assets.is_dir():
+                data.append((str(assets), str(assets.relative_to(root))))
+    return data
+
+
 def load_target(name: str) -> dict:
     targets = json.loads(CATALOG.read_text(encoding="utf-8"))
     if name not in targets:

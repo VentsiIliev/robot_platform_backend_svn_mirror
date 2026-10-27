@@ -20,6 +20,14 @@ class _StubUser(IAuthenticatedUser):
 class StubLoginApplicationService(ILoginApplicationService):
     """Always authenticates successfully. Used in tests and standalone runners."""
 
+    def get_connection_information(self) -> dict:
+        return {
+            "hostname": "robot-demo",
+            "username": "operator",
+            "addresses": [{"interface": "eth0", "address": "192.168.222.20"}],
+            "rustdesk_id": "123456789",
+        }
+
     def authenticate(self, user_id: str, password: str) -> Optional[IAuthenticatedUser]:
         return _StubUser()
 

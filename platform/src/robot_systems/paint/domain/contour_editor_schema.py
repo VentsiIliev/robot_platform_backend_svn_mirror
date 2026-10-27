@@ -18,9 +18,9 @@ def build_paint_layer_config() -> ContourEditorLayerConfig:
         roles={
             "workpiece": LayerRoleConfig("workpiece", "Workpiece", "#FF8C32", visible=True, enabled=True),
             # Paint starts with a complete process contour copied from the
-            # matching boundary. Operators will later split/select this copy
-            # into the RTCP paint sections without changing the Workpiece
-            # layer used for matching.
+            # editable Workpiece boundary. Operators split/select this copy
+            # into RTCP paint sections. The original camera boundary stays in
+            # matchingContour, outside the editor layers.
             "contour": LayerRoleConfig("contour", "Paint", "#00FFFF", visible=True, enabled=True),
             "fill": LayerRoleConfig("fill", "Fill", "#00FF00", visible=False, enabled=False),
         },

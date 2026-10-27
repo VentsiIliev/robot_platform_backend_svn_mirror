@@ -3,6 +3,7 @@ import os
 from time import perf_counter
 from typing import List, Tuple, Callable
 import copy
+from functools import partial
 from datetime import datetime
 
 import numpy as np
@@ -13,6 +14,7 @@ from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import QDialog, QLabel, QScrollArea, QVBoxLayout, QPushButton, QHBoxLayout, QTabWidget
 
 from src.applications.base.i_application_controller import IApplicationController
+from src.applications.base.background_worker import BackgroundWorker
 from src.applications.workpiece_editor.model import WorkpieceEditorModel
 from src.applications.workpiece_editor.service.i_workpiece_path_executor import WorkpieceProcessAction
 from src.applications.workpiece_editor.view.workpiece_editor_view import WorkpieceEditorView
@@ -30,10 +32,12 @@ class _Bridge(QObject):
     load_workpiece_raw = pyqtSignal(dict)
 
 
-class WorkpieceEditorController(IApplicationController):
+class WorkpieceEditorController(IApplicationController, BackgroundWorker):
 
     def __init__(self, model: WorkpieceEditorModel, view: WorkpieceEditorView,
                  messaging: IMessagingService, custom_action_handler=None):
+        BackgroundWorker.__init__(self)
+        self._capture_generation = 0
         self._model = model
         self._view = view
         self._broker = messaging
@@ -65,6 +69,7 @@ class WorkpieceEditorController(IApplicationController):
 
     def stop(self) -> None:
         self._active = False
+        self._stop_threads()
         try:
             self._bridge.camera_frame.disconnect()
         except (RuntimeError, TypeError):
@@ -99,6 +104,8 @@ class WorkpieceEditorController(IApplicationController):
     def _on_capture(self) -> list:
         """Called by the editor's capture button. Picks the largest contour,
         stops the live feed and loads the contour into the Workpiece layer."""
+        if self.has_running_workers():
+            return []
         try:
             contours = self._model.get_contours()
         except RuntimeError as exc:
@@ -129,13 +136,12 @@ class WorkpieceEditorController(IApplicationController):
         known_raw, match_payload, match_message = self._try_prepare_known_workpiece_capture(largest)
         if known_raw is not None:
             try:
-                self._load_raw_into_editor(known_raw, storage_id=None)
-                self._view._editor.set_verification_contours([self._normalize_contour_points(largest)])
                 show_info(
                     self._view,
                     self._t("Matched Workpiece"),
                     self._capture_match_summary(match_payload or {}),
                 )
+                self._start_capture_preparation(known_raw)
                 return [largest]
             except Exception:
                 self._logger.exception("Capture: failed to load matched workpiece")
@@ -149,12 +155,47 @@ class WorkpieceEditorController(IApplicationController):
             )
 
         try:
-            self._load_capture_contour_into_editor(largest)
-            self._set_pickup_point_overlay()
+            self._start_capture_preparation({"contour": self._captured_matching_contour})
         except Exception:
             self._logger.exception("Capture: failed to load contour into editor")
 
         return [largest]
+
+    def has_active_operations(self) -> bool:
+        return self.has_running_workers()
+
+    def _start_capture_preparation(self, raw: dict) -> None:
+        raw = copy.deepcopy(raw)
+        raw["matchingContour"] = copy.deepcopy(self._captured_matching_contour)
+        if self._captured_pickup_point is not None:
+            raw.setdefault("pickupPoint", list(self._captured_pickup_point))
+        inner = self._view._editor.contourEditor.editor_with_rulers.editor
+        inner.workpiece_manager.clear_workpiece()
+        self._loaded_raw_workpiece = None
+        self._view._editor.pointManagerWidget.refresh_points()
+        self._view.set_capture_busy(True)
+        generation = self._capture_generation
+        self._run_in_thread(
+            partial(self._model.prepare_capture_workpiece, raw),
+            partial(self._on_capture_prepared, generation),
+            partial(self._on_capture_preparation_failed, generation),
+        )
+
+    def _on_capture_prepared(self, generation: int, raw: dict) -> None:
+        if self._active and generation == self._capture_generation and not self._camera_active:
+            try:
+                self._load_raw_into_editor(raw, storage_id=None)
+                self._view._editor.clear_verification_contours()
+            except Exception as exc:
+                self._logger.exception("Failed to load processed capture")
+                show_warning(self._view, self._t("Capture"), str(exc))
+            finally:
+                self._view.set_capture_busy(False)
+
+    def _on_capture_preparation_failed(self, generation: int, message: str) -> None:
+        if self._active and generation == self._capture_generation:
+            self._view.set_capture_busy(False)
+            show_warning(self._view, self._t("Capture"), message)
 
     @staticmethod
     def _pick_largest(contours: list):
@@ -223,7 +264,7 @@ class WorkpieceEditorController(IApplicationController):
             show_warning(self._view, self._t("Cannot Save"), msg)
             return False, msg
         # Resume live feed after successful save
-        self._camera_active = True
+        self._restore_live_feed()
         return True, msg
 
     def _connect_signals(self) -> None:
@@ -261,10 +302,15 @@ class WorkpieceEditorController(IApplicationController):
         return 1280.0, 720.0
 
     def _clear_verification_overlay(self) -> None:
+        self._invalidate_capture_preparation()
         try:
             self._view._editor.clear_verification_contours()
         except Exception:
             self._logger.debug("Failed to clear verification overlay", exc_info=True)
+
+    def _invalidate_capture_preparation(self) -> None:
+        self._capture_generation = getattr(self, "_capture_generation", 0) + 1
+        self._view.set_capture_busy(False)
 
     def _set_pickup_point_overlay(self) -> None:
         try:
@@ -682,6 +728,7 @@ class WorkpieceEditorController(IApplicationController):
                     self._logger.info("Execute: using loaded raw workpiece payload because editor state is empty")
             except Exception:
                 self._logger.debug("Failed to inspect editor_data stats during execute", exc_info=True)
+        form_data = self._augment_form_data_with_editor_context(form_data)
         payload = {"form_data": form_data, "editor_data": editor_data}
         ok, msg = self._model.execute_workpiece(payload, skip_debug_plot=_TEMPORARILY_SKIP_PREPARED_PROCESS_PREVIEW)
         self._logger.info("Execute workpiece: %s — %s", ok, msg)
@@ -914,6 +961,9 @@ class WorkpieceEditorController(IApplicationController):
 
     def _augment_form_data_with_editor_context(self, form_data: dict) -> dict:
         enriched = dict(form_data or {})
+        loaded_raw = getattr(self, "_loaded_raw_workpiece", None)
+        if loaded_raw is not None:
+            enriched.update(self._model.get_workpiece_data_adapter().get_persistent_metadata(loaded_raw))
         if self._captured_pickup_point is not None and not enriched.get("pickupPoint"):
             enriched[
                 "pickupPoint"] = f"{float(self._captured_pickup_point[0]):.3f},{float(self._captured_pickup_point[1]):.3f}"
@@ -1048,6 +1098,7 @@ class WorkpieceEditorController(IApplicationController):
         return normalized
 
     def _restore_live_feed(self) -> None:
+        self._invalidate_capture_preparation()
         self._camera_active = True
 
     def _try_prepare_known_workpiece_capture(

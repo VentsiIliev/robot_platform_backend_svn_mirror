@@ -73,6 +73,35 @@ class TestWorkpieceEditorCaptureMatching(unittest.TestCase):
             enriched["matchingContour"],
         )
 
+    def test_stale_preparation_is_discarded_after_new_load_or_live_feed_resume(self) -> None:
+        self.controller._view = MagicMock()
+        self.controller._active = True
+        self.controller._camera_active = False
+        self.controller._capture_generation = 2
+        self.controller._load_raw_into_editor = MagicMock()
+        raw = {"contour": [[1.0, 2.0], [3.0, 4.0]]}
+        self.controller._on_capture_prepared(1, raw)
+        self.controller._load_raw_into_editor.assert_not_called()
+        self.controller._on_capture_prepared(2, raw)
+        self.controller._load_raw_into_editor.assert_called_once_with(raw, storage_id=None)
+        self.controller._view._editor.set_verification_contours.assert_not_called()
+        self.controller._load_raw_into_editor.reset_mock()
+        self.controller._camera_active = True
+        self.controller._on_capture_prepared(2, raw)
+        self.controller._load_raw_into_editor.assert_not_called()
+
+    def test_editable_processed_contour_does_not_replace_captured_matching_points(self) -> None:
+        self.controller._view = MagicMock()
+        self.controller._active = True
+        self.controller._camera_active = False
+        self.controller._capture_generation = 1
+        self.controller._load_raw_into_editor = MagicMock()
+        captured = [[1.25, 2.5], [8.75, 2.5], [8.75, 9.5]]
+        self.controller._captured_matching_contour = captured
+        self.controller._on_capture_prepared(1, {"contour": [[10, 20], [30, 40]]})
+        saved = self.controller._augment_form_data_with_editor_context({"name": "part"})
+        self.assertEqual(captured, saved["matchingContour"])
+
 
 if __name__ == "__main__":
     unittest.main()

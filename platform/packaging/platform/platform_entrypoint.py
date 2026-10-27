@@ -35,6 +35,36 @@ def main():
         run_platform()
 
 
+def check_vision_application_widgets(app):
+    """Construct lazy vision screens with stubs, without cameras or robot I/O."""
+    from src.engine.core.messaging_service import MessagingService
+    from src.applications.calibration.calibration_factory import CalibrationFactory
+    from src.applications.calibration.service.stub_calibration_service import StubCalibrationService
+    from src.applications.camera_settings.camera_settings_factory import CameraSettingsFactory
+    from src.applications.camera_settings.service.stub_camera_settings_service import StubCameraSettingsService
+    from src.applications.work_area_settings.work_area_settings_factory import WorkAreaSettingsFactory
+    from src.applications.work_area_settings.service.stub_work_area_settings_service import StubWorkAreaSettingsService
+    from src.shared_contracts.declarations import WorkAreaDefinition
+    from pl_gui.settings.settings_view.styles import PRIMARY
+
+    messaging = MessagingService()
+    areas = [WorkAreaDefinition(id="magazine", label="Magazine", color=PRIMARY)]
+    for factory, service, options in (
+        (WorkAreaSettingsFactory(areas), StubWorkAreaSettingsService(), {}),
+        (CameraSettingsFactory(), StubCameraSettingsService(), {"show_camera_devices": True}),
+        (CalibrationFactory(areas), StubCalibrationService(), {}),
+    ):
+        view = factory.build(service, messaging=messaging, **options)
+        try:
+            view.resize(1280, 800)
+            view.grab()
+            app.processEvents()
+        finally:
+            view.clean_up()
+            view.deleteLater()
+    app.processEvents()
+
+
 def self_test():
     """Verify frozen imports, startup resources and Qt without touching hardware."""
     from PyQt6.QtWidgets import QApplication
@@ -52,6 +82,13 @@ def self_test():
     target = json.loads((resource_root / "config/release-target.json").read_text())
     load_factory_defaults(resource_root, target)
     app = QApplication([])
+    check_vision_application_widgets(app)
+    if "paint" in target["packages"]:
+        from src.robot_systems.paint.applications.dashboard.ui.paint_card_factory import _PAINT_ICON_PATH
+        from PyQt6.QtSvg import QSvgRenderer
+        from PyQt6.QtGui import QIcon
+        if not QSvgRenderer(_PAINT_ICON_PATH).isValid() or QIcon(_PAINT_ICON_PATH).pixmap(48, 48).isNull():
+            raise RuntimeError(f"Bundled paint process status icon could not be loaded: {_PAINT_ICON_PATH}")
     # Exercise all selectable progress variants so packaging cannot silently
     # omit a style that is not currently selected by the update view.
     for style in ("ink", "plume", "vessel"):

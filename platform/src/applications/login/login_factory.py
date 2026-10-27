@@ -21,5 +21,7 @@ class LoginFactory:
         ctrl  = LoginController(model, view, messaging)
         # Keep controller alive as long as the view (same pattern as ApplicationFactory)
         view._controller = ctrl
+        view.finished.connect(ctrl.stop)
+        view.destroyed.connect(ctrl.stop)
         ctrl.load()
         return view

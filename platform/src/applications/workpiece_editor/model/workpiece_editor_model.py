@@ -22,6 +22,9 @@ class WorkpieceEditorModel(IApplicationModel):
     def get_contours(self) -> list:
         return self._service.get_contours()
 
+    def prepare_capture_workpiece(self, workpiece: dict) -> dict:
+        return self._service.prepare_capture_workpiece(workpiece)
+
     def save_workpiece(self, data: dict) -> tuple[bool, str]:
         return self._service.save_workpiece(data)
 

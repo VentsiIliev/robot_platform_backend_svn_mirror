@@ -1,0 +1,4 @@
+interface:
+  display_name: "Robot Releases"
+  short_description: "Build and verify robot releases and update feeds"
+  default_prompt: "Use $robot-releases to prepare a release, resolve any unanswered deployment questions, verify the build, and deliver it through the authorized update source."

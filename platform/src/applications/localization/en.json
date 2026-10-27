@@ -118,6 +118,9 @@
     "Stop the robot and wait until motion has finished before shutting down the platform.": "Stop the robot and wait until motion has finished before shutting down the platform.",
     "Robot state could not be verified. Check the robot connection before shutting down the platform.": "Robot state could not be verified. Check the robot connection before shutting down the platform."
   },
+  "_PopupKeyboardDialog": {
+    "Caps Lock": "Caps Lock"
+  },
   "KioskExitDialog": {
     "Exit kiosk mode": "Exit kiosk mode",
     "Password": "Password",

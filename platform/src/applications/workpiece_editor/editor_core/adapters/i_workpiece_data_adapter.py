@@ -9,6 +9,10 @@ from contour_editor.persistence.data.editor_data_model import ContourEditorData
 class IWorkpieceDataAdapter(ABC):
     """Convert between system-specific workpiece payloads/objects and editor data."""
 
+    def get_persistent_metadata(self, raw: dict) -> dict:
+        """Return system-owned metadata that must survive edits to visible settings."""
+        return {}
+
     @abstractmethod
     def from_workpiece(self, workpiece) -> ContourEditorData: ...
 

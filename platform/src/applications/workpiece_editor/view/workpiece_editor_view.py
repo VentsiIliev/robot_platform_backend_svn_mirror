@@ -1,7 +1,7 @@
 import logging
 
 from PyQt6.QtWidgets import QVBoxLayout, QLabel, QWidget
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import QEvent, pyqtSignal
 from contour_editor import BezierSegmentManager
 from pl_gui.settings.settings_view.styles import BG_COLOR
 
@@ -34,6 +34,7 @@ class WorkpieceEditorView(IApplicationView):
         self._editor          = None
         self._capture_handler = None
         self._onboarding_tour = None
+        self._capture_busy = False
         super().__init__("WorkpieceEditor", parent)
 
     def setup_ui(self) -> None:
@@ -42,6 +43,9 @@ class WorkpieceEditorView(IApplicationView):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
+        self._capture_status_label = QLabel(self)
+        self._capture_status_label.hide()
+        layout.addWidget(self._capture_status_label)
         try:
             self._editor = self._build_editor()
             layout.addWidget(self._editor)
@@ -167,6 +171,21 @@ class WorkpieceEditorView(IApplicationView):
         # Restart lazily so an active tour cannot retain the previous language.
         if self._onboarding_tour is not None:
             self._onboarding_tour.stop()
+        if hasattr(self, "_capture_status_label"):
+            self._capture_status_label.setText(self.tr("Processing captured contour…"))
+
+    def changeEvent(self, event) -> None:
+        if event.type() == QEvent.Type.LanguageChange:
+            self.retranslateUi()
+        super().changeEvent(event)
+
+    def set_capture_busy(self, busy: bool) -> None:
+        """Prevent editing until capture processing has supplied editable geometry."""
+        self._capture_busy = bool(busy)
+        if self._editor is not None:
+            self._editor.setEnabled(not busy)
+        self._capture_status_label.setVisible(busy)
+        self.retranslateUi()
 
     def _build_editor(self):
         return (

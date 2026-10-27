@@ -11,10 +11,13 @@ from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QStackedLayout, QGraphicsOpacityEffect,
     QLabel, QLineEdit, QPushButton, QFrame, QButtonGroup,
-    QSizePolicy, QStackedWidget, QTabWidget, QWidget, QMessageBox,
+    QSizePolicy, QStackedWidget, QTabWidget, QWidget, QMessageBox, QScrollArea,
 )
 
 from pl_gui.utils.utils_widgets.camera_view import CameraView
+from pl_gui.settings.settings_view.styles import GHOST_BTN_STYLE
+from src.applications.login.view.connection_information_dialog import ConnectionInformationDialog
+from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEdit
 
 
 class _FeedOnlyCameraView(CameraView):
@@ -95,6 +98,7 @@ class LoginView(QDialog):
     qr_scan_requested     = pyqtSignal()
     qr_tab_activated      = pyqtSignal()
     first_admin_submitted = pyqtSignal(str, str, str, str)
+    connection_information_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -108,6 +112,11 @@ class LoginView(QDialog):
         self._qr_timer.timeout.connect(self.qr_scan_requested)
 
         self._logo_pixmap: Optional[QPixmap] = None
+        self._connection_dialog = ConnectionInformationDialog(self)
+        self._connection_information_guard = None
+        self._connection_information_authorized = False
+        self._connection_dialog.finished.connect(self._on_connection_information_closed)
+        self._connection_dialog.refresh_requested.connect(self._on_connection_refresh_requested)
 
         self._setup_ui()
         self.setStyleSheet(self._stylesheet())
@@ -137,6 +146,7 @@ class LoginView(QDialog):
         self._error_label.setVisible(True)
 
     def accept_login(self, user: IAuthenticatedUser) -> None:
+        self._connection_dialog.reject()
         self._result_user = user
         self._allow_close = True
         self._stop_qr_scanning()
@@ -152,6 +162,42 @@ class LoginView(QDialog):
 
     def stop_qr_scanning(self) -> None:
         self._stop_qr_scanning()
+
+    def set_connection_information_busy(self, busy: bool) -> None:
+        self._connection_dialog.set_busy(busy)
+
+    def set_connection_information(self, information: dict) -> None:
+        if self._connection_information_authorized:
+            self._connection_dialog.set_information(information)
+
+    def show_connection_information_error(self) -> None:
+        if self._connection_information_authorized:
+            self._connection_dialog.show_error()
+
+    def set_connection_information_guard(self, guard) -> None:
+        """Inject the bootstrap-owned platform password prompt; default is locked."""
+        self._connection_information_guard = guard
+
+    def is_connection_information_authorized(self) -> bool:
+        return self._connection_information_authorized
+
+    def _on_connection_information_closed(self, _result) -> None:
+        self._connection_information_authorized = False
+        self._connection_dialog.set_information({})
+
+    def _on_connection_information_clicked(self) -> None:
+        if self._connection_dialog.isVisible():
+            self._connection_dialog.raise_()
+            return
+        guard = self._connection_information_guard
+        if guard is None or not guard(self):
+            return
+        self._connection_information_authorized = True
+        self._connection_dialog.open()
+        self.connection_information_requested.emit()
+
+    def _on_connection_refresh_requested(self) -> None:
+        self.connection_information_requested.emit()
 
     # ── UI construction ──────────────────────────────────────────────────────
 
@@ -226,7 +272,7 @@ class LoginView(QDialog):
 
     @staticmethod
     def _input() -> QLineEdit:
-        edit = QLineEdit()
+        edit = KeyboardLineEdit()
         edit.setFixedHeight(_FIELD_HEIGHT)
         return edit
 
@@ -268,6 +314,17 @@ class LoginView(QDialog):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
+        self._connection_info_btn = QPushButton()
+        self._connection_info_btn.setStyleSheet(GHOST_BTN_STYLE)
+        self._connection_info_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._connection_info_btn.setAutoDefault(False)
+        self._connection_info_btn.clicked.connect(self._on_connection_information_clicked)
+        info_row = QHBoxLayout()
+        info_row.setContentsMargins(24, 16, 24, 0)
+        info_row.addStretch(1)
+        info_row.addWidget(self._connection_info_btn)
+        layout.addLayout(info_row)
+
         self._stack = QStackedWidget()
         self._stack.setObjectName("loginPages")
         self._stack.addWidget(self._build_setup_page())      # _PAGE_SETUP     = 0
@@ -287,7 +344,18 @@ class LoginView(QDialog):
         err_row.addStretch(1)
         layout.addLayout(err_row)
 
-        return container
+        scroll = QScrollArea()
+        scroll.setObjectName("loginScroll")
+        scroll.viewport().setObjectName("loginViewport")
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(container)
+        # QScrollArea otherwise paints its viewport over the WebGL layer.
+        scroll.setAutoFillBackground(False)
+        scroll.viewport().setAutoFillBackground(False)
+        container.setAutoFillBackground(False)
+        return scroll
 
     # ── Setup page ────────────────────────────────────────────────────────────
 
@@ -583,6 +651,8 @@ class LoginView(QDialog):
 
     def retranslateUi(self, *_) -> None:
         self.setWindowTitle(self._t("Login"))
+        self._connection_info_btn.setText(self._t("Connection information"))
+        self._connection_dialog.retranslateUi()
         if self._logo_pixmap is None:
             self._logo_label.setText(self._t("Robot\nPlatform"))
         if getattr(self, "_machine_pixmap", None) is None:
@@ -715,6 +785,7 @@ class LoginView(QDialog):
 
             /* Layers above the WebGL surface stay see-through */
             QWidget#fluidOverlay, QWidget#logoPanel, QWidget#rightPanel,
+            QScrollArea#loginScroll, QWidget#loginViewport,
             QStackedWidget#loginPages, QStackedWidget#loginPages > QWidget {
                 background: transparent;
             }

@@ -118,6 +118,9 @@
     "Stop the robot and wait until motion has finished before shutting down the platform.": "Спрете робота и изчакайте движението да приключи, преди да изключите платформата.",
     "Robot state could not be verified. Check the robot connection before shutting down the platform.": "Състоянието на робота не може да бъде потвърдено. Проверете връзката с робота, преди да изключите платформата."
   },
+  "_PopupKeyboardDialog": {
+    "Caps Lock": "Главни букви"
+  },
   "KioskExitDialog": {
     "Exit kiosk mode": "Изход от киоск режим",
     "Password": "Парола",

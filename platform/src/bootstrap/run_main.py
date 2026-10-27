@@ -334,8 +334,14 @@ def _run_application(startup_config, diagnostics_service) -> None:
     if not skip_splash:
         robot_connection_notifier.start()
 
+    from src.bootstrap.connection_information_access import ConnectionInformationAccess
+    connection_information_access = ConnectionInformationAccess(
+        Path(startup_config.ui.kiosk_password_file), kiosk_password,
+    )
+
     def _show_login_view() -> None:
         login_view = bootstrap_provider.build_login_view(robot_app, ctx.messaging_service)   # parent=None; stacked_widget becomes parent
+        login_view.set_connection_information_guard(connection_information_access)
         active_login_view["widget"] = login_view
         shell.stacked_widget.addWidget(login_view)
         shell.stacked_widget.setCurrentWidget(login_view)   # show login in shell content area

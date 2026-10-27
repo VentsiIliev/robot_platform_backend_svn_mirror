@@ -1,23 +1,29 @@
 """Dedicated password verification for kiosk exit, independent of the operator session."""
 import logging
 
-from PyQt6.QtCore import QCoreApplication, QEvent
+from PyQt6.QtCore import QCoreApplication, QEvent, Qt
 from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout, QLabel, QLineEdit
 
 from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEdit
 from src.bootstrap.kiosk_password import KioskPassword
+from pl_gui.settings.settings_view.styles import ACTION_BTN_STYLE, GHOST_BTN_STYLE
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class KioskExitGuard:
-    def __init__(self, authentication: KioskPassword):
+    def __init__(self, authentication: KioskPassword, *, title="Exit kiosk mode",
+                 message="Enter the kiosk exit password to close the application.",
+                 action="Exit kiosk mode", context="KioskExitDialog"):
         self._authentication = authentication
+        self._title = title
+        self._message = message
+        self._action = action
+        self._context = context
         self.parent = None
 
-    @staticmethod
-    def _t(source):
-        return QCoreApplication.translate("KioskExitDialog", source) or source
+    def _t(self, source):
+        return QCoreApplication.translate(self._context, source) or source
 
     def verify(self, password: str) -> bool:
         try:
@@ -34,29 +40,35 @@ class KioskExitGuard:
                 super().changeEvent(event)
 
         dialog = ExitDialog(self.parent)
-        dialog.setWindowTitle(self._t("Exit kiosk mode"))
+        dialog.setMinimumWidth(480)
+        dialog.setWindowTitle(self._t(self._title))
         layout = QFormLayout(dialog)
         password = KeyboardLineEdit()
         password.setEchoMode(QLineEdit.EchoMode.Password)
-        message = QLabel(self._t("Enter the kiosk exit password to close the application."))
+        message = QLabel(self._t(self._message))
+        message.setWordWrap(True)
         layout.addRow(message)
         password_label = QLabel()
         layout.addRow(password_label, password)
         buttons = QDialogButtonBox()
-        exit_button = buttons.addButton(self._t("Exit kiosk mode"), QDialogButtonBox.ButtonRole.AcceptRole)
+        exit_button = buttons.addButton(self._t(self._action), QDialogButtonBox.ButtonRole.AcceptRole)
         cancel_button = buttons.addButton(self._t("Cancel"), QDialogButtonBox.ButtonRole.RejectRole)
+        exit_button.setStyleSheet(ACTION_BTN_STYLE)
+        cancel_button.setStyleSheet(GHOST_BTN_STYLE)
+        for button in (exit_button, cancel_button):
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
         cancel_button.clicked.connect(dialog.reject)
 
         failed = False
 
         def retranslate():
-            dialog.setWindowTitle(self._t("Exit kiosk mode"))
+            dialog.setWindowTitle(self._t(self._title))
             password_label.setText(self._t("Password"))
-            exit_button.setText(self._t("Exit kiosk mode"))
+            exit_button.setText(self._t(self._action))
             cancel_button.setText(self._t("Cancel"))
             message.setText(self._t(
                 "Incorrect password or temporarily locked. Try again later." if failed else
-                "Enter the kiosk exit password to close the application."
+                self._message
             ))
 
         def attempt_exit():

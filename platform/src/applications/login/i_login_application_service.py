@@ -7,6 +7,14 @@ from src.engine.auth.i_authenticated_user import IAuthenticatedUser
 class ILoginApplicationService(ABC):
 
     @abstractmethod
+    def get_connection_information(self) -> dict:
+        """Read hostname, OS username, useful IP addresses, and RustDesk ID.
+
+        Missing fields are None. An empty address list means no addresses are
+        assigned. This read-only query must not require platform authentication.
+        """
+
+    @abstractmethod
     def authenticate(self, user_id: str, password: str) -> Optional[IAuthenticatedUser]:
         """Verify credentials. Returns IAuthenticatedUser on success, None on failure."""
 
