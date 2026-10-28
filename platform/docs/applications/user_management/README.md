@@ -15,6 +15,14 @@ edit metadata. It has no password, hash, ciphertext, code or card field.
 `DEFAULT_USER_SCHEMA` describes the safe table. Credentials are absent rather than
 retrieved for table masking.
 
+Created by / Edited by display the actor's current name and numeric login ID,
+such as `Alice Admin (1)`. The model resolves those labels from the full authorized
+page before filtering. Stored metadata and audit records retain the stable account
+UUID; no database migration is needed. Missing/deleted actors and setup/OS actor
+references absent from that page display `—`, without attributing an old action
+to a different account that reused the same login ID. Table filters use the same
+labels that are displayed. Existing column titles and styles are unchanged.
+
 Commands separate creation, profile edit, password change, role change and deletion:
 `NewUser`, `EditUser`, `PasswordChange`, and `RoleChange`. Mutations use the
 technical account ID and displayed revision. Login IDs remain numeric for the
@@ -35,7 +43,8 @@ results, recovery-code displays and QR image DTOs have redacted representations.
 | Change role | Denied | Allowed; Operator boundary requires a different new password | Denied |
 | Issue card | Own or Operator | Enabled accounts | Denied |
 | Generate recovery codes | Own with current password | No personal Admin recovery issuance | Denied |
-| App Permissions/history | Denied | Allowed | Denied |
+| App Permissions | Denied | Allowed | Denied |
+| Account history | Own account and current Operators | All identities, including deleted accounts | Denied |
 
 Privileged passwords are hash-only and cannot be revealed. Last-Admin and
 operational/data constraints still apply to Manufacturer actions. Creation and
@@ -43,12 +52,24 @@ edit metadata come from the trusted services; no-op profile saves do not rewrite
 metadata. History contains actor/time/action and allowlisted changes, with a
 password-change marker instead of credential material.
 
+Select a user and choose **Account history** to inspect the latest 100 events,
+newest first. The dialog lists UTC time, actor, action and outcome. Selecting an
+event shows each changed field's **Before** and **After** values. Password changes
+show a marker only; password values never enter audit records. Known actors are
+displayed using their current name and login ID; an unavailable actor retains its
+stable reference rather than being attributed to a newly created account.
+The dialog supports English/Bulgarian language switching and clears its data on
+close or session invalidation. Admin can inspect their own account and current
+Operators. Other Admins, Manufacturer accounts and deleted identities remain
+Manufacturer-only. Both the presentation gate and the history service use the
+same target-scoped policy, with roles reloaded from storage on each query.
+
 ## Reusable presentation gates
 
 The controller binds the existing widgets through `base/access/AccessBinding`,
 `WidgetAdapter` and `TabAdapter`. Action/feature requirements are declarative.
 Role denial hides controls; target denial disables them, while Operator-password
-reveal is also hidden for privileged targets. Busy/selection state remains an
+reveal and account history are hidden for unauthorized targets. Busy/selection state remains an
 independent input and cannot be overwritten by a permission refresh.
 
 Access replies carry session/policy/selection versions. Changed selections and
@@ -64,6 +85,10 @@ Each `ApplicationGrant` reports `editable_roles`. The adapter derives locked cel
 from that contract, so Manufacturer, protected and denied grants are displayed
 consistently with backend policy. Updates use the displayed permission revision
 and take effect in fresh navigation queries.
+
+For Paint systems (including both dryer variants), `contourmatchingtester` locks
+only Manufacturer access. Manufacturer can untick Admin in App Permissions and
+save it. The updated policy denies Admin navigation as well as hiding the app.
 
 ## Workers and private displays
 

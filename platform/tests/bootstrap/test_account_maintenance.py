@@ -39,6 +39,64 @@ class AccountMaintenanceCLITests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertNotIn(self.fixture.manufacturer.password_hash, output)
 
+    def test_installer_requirement_preserves_existing_manufacturer_without_prompting(self):
+        before = self.fixture.get(self.fixture.manufacturer)
+        with patch.object(account_maintenance, '_read_manufacturer') as prompt:
+            code, output, errors = self.run_command(['ensure-manufacturer'])
+        self.assertEqual(code, 0, errors)
+        prompt.assert_not_called()
+        self.assertEqual(self.fixture.get(self.fixture.manufacturer), before)
+
+    def test_installer_requirement_provisions_and_audits_missing_manufacturer(self):
+        from src.shared_contracts.accounts.maintenance import CreateManufacturer
+        with self.fixture.store.transaction() as transaction:
+            transaction.delete(self.fixture.manufacturer.summary.account_id)
+        with patch.object(account_maintenance, '_read_manufacturer', return_value=CreateManufacturer(
+                '900', 'Service', 'Engineer', 'private-secret')):
+            code, output, errors = self.run_command(['ensure-manufacturer'])
+        self.assertEqual(code, 0, errors)
+        self.assertNotIn('private-secret', output + errors)
+        with self.fixture.store.transaction() as transaction:
+            created = transaction.get_by_login('900')
+            self.assertEqual(created.summary.role, 'Manufacturer')
+            self.assertTrue(created.summary.enabled)
+            self.assertEqual(transaction.metadata('commissioned'), '0')
+        self.assertEqual(self.fixture.history(created.summary.account_id)[0].action_id,
+                         'maintenance.manufacturer_created')
+
+    def test_installer_requirement_refuses_busy_without_prompting(self):
+        with AccountRuntimeLock.acquire(self.fixture.path), \
+                patch.object(account_maintenance, '_read_manufacturer') as prompt:
+            code, output, errors = self.run_command(['ensure-manufacturer'])
+        self.assertEqual(code, 2)
+        self.assertIn('busy', errors)
+        prompt.assert_not_called()
+
+    def test_disabled_manufacturer_and_cancelled_prompt_do_not_satisfy_installer_requirement(self):
+        from dataclasses import replace
+        before = self.fixture.get(self.fixture.manufacturer)
+        disabled = replace(before, summary=replace(before.summary, enabled=False))
+        with self.fixture.store.transaction() as transaction:
+            transaction.replace(disabled)
+        with patch.object(account_maintenance, '_read_manufacturer', side_effect=KeyboardInterrupt):
+            code, output, errors = self.run_command(['ensure-manufacturer'])
+        self.assertEqual(code, 130)
+        self.assertIn('cancelled', errors)
+        self.assertEqual(self.fixture.get(self.fixture.manufacturer), disabled)
+
+    def test_manufacturer_identity_input_requires_terminal_numeric_login_and_names(self):
+        with patch.object(account_maintenance.sys.stdin, 'isatty', return_value=False), \
+                patch('builtins.input') as identity:
+            with self.assertRaises(ValueError):
+                account_maintenance._read_manufacturer()
+            identity.assert_not_called()
+        for values in (['text-id'], ['900', '', 'Engineer']):
+            with patch.object(account_maintenance.sys.stdin, 'isatty', return_value=True), \
+                    patch.object(account_maintenance.sys.stdout, 'isatty', return_value=True), \
+                    patch('builtins.input', side_effect=values), redirect_stdout(io.StringIO()):
+                with self.assertRaises(ValueError):
+                    account_maintenance._read_manufacturer()
+
     def test_nonroot_is_refused_before_opening_database_or_prompting(self):
         with patch("os.geteuid", return_value=1000), \
                 patch("src.engine.auth.sqlite_account_store.SQLiteAccountStore") as store, \

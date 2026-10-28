@@ -68,6 +68,12 @@ is migrated during installed update activation; see
 
 `PaintRobotSystem` declares the shell, settings, services, movement groups, target points, target frames, work areas, and role policy that the platform consumes through `SystemBuilder`.
 
+The `contourmatchingtester` application protects Manufacturer access only.
+Manufacturer can revoke Admin access through **Administration → User Management
+→ App Permissions**. The dryer variants inherit this rule. Manufacturer retains
+access to every application; Operator restrictions on Service and Administration
+remain system-owned constraints.
+
 ### Movement, targeting and work-area declarations
 
 Current movement-group IDs include `HOME`, `CALIBRATION`, `JOG`, `Horizontal Shaft`, `Vertical Shaft`, `Vertical Shaft Alignment`, `Clean`, `Dropoff`, `Magazine`, and `Magazine Fixed Pickup`. The older `PAINTING` / `PAINTING_NEW` names are not the current class declarations. Their pose/velocity values remain settings-owned.

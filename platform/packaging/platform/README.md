@@ -104,6 +104,26 @@ disables the source developer login bypass. See
 
 ## First installation versus software updates
 
+Paint factory templates include every required setting declared by the selected
+system, serialized from code defaults with authored hardware templates taking
+precedence. No development storage, movement poses or station calibration results
+are copied. The frozen self-test seeds empty data and loads all required settings
+through the real repositories; missing tool-changer configuration therefore fails
+release verification before deployment. This correction follows the 1.0.19 fresh
+installation test. Existing machine files are preserved and never silently repaired.
+The installer runs `--check-installation` on the actual installed data before
+provisioning Manufacturer/kiosk access, so settings errors also block deployment
+completion on the station itself.
+
+The updated installer requires account commissioning before kiosk setup. It runs
+empty account setup as the desktop OS user and installs the root-owned maintenance
+tool. `ensure-manufacturer` prompts for identity and a privately confirmed password
+only when no enabled Manufacturer exists. Cancellation or failure leaves setup
+pending; rerun the installer to resume. Existing accounts and credentials are
+preserved. Run the installer without `sudo`; it requests administrator authority
+separately. First-Admin setup follows on normal application startup. Published
+1.0.18 archives still require the explicit manual commissioning procedure.
+
 A first installation automatically provisions SSH, branded RustDesk, and GNOME
 Kiosk for the desktop account running the installer. Kiosk uses X11 with
 automatic login and launches through the stable installed launcher, so future

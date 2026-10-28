@@ -23,6 +23,12 @@ def verified_session_account(transaction: IAccountTransaction, snapshot: Session
     return account
 
 
+def account_history_facts(transaction: IAccountTransaction, reference: ResourceRef) -> ResourceFacts:
+    """History retains its identity after account deletion; only live roles grant Admin access."""
+    stored = transaction.get(reference.resource_id)
+    return ResourceFacts(reference, reference.resource_id, stored.summary.role if stored else None)
+
+
 class AccountAccessContext(IAccessContextProvider):
     def __init__(self, store: IAccountStore, session: ISessionService,
                  resources: IAccessResourceResolver | None = None) -> None:
@@ -41,9 +47,11 @@ class AccountAccessContext(IAccessContextProvider):
                     stored = transaction.get(target.resource_id)
                     if stored is not None:
                         facts = ResourceFacts(target, stored.summary.account_id, stored.summary.role)
+                elif target.kind == "account_history":
+                    facts = account_history_facts(transaction, target)
                 elif target.kind == "new_account_role" and target.resource_id in {r.value for r in UserRole}:
                     facts = ResourceFacts(target, role=target.resource_id)
-        if (actor is not None and target is not None and target.kind not in {"account", "new_account_role"}
+        if (actor is not None and target is not None and target.kind not in {"account", "account_history", "new_account_role"}
                 and self._resources is not None):
             facts = self._resources.resolve(target)
         return AccessContext(actor, snapshot.revision, facts)

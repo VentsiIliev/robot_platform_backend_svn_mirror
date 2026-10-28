@@ -8,8 +8,8 @@ DEFAULT_USER_SCHEMA = UserSchema(id_key="id", fields=[
     FieldDescriptor("role", "Role", "text"),
     FieldDescriptor("email", "Email", "text", required=False),
     FieldDescriptor("created_at", "Created at", "text", required=False),
-    FieldDescriptor("created_by", "Created by", "text", required=False),
+    FieldDescriptor("created_by_label", "Created by", "text", required=False),
     FieldDescriptor("updated_at", "Edited at", "text", required=False),
-    FieldDescriptor("updated_by", "Edited by", "text", required=False),
+    FieldDescriptor("updated_by_label", "Edited by", "text", required=False),
 ])
 

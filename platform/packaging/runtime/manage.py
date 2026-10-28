@@ -20,6 +20,7 @@ from src.engine.updates.updater import PlatformUpdater
 from src.engine.updates.service_install import install_service
 from src.engine.updates.releases import validate_manifest, release_executable
 from src.engine.updates.environment import subprocess_environment
+from src.engine.updates.account_provisioning import provision_installation_accounts
 
 KIOSK_PASSWORD_FILE = Path("/etc/robot-platform/kiosk-password.json")
 KIOSK_PASSWORD_GROUP = "robot-kiosk"
@@ -115,10 +116,11 @@ def prepare_system_setup(root, *, first_install, mode=None, setup_system=False):
     path = root / "update-state/system-setup.json"
     state = json.loads(path.read_text()) if path.exists() else None
     if setup_system or (first_install and (state is None or state["complete"])):
-        state = {"complete": False, "kiosk": mode or "enabled"}
+        fresh_accounts = first_install or bool(state and not state['complete'] and state.get('fresh_accounts'))
+        state = {"complete": False, "kiosk": mode or "enabled", "fresh_accounts": fresh_accounts}
         atomic_json(path, state)
     elif first_install and mode is not None:
-        state = {"complete": False, "kiosk": mode}
+        state = {"complete": False, "kiosk": mode, "fresh_accounts": True}
         atomic_json(path, state)
     elif mode is not None and not (state is not None and not state["complete"] and state["kiosk"] == mode):
         raise ValueError("Use --setup-system to change kiosk on an existing installation")
@@ -126,6 +128,13 @@ def prepare_system_setup(root, *, first_install, mode=None, setup_system=False):
 
 
 def finish_system_setup(root, config_path, state, launcher=None):
+    try:
+        provision_installation_accounts(
+            root, config_path, initialize=bool(state and not state['complete'] and state.get('fresh_accounts')),
+        )
+    except (OSError, ValueError, subprocess.SubprocessError, RuntimeError) as error:
+        raise RuntimeError("Manufacturer provisioning is incomplete; deployment setup was not completed. "
+                           "Rerun the installer to retry: " + str(error)) from error
     if state is None or state["complete"]:
         from src.engine.updates.remote_support import reconcile, release_settings
         release = root / 'current'
@@ -245,7 +254,9 @@ def install(args):
         updater.stage_local(args.archive.resolve())
         updater.queue()
         updater.apply_pending()
-    with updater.offline():
+    # Frozen account tools take the update-state lock themselves. Hold only the
+    # outer runtime lease during commissioning to avoid a nested-lock deadlock.
+    with lock(root / 'runtime.lock'):
         finish_system_setup(root, config_path, system_setup)
     install_service(root, config_path)
     print(f"Installed platform at {root}\nUpdate configuration: {config_path}")

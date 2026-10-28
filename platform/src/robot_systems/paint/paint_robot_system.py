@@ -417,7 +417,7 @@ class PaintRobotSystem(BaseRobotSystem):
             "softwareupdate": ["Admin"],
             "platformsettings": ["Admin"],
             "paintmotionrecipe": ["Admin", "Manufacturer"],
-            "contourmatchingtester": ["Admin", "Manufacturer"],
+            "contourmatchingtester": ["Manufacturer"],
         },
         denied_folder_role_values={"ADMIN": ["Operator"], "SERVICE": ["Operator"]},
     )

@@ -14,6 +14,7 @@ from src.applications.user_management.domain.user_schema import UserRecord, User
 from src.applications.user_management.view.account_form_dialog import AccountFormDialog
 from src.applications.user_management.view.permissions_view import PermissionsView
 from src.applications.user_management.view.login_card_dialog import LoginCardDialog
+from src.applications.user_management.view.account_history_dialog import AccountHistoryDialog
 from src.applications.base.widgets.private_text_dialog import PrivateTextDialog
 from src.applications.base.access.adapters import WidgetAdapter, TabAdapter
 
@@ -89,6 +90,13 @@ class UserManagementView(IApplicationView):
 
     def display_qr(self, png):
         dialog = LoginCardDialog(png, self)
+        self._private_dialog = dialog
+        dialog.exec()
+        self._private_dialog = None
+        dialog.deleteLater()
+
+    def display_history(self, entries):
+        dialog = AccountHistoryDialog(entries, self)
         self._private_dialog = dialog
         dialog.exec()
         self._private_dialog = None

@@ -5,6 +5,7 @@ from src.engine.auth.i_access_policy import IAccessPolicy
 from src.engine.auth.i_session_service import ISessionService
 from src.shared_contracts.accounts.events import HistoryQuery
 from src.shared_contracts.authorization.actions import AuditAction
+from src.shared_contracts.authorization.access import ResourceRef
 from src.shared_contracts.authorization.errors import ErrorCode
 from src.shared_contracts.authorization.results import Success
 
@@ -20,4 +21,4 @@ class AuditHistoryService(IAuditHistoryService):
             return self._operations.failure(ErrorCode.INVALID_INPUT)
         def read(transaction, actor, target):
             return Success(transaction.history(query))
-        return self._operations.execute(AuditAction.VIEW, None, None, read)
+        return self._operations.execute(AuditAction.VIEW, ResourceRef("account_history", query.target_id), None, read)

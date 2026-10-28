@@ -80,11 +80,26 @@ class AccountApplicationFlowTests(unittest.TestCase):
         self.users.change_password(PasswordChange(target.account_id, target.revision, "new-secret"))
         self.assertIsInstance(self.login.authenticate_qr(token), LoginFailure)
 
-    def test_only_manufacturer_can_read_redacted_account_history(self):
+    def test_admin_can_read_own_and_operator_history_but_not_other_privileged_accounts(self):
         target = self.fixture.operator.summary
         self.users.change_password(PasswordChange(target.account_id, 1, "operator-secret"))
-        self.assertIsInstance(self.users.history(target.account_id), UserFailure)
+        self.assertTrue(any(row.password_changed for row in self.users.history(target.account_id).value))
+        self.assertNotIsInstance(self.users.history(self.fixture.admin.summary.account_id), UserFailure)
+        for account in (self.fixture.other_admin, self.fixture.manufacturer):
+            with self.subTest(target=account.summary.role):
+                self.assertIsInstance(self.users.history(account.summary.account_id), UserFailure)
         self.fixture.login(self.fixture.manufacturer)
         history = self.users.history(target.account_id).value
-        self.assertTrue(any("password changed" in row.changes for row in history))
+        self.assertTrue(any(row.password_changed for row in history))
         self.assertNotIn("operator-secret", repr(history))
+
+    def test_history_button_access_matches_target_scope(self):
+        for target, permitted in ((None, False), (self.fixture.admin, True), (self.fixture.operator, True),
+                                  (self.fixture.other_admin, False), (self.fixture.manufacturer, False)):
+            identity = target.summary.account_id if target else None
+            with self.subTest(target=identity):
+                controls = {control.key: control for control in self.users.access(identity).value.controls}
+                self.assertTrue(controls["history"].role_eligible)
+                self.assertEqual(controls["history"].allowed, permitted)
+        self.fixture.login(self.fixture.operator)
+        self.assertIsInstance(self.users.history(self.fixture.operator.summary.account_id), UserFailure)

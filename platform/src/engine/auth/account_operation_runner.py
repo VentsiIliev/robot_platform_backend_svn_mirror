@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from contextlib import ExitStack
 from uuid import uuid4
 
-from src.engine.auth.account_access_context import verified_session_account
+from src.engine.auth.account_access_context import account_history_facts, verified_session_account
 from src.engine.auth.account_store import IAccountStore
 from src.engine.auth.access_change_guard import NoActiveOperationGuard
 from src.engine.auth.i_access_change_guard import IAccessChangeGuard
@@ -50,6 +50,8 @@ class AccountOperationRunner:
                 facts = (ResourceFacts(reference, target.summary.account_id, target.summary.role) if target
                          else ResourceFacts(reference, role=reference.resource_id)
                          if reference and reference.kind == "new_account_role" else None)
+                if reference and reference.kind == "account_history":
+                    facts = account_history_facts(transaction, reference)
                 decision = self._policy.decide(
                     AccessRequest(AccessKind.ACTION, action, reference),
                     AccessContext(Actor(actor.summary.account_id, actor.summary.role), snapshot.revision, facts),

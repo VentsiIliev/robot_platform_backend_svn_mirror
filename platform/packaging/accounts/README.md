@@ -30,6 +30,12 @@ is installed. Updating this root tool requires an OS administrator; the ordinary
 user's software updater cannot replace it.
 
 Create/reset commands require a private interactive terminal and refuse while the
-platform holds the account database runtime lease. They work without the
+platform holds the account database runtime lease. `ensure-manufacturer` is the
+installer's required commissioning command: it verifies an existing enabled
+Manufacturer or prompts for numeric login ID, name and privately confirmed
+password. It preserves existing accounts/passwords and never enables a disabled
+account. Cancellation, busy, invalid input and audit failures return nonzero so
+deployment setup cannot be marked complete. First-Admin setup remains separate.
+These commands work without the
 Operator encryption key. See [recovery procedures](../../docs/engine/auth/account_recovery_runbook.md)
 and [handover](../../docs/installation/account-handover.md).

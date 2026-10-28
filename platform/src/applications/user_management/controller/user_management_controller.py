@@ -44,7 +44,7 @@ class UserManagementController(IApplicationController, BackgroundWorker):
     def load(self):
         for key, adapter in self._view.access_adapters().items():
             requirement = (AccessRequirement(feature=UserFeature.APP_PERMISSIONS) if key == "permissions"
-                           else AccessRequirement(action=_ACTIONS[key], hide_when_target_denied=key == "reveal"))
+                           else AccessRequirement(action=_ACTIONS[key], hide_when_target_denied=key in {"reveal", "history"}))
             self._binding.register(key, adapter, requirement, operational=ControlState(True, False))
         for signal, callback in (
             (self._view.add_requested, self._on_add), (self._view.edit_requested, self._on_edit),
@@ -347,9 +347,7 @@ class UserManagementController(IApplicationController, BackgroundWorker):
 
     def _history_ready(self, result):
         if not self._failure(result):
-            text = "\n\n".join(" | ".join((row.occurred_at, row.actor, row.action, row.outcome, row.changes))
-                                for row in result.value)
-            self._view.display_secret("Account history", "UTC time, actor, action, outcome, and changed fields.", text)
+            self._view.display_history(result.value)
 
     def _on_filter(self, key, value):
         self._filter = (key, value)

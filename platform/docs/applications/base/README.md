@@ -379,6 +379,10 @@ Behavior:
 - the focused field is scrolled above the keyboard
 - scroll padding and original scroll position are restored when the keyboard hides
 - only one keyboard owner is active at a time
+- physical keys received by the popup are forwarded to the owning input; touch
+  and physical typing can be mixed without changing password echo or numeric
+  validation. Editing keys and native shortcuts keep their input-widget behavior.
+  Tab/Shift+Tab follow the form's focus order; Escape dismisses the popup.
 
 Direct field example:
 

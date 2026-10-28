@@ -33,6 +33,12 @@ TESTS = (
     'tests.engine.updates.test_update_service',
     'tests.engine.updates.test_remote_support_updates',
     'tests.engine.updates.test_installer_remote_support',
+    'tests.engine.updates.test_account_provisioning',
+    'tests.bootstrap.test_account_maintenance',
+    'tests.bootstrap.test_account_maintenance_payload',
+    'tests.bootstrap.test_installed_account_tools',
+    'tests.bootstrap.test_fresh_install_settings',
+    'tests.engine.updates.test_factory_defaults',
 )
 
 

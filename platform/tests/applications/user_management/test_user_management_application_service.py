@@ -10,7 +10,9 @@ from src.engine.auth.user_session import UserSession
 from src.shared_contracts.accounts.records import AccountSummary, AccountChange
 from src.shared_contracts.accounts.commands import CreateAccount, EditProfile, ChangePassword, ChangeRole, DeleteAccount, RevealedPassword
 from src.shared_contracts.accounts.recovery import RecoveryCodes
-from src.shared_contracts.authorization.access import AccessSnapshot, AccessDecision, DenialReason
+from src.shared_contracts.accounts.events import AuditEvent, FieldChange, HistoryQuery
+from src.shared_contracts.authorization.access import AccessSnapshot, AccessDecision, DenialReason, ResourceRef
+from src.shared_contracts.authorization.actions import AuditAction
 from src.shared_contracts.authorization.errors import StorageIntegrityError, ErrorCode, ServiceError
 from src.shared_contracts.authorization.results import Success, Failure
 from src.shared_contracts.authorization.permissions import PermissionSnapshot, ApplicationGrant, UpdateAppPermissions
@@ -100,4 +102,25 @@ class UserManagementAdapterTests(unittest.TestCase):
     def test_plaintext_package_api_is_removed(self):
         self.assertFalse(hasattr(self.service, "send_access_package"))
         self.assertFalse(hasattr(self.service, "generate_qr"))
+
+    def test_history_keeps_structured_safe_field_changes_and_password_marker(self):
+        self.history.list_events.return_value = Success((AuditEvent(
+            "event", "2026-10-28T12:00:00Z", "admin-id", "Admin", "session", "operator-id",
+            "users.edit_profile", "succeeded", (FieldChange("first_name", "Before", "After"),), True),))
+        event = self.service.history("operator-id").value[0]
+        self.history.list_events.assert_called_once_with(HistoryQuery("operator-id"))
+        self.assertEqual((event.changes[0].field, event.changes[0].before, event.changes[0].after),
+                         ("first_name", "Before", "After"))
+        self.assertTrue(event.password_changed)
+
+    def test_history_access_request_carries_selected_history_identity(self):
+        def allow_all(requests):
+            return Success(AccessSnapshot(self.session.snapshot().revision, 1, requests,
+                tuple(AccessDecision(True, True, DenialReason.ALLOWED) for _ in requests)))
+        self.access.evaluate.side_effect = allow_all
+        for target in (None, "operator-id"):
+            self.service.access(target)
+            requests = self.access.evaluate.call_args.args[0]
+            history = next(request for request in requests if request.key == AuditAction.VIEW)
+            self.assertEqual(history.target, ResourceRef("account_history", target) if target else None)
 

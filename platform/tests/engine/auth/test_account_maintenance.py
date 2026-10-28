@@ -38,12 +38,23 @@ class AccountMaintenanceTests(unittest.TestCase):
         store = MagicMock(spec=IAccountStore)
         service = AccountMaintenanceService(store, FakeAuthority(False), self.fixture.credentials)
         commands = (
+            service.has_enabled_manufacturer(),
             service.inspect_manufacturer("4"),
             service.create_manufacturer(CreateManufacturer("5", "New", "Manufacturer", "secret")),
             service.reset_manufacturer_password(ResetManufacturerPassword("id", 1, "secret")),
         )
         self.assertTrue(all(result.error.code == ErrorCode.ACCESS_DENIED for result in commands))
         store.transaction.assert_not_called()
+
+    def test_readiness_requires_an_enabled_manufacturer_without_mutating_accounts(self):
+        self.assertTrue(self.service.has_enabled_manufacturer().value)
+        before = self.fixture.get(self.fixture.manufacturer)
+        with self.fixture.store.transaction() as transaction:
+            transaction.replace(replace(before, summary=replace(before.summary, enabled=False)))
+        self.assertFalse(self.service.has_enabled_manufacturer().value)
+        with self.fixture.store.transaction() as transaction:
+            transaction.delete(before.summary.account_id)
+        self.assertFalse(self.service.has_enabled_manufacturer().value)
 
     def test_platform_manufacturer_session_does_not_grant_os_maintenance(self):
         self.fixture.login(self.fixture.manufacturer)

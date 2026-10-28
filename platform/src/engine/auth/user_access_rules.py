@@ -38,7 +38,10 @@ def user_access_rules(*, admin_role: str, operator_role: str) -> tuple[AccessRul
         ), target_kind="account"),
         AccessRule(AccessKind.ACTION, PermissionAction.MANAGE),
         AccessRule(AccessKind.FEATURE, UserFeature.APP_PERMISSIONS),
-        AccessRule(AccessKind.ACTION, AuditAction.VIEW),
+        AccessRule(AccessKind.ACTION, AuditAction.VIEW, (
+            RoleGrant(admin_role, GrantScope.SELF),
+            RoleGrant(admin_role, GrantScope.TARGET_ROLE, frozenset({operator_role})),
+        ), target_kind="account_history"),
         AccessRule(AccessKind.ACTION, RecoveryAction.ISSUE, (RoleGrant(admin_role),)),
     ]
     return tuple(rules)

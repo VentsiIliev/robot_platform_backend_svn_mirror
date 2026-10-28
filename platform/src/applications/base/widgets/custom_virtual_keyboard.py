@@ -135,6 +135,31 @@ class _PopupKeyboardDialog(QDialog):
             self._retranslate()
         super().changeEvent(event)
 
+    def event(self, event) -> bool:
+        # Popup windows grab the keyboard. Let the owning form keep its normal
+        # Tab order rather than moving focus between the popup's controls.
+        if event.type() == QEvent.Type.KeyPress and event.key() in (Qt.Key.Key_Tab, Qt.Key.Key_Backtab):
+            forward = (event.key() != Qt.Key.Key_Backtab
+                       and not event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+            self.hide()
+            if not sip.isdeleted(self._target):
+                self._target.focusNextPrevChild(forward)
+            event.accept()
+            return True
+        return super().event(event)
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key.Key_Escape:
+            super().keyPressEvent(event)
+            return
+        # Send physical typing and editing shortcuts through the native input
+        # widget so selection, password mode and numeric validators still apply.
+        if not sip.isdeleted(self._target):
+            QCoreApplication.sendEvent(self._target, event)
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
     def _retranslate(self) -> None:
         if self._caps_lock_button is not None:
             label = QCoreApplication.translate("_PopupKeyboardDialog", "Caps Lock") or "Caps Lock"

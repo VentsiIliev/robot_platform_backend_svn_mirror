@@ -13,6 +13,11 @@ class IAccountMaintenanceService(ABC):
     and cryptography failures use shared infrastructure exceptions. May block.
     """
     @abstractmethod
+    def has_enabled_manufacturer(self) -> Result[bool]:
+        """Check installation readiness without exposing credentials or changing accounts."""
+        ...
+
+    @abstractmethod
     def inspect_manufacturer(self, login_id: str) -> Result[AccountSummary]: ...
 
     @abstractmethod

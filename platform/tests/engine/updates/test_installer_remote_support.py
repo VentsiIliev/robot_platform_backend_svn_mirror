@@ -165,6 +165,40 @@ class FirstInstallSetupTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         self.config = self.root / 'updates.json'
+        provisioning = patch.object(manager, 'provision_installation_accounts')
+        self.accounts = provisioning.start()
+        self.addCleanup(provisioning.stop)
+
+    def test_manufacturer_failure_blocks_kiosk_and_setup_completion_and_can_retry(self):
+        state = manager.prepare_system_setup(self.root, first_install=True)
+        self.accounts.side_effect = subprocess.CalledProcessError(130, ['maintenance'])
+        with patch.object(manager, 'install_remote_support') as support, \
+                patch.object(manager, 'install_kiosk') as kiosk:
+            with self.assertRaisesRegex(RuntimeError, 'Manufacturer provisioning is incomplete'):
+                manager.finish_system_setup(self.root, self.config, state)
+            support.assert_not_called()
+            kiosk.assert_not_called()
+            pending = manager.prepare_system_setup(self.root, first_install=False)
+            self.assertFalse(pending['complete'])
+            self.assertTrue(pending['fresh_accounts'])
+            self.accounts.side_effect = None
+            manager.finish_system_setup(self.root, self.config, pending)
+            kiosk.assert_called_once()
+        completed = manager.prepare_system_setup(self.root, first_install=False)
+        self.assertTrue(completed['complete'])
+        self.accounts.assert_called_with(self.root, self.config, initialize=True)
+
+    def test_completed_and_legacy_installs_verify_manufacturer_without_initializing(self):
+        for state in (None, {'complete': True, 'kiosk': 'enabled', 'fresh_accounts': True}):
+            manager.finish_system_setup(self.root, self.config, state)
+            self.accounts.assert_called_with(self.root, self.config, initialize=False)
+
+    def test_explicit_setup_retry_retains_fresh_account_initialization_intent(self):
+        manager.prepare_system_setup(self.root, first_install=True)
+        state = manager.prepare_system_setup(self.root, first_install=True, mode='manual')
+        self.assertTrue(state['fresh_accounts'])
+        state = manager.prepare_system_setup(self.root, first_install=False, setup_system=True)
+        self.assertTrue(state['fresh_accounts'])
 
     def test_first_install_sets_up_once_and_maintenance_preserves_settings(self):
         state = manager.prepare_system_setup(self.root, first_install=True)

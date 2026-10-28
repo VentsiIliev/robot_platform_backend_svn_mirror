@@ -59,6 +59,8 @@ class UserEntry:
     created_by: str | None
     updated_at: str | None
     updated_by: str | None
+    created_by_label: str = "—"
+    updated_by_label: str = "—"
 
     def get(self, key, default=""):
         name = {"id": "login_id", "firstName": "first_name", "lastName": "last_name"}.get(key, key)
@@ -139,12 +141,20 @@ class QrDisplay:
 
 
 @dataclass(frozen=True)
+class HistoryChange:
+    field: str
+    before: str | None
+    after: str | None
+
+
+@dataclass(frozen=True)
 class HistoryEntry:
     occurred_at: str
     actor: str
     action: str
     outcome: str
-    changes: str
+    changes: tuple[HistoryChange, ...] = ()
+    password_changed: bool = False
 
 
 @dataclass(frozen=True)

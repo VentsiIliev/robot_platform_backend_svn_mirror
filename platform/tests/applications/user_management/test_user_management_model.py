@@ -1,8 +1,11 @@
+from dataclasses import replace
 import unittest
+from unittest.mock import patch
 from src.applications.user_management.model.user_management_model import UserManagementModel
 from src.applications.user_management.model.permissions_model import PermissionsModel
 from src.applications.user_management.service.stub_user_management_service import StubUserManagementService
 from src.applications.user_management.service.i_user_management_service import NewUser, EditUser, UserFailure
+from src.applications.user_management.service.i_user_management_service import HistoryEntry, UserSuccess
 
 
 class UserManagementModelTests(unittest.TestCase):
@@ -45,3 +48,46 @@ class UserManagementModelTests(unittest.TestCase):
         with self.assertRaises(NotImplementedError):
             self.model.save({"password": "replacement"})
 
+    def test_actor_columns_show_names_and_login_ids_without_rewriting_audit_references(self):
+        created = self.model.create(NewUser("5", "New", "User", "Operator", "secret")).value
+        self.model.page = self.model.load().value
+        row = self.model.filtered_users("id", "5")[0]
+        self.assertEqual(row.created_by_label, "Service Engineer (3)")
+        self.assertEqual(row.updated_by_label, "Service Engineer (3)")
+        self.assertEqual((row.created_by, row.updated_by), (created.created_by, created.updated_by))
+        original = next(entry for entry in self.model.page.users if entry.account_id == created.account_id)
+        self.assertEqual(original.created_by_label, "—")
+
+    def test_filtering_actor_names_resolves_actors_outside_the_filtered_rows(self):
+        self.model.create(NewUser("5", "New", "User", "Operator", "secret"))
+        self.model.page = self.model.load().value
+        self.assertEqual([row.login_id for row in self.model.filtered_users("created_by_label", "service engineer")], ["5"])
+        self.assertEqual([row.login_id for row in self.model.filtered_users("updated_by_label", "(3)")], ["5"])
+
+    def test_deleted_actor_is_not_misattributed_to_a_reused_login_id(self):
+        self.model.create(NewUser("5", "New", "User", "Operator", "secret"))
+        page = self.model.load().value
+        rows = tuple(replace(row, account_id="replacement-maker") if row.account_id == "demo-maker" else row
+                     for row in page.users)
+        self.model.page = replace(page, users=rows)
+        row = self.model.filtered_users("id", "5")[0]
+        self.assertEqual(row.created_by, "demo-maker")
+        self.assertEqual(row.created_by_label, "—")
+        self.assertEqual(row.updated_by_label, "—")
+
+    def test_initial_setup_and_unavailable_actors_have_a_safe_placeholder(self):
+        initial = self.model.filtered_users("id", "1")[0]
+        self.assertEqual((initial.created_by_label, initial.updated_by_label), ("—", "—"))
+        self.model.page = replace(self.model.page,
+            users=(replace(self.model.page.users[0], created_by="os:uid:0", updated_by="missing-id"),))
+        unknown = self.model.filtered_users("", "")[0]
+        self.assertEqual((unknown.created_by_label, unknown.updated_by_label), ("—", "—"))
+
+    def test_history_resolves_known_actor_names_without_guessing_deleted_identities(self):
+        events = (HistoryEntry("now", "demo-maker", "users.edit_profile", "succeeded"),
+                  HistoryEntry("then", "deleted-identity", "users.edit_profile", "succeeded"))
+        with patch.object(self.service, "history", return_value=UserSuccess(events)):
+            history = self.model.history("demo-operator").value
+        self.assertEqual(history[0].actor, "Service Engineer (3)")
+        self.assertEqual(history[1].actor, "deleted-identity")
+        self.assertEqual(events[0].actor, "demo-maker")

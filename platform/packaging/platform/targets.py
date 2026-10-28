@@ -47,7 +47,18 @@ def prepare_target(name: str, destination: Path) -> dict:
     (destination / "platform.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
     (destination / "release-target.json").write_text(json.dumps(target, indent=2), encoding="utf-8")
     factory = ROOT / "config/factory_defaults" / f"{name}.json"
-    (destination / "factory-defaults.json").write_text(factory.read_text(encoding="utf-8"), encoding="utf-8")
+    document = json.loads(factory.read_text(encoding="utf-8"))
+    if 'paint' in target['packages']:
+        # Serialize the selected system's declared defaults, never its mutable
+        # development storage. Authored machine templates take precedence.
+        from src.bootstrap.startup_config import load_startup_config, load_bootstrap_provider
+        provider = load_bootstrap_provider(load_startup_config(destination / 'platform.json'))
+        defaults = {
+            spec.storage_key: spec.serializer.to_dict(spec.serializer.get_default())
+            for spec in provider.system_class.settings_specs if spec.required
+        }
+        document['files'] = {**defaults, **document['files']}
+    (destination / "factory-defaults.json").write_text(json.dumps(document, indent=2) + '\n', encoding="utf-8")
     update_source = load_update_source(target)
     source_dir = destination / 'update-source'
     source_dir.mkdir(exist_ok=True)

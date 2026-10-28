@@ -33,6 +33,12 @@ def main():
         # backend/Qt startup. Missing storage is never initialized as a fallback.
         if dispatch_account_tool(target):
             return
+        if '--check-installation' in sys.argv[1:]:
+            if sys.argv[1:] != ['--check-installation']:
+                raise ValueError('Use --check-installation without additional arguments')
+            prepare_installed_settings(resource_root, Path(os.environ['ROBOT_PLATFORM_DATA_ROOT']), target)
+            print('Installed settings verified (no hardware/backend started)')
+            return
         from src.engine.updates.factory_defaults import seed_factory_defaults
         seed_factory_defaults(resource_root, Path(os.environ["ROBOT_PLATFORM_DATA_ROOT"]), target)
         from src.bootstrap.run_main import main as run_platform
@@ -94,6 +100,67 @@ def check_vision_application_widgets(app):
     app.processEvents()
 
 
+def check_account_widgets(app):
+    """Construct first-Admin/account/recovery screens with in-memory test services."""
+    import io
+    import time
+    import qrcode
+    from src.applications.login.login_factory import LoginFactory
+    from src.applications.login.stub_login_application_service import StubLoginApplicationService
+    from src.applications.login.view.admin_recovery_dialog import AdminRecoveryDialog
+    from src.applications.user_management.user_management_factory import UserManagementFactory
+    from src.applications.user_management.service.stub_user_management_service import StubUserManagementService
+    from src.applications.user_management.view.account_form_dialog import AccountFormDialog
+    from src.applications.user_management.view.login_card_dialog import LoginCardDialog
+    login = LoginFactory.build(StubLoginApplicationService())
+    users = UserManagementFactory().build(StubUserManagementService())
+    image = io.BytesIO()
+    qrcode.make('self-test-only-invalid-card').save(image, format='PNG')
+    dialogs = [AdminRecoveryDialog(),
+               AccountFormDialog('Add User', (('login_id', 'ID', False), ('password', 'Password', True))),
+               LoginCardDialog(image.getvalue())]
+    try:
+        login.show_first_run()
+        deadline = time.monotonic() + 5
+        while users._controller._model.page is None and time.monotonic() < deadline:
+            app.processEvents()
+            time.sleep(0.005)
+        if users._controller._model.page is None:
+            raise RuntimeError('Frozen account screen failed to load')
+        for widget in (login, users, *dialogs):
+            widget.resize(800, 600)
+            if widget.grab().isNull():
+                raise RuntimeError('Frozen account widget failed to render')
+        if dialogs[-1]._image.pixmap().isNull():
+            raise RuntimeError('Frozen login-card QR rendering failed')
+    finally:
+        users.clean_up()
+        login.reject()
+        for widget in (login, users, *dialogs):
+            widget.deleteLater()
+        from PyQt6.QtCore import QCoreApplication, QEvent
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        app.processEvents()
+
+
+def check_configuration_dependencies():
+    """Verify direct configuration/model dependencies in the frozen runtime."""
+    import tempfile
+    import joblib
+    import yaml
+    from src.engine.vision.implementation.VisionSystem.features.shape_matching_training.config.base_config import YAML_AVAILABLE
+    if not YAML_AVAILABLE:
+        raise RuntimeError('Frozen YAML configuration support is missing')
+    data = {'self-test': [1, 2, 3]}
+    if yaml.safe_load(yaml.safe_dump(data)) != data:
+        raise RuntimeError('Frozen YAML configuration round trip failed')
+    with tempfile.TemporaryDirectory(prefix='model-dependency-self-test-') as temporary:
+        path = Path(temporary) / 'model.joblib'
+        joblib.dump(data, path)
+        if joblib.load(path) != data:
+            raise RuntimeError('Frozen model persistence round trip failed')
+
+
 def check_account_backend():
     """Exercise frozen cryptography/SQLite imports using an empty temporary store."""
     import tempfile
@@ -118,6 +185,37 @@ def check_account_backend():
             raise RuntimeError("Frozen password verification failed")
 
 
+def prepare_installed_settings(resource_root, data_root, target):
+    """Seed fresh templates and read declared settings without constructing services."""
+    from src.bootstrap.startup_config import load_bootstrap_provider, load_startup_config
+    from src.engine.repositories.settings_service_factory import build_from_specs
+    from src.engine.updates.factory_defaults import seed_factory_defaults
+    provider = load_bootstrap_provider(load_startup_config(resource_root / 'config/platform.json'))
+    system = provider.system_class
+    seed_factory_defaults(resource_root, data_root, target)
+    previous = os.environ.get('ROBOT_PLATFORM_DATA_ROOT')
+    os.environ['ROBOT_PLATFORM_DATA_ROOT'] = str(data_root)
+    try:
+        settings = build_from_specs(system.settings_specs, system.metadata.settings_root, system)
+        for spec in system.settings_specs:
+            if spec.required:
+                settings.get(spec.name)
+    finally:
+        if previous is None:
+            os.environ.pop('ROBOT_PLATFORM_DATA_ROOT', None)
+        else:
+            os.environ['ROBOT_PLATFORM_DATA_ROOT'] = previous
+
+
+def check_fresh_settings(resource_root, target):
+    """Read every required setting from an empty installed data root, without I/O to hardware."""
+    import tempfile
+    if 'paint' not in target['packages']:
+        return
+    with tempfile.TemporaryDirectory(prefix='fresh-settings-self-test-') as temporary:
+        prepare_installed_settings(resource_root, Path(temporary), target)
+
+
 def self_test():
     """Verify frozen imports, startup resources and Qt without touching hardware."""
     from PyQt6.QtWidgets import QApplication
@@ -134,11 +232,14 @@ def self_test():
     resource_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
     target = json.loads((resource_root / "config/release-target.json").read_text())
     load_factory_defaults(resource_root, target)
+    check_fresh_settings(resource_root, target)
+    check_configuration_dependencies()
     check_account_backend()
     from src.bootstrap.qt_application import prepare_qt_application
     prepare_qt_application()
-    app = QApplication([])
+    app = QApplication([sys.argv[0]])
     check_vision_application_widgets(app)
+    check_account_widgets(app)
     if "paint" in target["packages"]:
         from src.robot_systems.paint.applications.dashboard.ui.paint_card_factory import _PAINT_ICON_PATH
         from PyQt6.QtSvg import QSvgRenderer
@@ -209,7 +310,7 @@ if __name__ == "__main__":
         main()
     except Exception as error:
         # Keep hardware-free build checks noninteractive.
-        if "--self-test" in sys.argv:
+        if "--self-test" in sys.argv or "--check-installation" in sys.argv:
             raise
         from src.bootstrap.startup_error import report_startup_error
         root = default_install_root(os.environ.get("ROBOT_PLATFORM_PRODUCT", "paint-robot"))

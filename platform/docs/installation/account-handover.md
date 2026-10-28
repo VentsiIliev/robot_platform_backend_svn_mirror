@@ -9,6 +9,41 @@ The implementation is verified with disposable installations. A target machine's
 commissioning, physical idle checks, real backup location and staff handover must
 be recorded there; local test results do not certify a robot station.
 
+## Required installer commissioning
+
+The updated combined and standalone installers require an enabled Manufacturer
+before deployment setup completes, even with kiosk mode `manual` or `off`.
+Run the installer as the platform desktop OS user, without `sudo`; it requests
+administrator authentication for the privileged steps separately.
+
+The installer also invokes `--check-installation` against the real installed
+data root before Manufacturer/system provisioning. This hardware-free command
+seeds a fresh settings directory and loads all required repositories. Missing
+or corrupt established settings prevent setup completion and kiosk enablement.
+The frozen self-test independently repeats this check on empty disposable data.
+
+For a recorded first installation, the installer runs hardware-free empty account
+setup as that desktop user, stages and installs the maintenance tool in root-owned
+locations, and invokes `ensure-manufacturer`. If no enabled Manufacturer exists,
+enter the numeric login ID, responsible person's first/last name, and a privately
+entered, confirmed password. There is no default account or password. Existing
+enabled Manufacturers are preserved without prompting for a new password.
+Disabled Manufacturers do not satisfy the requirement and are not silently enabled.
+
+Cancellation or failure leaves setup incomplete and prevents the installer from
+enabling kiosk. Retry the same installer; account initialization resumes without
+replacing accounts or credentials. Established installations must validate their
+existing store rather than initialize missing material. Commissioning starts no
+Qt screen, backend or robot application. First-customer-Admin setup remains available.
+
+`--skip-system-setup` is for software-only release verification: it skips
+commissioning and does not produce a deployment ready for handover. Automatic
+software updates neither prompt for passwords nor replace the root maintenance tool.
+
+The published **1.0.18** installer predates this required flow. For that archive,
+use the explicit setup and Manufacturer commands below before normal startup.
+The updated flow requires a newly built release.
+
 ## Installed commands and location record
 
 New platform bundles include `installation/account-maintenance/`. An administrator

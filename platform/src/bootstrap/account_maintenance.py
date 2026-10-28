@@ -23,6 +23,7 @@ def _parser():
     parser.add_argument("--database", required=True, type=Path,
                         help="Absolute path to an initialized SQLite account database")
     commands = parser.add_subparsers(dest="action", required=True)
+    commands.add_parser("ensure-manufacturer", help="Require an enabled Manufacturer; provision interactively if absent")
     inspect = commands.add_parser("inspect-manufacturer", help="Inspect a Manufacturer account without secrets")
     inspect.add_argument("--login-id", required=True)
     reset = commands.add_parser("reset-manufacturer", help="Set a new Manufacturer password")
@@ -45,6 +46,22 @@ def _read_password():
     if not first or first != second:
         raise ValueError("Passwords must be nonempty and match.")
     return first
+
+
+def _read_manufacturer():
+    """Collect identity interactively; passwords never enter arguments or environment."""
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        raise ValueError("Manufacturer provisioning requires an interactive terminal.")
+    print("An enabled Manufacturer account is required to complete installation.")
+    login_id = input("Manufacturer login ID (numeric): ").strip()
+    if not login_id.isdigit():
+        raise ValueError("Manufacturer login ID must be numeric.")
+    first_name = input("First name: ").strip()
+    last_name = input("Last name: ").strip()
+    if not first_name or not last_name:
+        raise ValueError("First and last names are required.")
+    from src.shared_contracts.accounts.maintenance import CreateManufacturer
+    return CreateManufacturer(login_id, first_name, last_name, _read_password())
 
 
 def main(argv=None):
@@ -77,7 +94,15 @@ def main(argv=None):
             ownership = AccountRuntimeLock.acquire(args.database)
 
         service = AccountMaintenanceService(SQLiteAccountStore(args.database), authority, ScryptPasswordHasher())
-        if args.action in ("inspect-manufacturer", "reset-manufacturer"):
+        if args.action == "ensure-manufacturer":
+            ready = service.has_enabled_manufacturer()
+            if isinstance(ready, Failure):
+                return _report_failure(ready)
+            if ready.value:
+                print("Enabled Manufacturer account verified; existing credentials preserved.")
+                return 0
+            result = service.create_manufacturer(_read_manufacturer())
+        elif args.action in ("inspect-manufacturer", "reset-manufacturer"):
             target = service.inspect_manufacturer(args.login_id)
             if isinstance(target, Failure):
                 return _report_failure(target)

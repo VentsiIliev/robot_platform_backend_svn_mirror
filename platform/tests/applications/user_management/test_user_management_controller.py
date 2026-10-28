@@ -10,6 +10,7 @@ from src.applications.user_management.service.i_user_management_service import (
     SecretDisplay, UserSuccess, UserFailure, UserError, UserErrorCode,
 )
 from src.applications.base.widgets.private_text_dialog import PrivateTextDialog
+from src.applications.user_management.view.account_history_dialog import AccountHistoryDialog
 from src.applications.user_management.user_management_factory import UserManagementFactory
 
 
@@ -105,6 +106,28 @@ class ControllerAccessTests(unittest.TestCase):
             second[1](second[0]())
             self.assertTrue(self.view._btn_reveal.isHidden())
 
+    def test_target_denial_hides_history_and_blocks_direct_signal(self):
+        original_access = self.service.access
+
+        def restricted_history(target_id):
+            result = original_access(target_id)
+            controls = tuple(replace(control, allowed=target_id == "demo-operator")
+                             if control.key == "history" else control for control in result.value.controls)
+            return UserSuccess(replace(result.value, controls=controls))
+
+        with patch.object(self.service, "access", side_effect=restricted_history):
+            self.view._table.selectRow(1)
+            self.wait()
+            self.assertFalse(self.view._btn_history.isHidden())
+            self.assertTrue(self.view._btn_history.isEnabled())
+            self.view._table.selectRow(0)
+            self.wait()
+            self.assertTrue(self.view._btn_history.isHidden())
+            with patch.object(self.service, "history") as history:
+                self.view.history_requested.emit(self.view.selected_record())
+                self.wait()
+            history.assert_not_called()
+
     def test_busy_state_survives_a_permission_refresh(self):
         self.view._table.selectRow(1)
         self.wait()
@@ -159,4 +182,21 @@ class ControllerAccessTests(unittest.TestCase):
         self.assertIsNone(self.controller._model.page)
         self.assertIsNone(self.controller._permissions)
         self.assertFalse(self.view._tabs.isTabVisible(1))
+
+    def test_history_cannot_be_displayed_after_session_switch(self):
+        revision = self.service.session_revision()
+        self.service.current_revision += 1
+        with patch.object(self.view, "display_history") as display:
+            self.controller._delivered(self.controller._history_ready, revision, UserSuccess(()))
+        display.assert_not_called()
+
+    def test_session_revocation_closes_and_clears_history_dialog(self):
+        from src.applications.user_management.service.i_user_management_service import HistoryEntry
+        dialog = AccountHistoryDialog((HistoryEntry("now", "actor", "users.edit_profile", "succeeded"),), self.view)
+        self.view._private_dialog = dialog
+        self.service.current_revision += 1
+        self.controller._poll_access()
+        self.wait()
+        self.assertEqual(dialog._entries, ())
+        self.assertIsNone(dialog._events.item(0, 1))
 

@@ -2,7 +2,10 @@ from contextlib import redirect_stdout
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -20,6 +23,30 @@ spec.loader.exec_module(entry)
 class InstalledAccountToolTests(unittest.TestCase):
     def test_frozen_self_test_checks_real_credentials_without_hardware(self):
         entry.check_account_backend()
+
+    def test_frozen_configuration_and_model_dependencies_are_available(self):
+        entry.check_configuration_dependencies()
+
+    def test_frozen_self_test_constructs_account_and_recovery_screens(self):
+        # WebEngine needs a program name and one QApplication per process.
+        # Other UI tests intentionally use QApplication([]), so isolate the
+        # rendering check just like the actual frozen executable.
+        script = '''
+import importlib.util
+from pathlib import Path
+from src.bootstrap.qt_application import prepare_qt_application
+prepare_qt_application()
+from PyQt6.QtWidgets import QApplication
+app = QApplication(['account-widget-self-test'])
+spec = importlib.util.spec_from_file_location('account_entry', Path('packaging/platform/platform_entrypoint.py'))
+entry = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(entry)
+entry.check_account_widgets(app)
+'''
+        result = subprocess.run([sys.executable, '-B', '-c', script], cwd=ROOT,
+            env={**os.environ, 'QT_QPA_PLATFORM': 'offscreen', 'QTWEBENGINE_DISABLE_SANDBOX': '1'},
+            capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()

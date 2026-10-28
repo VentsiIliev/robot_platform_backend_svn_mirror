@@ -32,6 +32,7 @@ machine's accounts have been erased, initialized, or migrated by this work.
 - [x] C6. Replace the previous import/mapping work with the confirmed empty-account cutover. Fresh initialization reads no old users, passwords, or grants.
 - [x] C7. Document clean credential cutover: fresh accounts/passwords/cards, no required plaintext rollback backup, explicit retirement of old test credentials after live wiring is verified (see the credential storage guide).
 - [x] C8. Add explicit fresh installation with no CSV/JSON sources, no default accounts, interruption recovery, immutable setup-mode choice, and an audited setup command.
+- [x] C9. Require enabled Manufacturer provisioning in combined and standalone installers before kiosk/setup completion; private interactive identity/password entry, preserved existing credentials, failed/cancelled setup retry, and desktop-owned empty storage. Implemented in source; the published 1.0.18 archive still uses manual commissioning.
 
 ## Runtime and role rollout
 
@@ -88,6 +89,8 @@ been launched, initialized, or changed by this work.
 - Admin manages Operators and their own profile/password; other Admin/Manufacturer management is Manufacturer-only.
 - Operator never sees or opens Administration/Service. Manufacturer sees all applications.
 - App Permissions is Manufacturer-only. Visibility and execution are independent gates.
+- Account history is available to Admin for self and current Operators; Manufacturer
+  can inspect all identities, including deleted accounts. Operator reads are denied.
 - Admin personal offline recovery codes, Manufacturer reset fallback, and OS-authorized last-resort Manufacturer maintenance.
 - SQLite behind contracts; user metadata and durable action history; current styles preserved.
 - Protected local key storage is the initial implementation behind a replaceable provider; production provisioning/backup must be recorded before cutover.

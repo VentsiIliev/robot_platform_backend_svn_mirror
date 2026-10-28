@@ -30,14 +30,27 @@ does not change profile metadata or revoke already authenticated sessions.
 
 ## Contracts
 
+`IAccountMaintenanceService.has_enabled_manufacturer()` is an OS-authorized
+`Result[bool]` readiness query; disabled Manufacturers do not satisfy it. The
+installer invokes the root-owned `ensure-manufacturer` command under the exclusive
+account runtime lease, then permits kiosk provisioning only on success. The CLI
+collects missing identity/password privately and uses the existing atomic,
+audited create command. It preserves existing enabled accounts and leaves
+first-customer-Admin commissioning independent.
+
 `src/shared_contracts/accounts/` owns safe account summaries, explicit commands,
 redacted history, recovery, cards, and session validity. `src/shared_contracts/authorization/`
 owns action/feature IDs, access requests/decisions, typed results, errors, and
 permission snapshots. These packages depend only on stdlib.
 
 `IAuditHistoryService` exposes authorized paged history reads under `audit.view`.
-This action has no ordinary-role grant initially; Manufacturer's global grant
-permits it. History remains readable by technical account ID after deletion.
+It requires an `account_history` resource reference. Admin has self and
+current-Operator grants; other privileged targets are denied. Both presentation
+context and command execution resolve trusted history facts from storage using
+the same helper. A history identity survives account deletion with no current
+role: Manufacturer's global grant retains access, while Admin cannot read a
+deleted identity or gain access through a stale Operator role. History reads
+also revalidate the session and discard results if it changes during the query.
 
 Account commands return `Success[T]` or `Failure(ServiceError)`. Expected errors
 include access denial, invalid proof/input, revision conflict, and policy violation.

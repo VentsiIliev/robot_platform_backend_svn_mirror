@@ -54,6 +54,22 @@ class TestUserManagementViewSetUsers(unittest.TestCase):
         stored = self._view._table.item(0, 0).data(Qt.ItemDataRole.UserRole)
         self.assertEqual(stored.get("id"), "42")
 
+    def test_actor_columns_render_readable_labels_and_retain_stable_actor_identity(self):
+        from src.applications.user_management.model.user_management_model import UserManagementModel
+        from src.applications.user_management.service.i_user_management_service import NewUser
+
+        service = StubUserManagementService()
+        created = service.create(NewUser("5", "New", "Operator", "Operator", "secret")).value
+        model = UserManagementModel(service, permissions_model=None)
+        model.page = model.load().value
+        self._view.set_users(model.filtered_users("id", "5"))
+        fields = DEFAULT_USER_SCHEMA.get_table_fields()
+        for key in ("created_by_label", "updated_by_label"):
+            column = next(index for index, field in enumerate(fields) if field.key == key)
+            self.assertEqual(self._view._table.item(0, column).text(), "Service Engineer (3)")
+        stored = self._view._table.item(0, 0).data(Qt.ItemDataRole.UserRole)
+        self.assertEqual(stored.created_by, created.created_by)
+
 
 class TestUserManagementViewSetStatus(unittest.TestCase):
 

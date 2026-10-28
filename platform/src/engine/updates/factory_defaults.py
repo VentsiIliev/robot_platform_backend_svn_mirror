@@ -9,6 +9,10 @@ from .files import atomic_json, sync_directory
 ALLOWED_FILES = frozenset({
     "hardware/peripherals.json", "hardware/modbus.json",
     "hardware/cameras.json", "dryer/settings.json",
+    "robot/config.json", "robot/movement_groups.json", "robot/calibration.json",
+    "targeting/definitions.json", "tools/tool_changer.json",
+    "vision/calibration_settings.json", "vision/camera_settings.json", "vision/work_areas.json",
+    "paint/process.json", "paint/adjustment.json", "hardware/operator_lights.json",
 })
 
 

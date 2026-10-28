@@ -3,7 +3,7 @@ from io import BytesIO
 
 from src.applications.user_management.service.i_user_management_service import (
     IUserManagementService, UserEntry, UserPage, UserError, UserErrorCode, UserFailure, UserSuccess,
-    ControlAccess, ScreenAccess, SecretDisplay, QrDisplay, HistoryEntry, PermissionsPage,
+    ControlAccess, ScreenAccess, SecretDisplay, QrDisplay, HistoryEntry, HistoryChange, PermissionsPage,
 )
 from src.engine.auth.i_account_service import IAccountService
 from src.engine.auth.i_access_service import IAccessService
@@ -93,7 +93,8 @@ class UserManagementApplicationService(IUserManagementService):
             ("reveal", AccessRequest(AccessKind.ACTION, UserAction.REVEAL_PASSWORD, target)),
             ("role", AccessRequest(AccessKind.ACTION, UserAction.CHANGE_ROLE, target)),
             ("qr", AccessRequest(AccessKind.ACTION, UserAction.ISSUE_LOGIN_TOKEN, target)),
-            ("history", AccessRequest(AccessKind.ACTION, AuditAction.VIEW)),
+            ("history", AccessRequest(AccessKind.ACTION, AuditAction.VIEW,
+                                     ResourceRef("account_history", target_id) if target_id else None)),
             ("codes", AccessRequest(AccessKind.ACTION, RecoveryAction.ISSUE)),
             ("permissions", AccessRequest(AccessKind.FEATURE, UserFeature.APP_PERMISSIONS)),
         )
@@ -155,9 +156,8 @@ class UserManagementApplicationService(IUserManagementService):
         def convert(events):
             return tuple(HistoryEntry(event.occurred_at, event.actor_id or event.actor_method,
                                      event.action_id, event.outcome,
-                                     "; ".join(change.field + ": " + str(change.before) + " -> " + str(change.after)
-                                               for change in event.changes)
-                                     + ("; password changed" if event.password_changed else "")) for event in events)
+                                     tuple(HistoryChange(change.field, change.before, change.after)
+                                           for change in event.changes), event.password_changed) for event in events)
         return self._call(lambda: self._history.list_events(HistoryQuery(account_id)), convert)
 
     def _permissions_page(self, snapshot):

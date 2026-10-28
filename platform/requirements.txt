@@ -16,6 +16,8 @@ coverage==7.15.2
 cryptography==50.0.2
 ImageIO==2.37.2
 PyQt6==6.11.0
+PyQt6-WebEngine==6.11.0
+PyYAML==6.0.3
 QtAwesome==1.4.2
 QtPy==2.4.3
 # Pin the immutable 1.1.1 release tag used by WorkpieceEditor.
@@ -23,6 +25,7 @@ contour-editor-plugin @ git+https://github.com/VentsiIliev/contour_editor-plugin
 ezdxf==1.4.3
 matplotlib==3.10.8
 minimalmodbus==2.1.1
+joblib==1.6.0
 networkx==3.6.1
 numpy==2.4.4
 opencv-python==4.13.0.92

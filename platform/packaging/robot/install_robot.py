@@ -81,7 +81,7 @@ def main():
     parser.add_argument('--kiosk', choices=('enabled', 'manual', 'off'))
     parser.add_argument('--setup-system', action='store_true')
     parser.add_argument('--skip-system-setup', action='store_true',
-                        help='Install software only, for isolated release verification')
+                        help='Verification only: install software without commissioning accounts or system setup')
     args = parser.parse_args()
     if args.skip_system_setup and (args.setup_system or args.kiosk is not None):
         parser.error('--skip-system-setup cannot be combined with system setup options')
@@ -118,7 +118,8 @@ def main():
                     if first_install and not setup_state.exists():
                         setup_state.parent.mkdir(parents=True, exist_ok=True)
                         temporary_state = setup_state.with_suffix('.tmp')
-                        temporary_state.write_text(json.dumps({'complete': False, 'kiosk': args.kiosk or 'enabled'}))
+                        temporary_state.write_text(json.dumps({'complete': False, 'kiosk': args.kiosk or 'enabled',
+                                                               'fresh_accounts': True}))
                         os.replace(temporary_state, setup_state)
                     pending_setup = json.loads(setup_state.read_text()) if setup_state.exists() else None
                     retrying_choice = (pending_setup is not None and not pending_setup['complete']

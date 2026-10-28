@@ -318,9 +318,67 @@ class AccountServiceTests(unittest.TestCase):
         self.assertEqual(history.list_events(HistoryQuery(identity)).error.code, ErrorCode.ACCESS_DENIED)
         self.login(self.manufacturer)
         events = history.list_events(HistoryQuery(identity)).value
-        self.assertEqual(events[0].action_id, "users.delete")
-        self.assertEqual(events[0].target_id, identity)
+        self.assertTrue(any(event.action_id == "users.delete" for event in events))
+        self.assertTrue(all(event.target_id == identity for event in events))
         self.assertEqual(history.list_events(HistoryQuery(identity, limit=0)).error.code, ErrorCode.INVALID_INPUT)
+
+    def test_history_ui_advice_and_service_enforce_same_role_and_target_scope(self):
+        from src.engine.auth.access_service import AccessService
+        from src.shared_contracts.authorization.access import AccessKind, AccessRequest
+        from src.shared_contracts.authorization.actions import AuditAction
+
+        history = AuditHistoryService(self.store, self.session, self.policy)
+        access = AccessService(AccountAccessContext(self.store, self.session), self.policy)
+        self.service.edit_profile(EditProfile(self.admin.summary.account_id, 1, "Edited", "Admin", ""))
+        self.service.edit_profile(EditProfile(self.operator.summary.account_id, 1, "Edited", "Operator", ""))
+        for actor, permitted in ((self.admin, {self.admin.summary.account_id, self.operator.summary.account_id}),
+                                 (self.manufacturer, {account.summary.account_id for account in
+                                    (self.admin, self.other_admin, self.operator, self.manufacturer)}),
+                                 (self.operator, set())):
+            self.login(actor)
+            for target in (self.admin, self.other_admin, self.operator, self.manufacturer):
+                identity = target.summary.account_id
+                with self.subTest(actor=actor.summary.role, target=target.summary.role, identity=identity):
+                    request = AccessRequest(AccessKind.ACTION, AuditAction.VIEW,
+                                            ResourceRef("account_history", identity))
+                    decision = access.evaluate((request,)).value.decisions[0]
+                    result = history.list_events(HistoryQuery(identity))
+                    self.assertEqual(decision.allowed, identity in permitted)
+                    self.assertEqual(isinstance(result, Success), identity in permitted)
+                    if isinstance(result, Failure):
+                        self.assertEqual(result.error.code, ErrorCode.ACCESS_DENIED)
+        self.session.logout()
+        self.assertEqual(history.list_events(HistoryQuery(self.admin.summary.account_id)).error.code,
+                         ErrorCode.AUTHENTICATION_REQUIRED)
+
+    def test_history_rechecks_target_role_after_ui_authorization(self):
+        from src.engine.auth.access_service import AccessService
+        from src.shared_contracts.authorization.access import AccessKind, AccessRequest
+        from src.shared_contracts.authorization.actions import AuditAction
+
+        identity = self.operator.summary.account_id
+        history = AuditHistoryService(self.store, self.session, self.policy)
+        request = AccessRequest(AccessKind.ACTION, AuditAction.VIEW, ResourceRef("account_history", identity))
+        access = AccessService(AccountAccessContext(self.store, self.session), self.policy)
+        self.assertTrue(access.evaluate((request,)).value.decisions[0].allowed)
+        self.login(self.manufacturer)
+        self.assertIsInstance(self.service.change_role(ChangeRole(identity, 1, "Admin", "new-privileged-secret")), Success)
+        self.login(self.admin)
+        self.assertFalse(access.evaluate((request,)).value.decisions[0].allowed)
+        self.assertEqual(history.list_events(HistoryQuery(identity)).error.code, ErrorCode.ACCESS_DENIED)
+
+    def test_history_does_not_return_events_if_session_changes_during_read(self):
+        history = AuditHistoryService(self.store, self.session, self.policy)
+        original = SQLiteAccountTransaction.history
+
+        def read_then_logout(transaction, query):
+            events = original(transaction, query)
+            self.session.logout()
+            return events
+
+        with patch.object(SQLiteAccountTransaction, "history", read_then_logout):
+            result = history.list_events(HistoryQuery(self.operator.summary.account_id))
+        self.assertEqual(result.error.code, ErrorCode.CONFLICT)
 
     def test_login_returns_safe_identity_without_changing_edit_metadata(self):
         login = AccountLoginService(self.store, self.credentials)

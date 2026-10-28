@@ -20,6 +20,15 @@ class AccountMaintenanceService(IAccountMaintenanceService):
         self._store, self._authority, self._passwords = store, authority, passwords
         self._clock = clock or (lambda: datetime.now(timezone.utc).isoformat())
 
+    def has_enabled_manufacturer(self):
+        authorized = self._authority.current_actor()
+        if isinstance(authorized, Failure):
+            return authorized
+        with self._store.transaction() as transaction:
+            return Success(any(account.summary.role == UserRole.MANUFACTURER
+                               and account.summary.enabled
+                               for account in transaction.list_accounts()))
+
     def inspect_manufacturer(self, login_id):
         authorized = self._authority.current_actor()
         if isinstance(authorized, Failure):

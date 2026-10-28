@@ -104,6 +104,14 @@ First installation provisions native dependencies, remote support, GNOME Kiosk
 and the per-user updater. Kiosk provisioning automatically installs the shared
 exit-password hash embedded during the platform build; repeated installation
 preserves the station's existing hash.
+The updated installer first initializes empty account storage as the desktop
+user and requires an enabled Manufacturer through the root-owned maintenance
+tool. When absent, Manufacturer identity and a privately confirmed password are
+requested interactively. Cancellation/failure leaves setup incomplete and blocks
+kiosk provisioning. Retry the installer to resume; existing Manufacturers and
+credentials are preserved. Run `python3 robot/install.py` without `sudo`.
+The published 1.0.18 archive still requires manual account commissioning; see
+[handover](../../docs/installation/account-handover.md).
 Maintenance installation preserves desktop and machine settings. Explicit
 `--setup-system --kiosk enabled` retries system provisioning.
 Package installation waits for the apt/dpkg lock held by automatic OS updates.

@@ -7,6 +7,14 @@ releases. For complete-system operation, use
 
 ## Complete-system activation
 
+Trusted installer commissioning uses `account_provisioning` before enabling
+kiosk or marking setup complete. Recorded first installs initialize empty accounts
+as the desktop user; established installs must open their existing store. The
+root-owned maintenance tool requires an enabled Manufacturer, prompting privately
+only if none exists. Failed/cancelled commissioning stays pending for retry.
+Automatic update activation does not run this interactive provisioning flow.
+See [account handover](../../installation/account-handover.md).
+
 The Software Update screen delegates check, download, queue and status requests
 to a per-user systemd service over a local Unix socket. The service stages the
 complete robot archive. It waits for the runtime locks to become available after
@@ -34,6 +42,19 @@ revert it. Kiosk updates are deferred: automatic updates preserve kiosk/session
 and automatic-login settings rather than rerunning kiosk setup.
 
 ## Installed layout
+
+Paint builds assemble factory templates from the selected system's declared
+required settings serializers, with authored hardware/dryer templates taking
+precedence. This includes tool-changer configuration and other required JSON
+files without importing development storage, poses or station calibration results.
+The frozen self-test seeds a disposable data root and loads every required
+setting through the real settings repositories, before any hardware is started.
+The installed `--check-installation` command does the same against the actual
+data root during trusted installer commissioning, before kiosk setup or successful
+completion. It returns before Qt, backend or robot startup; errors remain terminal
+errors rather than opening a GUI dialog.
+Existing settings are preserved; missing files in established storage still
+require explicit recovery instead of silent defaults.
 
 ```text
 ~/.local/share/robot-releases/paint_tray_dry/
