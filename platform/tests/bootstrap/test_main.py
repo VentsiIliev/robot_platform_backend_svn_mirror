@@ -130,6 +130,8 @@ class TestStartupSequenceOrder(unittest.TestCase):
             patch("src.bootstrap.run_main.build_configured_robot", return_value=MagicMock()),
             patch("src.bootstrap.run_main.SystemBuilder",
                   return_value=fake_builder),
+            patch("src.bootstrap.account_runtime.configure_account_runtime",
+                  side_effect=lambda *_args, **_kwargs: call_order.append("accounts")),
             patch("src.bootstrap.run_main.ShellConfigurator.configure",
                   side_effect=lambda _: call_order.append("shell_cfg")),
             patch("src.bootstrap.run_main.QApplication",
@@ -150,6 +152,7 @@ class TestStartupSequenceOrder(unittest.TestCase):
         self.assertIn("engine",      call_order)
         self.assertIn("backend_start", call_order)
         self.assertIn("system_build", call_order)
+        self.assertIn("accounts", call_order)
         self.assertIn("shell_cfg",   call_order)
         self.assertIn("qt",          call_order)
 
@@ -165,6 +168,10 @@ class TestStartupSequenceOrder(unittest.TestCase):
         # system_build must come before shell_cfg
         self.assertLess(
             call_order.index("system_build"),
+            call_order.index("accounts"),
+        )
+        self.assertLess(
+            call_order.index("accounts"),
             call_order.index("shell_cfg"),
         )
         # shell_cfg must come before Qt
@@ -179,6 +186,35 @@ class TestStartupSequenceOrder(unittest.TestCase):
 # ══════════════════════════════════════════════════════════════════════════════
 
 class TestStartupAbortOnFailure(unittest.TestCase):
+
+    def test_account_preflight_failure_aborts_before_backend_or_hardware(self):
+        import src.bootstrap.run_main as m
+        config = MagicMock(ui=MagicMock(kiosk_mode=False, dev_skip_login=False))
+        with (patch.object(m, "load_startup_config", return_value=config),
+              patch.object(m, "build_diagnostics_service"),
+              patch.object(m, "load_bootstrap_provider"),
+              patch.object(m, "EngineContext"),
+              patch("src.bootstrap.account_runtime.prepare_account_runtime", side_effect=RuntimeError("invalid store")),
+              patch.object(m, "build_ros_backend_launcher_from_env") as backend,
+              patch.object(m, "SystemBuilder") as builder):
+            with self.assertRaisesRegex(RuntimeError, "invalid store"):
+                m.main()
+            backend.assert_not_called()
+            builder.assert_not_called()
+
+    def test_backend_construction_failure_releases_prepared_account_ownership(self):
+        import src.bootstrap.run_main as m
+        config = MagicMock(ui=MagicMock(kiosk_mode=False, dev_skip_login=False))
+        prepared = MagicMock()
+        with (patch.object(m, "load_startup_config", return_value=config),
+              patch.object(m, "build_diagnostics_service"),
+              patch.object(m, "load_bootstrap_provider"),
+              patch.object(m, "EngineContext"),
+              patch("src.bootstrap.account_runtime.prepare_account_runtime", return_value=prepared),
+              patch.object(m, "build_ros_backend_launcher_from_env", side_effect=RuntimeError("backend failed"))):
+            with self.assertRaisesRegex(RuntimeError, "backend failed"):
+                m.main()
+            prepared.close.assert_called_once()
 
     def test_startup_aborts_cleanly_on_engine_build_failure(self):
         """

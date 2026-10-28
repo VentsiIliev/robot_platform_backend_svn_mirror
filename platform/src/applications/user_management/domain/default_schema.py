@@ -1,16 +1,15 @@
 from src.applications.user_management.domain.user_schema import UserSchema, FieldDescriptor
 
-# Default schema matching the original User model — reuse or replace per robot vision_service
-DEFAULT_USER_SCHEMA = UserSchema(
-    id_key="id",
-    fields=[
-        FieldDescriptor(key="id",        label="ID",         widget="int",      required=True,  read_only_on_edit=True),
-        FieldDescriptor(key="firstName", label="First Name", widget="text",     required=True),
-        FieldDescriptor(key="lastName",  label="Last Name",  widget="text",     required=True),
-        FieldDescriptor(key="password",  label="Password",   widget="password", required=True,  mask_in_table=True),
-        FieldDescriptor(key="role",      label="Role",       widget="combo",    required=True,
-                        options=["Admin", "Operator", "Viewer"]),
-        FieldDescriptor(key="email",     label="Email",      widget="email",    required=False),
-    ],
-)
+# Safe presentation schema. Credentials are never part of a table/profile DTO.
+DEFAULT_USER_SCHEMA = UserSchema(id_key="id", fields=[
+    FieldDescriptor("id", "ID", "text"),
+    FieldDescriptor("firstName", "First Name", "text"),
+    FieldDescriptor("lastName", "Last Name", "text"),
+    FieldDescriptor("role", "Role", "text"),
+    FieldDescriptor("email", "Email", "text", required=False),
+    FieldDescriptor("created_at", "Created at", "text", required=False),
+    FieldDescriptor("created_by", "Created by", "text", required=False),
+    FieldDescriptor("updated_at", "Edited at", "text", required=False),
+    FieldDescriptor("updated_by", "Edited by", "text", required=False),
+])
 

@@ -42,13 +42,11 @@ class TestUserManagementViewSetUsers(unittest.TestCase):
         self._view.set_users([])
         self.assertEqual(self._view._table.rowCount(), 0)
 
-    def test_set_users_masks_password_column(self):
+    def test_passwords_are_absent_from_the_table_schema(self):
         self._view.set_users([_record("1")])
         # Password column index in DEFAULT_USER_SCHEMA table fields
         headers = DEFAULT_USER_SCHEMA.get_table_headers()
-        pwd_col = headers.index("Password")
-        item = self._view._table.item(0, pwd_col)
-        self.assertEqual(item.text(), "****")
+        self.assertNotIn("Password", headers)
 
     def test_set_users_stores_record_in_user_role(self):
         record = _record("42")
@@ -112,12 +110,12 @@ class TestUserManagementViewButtonStates(unittest.TestCase):
         self.assertFalse(self._view._btn_delete.isEnabled())
         self.assertFalse(self._view._btn_qr.isEnabled())
 
-    def test_buttons_enabled_after_row_selection(self):
+    def test_selection_cannot_regrant_buttons_owned_by_access_binding(self):
         self._view.set_users([_record("1")])
         self._view._table.selectRow(0)
-        self.assertTrue(self._view._btn_edit.isEnabled())
-        self.assertTrue(self._view._btn_delete.isEnabled())
-        self.assertTrue(self._view._btn_qr.isEnabled())
+        self.assertFalse(self._view._btn_edit.isEnabled())
+        self.assertFalse(self._view._btn_delete.isEnabled())
+        self.assertFalse(self._view._btn_qr.isEnabled())
 
     def test_buttons_disabled_after_table_cleared(self):
         self._view.set_users([_record("1")])
@@ -155,6 +153,7 @@ class TestUserManagementViewSignals(unittest.TestCase):
         self._view.edit_requested.connect(lambda r: received.append(r))
         self._view.set_users([_record("5", first="Eve")])
         self._view._table.selectRow(0)
+        self._view._btn_edit.setEnabled(True)
         self._view._btn_edit.click()
         self.assertEqual(len(received), 1)
         self.assertEqual(received[0].get("id"), "5")
@@ -164,6 +163,7 @@ class TestUserManagementViewSignals(unittest.TestCase):
         self._view.delete_requested.connect(lambda r: received.append(r))
         self._view.set_users([_record("3")])
         self._view._table.selectRow(0)
+        self._view._btn_delete.setEnabled(True)
         self._view._btn_delete.click()
         self.assertEqual(len(received), 1)
         self.assertEqual(received[0].get("id"), "3")
@@ -173,6 +173,7 @@ class TestUserManagementViewSignals(unittest.TestCase):
         self._view.qr_requested.connect(lambda r: received.append(r))
         self._view.set_users([_record("9")])
         self._view._table.selectRow(0)
+        self._view._btn_qr.setEnabled(True)
         self._view._btn_qr.click()
         self.assertEqual(len(received), 1)
         self.assertEqual(received[0].get("id"), "9")
@@ -200,7 +201,7 @@ class TestUserManagementViewSignals(unittest.TestCase):
         if clear_btn:
             clear_btn.click()
         self.assertEqual(self._view._filter_input.text(), "")
-        self.assertTrue(any(col == "All" for col, _ in received))
+        self.assertTrue(any(col == "" for col, _ in received))
 
     def test_clean_up_returns_none(self):
         self.assertIsNone(self._view.clean_up())
@@ -244,6 +245,12 @@ class TestUserManagementLocalizationRegression(unittest.TestCase):
         self._window.show()
         self._app.processEvents()
 
+        from PyQt6.QtTest import QTest
+        for _ in range(100):
+            QTest.qWait(10)
+            if not self._view._controller.has_running_workers():
+                break
+
     def tearDown(self):
         self._window.close()
         self._view.clean_up()
@@ -252,11 +259,11 @@ class TestUserManagementLocalizationRegression(unittest.TestCase):
 
     def test_selector_retranslates_embedded_user_management_view(self):
         self.assertEqual(self._view._title_label.text(), "User Management")
-        self.assertEqual(self._view._status.text(), "2 users loaded")
+        self.assertEqual(self._view._status.text(), "3 users loaded")
 
         self._selector.setCurrentIndex(self._selector.findText("Български"))
         self._app.processEvents()
 
         self.assertEqual(self._view._title_label.text(), "Управление на потребители")
         self.assertEqual(self._view._btn_refresh.text(), "Обнови")
-        self.assertEqual(self._view._status.text(), "Заредени 2 потребителя")
+        self.assertEqual(self._view._status.text(), "Заредени 3 потребителя")

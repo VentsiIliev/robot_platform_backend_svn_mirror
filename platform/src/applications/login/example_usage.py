@@ -4,7 +4,7 @@ Standalone runner for the Login application.
 Demonstrates three scenarios:
   1. Normal login   — stub always accepts any numeric ID + password.
   2. First-run      — is_first_run()=True → first-admin creation form.
-  3. QR auto-login  — try_qr_login() returns credentials after 4 s;
+  3. QR auto-login  — scan_qr() returns a demo token;
                       fake camera frames are published so the live feed works.
 
 Run from the project root:
@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from src.applications.login.login_factory import LoginFactory
 from src.applications.login.stub_login_application_service import StubLoginApplicationService
+from src.applications.login.i_login_application_service import LoginSuccess
 from src.engine.auth.i_authenticated_user import IAuthenticatedUser
 from src.engine.core.message_broker import MessageBroker
 from src.shared_contracts.events.vision_events import VisionTopics
@@ -33,18 +34,18 @@ from src.shared_contracts.events.vision_events import VisionTopics
 # ── Stub variants ─────────────────────────────────────────────────────────────
 
 class _FirstRunStub(StubLoginApplicationService):
-    def is_first_run(self) -> bool:
-        return True
+    def is_first_run(self):
+        return LoginSuccess(True)
 
 
 class _QrAutoStub(StubLoginApplicationService):
     _scanned = False
 
-    def try_qr_login(self) -> Optional[Tuple[str, str]]:
+    def scan_qr(self):
         if self._scanned:
-            return None
+            return LoginSuccess(None)
         self._scanned = True
-        return "1", "stubpassword"
+        return LoginSuccess("demo-opaque-card")
 
     def move_to_login_pos(self) -> None:
         print("[Stub] Robot moving to login position…")

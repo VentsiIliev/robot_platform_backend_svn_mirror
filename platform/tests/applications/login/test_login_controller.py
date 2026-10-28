@@ -1,185 +1,112 @@
-"""
-Tests for src/applications/login/controller/login_controller.y_pixels
-"""
+import threading
 import unittest
 from unittest.mock import MagicMock
 
-from src.applications.login.model.login_model import LoginModel
+from PyQt6.QtTest import QTest
+from PyQt6.QtWidgets import QApplication
+
 from src.applications.login.controller.login_controller import LoginController
-from src.engine.auth.i_authenticated_user import IAuthenticatedUser
+from src.applications.login.model.login_model import LoginModel
+from src.applications.login.stub_login_application_service import StubLoginApplicationService
+from src.applications.login.i_login_application_service import LoginSuccess, LoginFailure, LoginError, LoginErrorCode
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+class _LoginStub(StubLoginApplicationService):
+    def __init__(self):
+        self.calls = []
+        self.result = super().authenticate("1", "demo")
+        self.first_run = False
+        self.recovery_calls = []
 
-def _make_user() -> IAuthenticatedUser:
-    u = MagicMock(spec=IAuthenticatedUser)
-    u.user_id = "1"
-    return u
+    def authenticate(self, user_id, password):
+        self.calls.append((user_id, password, threading.get_ident()))
+        return self.result
 
+    def is_first_run(self):
+        return LoginSuccess(self.first_run)
 
-def _make_model(
-    user=None,
-    first_run: bool = False,
-    validation_error: str = None,
-    admin_result=(True, "Created"),
-    qr_result=None,
-) -> LoginModel:
-    m = MagicMock(spec=LoginModel)
-    m.is_first_run.return_value         = first_run
-    m.authenticate.return_value         = user
-    m.try_qr_login.return_value         = qr_result
-    m.validate_login_input.return_value = validation_error
-    m.create_first_admin.return_value   = admin_result
-    return m
+    def recover_admin(self, command):
+        self.recovery_calls.append(command)
+        return super().recover_admin(command)
 
 
-def _make_view():
-    v = MagicMock()
-    v.setup_confirmed       = MagicMock()
-    v.login_submitted       = MagicMock()
-    v.qr_scan_requested     = MagicMock()
-    v.qr_tab_activated      = MagicMock()
-    v.first_admin_submitted = MagicMock()
-    return v
+class LoginControllerTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
 
+    def setUp(self):
+        self.service = _LoginStub()
+        self.view = MagicMock()
+        self.controller = LoginController(LoginModel(self.service), self.view)
+        self.controller.load()
+        self.addCleanup(self.controller.stop)
 
-# ── load() ───────────────────────────────────────────────────────────────────
+    def wait(self):
+        for _ in range(100):
+            QTest.qWait(10)
+            if not self.controller.has_running_workers():
+                return
+        self.fail("Login worker did not finish")
 
-class TestLoginControllerLoad(unittest.TestCase):
+    def test_login_runs_off_gui_thread_and_delivers_result(self):
+        gui_thread = threading.get_ident()
+        self.controller._on_login_submitted("42", " secret ")
+        self.wait()
+        self.assertEqual(self.service.calls[0][:2], ("42", " secret "))
+        self.assertNotEqual(self.service.calls[0][2], gui_thread)
+        self.view.accept_login.assert_called_once_with(self.service.result.value)
 
-    def _loaded(self, **kwargs):
-        ctrl = LoginController(_make_model(**kwargs), _make_view())
-        ctrl.load()
-        return ctrl
+    def test_invalid_input_never_starts_authentication(self):
+        self.controller._on_login_submitted("", "secret")
+        self.assertEqual(self.service.calls, [])
+        self.view.show_error.assert_called_once()
 
-    def test_load_shows_setup_page(self):
-        ctrl = self._loaded()
-        ctrl._view.show_setup.assert_called_once()
+    def test_repeated_submission_cannot_start_duplicate_authentication(self):
+        self.controller._on_login_submitted("42", "secret")
+        self.controller._on_login_submitted("42", "second")
+        self.wait()
+        self.assertEqual(len(self.service.calls), 1)
 
-    def test_load_connects_setup_confirmed(self):
-        ctrl = self._loaded()
-        ctrl._view.setup_confirmed.connect.assert_called_once()
+    def test_rate_limit_is_shown_without_accepting_login(self):
+        self.service.result = LoginFailure(LoginError(LoginErrorCode.RATE_LIMITED))
+        self.controller._on_login_submitted("42", "secret")
+        self.wait()
+        self.assertIn("Too many attempts", self.view.show_error.call_args.args[0])
+        self.view.accept_login.assert_not_called()
 
-    def test_load_connects_login_submitted(self):
-        ctrl = self._loaded()
-        ctrl._view.login_submitted.connect.assert_called_once()
+    def test_first_customer_setup_is_a_worker_query(self):
+        self.service.first_run = True
+        self.controller._on_setup_confirmed()
+        self.wait()
+        self.view.show_first_run.assert_called_once()
+        self.view.show_login.assert_not_called()
 
-    def test_load_connects_qr_scan_requested(self):
-        ctrl = self._loaded()
-        ctrl._view.qr_scan_requested.connect.assert_called_once()
+    def test_recovery_displays_replacements_and_requires_normal_login(self):
+        self.controller._on_recovery_submitted("42", "saved-code", "replacement")
+        self.wait()
+        self.view.show_replacement_codes.assert_called_once()
+        self.view.show_login.assert_called_once()
+        self.view.accept_login.assert_not_called()
+        self.assertEqual(self.service.calls, [])
 
-    def test_load_connects_qr_tab_activated(self):
-        ctrl = self._loaded()
-        ctrl._view.qr_tab_activated.connect.assert_called_once()
+    def test_worker_exception_never_exposes_exception_text(self):
+        self.service.authenticate = MagicMock(side_effect=RuntimeError("password=do-not-show"))
+        self.controller._on_login_submitted("42", "secret")
+        self.wait()
+        self.assertNotIn("do-not-show", self.view.show_error.call_args.args[0])
+        self.view.accept_login.assert_not_called()
 
-    def test_load_connects_first_admin_submitted(self):
-        ctrl = self._loaded()
-        ctrl._view.first_admin_submitted.connect.assert_called_once()
+    def test_stop_unsubscribes_named_broker_callback(self):
+        messaging = MagicMock()
+        controller = LoginController(LoginModel(self.service), MagicMock(), messaging)
+        controller.load()
+        controller.stop()
+        messaging.unsubscribe.assert_called_once_with(*messaging.subscribe.call_args.args)
+        controller.stop()
+        self.assertEqual(messaging.unsubscribe.call_count, 1)
 
-    def test_load_does_not_call_show_login_or_first_run(self):
-        ctrl = self._loaded()
-        ctrl._view.show_login.assert_not_called()
-        ctrl._view.show_first_run.assert_not_called()
-
-
-# ── _on_setup_confirmed ───────────────────────────────────────────────────────
-
-class TestOnSetupConfirmed(unittest.TestCase):
-
-    def test_shows_login_when_not_first_run(self):
-        ctrl = LoginController(_make_model(first_run=False), _make_view())
-        ctrl._on_setup_confirmed()
-        ctrl._view.show_login.assert_called_once()
-        ctrl._view.show_first_run.assert_not_called()
-
-    def test_shows_first_run_when_first_run(self):
-        ctrl = LoginController(_make_model(first_run=True), _make_view())
-        ctrl._on_setup_confirmed()
-        ctrl._view.show_first_run.assert_called_once()
-        ctrl._view.show_login.assert_not_called()
-
-
-# ── _on_login_submitted ───────────────────────────────────────────────────────
-
-class TestOnLoginSubmitted(unittest.TestCase):
-
-    def test_validation_error_shown_without_authenticate(self):
-        model = _make_model(validation_error="User id is required.")
-        ctrl  = LoginController(model, _make_view())
-        ctrl._on_login_submitted("", "pw")
-        ctrl._view.show_error.assert_called_once_with("User id is required.")
-        model.authenticate.assert_not_called()
-
-    def test_failed_auth_shows_error(self):
-        model = _make_model(user=None, validation_error=None)
-        ctrl  = LoginController(model, _make_view())
-        ctrl._on_login_submitted("1", "bad")
-        ctrl._view.show_error.assert_called_once()
-
-    def test_successful_auth_calls_accept_login(self):
-        user  = _make_user()
-        model = _make_model(user=user, validation_error=None)
-        ctrl  = LoginController(model, _make_view())
-        ctrl._on_login_submitted("1", "pw")
-        ctrl._view.accept_login.assert_called_once_with(user)
-
-
-# ── _on_qr_tab_activated ─────────────────────────────────────────────────────
-
-class TestOnQrTabActivated(unittest.TestCase):
-
-    def test_calls_move_to_login_pos(self):
-        model = _make_model()
-        ctrl  = LoginController(model, _make_view())
-        ctrl._on_qr_tab_activated()
-        model.move_to_login_pos.assert_called_once()
-
-
-# ── _on_qr_scan_requested ────────────────────────────────────────────────────
-
-class TestOnQrScanRequested(unittest.TestCase):
-
-    def test_no_result_does_nothing(self):
-        ctrl = LoginController(_make_model(qr_result=None), _make_view())
-        ctrl._on_qr_scan_requested()
-        ctrl._view.accept_login.assert_not_called()
-        ctrl._view.show_error.assert_not_called()
-
-    def test_qr_result_authenticates_and_accepts(self):
-        user  = _make_user()
-        model = _make_model(user=user, qr_result=("1", "pw"))
-        ctrl  = LoginController(model, _make_view())
-        ctrl._on_qr_scan_requested()
-        model.authenticate.assert_called_once_with("1", "pw")
-        ctrl._view.accept_login.assert_called_once_with(user)
-
-    def test_qr_bad_credentials_shows_error(self):
-        model = _make_model(user=None, qr_result=("1", "bad"))
-        ctrl  = LoginController(model, _make_view())
-        ctrl._on_qr_scan_requested()
-        ctrl._view.show_error.assert_called_once()
-        ctrl._view.accept_login.assert_not_called()
-
-
-# ── _on_first_admin_submitted ─────────────────────────────────────────────────
-
-class TestOnFirstAdminSubmitted(unittest.TestCase):
-
-    def test_create_success_logs_in(self):
-        user  = _make_user()
-        model = _make_model(user=user, admin_result=(True, "Created"))
-        ctrl  = LoginController(model, _make_view())
-        ctrl._on_first_admin_submitted("1", "Alice", "Smith", "pw")
-        model.create_first_admin.assert_called_once_with("1", "Alice", "Smith", "pw")
-        ctrl._view.accept_login.assert_called_once_with(user)
-
-    def test_create_failure_shows_error(self):
-        model = _make_model(user=None, admin_result=(False, "ID taken"))
-        ctrl  = LoginController(model, _make_view())
-        ctrl._on_first_admin_submitted("1", "Alice", "Smith", "pw")
-        ctrl._view.show_error.assert_called_once_with("ID taken")
-        ctrl._view.accept_login.assert_not_called()
-
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_stopped_controller_ignores_new_authentication_requests(self):
+        self.controller.stop()
+        self.controller._on_login_submitted("42", "secret")
+        self.assertEqual(self.service.calls, [])

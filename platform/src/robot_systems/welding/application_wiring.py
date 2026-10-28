@@ -136,46 +136,8 @@ def _build_welding_contour_editor_application(robot_system):
 
 
 def _build_user_management_application(robot_system):
-    from src.applications.base.widget_application import WidgetApplication
-    from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
-    from src.applications.user_management.user_management_factory import UserManagementFactory
-    from src.applications.user_management.service.user_management_application_service import \
-        UserManagementApplicationService
-    from src.applications.user_management.domain.csv_user_repository import CsvUserRepository
-    from src.engine.auth.json_permissions_repository import JsonPermissionsRepository
-    from src.robot_systems.welding.domain.users import build_welding_user_schema
-    from src.engine.auth.authorization_service import AuthorizationService
-
-    role_policy = robot_system.__class__.role_policy
-    service = UserManagementApplicationService(
-        CsvUserRepository(
-            robot_system.users_storage_path(),
-            build_welding_user_schema(role_policy.role_values),
-        )
-    )
-    perm_repo = JsonPermissionsRepository(
-        robot_system.permissions_storage_path(),
-        default_role_values=role_policy.default_permission_role_values,
-    )
-    perm_svc = AuthorizationService(
-        perm_repo,
-        protected_app_role_values=role_policy.protected_app_role_values,
-    )
-    known_ids = [spec.app_id for spec in robot_system.shell.applications]
-    jog_service = build_robot_system_jog_service(robot_system)
-
-    def _build(messaging_service):
-        return UserManagementFactory().build(
-            service,
-            perm_svc,
-            known_ids,
-            role_values=role_policy.role_values,
-            default_role_values=role_policy.default_permission_role_values,
-            messaging=messaging_service,
-            jog_service=jog_service,
-        )
-
-    return WidgetApplication(widget_factory=_build)
+    from src.bootstrap.account_application_wiring import build_account_user_management_application
+    return build_account_user_management_application(robot_system)
 
 
 def _build_camera_settings_application(robot_system):

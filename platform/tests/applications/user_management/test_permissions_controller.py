@@ -1,94 +1,72 @@
-"""
-Tests for src/applications/user_management/controller/permissions_controller.y_pixels
-
-Covers the pure controller logic: load populates the view, checkbox signals
-are forwarded to the model, and the deferral notice is shown on load.
-Qt is fully mocked — no display required.
-"""
 import unittest
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock
+from PyQt6.QtTest import QTest
+from PyQt6.QtWidgets import QApplication
 
 from src.applications.user_management.controller.permissions_controller import PermissionsController
 from src.applications.user_management.model.permissions_model import PermissionsModel
+from src.applications.user_management.service.stub_user_management_service import StubUserManagementService
+from src.applications.user_management.service.i_user_management_service import UserError, UserErrorCode, UserFailure
 
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
+class _SessionStub(StubUserManagementService):
+    def __init__(self):
+        super().__init__()
+        self.revision = 1
 
-def _make_model(
-    app_ids: list = None,
-    perms:   dict = None,
-) -> PermissionsModel:
-    model = MagicMock(spec=PermissionsModel)
-    model.get_known_app_ids.return_value = list(app_ids or [])
-    model.get_role_values.return_value   = ["Admin", "Operator", "Viewer"]
-    model.get_permissions.return_value   = dict(perms or {})
-    return model
+    def session_revision(self):
+        return self.revision
 
 
-def _make_view():
-    view = MagicMock()
-    return view
+class PermissionsControllerTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
 
+    def setUp(self):
+        self.service = _SessionStub()
+        self.view = MagicMock()
+        self.controller = PermissionsController(PermissionsModel(self.service), self.view)
+        self.addCleanup(self.controller.stop)
 
-# ── Load ───────────────────────────────────────────────────────────────────────
+    def wait(self):
+        for _ in range(100):
+            QTest.qWait(10)
+            if not self.controller.has_running_workers():
+                return
+        self.fail("Permission worker did not finish")
 
-class TestPermissionsControllerLoad(unittest.TestCase):
+    def test_load_and_toggle_use_workers_and_current_revision(self):
+        self.controller.load()
+        self.wait()
+        self.view.set_permissions.assert_called_once()
+        self.controller._on_permission_toggled("demo", "Operator", False)
+        self.wait()
+        self.assertEqual(self.view.set_permissions.call_count, 2)
+        self.assertNotIn("Operator", self.view.set_permissions.call_args.args[2]["demo"])
 
-    def test_load_calls_set_permissions_on_view(self):
-        model = _make_model(
-            app_ids=["dashboard"],
-            perms={"dashboard": ["Admin", "Operator"]},
-        )
-        view       = _make_view()
-        controller = PermissionsController(model, view)
-        controller.load()
-        view.set_permissions.assert_called_once_with(
-            app_ids    = ["dashboard"],
-            role_values= ["Admin", "Operator", "Viewer"],
-            permissions= {"dashboard": ["Admin", "Operator"]},
-        )
+    def test_late_result_from_prior_session_clears_the_table(self):
+        self.controller._session_revision = 1
+        self.service.revision = 2
+        self.controller._loaded(self.service.permissions())
+        self.view.set_permissions.assert_not_called()
+        self.view.clear_permissions.assert_called_once()
 
-    def test_load_shows_deferral_notice(self):
-        model      = _make_model()
-        view       = _make_view()
-        controller = PermissionsController(model, view)
-        controller.load()
-        view.set_notice.assert_called_once()
-        notice_text = view.set_notice.call_args[0][0]
-        self.assertIn("next login", notice_text.lower())
+    def test_stopped_controller_never_populates_deleted_widgets(self):
+        result = self.service.permissions()
+        self.controller.stop()
+        self.view.reset_mock()
+        self.controller._loaded(result)
+        self.view.set_permissions.assert_not_called()
 
-
-# ── Checkbox signal ────────────────────────────────────────────────────────────
-
-class TestPermissionsControllerCheckbox(unittest.TestCase):
-
-    def test_permission_toggled_delegates_to_model(self):
-        model      = _make_model()
-        view       = _make_view()
-        controller = PermissionsController(model, view)
-        controller.load()
-
-        # Simulate the view emitting permission_toggled(app_id, role_value, allowed)
-        toggle_slot = view.permission_toggled.connect.call_args[0][0]
-        toggle_slot("dashboard", "Operator", True)
-
-        model.set_permission.assert_called_once_with("dashboard", "Operator", True)
-
-    def test_permission_toggled_refreshes_view(self):
-        model = _make_model(
-            app_ids=["dashboard"],
-            perms={"dashboard": ["Admin", "Operator"]},
-        )
-        view       = _make_view()
-        controller = PermissionsController(model, view)
-        controller.load()
-
-        toggle_slot = view.permission_toggled.connect.call_args[0][0]
-        toggle_slot("dashboard", "Viewer", True)
-
-        # set_permissions should be called twice: once on load, once after toggle
-        self.assertEqual(view.set_permissions.call_count, 2)
-
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_busy_write_gives_idle_guidance_and_allows_a_later_refresh(self):
+        self.controller.load()
+        self.wait()
+        self.service.set_permission = MagicMock(return_value=UserFailure(UserError(UserErrorCode.BUSY)))
+        self.controller._on_permission_toggled("demo", "Operator", False)
+        self.wait()
+        self.assertIsNone(self.controller._model.page)
+        self.assertIn("idle", self.view.set_notice.call_args.args[0])
+        self.controller.refresh()
+        self.wait()
+        self.assertIsNotNone(self.controller._model.page)

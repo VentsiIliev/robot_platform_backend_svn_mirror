@@ -245,8 +245,8 @@ class AppearanceTests(unittest.TestCase):
         self.assertFalse(theme_palette.is_dark())
 
     def test_dark_shell_background_and_native_shutdown(self):
-        # A separate interpreter exercises native Qt teardown, including a live
-        # preview and cached icons, rather than hiding destruction errors.
+        # A separate interpreter exercises the normal close path and native Qt
+        # teardown, including a live preview, protected page and cached icons.
         script = textwrap.dedent('''
             from PyQt6.QtWidgets import QApplication
             from pl_gui.shell.AppShell import AppShell
@@ -254,7 +254,6 @@ class AppearanceTests(unittest.TestCase):
             from src.applications.platform_settings.platform_settings_factory import PlatformSettingsFactory
             from src.applications.platform_settings.service.stub_platform_settings_service import StubPlatformSettingsService
             from src.applications.user_management.view.user_management_view import UserManagementView
-            from src.applications.user_management.view.permissions_view import PermissionsView
             from src.applications.user_management.domain.default_schema import DEFAULT_USER_SCHEMA
             app = QApplication([])
             view = PlatformSettingsFactory().build(StubPlatformSettingsService())
@@ -271,14 +270,17 @@ class AppearanceTests(unittest.TestCase):
             assert image.pixelColor(view.width() - 5, 10).name().upper() == THEME_PRESETS['dark']['background']
             shell.grab()
             users = UserManagementView(DEFAULT_USER_SCHEMA)
-            permissions = PermissionsView()
+            permissions = users.ensure_permissions_view()
             permissions.set_permissions(['dashboard'], ['Admin'], {'dashboard': ['Admin']})
-            users.add_permissions_tab(permissions)
+            users._tabs.setTabVisible(1, True)  # presentation fixture; policy is covered separately
             users._tabs.setCurrentIndex(1)
             users.resize(1280, 900)
             users.show()
             app.processEvents()
             users.grab()
+            users.close()
+            shell.close()
+            app.processEvents()
         ''')
         result = subprocess.run(
             [sys.executable, '-B', '-c', script],

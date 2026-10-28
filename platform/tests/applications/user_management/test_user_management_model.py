@@ -1,149 +1,47 @@
 import unittest
-from unittest.mock import MagicMock
-
-from src.applications.user_management.domain.default_schema import DEFAULT_USER_SCHEMA
-from src.applications.user_management.domain.user_schema import UserRecord
 from src.applications.user_management.model.user_management_model import UserManagementModel
-from src.applications.user_management.service.i_user_management_service import IUserManagementService
+from src.applications.user_management.model.permissions_model import PermissionsModel
+from src.applications.user_management.service.stub_user_management_service import StubUserManagementService
+from src.applications.user_management.service.i_user_management_service import NewUser, EditUser, UserFailure
 
 
-def _make_service(records=None):
-    svc = MagicMock(spec=IUserManagementService)
-    svc.get_schema.return_value = DEFAULT_USER_SCHEMA
-    svc.get_all_users.return_value = records or []
-    svc.add_user.return_value    = (True, "added")
-    svc.update_user.return_value = (True, "updated")
-    svc.delete_user.return_value = (True, "deleted")
-    svc.generate_qr.return_value = (True, "QR generated", "/tmp/qr.png")
-    svc.send_access_package.return_value = (True, "Sent")
-    return svc
+class UserManagementModelTests(unittest.TestCase):
+    def setUp(self):
+        self.service = StubUserManagementService()
+        self.model = UserManagementModel(self.service, PermissionsModel(self.service))
+        self.model.page = self.model.load().value
 
+    def test_page_is_safe_and_filters_on_stable_keys(self):
+        rows = self.model.filtered_users("firstName", "alice")
+        self.assertEqual([row.login_id for row in rows], ["1"])
+        self.assertTrue(all(row.get("password") == "" for row in self.model.page.users))
+        self.assertEqual(len(self.model.filtered_users("", "")), 3)
 
-def _record(uid):
-    return UserRecord({"id": uid, "firstName": "A", "lastName": "B",
-                       "password": "pw", "role": "Admin", "email": "a@b.com"})
+    def test_create_and_edit_use_explicit_commands_and_revisions(self):
+        created = self.model.create(NewUser("5", "New", "User", "Operator", "secret")).value
+        edited = self.model.edit(EditUser(created.account_id, 1, "Changed", "User", "")).value
+        self.assertEqual((edited.first_name, edited.revision), ("Changed", 2))
+        self.assertIsInstance(self.model.edit(EditUser(created.account_id, 1, "Stale", "User", "")), UserFailure)
 
+    def test_load_does_not_overwrite_the_displayed_snapshot_until_controller_accepts_it(self):
+        old = self.model.page
+        self.model.create(NewUser("5", "New", "User", "Operator", "secret"))
+        result = self.model.load()
+        self.assertIs(self.model.page, old)
+        self.assertEqual(len(result.value.users), 4)
 
-class TestUserManagementModelInit(unittest.TestCase):
+    def test_delete_is_bound_to_technical_identity(self):
+        target = self.model.page.users[1]
+        self.model.delete(target.account_id, target.revision)
+        recreated = self.model.create(NewUser(target.login_id, "New", "Owner", "Operator", "secret")).value
+        self.assertNotEqual(recreated.account_id, target.account_id)
 
-    def test_schema_is_loaded_from_service(self):
-        model = UserManagementModel(_make_service())
-        self.assertIs(model.schema, DEFAULT_USER_SCHEMA)
+    def test_secret_commands_are_redacted(self):
+        command = NewUser("5", "New", "User", "Operator", "do-not-log")
+        self.assertNotIn("do-not-log", repr(command))
+        self.assertNotIn("DEMO ONLY", repr(self.model.reveal("demo-operator")))
 
-    def test_get_users_empty_before_load(self):
-        model = UserManagementModel(_make_service())
-        self.assertEqual(model.get_users(), [])
-
-
-class TestUserManagementModelLoad(unittest.TestCase):
-
-    def test_load_calls_get_all_users(self):
-        svc = _make_service(records=[_record("1")])
-        model = UserManagementModel(svc)
-        model.load()
-        svc.get_all_users.assert_called_once()
-
-    def test_load_returns_records(self):
-        records = [_record("1"), _record("2")]
-        model = UserManagementModel(_make_service(records=records))
-        result = model.load()
-        self.assertEqual(len(result), 2)
-
-    def test_load_updates_internal_cache(self):
-        records = [_record("1")]
-        model = UserManagementModel(_make_service(records=records))
-        model.load()
-        self.assertEqual(len(model.get_users()), 1)
-
-    def test_save_is_noop(self):
-        UserManagementModel(_make_service()).save()
-
-
-class TestUserManagementModelAddUser(unittest.TestCase):
-
-    def test_add_user_success_refreshes_records(self):
-        fresh = [_record("1"), _record("99")]
-        svc = _make_service()
-        svc.get_all_users.return_value = fresh
-        model = UserManagementModel(svc)
-        ok, msg = model.add_user(_record("99"))
-        self.assertTrue(ok)
-        self.assertEqual(len(model.get_users()), 2)
-
-    def test_add_user_failure_does_not_refresh(self):
-        svc = _make_service()
-        svc.add_user.return_value = (False, "exists")
-        model = UserManagementModel(svc)
-        model.add_user(_record("1"))
-        svc.get_all_users.assert_not_called()
-
-    def test_add_user_returns_service_result(self):
-        svc = _make_service()
-        svc.add_user.return_value = (False, "dup")
-        model = UserManagementModel(svc)
-        ok, msg = model.add_user(_record("1"))
-        self.assertFalse(ok)
-        self.assertEqual(msg, "dup")
-
-
-class TestUserManagementModelUpdateUser(unittest.TestCase):
-
-    def test_update_user_success_refreshes_records(self):
-        fresh = [_record("1")]
-        svc = _make_service(records=[_record("1")])
-        svc.get_all_users.side_effect = [[_record("1")], fresh]
-        model = UserManagementModel(svc)
-        model.load()
-        ok, _ = model.update_user(_record("1"))
-        self.assertTrue(ok)
-
-    def test_update_user_failure_does_not_refresh(self):
-        svc = _make_service()
-        svc.update_user.return_value = (False, "not found")
-        model = UserManagementModel(svc)
-        model.update_user(_record("1"))
-        svc.get_all_users.assert_not_called()
-
-
-class TestUserManagementModelDeleteUser(unittest.TestCase):
-
-    def test_delete_user_success_refreshes_records(self):
-        svc = _make_service(records=[_record("1")])
-        svc.get_all_users.side_effect = [[_record("1")], []]
-        model = UserManagementModel(svc)
-        model.load()
-        ok, _ = model.delete_user("1")
-        self.assertTrue(ok)
-        self.assertEqual(len(model.get_users()), 0)
-
-    def test_delete_user_failure_does_not_refresh(self):
-        svc = _make_service()
-        svc.delete_user.return_value = (False, "not found")
-        model = UserManagementModel(svc)
-        model.delete_user("99")
-        svc.get_all_users.assert_not_called()
-
-
-class TestUserManagementModelQrAndEmail(unittest.TestCase):
-
-    def test_generate_qr_delegates_to_service(self):
-        svc = _make_service()
-        model = UserManagementModel(svc)
-        record = _record("1")
-        ok, msg, path = model.generate_qr(record)
-        svc.generate_qr.assert_called_once_with(record)
-        self.assertTrue(ok)
-        self.assertEqual(path, "/tmp/qr.png")
-
-    def test_send_access_package_delegates_to_service(self):
-        svc = _make_service()
-        model = UserManagementModel(svc)
-        record = _record("1")
-        ok, msg = model.send_access_package(record, "/tmp/qr.png")
-        svc.send_access_package.assert_called_once_with(record, "/tmp/qr.png")
-        self.assertTrue(ok)
-
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_generic_save_cannot_bypass_explicit_command_contracts(self):
+        with self.assertRaises(NotImplementedError):
+            self.model.save({"password": "replacement"})
 

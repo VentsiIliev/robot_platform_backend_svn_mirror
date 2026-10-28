@@ -1,50 +1,54 @@
-from typing import List, Optional
 from src.applications.base.i_application_model import IApplicationModel
-from src.applications.user_management.domain.user_schema import UserRecord, UserSchema
 from src.applications.user_management.service.i_user_management_service import IUserManagementService
 
 
 class UserManagementModel(IApplicationModel):
-
-    def __init__(self, service: IUserManagementService):
+    def __init__(self, service: IUserManagementService, permissions_model):
         self._service = service
-        self._records: List[UserRecord] = []
-        self._schema:  UserSchema       = service.get_schema()
+        self.permissions = permissions_model
+        self.page = None
 
-    @property
-    def schema(self) -> UserSchema:
-        return self._schema
+    def load(self):
+        return self._service.load_users()
 
-    def load(self) -> List[UserRecord]:
-        self._records = self._service.get_all_users()
-        return self._records
+    def session_revision(self):
+        return self._service.session_revision()
 
-    def save(self, *args, **kwargs) -> None:
-        pass
+    def access(self, target_id):
+        return self._service.access(target_id)
 
-    def get_users(self) -> List[UserRecord]:
-        return list(self._records)
+    def create(self, command):
+        return self._service.create(command)
 
-    def add_user(self, record: UserRecord) -> tuple[bool, str]:
-        ok, msg = self._service.add_user(record)
-        if ok:
-            self._records = self._service.get_all_users()
-        return ok, msg
+    def edit(self, command):
+        return self._service.edit(command)
 
-    def update_user(self, record: UserRecord) -> tuple[bool, str]:
-        ok, msg = self._service.update_user(record)
-        if ok:
-            self._records = self._service.get_all_users()
-        return ok, msg
+    def change_password(self, command):
+        return self._service.change_password(command)
 
-    def delete_user(self, user_id) -> tuple[bool, str]:
-        ok, msg = self._service.delete_user(user_id)
-        if ok:
-            self._records = self._service.get_all_users()
-        return ok, msg
+    def change_role(self, command):
+        return self._service.change_role(command)
 
-    def generate_qr(self, record: UserRecord) -> tuple[bool, str, Optional[str]]:
-        return self._service.generate_qr(record)
+    def delete(self, account_id, revision):
+        return self._service.delete(account_id, revision)
 
-    def send_access_package(self, record: UserRecord, qr_path: str) -> tuple[bool, str]:
-        return self._service.send_access_package(record, qr_path)
+    def reveal(self, account_id):
+        return self._service.reveal(account_id)
+
+    def issue_qr(self, account_id, revision):
+        return self._service.issue_qr(account_id, revision)
+
+    def generate_recovery_codes(self, current_password):
+        return self._service.generate_recovery_codes(current_password)
+
+    def history(self, account_id):
+        return self._service.history(account_id)
+
+    def save(self, *args, **kwargs):
+        raise NotImplementedError("Use the explicit account commands")
+
+    def filtered_users(self, key: str, value: str):
+        rows = self.page.users if self.page is not None else ()
+        if not value:
+            return rows
+        return tuple(row for row in rows if value.casefold() in str(row.get(key)).casefold())

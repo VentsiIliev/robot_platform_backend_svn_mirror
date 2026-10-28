@@ -24,6 +24,7 @@ class ShellSessionController:
         show_account_button_when_dev_skip_login: bool,
         show_login_view: Callable[[], None],
         can_close_running_apps: Callable[[], bool],
+        can_expire_session: Callable[[], bool],
         actions=None,
     ) -> None:
         self._shell = shell
@@ -32,6 +33,7 @@ class ShellSessionController:
         self._show_account_button_when_dev_skip_login = show_account_button_when_dev_skip_login
         self._show_login_view = show_login_view
         self._can_close_running_apps = can_close_running_apps
+        self._can_expire_session = can_expire_session
         self._actions = actions
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -92,7 +94,19 @@ class ShellSessionController:
             self._logger.info("Logout blocked by an application can_close() veto")
             return
 
-        self._shell.close_all_apps()
+        self._finish_logout(force=False)
+
+    def expire_session(self) -> bool:
+        """Clear revoked access after current operations finish, without stopping them."""
+        if not self._session.is_authenticated():
+            return True
+        if self._dev_skip_login or not self._can_expire_session():
+            return False
+        self._finish_logout(force=True, action="user.session_expired")
+        return True
+
+    def _finish_logout(self, *, force: bool, action="user.logout") -> None:
+        self._shell.close_all_apps(force=force)
         token = {}
         if self._actions is not None:
             try:
@@ -102,7 +116,7 @@ class ShellSessionController:
         self._session.logout()
         if self._actions is not None:
             try:
-                self._actions.record('user.logout', context=token, outcome='succeeded')
+                self._actions.record(action, context=token, outcome='succeeded')
                 self._actions.session_changed(False)
             except Exception:
                 pass

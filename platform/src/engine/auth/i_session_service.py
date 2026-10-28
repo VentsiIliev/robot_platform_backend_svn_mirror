@@ -1,11 +1,24 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
 from src.engine.auth.i_authenticated_user import IAuthenticatedUser
 
 
+@dataclass(frozen=True)
+class SessionSnapshot:
+    """Atomic session read; revision changes even when the same account relogs in."""
+
+    user: Optional[IAuthenticatedUser]
+    revision: int
+
+
 class ISessionService(ABC):
+
+    @abstractmethod
+    def snapshot(self) -> SessionSnapshot:
+        """Read user and monotonic session revision together, without I/O."""
 
     @abstractmethod
     def login(self, user: IAuthenticatedUser) -> None:

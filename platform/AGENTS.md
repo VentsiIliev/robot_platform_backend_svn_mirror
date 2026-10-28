@@ -17,7 +17,11 @@ python -m unittest tests/path/to/test_file.py -v     # single test file
 python src/applications/<name>/example_usage.py      # standalone app dev runner
 ```
 
-No `pyproject.toml`, `setup.py`, or `requirements.txt` — dependencies are managed via the `.venv` directory.
+Python dependencies are declared in the root `requirements.txt` and installed in
+`.venv`. Add every new direct third-party dependency to `requirements.txt` with its
+tested version when introducing it. Build-only tools belong in
+`packaging/requirements-build.txt`, which includes the root requirements. ROS and
+native OS dependencies remain managed through apt/the ROS workspace.
 
 ## Release workflow
 

@@ -1,43 +1,95 @@
+"""Application-owned login contracts; implementations may use any identity backend."""
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Generic, Protocol, TypeAlias, TypeVar
 
-from src.engine.auth.i_authenticated_user import IAuthenticatedUser
+
+class LoginUser(Protocol):
+    @property
+    def user_id(self) -> str: ...
+
+    @property
+    def role(self) -> Enum: ...
+
+
+class LoginErrorCode(str, Enum):
+    INVALID_INPUT = "invalid_input"
+    INVALID_PROOF = "invalid_proof"
+    RATE_LIMITED = "rate_limited"
+    BUSY = "busy"
+    SETUP_CLOSED = "setup_closed"
+    ALREADY_EXISTS = "already_exists"
+    UNAVAILABLE = "unavailable"
+
+
+@dataclass(frozen=True)
+class LoginError:
+    code: LoginErrorCode
+    reference: str = ""
+
+
+T = TypeVar("T")
+
+
+@dataclass(frozen=True)
+class LoginSuccess(Generic[T]):
+    value: T
+
+
+@dataclass(frozen=True)
+class LoginFailure:
+    error: LoginError
+
+
+LoginResult: TypeAlias = LoginSuccess[T] | LoginFailure
+
+
+@dataclass(frozen=True)
+class AdminSetup:
+    login_id: str
+    first_name: str
+    last_name: str
+    password: str = field(repr=False)
+
+
+@dataclass(frozen=True)
+class AdminRecovery:
+    login_id: str
+    code: str = field(repr=False)
+    new_password: str = field(repr=False)
+
+
+@dataclass(frozen=True)
+class RecoveryCodeDisplay:
+    codes: tuple[str, ...] = field(repr=False)
 
 
 class ILoginApplicationService(ABC):
-
     @abstractmethod
     def get_connection_information(self) -> dict:
-        """Read hostname, OS username, useful IP addresses, and RustDesk ID.
-
-        Missing fields are None. An empty address list means no addresses are
-        assigned. This read-only query must not require platform authentication.
-        """
+        """Read-only connection identifiers; never requires account authentication."""
 
     @abstractmethod
-    def authenticate(self, user_id: str, password: str) -> Optional[IAuthenticatedUser]:
-        """Verify credentials. Returns IAuthenticatedUser on success, None on failure."""
+    def authenticate(self, user_id: str, password: str) -> LoginResult[LoginUser]: ...
 
     @abstractmethod
-    def authenticate_qr(self, qr_payload: str) -> Optional[IAuthenticatedUser]:
-        """Verify a QR-encoded payload. Returns IAuthenticatedUser on success, None on failure."""
+    def authenticate_qr(self, payload: str) -> LoginResult[LoginUser]: ...
 
     @abstractmethod
-    def try_qr_login(self) -> Optional[Tuple[str, str]]:
-        """Poll the camera for a QR code.
-        Returns (user_id, password) if a valid payload is detected, None otherwise."""
+    def scan_qr(self) -> LoginResult[str | None]:
+        """Poll an optional scanner for an opaque card payload; never a password."""
 
     @abstractmethod
-    def move_to_login_pos(self) -> None:
-        """Move the robot to the QR scan position. No-op if no robot is configured."""
+    def move_to_login_pos(self) -> None: ...
 
     @abstractmethod
-    def is_first_run(self) -> bool:
-        """True if the user store is empty — setup wizard should be shown."""
+    def is_first_run(self) -> LoginResult[bool]:
+        """Whether first customer Admin setup is still open (not a user count)."""
 
     @abstractmethod
-    def create_first_admin(
-        self, user_id: str, first_name: str, last_name: str, password: str
-    ) -> Tuple[bool, str]:
-        """Create the initial admin user on first run.
-        Returns (success, message)."""
+    def create_first_admin(self, command: AdminSetup) -> LoginResult[None]: ...
+
+    @abstractmethod
+    def recover_admin(self, command: AdminRecovery) -> LoginResult[RecoveryCodeDisplay]:
+        """Consume saved proof and return replacement codes once; no automatic login."""

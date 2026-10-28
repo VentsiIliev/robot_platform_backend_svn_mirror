@@ -340,6 +340,24 @@ a dedicated product identity, update config, repository and installation root. S
 <!-- source-navigation:end -->
 
 
+## Account access extensions
+
+All supported systems use one bootstrap-owned SQLite account runtime and session.
+Providers delegate login and user management to shared account wiring and return
+`get_account_navigation()` for navigation. Role catalogs contain Manufacturer,
+Admin, and Operator; ADMIN/SERVICE deny Operator by stable folder name.
+
+Concrete systems extend `account_access_extensions()` with domain action rules,
+a trusted resource resolver, and optionally an external-runtime activity query.
+An unknown activity state blocks access changes. The process manager reserves
+idle execution through commit; external runtimes must participate in ownership
+and provide a reliable activity hook plus `idle_reservation` when execution lives
+outside the process manager. Twin's contract declares typed `get_activity()` and
+atomic `hold_idle()`; its adapter keeps that lease through account commit and
+rejects unknown/legacy implementations. See the
+[blueprint guide](../../src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/ROBOT_SYSTEM_GUIDE.MD#accountaccess-runtime-composition)
+and [account services](../engine/auth/account_services.md).
+
 ## Startup rollback and cleanup ownership
 
 `SystemBuilder` closes completed services in reverse build order if a later

@@ -29,10 +29,39 @@ def main():
     with lock(root / "update-state/runtime.lock", shared=True):
         if (root / "update-state/transaction.json").exists():
             raise RuntimeError("Interrupted update: use the installed launcher to recover first")
+        # Tools obey the installation/update lock and exit before factory seeding,
+        # backend/Qt startup. Missing storage is never initialized as a fallback.
+        if dispatch_account_tool(target):
+            return
         from src.engine.updates.factory_defaults import seed_factory_defaults
         seed_factory_defaults(resource_root, Path(os.environ["ROBOT_PLATFORM_DATA_ROOT"]), target)
         from src.bootstrap.run_main import main as run_platform
         run_platform()
+
+
+def dispatch_account_tool(target) -> bool:
+    flags = {"--account-setup", "--account-locations"} & set(sys.argv[1:])
+    if not flags:
+        return False
+    if len(flags) != 1:
+        print("Select one account tool.", file=sys.stderr)
+        raise SystemExit(2)
+    flag = flags.pop()
+    from src.bootstrap.account_locations import installed_account_paths, main as locations
+    try:
+        paths = installed_account_paths(Path(os.environ["ROBOT_PLATFORM_DATA_ROOT"]), target)
+    except ValueError:
+        print("Account installation paths are invalid.", file=sys.stderr)
+        raise SystemExit(2)
+    arguments = sys.argv[sys.argv.index(flag) + 1:]
+    if flag == "--account-setup":
+        from src.bootstrap.account_setup import main as setup_accounts
+        result = setup_accounts(arguments, defaults=paths)
+    else:
+        result = locations(arguments, paths=paths)
+    if result:
+        raise SystemExit(result)
+    return True
 
 
 def check_vision_application_widgets(app):
@@ -65,6 +94,30 @@ def check_vision_application_widgets(app):
     app.processEvents()
 
 
+def check_account_backend():
+    """Exercise frozen cryptography/SQLite imports using an empty temporary store."""
+    import tempfile
+    from src.engine.auth.account_installation import AccountInstallation, AccountInstallationPaths
+    from src.shared_contracts.authorization.results import Failure
+
+    with tempfile.TemporaryDirectory(prefix="robot-account-self-test-") as temporary:
+        root = Path(temporary)
+        prepared = AccountInstallation(AccountInstallationPaths(root / "data/accounts.sqlite3",
+            root / "data/state.json", root / "private/operator.key")).initialize_new()
+        if isinstance(prepared, Failure):
+            raise RuntimeError("Frozen account setup failed")
+        with prepared.value.store.transaction() as transaction:
+            if transaction.list_accounts():
+                raise RuntimeError("Fresh account store must be empty")
+        credentials = prepared.value.credentials
+        ciphertext = credentials.encrypt_operator_password("self-test-only")
+        if credentials.decrypt_operator_password(ciphertext) != "self-test-only":
+            raise RuntimeError("Frozen credential protection failed")
+        hashed = credentials.hash_password("self-test-only")
+        if not credentials.verify_password("self-test-only", hashed):
+            raise RuntimeError("Frozen password verification failed")
+
+
 def self_test():
     """Verify frozen imports, startup resources and Qt without touching hardware."""
     from PyQt6.QtWidgets import QApplication
@@ -81,6 +134,7 @@ def self_test():
     resource_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
     target = json.loads((resource_root / "config/release-target.json").read_text())
     load_factory_defaults(resource_root, target)
+    check_account_backend()
     app = QApplication([])
     check_vision_application_widgets(app)
     if "paint" in target["packages"]:

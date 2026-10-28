@@ -1,52 +1,25 @@
-from src.engine.auth.i_permissions_admin_service import IPermissionsAdminService
+"""Qt-free permission state; writes use the exact revision displayed to the user."""
+from src.applications.user_management.service.i_user_management_service import IUserManagementService
 
 
 class PermissionsModel:
-    """Pure-logic model for the App Permissions tab.
+    def __init__(self, service: IUserManagementService):
+        self._service = service
+        self.page = None
 
-    Wraps IPermissionsAdminService and filters results to only the known app_ids
-    registered in the current RobotSystem shell. Each set_permission call
-    persists immediately — no separate save step needed.
-    """
+    def load(self):
+        return self._service.permissions()
 
-    def __init__(
-        self,
-        service: IPermissionsAdminService,
-        known_app_ids: list[str],
-        role_values: list[str],
-        default_role_values: list[str],
-    ) -> None:
-        self._service       = service
-        self._known_app_ids = list(known_app_ids)
-        self._role_values = list(role_values)
-        self._default_role_values = list(default_role_values)
+    def session_revision(self):
+        return self._service.session_revision()
 
-    # ── Read ───────────────────────────────────────────────────────────────────
-
-    def get_known_app_ids(self) -> list[str]:
-        return list(self._known_app_ids)
-
-    def get_role_values(self) -> list[str]:
-        """Column headers for the permissions table."""
-        return list(self._role_values)
-
-    def get_permissions(self) -> dict[str, list[str]]:
-        """Return permissions for known apps only.
-        Apps missing from the service default to ['Admin']."""
-        all_perms = self._service.get_all_permissions()
-        return {
-            app_id: list(all_perms.get(app_id, self._default_role_values))
-            for app_id in self._known_app_ids
-        }
-
-    # ── Write ──────────────────────────────────────────────────────────────────
-
-    def set_permission(self, app_id: str, role_value: str, allowed: bool) -> None:
-        """Toggle a single role for an app and persist immediately."""
-        current = list(self._service.get_all_permissions().get(app_id, self._default_role_values))
+    def set_permission(self, app_id, role, allowed):
+        if self.page is None:
+            raise RuntimeError("Load permissions before editing")
+        grants = dict(self.page.grants)
+        roles = set(grants[app_id])
         if allowed:
-            if role_value not in current:
-                current.append(role_value)
+            roles.add(role)
         else:
-            current = [r for r in current if r != role_value]
-        self._service.set_permissions(app_id, current)
+            roles.discard(role)
+        return self._service.set_permission(app_id, tuple(sorted(roles)), self.page.revision)

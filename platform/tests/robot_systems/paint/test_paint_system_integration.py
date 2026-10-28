@@ -371,53 +371,6 @@ class TestPaintApplicationWiring(unittest.TestCase):
             selection.get_selected_ids,
         )
 
-    def test_build_user_management_application_wires_roles_permissions_and_factory(self):
-        role_policy = SimpleNamespace(
-            role_values=["admin", "operator"],
-            default_permission_role_values=["admin"],
-            protected_app_role_values=["operator"],
-        )
-        robot_system = type("RobotSystem", (), {"role_policy": role_policy})()
-        robot_system.users_storage_path = MagicMock(return_value="/tmp/users.csv")
-        robot_system.permissions_storage_path = MagicMock(return_value="/tmp/permissions.json")
-        robot_system.shell = SimpleNamespace(applications=[SimpleNamespace(app_id="a"), SimpleNamespace(app_id="b")])
-        messaging = object()
-        built_widget = object()
-        user_repo = object()
-        service = object()
-        perm_repo = object()
-        perm_svc = object()
-        factory = MagicMock()
-        factory.build.return_value = built_widget
-
-        with (
-            patch("src.robot_systems.paint.domain.users.build_paint_user_schema", return_value="schema") as schema_builder,
-            patch("src.applications.user_management.domain.csv_user_repository.CsvUserRepository", return_value=user_repo) as repo_cls,
-            patch("src.applications.user_management.service.user_management_application_service.UserManagementApplicationService", return_value=service) as service_cls,
-            patch("src.engine.auth.json_permissions_repository.JsonPermissionsRepository", return_value=perm_repo) as perm_repo_cls,
-            patch("src.engine.auth.authorization_service.AuthorizationService", return_value=perm_svc) as authz_cls,
-            patch("src.applications.base.robot_jog_service_builder.build_robot_system_jog_service", return_value="jog"),
-            patch("src.applications.user_management.user_management_factory.UserManagementFactory", return_value=factory),
-        ):
-            app = application_wiring._build_user_management_application(robot_system)
-            app.register(messaging)
-            widget = app.create_widget()
-
-        self.assertIs(widget, built_widget)
-        schema_builder.assert_called_once_with(["admin", "operator"])
-        repo_cls.assert_called_once_with("/tmp/users.csv", "schema")
-        service_cls.assert_called_once_with(user_repo)
-        perm_repo_cls.assert_called_once_with("/tmp/permissions.json", default_role_values=["admin"])
-        authz_cls.assert_called_once_with(perm_repo, protected_app_role_values=["operator"])
-        factory.build.assert_called_once_with(
-            service,
-            perm_svc,
-            ["a", "b"],
-            role_values=["admin", "operator"],
-            default_role_values=["admin"],
-            messaging=messaging,
-            jog_service="jog",
-        )
 
     def test_build_camera_and_calibration_settings_applications_wire_expected_services(self):
         robot_system = SimpleNamespace(

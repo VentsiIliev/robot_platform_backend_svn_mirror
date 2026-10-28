@@ -1,80 +1,87 @@
-from PyQt6.QtCore import QObject, pyqtSignal, QCoreApplication
-
-from src.applications.user_management.model.permissions_model import PermissionsModel
-
-
-def _t(text: str) -> str:
-    translated = QCoreApplication.translate("UserManagement", text)
-    return translated or text
+from functools import partial
+from PyQt6.QtCore import QCoreApplication
+from src.applications.base.background_worker import BackgroundWorker
+from src.applications.user_management.service.i_user_management_service import UserErrorCode, UserFailure
 
 
-class _Bridge(QObject):
-    retranslate = pyqtSignal()
+class PermissionsController(BackgroundWorker):
+    def __init__(self, model, view):
+        super().__init__()
+        self._model, self._view = model, view
+        self._stopped, self._busy = False, False
+        self._connected = False
 
-
-class PermissionsController:
-    """Wires PermissionsModel to the App Permissions tab view.
-
-    The view must expose:
-      - set_permissions(app_ids, role_values, permissions)  — populate table
-      - set_notice(text)                                    — show deferral notice
-      - permission_toggled signal(app_id, role_value, allowed)
-    """
-
-    def __init__(self, model: PermissionsModel, view, messaging=None) -> None:
-        self._model     = model
-        self._view      = view
-        self._messaging = messaging
-        self._bridge    = _Bridge()
-        self._active    = False
-        self._bridge.retranslate.connect(self._retranslate)
-
-    def load(self) -> None:
-        self._active = True
+    def load(self):
         self._view.permission_toggled.connect(self._on_permission_toggled)
-        self._view.destroyed.connect(self.stop)
-        if self._messaging:
-            from src.shared_contracts.events.localization_events import LocalizationTopics
-            self._messaging.subscribe(LocalizationTopics.LANGUAGE_CHANGED, self._on_language_changed_raw)
-        self._view.set_notice(_t("Changes apply at next login."))
-        self._refresh()
+        self._view.language_changed.connect(self._retranslate)
+        self._connected = True
+        self.refresh()
 
-    def stop(self, *_args) -> None:
-        if not self._active:
+    def refresh(self):
+        if not self._busy and not self._stopped:
+            self._start(self._model.load)
+
+    def _start(self, operation):
+        self._busy = True
+        self._session_revision = self._model.session_revision()
+        self._view.setEnabled(False)
+        self._run_in_thread(operation, self._loaded, self._failed)
+
+    def _loaded(self, result):
+        if self._stopped:
             return
-        self._active = False
-        if self._messaging:
-            from src.shared_contracts.events.localization_events import LocalizationTopics
-            self._messaging.unsubscribe(LocalizationTopics.LANGUAGE_CHANGED, self._on_language_changed_raw)
-        try:
-            self._view.permission_toggled.disconnect(self._on_permission_toggled)
-            self._view.destroyed.disconnect(self.stop)
-        except (RuntimeError, TypeError):
-            pass
-
-    # ── private ────────────────────────────────────────────────────────────────
-
-    def _on_language_changed_raw(self, _payload) -> None:
-        if not self._active:
+        self._busy = False
+        if self._session_revision != self._model.session_revision():
+            self._view.clear_permissions()
             return
-        self._bridge.retranslate.emit()
-
-    def _retranslate(self) -> None:
-        if not self._active:
+        if isinstance(result, UserFailure):
+            self._model.page = None
+            self._view.clear_permissions()
+            self._notice("Wait until the active operation is idle before changing access."
+                         if result.error.code == UserErrorCode.BUSY
+                         else "Permissions could not be loaded. Refresh and try again.")
             return
-        try:
-            self._view.retranslateUi()
-            self._view.set_notice(_t("Changes apply at next login."))
-        except RuntimeError:
-            self.stop()
+        self._model.page = result.value
+        page = result.value
+        self._view.set_permissions([app for app, _ in page.grants], list(page.roles),
+                                   {app: list(roles) for app, roles in page.grants}, page.locked)
+        self._view.setEnabled(True)
+        self._notice("Changes apply immediately. Protected role grants cannot be edited.")
 
-    def _on_permission_toggled(self, app_id: str, role_value: str, allowed: bool) -> None:
-        self._model.set_permission(app_id, role_value, allowed)
-        self._refresh()
+    def _on_permission_toggled(self, app_id, role, allowed):
+        if not self._busy and not self._stopped and self._model.page is not None:
+            self._start(partial(self._model.set_permission, app_id, role, allowed))
 
-    def _refresh(self) -> None:
-        self._view.set_permissions(
-            app_ids     = self._model.get_known_app_ids(),
-            role_values = self._model.get_role_values(),
-            permissions = self._model.get_permissions(),
-        )
+    def _failed(self, _message):
+        if not self._stopped:
+            self._busy = False
+            self._model.page = None
+            self._view.clear_permissions()
+            self._notice("Permissions could not be loaded. Refresh and try again.")
+
+    def _notice(self, source):
+        self._notice_source = source
+        self._view.set_notice(self._t(source))
+
+    def _retranslate(self):
+        if not self._stopped and hasattr(self, "_notice_source"):
+            self._view.set_notice(self._t(self._notice_source))
+
+    def stop(self):
+        if self._stopped:
+            return
+        self._stopped = True
+        if self._connected:
+            try:
+                self._view.permission_toggled.disconnect(self._on_permission_toggled)
+                self._view.language_changed.disconnect(self._retranslate)
+            except (RuntimeError, TypeError):
+                pass
+            self._connected = False
+        self._stop_threads()
+        self._model.page = None
+        self._view.clear_permissions()
+
+    @staticmethod
+    def _t(text):
+        return QCoreApplication.translate("UserManagement", text) or text

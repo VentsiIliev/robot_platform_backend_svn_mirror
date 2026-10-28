@@ -105,8 +105,8 @@ class RosBackendLauncher:
                             identity = json.load(response).get("robot_release", {})
                         except (ValueError, AttributeError) as error:
                             raise RuntimeError("Running backend has no valid robot identity") from error
-                        # if identity != {"target": self._robot_target, "profile": self._backend_profile}:
-                        #     raise RuntimeError(f"Backend target/profile mismatch: expected {self._robot_target}/{self._backend_profile}, received {identity}")
+                        if identity != {"target": self._robot_target, "profile": self._backend_profile}:
+                            raise RuntimeError(f"Backend target/profile mismatch: expected {self._robot_target}/{self._backend_profile}, received {identity}")
                     return True
             except urllib.error.HTTPError as error:
                 if self._robot_target:

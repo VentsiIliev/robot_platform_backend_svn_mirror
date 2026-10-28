@@ -3,7 +3,7 @@ from PyQt6.QtCore import pyqtSignal, Qt, QCoreApplication
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QTableWidget, QTableWidgetItem, QHeaderView,
-    QGroupBox, QSizePolicy, QWidget, QLineEdit, QPushButton, QTabWidget,
+    QGroupBox, QSizePolicy, QWidget, QLineEdit, QPushButton, QTabWidget, QDialog,
 )
 from PyQt6.QtGui import QFont
 
@@ -11,6 +11,11 @@ from pl_gui.utils.utils_widgets.table_helpers import make_table
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEdit
 from src.applications.user_management.domain.user_schema import UserRecord, UserSchema
+from src.applications.user_management.view.account_form_dialog import AccountFormDialog
+from src.applications.user_management.view.permissions_view import PermissionsView
+from src.applications.user_management.view.login_card_dialog import LoginCardDialog
+from src.applications.base.widgets.private_text_dialog import PrivateTextDialog
+from src.applications.base.access.adapters import WidgetAdapter, TabAdapter
 
 
 class UserManagementView(IApplicationView):
@@ -21,9 +26,16 @@ class UserManagementView(IApplicationView):
     qr_requested      = pyqtSignal(object)    # UserRecord
     refresh_requested = pyqtSignal()
     filter_changed    = pyqtSignal(str, str)  # column label, value
+    selection_changed = pyqtSignal(object)
+    password_requested = pyqtSignal(object)
+    reveal_requested = pyqtSignal(object)
+    role_requested = pyqtSignal(object)
+    history_requested = pyqtSignal(object)
+    codes_requested = pyqtSignal()
 
     def __init__(self, schema: UserSchema, parent=None):
         self._schema = schema
+        self._private_dialog = None
         super().__init__("User Management", parent)
 
     # ── IApplicationView ─────────────────────────────────────────────
@@ -35,15 +47,56 @@ class UserManagementView(IApplicationView):
 
         self._tabs = QTabWidget()
         self._tabs.addTab(self._build_users_tab(), "")
+        self._permissions_page = QWidget()
+        QVBoxLayout(self._permissions_page)
+        self._perm_tab_idx = self._tabs.addTab(self._permissions_page, "")
+        self._tabs.setTabVisible(self._perm_tab_idx, False)
         root.addWidget(self._tabs)
         self.setStyleSheet(self._stylesheet())
         self.retranslateUi()
 
-    def add_permissions_tab(self, permissions_widget: QWidget) -> None:
-        """Attach the App Permissions tab. Called by the factory when the
-        permissions service is available."""
-        self._perm_tab_idx = self._tabs.addTab(permissions_widget, "")
-        self.retranslateUi()
+    def ensure_permissions_view(self):
+        if not hasattr(self, "_permissions_view"):
+            self._permissions_view = PermissionsView(self._permissions_page)
+            self._permissions_page.layout().addWidget(self._permissions_view)
+        return self._permissions_view
+
+    def access_adapters(self):
+        controls = {key: WidgetAdapter(getattr(self, "_btn_" + key))
+                    for key in ("add", "edit", "delete", "qr", "password", "reveal", "role", "history", "codes")}
+        controls["permissions"] = TabAdapter(self._tabs, self._permissions_page)
+        return controls
+
+    def set_busy(self, busy):
+        self._table.setEnabled(not busy)
+        self._btn_refresh.setEnabled(not busy)
+
+    def ask_form(self, title, fields, values=None, choices=None):
+        dialog = AccountFormDialog(title, fields, values, choices, self)
+        self._private_dialog = dialog
+        result = dialog.values() if dialog.exec() == QDialog.DialogCode.Accepted else None
+        self._private_dialog = None
+        dialog.clear()
+        dialog.deleteLater()
+        return result
+
+    def display_secret(self, title, notice, text):
+        dialog = PrivateTextDialog(title, notice, text, self)
+        self._private_dialog = dialog
+        dialog.exec()
+        self._private_dialog = None
+        dialog.deleteLater()
+
+    def display_qr(self, png):
+        dialog = LoginCardDialog(png, self)
+        self._private_dialog = dialog
+        dialog.exec()
+        self._private_dialog = None
+        dialog.deleteLater()
+
+    def clear_private_displays(self):
+        if self._private_dialog is not None:
+            self._private_dialog.reject()
 
     def _build_users_tab(self) -> QWidget:
         container = QWidget()
@@ -66,7 +119,7 @@ class UserManagementView(IApplicationView):
         return container
 
     def clean_up(self) -> None:
-        pass
+        self.clear_private_displays()
 
     # ── Public setters ────────────────────────────────────────────────
 
@@ -117,6 +170,16 @@ class UserManagementView(IApplicationView):
         self._btn_delete.setText(self._t("Delete User"))
         self._btn_refresh.setText(self._t("Refresh"))
         self._btn_qr.setText(self._t("Generate QR"))
+        for key, source in (("password", "Change password"), ("reveal", "Show Operator password"),
+                            ("role", "Change role"), ("history", "Account history"),
+                            ("codes", "Generate recovery codes")):
+            getattr(self, "_btn_" + key).setText(self._t(source))
+        current = self._filter_col.currentData()
+        self._filter_col.clear()
+        self._filter_col.addItem(self._t("All"), "")
+        for fd in self._schema.get_table_fields():
+            self._filter_col.addItem(self._t(fd.label), fd.key)
+        self._filter_col.setCurrentIndex(max(0, self._filter_col.findData(current)))
         self._table.setHorizontalHeaderLabels(
             [self._t(h) for h in self._schema.get_table_headers()]
         )
@@ -131,7 +194,6 @@ class UserManagementView(IApplicationView):
         layout.addWidget(self._filter_label)
 
         self._filter_col = QComboBox()
-        self._filter_col.addItems(self._schema.get_filterable_labels())
         layout.addWidget(self._filter_col)
 
         self._filter_input = KeyboardLineEdit()
@@ -139,6 +201,8 @@ class UserManagementView(IApplicationView):
 
         self._btn_filter = QPushButton()
         self._btn_clear  = QPushButton()
+        self._btn_filter.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_clear.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_filter.clicked.connect(self._emit_filter)
         self._btn_clear.clicked.connect(self._clear_filter)
         self._filter_input.returnPressed.connect(self._emit_filter)
@@ -165,6 +229,7 @@ class UserManagementView(IApplicationView):
 
         for btn in (self._btn_add, self._btn_edit, self._btn_delete, self._btn_refresh, self._btn_qr):
             btn.setMinimumHeight(48)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
             layout.addWidget(btn)
 
         self._btn_edit.setEnabled(False)
@@ -176,15 +241,43 @@ class UserManagementView(IApplicationView):
         self._btn_delete.clicked.connect(self._on_delete)
         self._btn_refresh.clicked.connect(self.refresh_requested)
         self._btn_qr.clicked.connect(self._on_qr)
-        return group
+        container = QWidget()
+        outer = QVBoxLayout(container)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(group)
+        extra = QGroupBox()
+        row = QHBoxLayout(extra)
+        for key, callback in (("password", self._on_password), ("reveal", self._on_reveal),
+                              ("role", self._on_role), ("history", self._on_history),
+                              ("codes", self._on_codes)):
+            button = QPushButton()
+            button.setMinimumHeight(48)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.clicked.connect(callback)
+            setattr(self, "_btn_" + key, button)
+            row.addWidget(button)
+        outer.addWidget(extra)
+        return container
 
     # ── Internal slots ────────────────────────────────────────────────
 
     def _on_selection_changed(self) -> None:
-        has = self.selected_record() is not None
-        self._btn_edit.setEnabled(has)
-        self._btn_delete.setEnabled(has)
-        self._btn_qr.setEnabled(has)
+        self.selection_changed.emit(self.selected_record())
+
+    def _on_password(self):
+        if self.selected_record(): self.password_requested.emit(self.selected_record())
+
+    def _on_reveal(self):
+        if self.selected_record(): self.reveal_requested.emit(self.selected_record())
+
+    def _on_role(self):
+        if self.selected_record(): self.role_requested.emit(self.selected_record())
+
+    def _on_history(self):
+        if self.selected_record(): self.history_requested.emit(self.selected_record())
+
+    def _on_codes(self):
+        self.codes_requested.emit()
 
     def _on_add(self)    -> None: self.add_requested.emit()
     def _on_edit(self)   -> None:
@@ -198,12 +291,12 @@ class UserManagementView(IApplicationView):
         if r: self.qr_requested.emit(r)
 
     def _emit_filter(self) -> None:
-        self.filter_changed.emit(self._filter_col.currentText(), self._filter_input.text().strip())
+        self.filter_changed.emit(self._filter_col.currentData() or "", self._filter_input.text().strip())
 
     def _clear_filter(self) -> None:
         self._filter_input.clear()
         self._filter_col.setCurrentIndex(0)
-        self.filter_changed.emit("All", "")
+        self.filter_changed.emit("", "")
 
     @staticmethod
     def _stylesheet() -> str:

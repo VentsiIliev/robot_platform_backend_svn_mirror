@@ -4,7 +4,7 @@ Plugin integration tests for UserManagement application.
 Verifies:
 - ApplicationSpec is declared in GlueRobotSystem.shell.applications
 - factory produces a WidgetApplication
-- factory creates the service with a CSV repository
+- factory uses the shared account runtime
 """
 import os
 import tempfile
@@ -16,13 +16,12 @@ from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
 
 
 def _make_robot_system():
-    tmp = tempfile.mktemp(suffix=".json")
-    app = MagicMock()
-    app._settings_service = MagicMock()
-    app.get_optional_service.return_value = None
-    app.__class__.role_policy = GlueRobotSystem.role_policy
-    app.permissions_storage_path.return_value = tmp
-    app.users_storage_path.return_value = tempfile.mktemp(suffix=".csv")
+    class RobotStub:
+        role_policy = GlueRobotSystem.role_policy
+        shell = GlueRobotSystem.shell
+    app = RobotStub()
+    app._account_runtime = MagicMock()
+    app.get_service = MagicMock()
     return app
 
 

@@ -102,6 +102,8 @@ def main():
     # The combined robot release bypasses build_release.py. Include its shared
     # first-install provisioning entry point directly in the platform bundle.
     installation = bundle / "installation"
+    subprocess.run([sys.executable, "packaging/accounts/build_payload.py",
+                    str(installation / "account-maintenance")], cwd=ROOT, check=True)
     (installation / "kiosk").mkdir(exist_ok=True)
     shutil.copy2(ROOT / "packaging/kiosk/setup_kiosk.sh", installation / "kiosk/setup_kiosk.sh")
     stage_kiosk_password(installation / "kiosk/kiosk-password.json", kiosk_password)

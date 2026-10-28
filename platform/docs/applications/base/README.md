@@ -542,8 +542,35 @@ Schema-based forms built through `KeyboardSettingsView` or `build_with_keyboard_
 [Complete source index](../../SOURCE_INDEX.md).
 <!-- source-navigation:end -->
 
+## Permission-aware presentation
+
+`src/applications/base/access/` provides opt-in `AccessBinding`, `WidgetAdapter`,
+and `TabAdapter`. Existing buttons, actions, and tab widgets keep their current
+styles and layout. Bindings apply visible/enabled state only, using plain local
+`AccessRequirement`, `PresentationAccess`, `ControlState`, and `AccessVersion` DTOs.
+
+The controller owns binding lifecycle, queries through model/application service,
+and calls `close()` before destroying widgets. Once a control is bound, update its
+ordinary state through `set_operational_state()` rather than direct enabled-state
+writes. Invalidate on session/policy/selection changes; old versioned results are
+discarded. Role denial hides by default; a temporary target denial disables.
+Tab requirements refer to page identity rather than changing numeric indices.
+
+Bindings never authorize an operation. The owning service must independently
+check current actor/target permissions. Do not inject engine services into views.
+User Management uses these bindings for existing buttons and the Manufacturer-only
+App Permissions tab. Login/recovery use the same typed service/error boundary.
+`replace_access()` refreshes one session/selection atomically without hiding an
+allowed tab between polls. A session/selection change still requires `invalidate()`.
+
 ## Navigation during operations
 
 `IApplicationController.has_active_operations()` is a nonblocking query for finite screen-owned work, including paused processes and stopping operations. Its default is false; custom controllers override it for private workers, executors or service-owned processes. The factory binds it to `IApplicationView.can_close()` and also checks `BackgroundWorker` work and jog commands. Workers block navigation from submission until cleanup. Specialized view guards must call `super().can_close()`.
 
 Finite reads, connection checks and actions block leaving until completion. Continuous previews and monitoring loops do not. Warnings use the shared English/Bulgarian `ApplicationNavigation` catalogs. Background worker failures quit their thread even without an error callback. Direct cleanup waits for private workers before releasing ownership.
+
+The shell's automatic session expiry uses `IApplicationView.has_active_operations()`
+as a silent query; it must not show a dialog or stop work. Expiry also checks
+robot-system activity in a background worker and waits until idle before closing
+views. Access-changing service commands independently reject active-operation
+changes, so UI state is never the authorization boundary.

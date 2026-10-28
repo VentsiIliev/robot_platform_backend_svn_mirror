@@ -1,5 +1,10 @@
 > Documentation status: design plan/backlog or historical review. Proposed paths and behaviors may not exist in the current checkout. Use the [source index](../SOURCE_INDEX.md) and current package guides to verify implementation.
 
+> Follow-up plan: [Role capabilities and password recovery](role_capabilities_and_password_recovery.md)
+> defines the current Manufacturer/Admin/Operator requirements, target-aware action
+> checks, reusable UI bindings, and credential/recovery work. It supersedes this
+> historical plan where their requirements differ.
+
 # Role-Based Authorization — Design Plan
 
 ## Implementation Status

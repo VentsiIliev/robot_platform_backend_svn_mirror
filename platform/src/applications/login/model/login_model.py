@@ -1,49 +1,43 @@
-from typing import Optional, Tuple
-
-from src.applications.login.i_login_application_service import ILoginApplicationService
-from src.engine.auth.i_authenticated_user import IAuthenticatedUser
+from src.applications.login.i_login_application_service import (
+    AdminRecovery, AdminSetup, ILoginApplicationService, LoginFailure,
+)
 
 
 class LoginModel:
-
     def __init__(self, service: ILoginApplicationService) -> None:
         self._svc = service
 
-    # ── Delegation ──────────────────────────────────────────────────────────
-
     def get_connection_information(self) -> dict:
-        """Return a read-only connection snapshot for the login screen."""
         return self._svc.get_connection_information()
 
-    def is_first_run(self) -> bool:
+    def is_first_run(self):
         return self._svc.is_first_run()
 
-    def authenticate(self, user_id: str, password: str) -> Optional[IAuthenticatedUser]:
-        return self._svc.authenticate(user_id, password)
+    def authenticate(self, user_id: str, password: str):
+        return self._svc.authenticate(user_id.strip(), password)
 
-    def authenticate_qr(self, qr_payload: str) -> Optional[IAuthenticatedUser]:
-        return self._svc.authenticate_qr(qr_payload)
-
-    def try_qr_login(self) -> Optional[Tuple[str, str]]:
-        return self._svc.try_qr_login()
+    def poll_qr_login(self):
+        result = self._svc.scan_qr()
+        if isinstance(result, LoginFailure) or result.value is None:
+            return result
+        return self._svc.authenticate_qr(result.value)
 
     def move_to_login_pos(self) -> None:
         self._svc.move_to_login_pos()
 
-    def create_first_admin(
-        self, user_id: str, first_name: str, last_name: str, password: str
-    ) -> Tuple[bool, str]:
-        return self._svc.create_first_admin(user_id, first_name, last_name, password)
+    def create_and_login(self, command: AdminSetup):
+        result = self._svc.create_first_admin(command)
+        return result if isinstance(result, LoginFailure) else self.authenticate(command.login_id, command.password)
 
-    # ── Validation ──────────────────────────────────────────────────────────
+    def recover_admin(self, command: AdminRecovery):
+        return self._svc.recover_admin(command)
 
-    def validate_login_input(self, user_id: str, password: str) -> Optional[str]:
-        uid = user_id.strip()
-        pw  = password.strip()
-        if not uid:
+    @staticmethod
+    def validate_login_input(user_id: str, password: str) -> str | None:
+        if not user_id.strip():
             return "User id is required."
-        if not uid.isnumeric():
+        if not user_id.strip().isnumeric():
             return "User id must be numeric."
-        if not pw:
+        if not password:
             return "Password is required."
         return None

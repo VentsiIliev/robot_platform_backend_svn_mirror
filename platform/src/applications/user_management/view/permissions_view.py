@@ -14,10 +14,12 @@ class PermissionsView(QWidget):
     """
 
     permission_toggled = pyqtSignal(str, str, bool)
+    language_changed = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._loading = False
+        self._roles = ()
         self._build_ui()
 
     # ── public API (called by PermissionsController) ───────────────────────────
@@ -27,9 +29,11 @@ class PermissionsView(QWidget):
         app_ids:     list[str],
         role_values: list[str],
         permissions: dict[str, list[str]],
+        locked: tuple[tuple[str, str], ...] = (),
     ) -> None:
         """Populate the table. Suppresses checkbox signals during population."""
         self._loading = True
+        self._roles = tuple(role_values)
         try:
             self._table.setRowCount(len(app_ids))
             self._table.setColumnCount(len(role_values))
@@ -45,6 +49,8 @@ class PermissionsView(QWidget):
                     layout.setContentsMargins(0, 0, 0, 0)
                     cb = QCheckBox()
                     cb.setChecked(role_value in allowed)
+                    cb.setEnabled((app_id, role_value) not in locked)
+                    cb.setCursor(Qt.CursorShape.PointingHandCursor)
                     cb.stateChanged.connect(
                         self._make_toggle_handler(app_id, role_value, cb)
                     )
@@ -56,6 +62,10 @@ class PermissionsView(QWidget):
     def set_notice(self, text: str) -> None:
         self._notice.setText(text)
 
+    def clear_permissions(self) -> None:
+        self._table.clearContents()
+        self._table.setRowCount(0)
+
     # ── Localization ───────────────────────────────────────────────────────────
 
     @staticmethod
@@ -65,10 +75,12 @@ class PermissionsView(QWidget):
 
     def retranslateUi(self, *_) -> None:
         self._title_label.setText(self._t("App Permissions"))
+        self._table.setHorizontalHeaderLabels([self._t(role) for role in self._roles])
 
     def changeEvent(self, event) -> None:
         if event.type() == QEvent.Type.LanguageChange:
             self.retranslateUi()
+            self.language_changed.emit()
         super().changeEvent(event)
 
     # ── UI construction ────────────────────────────────────────────────────────

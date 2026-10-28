@@ -1,61 +1,96 @@
-import logging
-from typing import List, Optional
+"""In-memory application test double; never used by production wiring."""
+from dataclasses import replace
+from uuid import uuid4
+import base64
 
-from src.applications.user_management.domain.default_schema import DEFAULT_USER_SCHEMA
-from src.applications.user_management.domain.user_schema import UserRecord, UserSchema
-from src.applications.user_management.service.i_user_management_service import IUserManagementService
-
-_logger = logging.getLogger(__name__)
-
-_STUB_RECORDS = [
-    UserRecord({"id": "1", "firstName": "Alice", "lastName": "Admin",    "password": "admin123", "role": "Admin",    "email": "alice@example.com"}),
-    UserRecord({"id": "2", "firstName": "Bob",   "lastName": "Operator", "password": "op456",    "role": "Operator", "email": "bob@example.com"}),
-]
+from src.applications.user_management.service.i_user_management_service import (
+    IUserManagementService, UserEntry, UserPage, UserSuccess, UserFailure, UserError,
+    ScreenAccess, ControlAccess, SecretDisplay, QrDisplay, PermissionsPage,
+)
 
 
 class StubUserManagementService(IUserManagementService):
+    def __init__(self):
+        self._rows = {
+            "demo-admin": UserEntry("demo-admin", "1", "Alice", "Admin", "Admin", "", True, 1, None, None, None, None),
+            "demo-operator": UserEntry("demo-operator", "2", "Bob", "Operator", "Operator", "", True, 1, None, None, None, None),
+            "demo-maker": UserEntry("demo-maker", "3", "Service", "Engineer", "Manufacturer", "", True, 1, None, None, None, None),
+        }
+        self._grants = (("demo", ("Manufacturer", "Admin", "Operator")),)
+        self._permission_revision = 1
 
-    def __init__(self, schema: UserSchema = DEFAULT_USER_SCHEMA):
-        self._schema  = schema
-        self._records = [UserRecord(r.to_dict()) for r in _STUB_RECORDS]
+    def session_revision(self):
+        return 1
 
-    def get_schema(self) -> UserSchema:
-        return self._schema
+    def load_users(self):
+        return UserSuccess(UserPage(tuple(self._rows.values()), "demo-maker", "Manufacturer", 1))
 
-    def get_all_users(self) -> List[UserRecord]:
-        _logger.info("Stub: get_all_users → %d records", len(self._records))
-        return list(self._records)
+    def access(self, target_id):
+        target = self._rows.get(target_id)
+        keys = ("add", "edit", "delete", "password", "reveal", "role", "qr", "history", "codes", "permissions")
+        controls = tuple(ControlAccess(key, key != "codes", key != "codes",
+                         (key in {"add", "permissions"}) or (target is not None and key != "codes"
+                          and (key != "reveal" or target.role == "Operator"))) for key in keys)
+        return UserSuccess(ScreenAccess(1, 1, controls, ("Manufacturer", "Admin", "Operator")))
 
-    def add_user(self, record: UserRecord) -> tuple[bool, str]:
-        uid = record.get_id(self._schema.id_key)
-        if any(r.get_id(self._schema.id_key) == uid for r in self._records):
-            return False, f"User {uid} already exists"
-        self._records.append(record)
-        _logger.info("Stub: add_user id=%s", uid)
-        return True, f"User {uid} added"
+    def create(self, command):
+        if any(row.login_id == command.login_id for row in self._rows.values()):
+            return UserFailure(UserError("already_exists"))
+        row = UserEntry(uuid4().hex, command.login_id, command.first_name, command.last_name, command.role,
+                        command.email, True, 1, None, "demo-maker", None, "demo-maker")
+        self._rows[row.account_id] = row
+        return UserSuccess(row)
 
-    def update_user(self, record: UserRecord) -> tuple[bool, str]:
-        uid = record.get_id(self._schema.id_key)
-        for i, r in enumerate(self._records):
-            if r.get_id(self._schema.id_key) == uid:
-                self._records[i] = record
-                _logger.info("Stub: update_user id=%s", uid)
-                return True, f"User {uid} updated"
-        return False, f"User {uid} not found"
+    def _replace(self, identity, revision, **values):
+        row = self._rows.get(identity)
+        if row is None:
+            return UserFailure(UserError("not_found"))
+        if row.revision != revision:
+            return UserFailure(UserError("conflict"))
+        changed = replace(row, revision=row.revision + 1, **values)
+        self._rows[identity] = changed
+        return UserSuccess(changed)
 
-    def delete_user(self, user_id) -> tuple[bool, str]:
-        before = len(self._records)
-        self._records = [r for r in self._records if r.get_id(self._schema.id_key) != user_id]
-        if len(self._records) < before:
-            _logger.info("Stub: delete_user id=%s", user_id)
-            return True, f"User {user_id} deleted"
-        return False, f"User {user_id} not found"
+    def edit(self, command):
+        return self._replace(command.account_id, command.revision, first_name=command.first_name,
+                             last_name=command.last_name, email=command.email)
 
-    def generate_qr(self, record: UserRecord) -> tuple[bool, str, Optional[str]]:
-        _logger.info("Stub: generate_qr id=%s", record.get_id(self._schema.id_key))
-        return True, "Stub QR generated", None
+    def change_password(self, command):
+        return self._replace(command.account_id, command.revision)
 
-    def send_access_package(self, record: UserRecord, qr_image_path: str) -> tuple[bool, str]:
-        email = record.get("email", "")
-        _logger.info("Stub: send_access_package id=%s email=%s", record.get_id(self._schema.id_key), email)
-        return True, f"Stub: package sent to {email}"
+    def change_role(self, command):
+        return self._replace(command.account_id, command.revision, role=command.role)
+
+    def delete(self, account_id, revision):
+        result = self._replace(account_id, revision)
+        if isinstance(result, UserFailure):
+            return result
+        del self._rows[account_id]
+        return UserSuccess(None)
+
+    def reveal(self, account_id):
+        row = self._rows.get(account_id)
+        if row is None or row.role != "Operator":
+            return UserFailure(UserError("policy_violation"))
+        return UserSuccess(SecretDisplay("DEMO ONLY"))
+
+    def issue_qr(self, account_id, revision):
+        return UserSuccess(QrDisplay(base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1cAAAAASUVORK5CYII=")))
+
+    def generate_recovery_codes(self, current_password):
+        return UserSuccess(SecretDisplay("DEMO-CODE-NOT-VALID"))
+
+    def history(self, account_id):
+        return UserSuccess(())
+
+    def permissions(self):
+        return UserSuccess(PermissionsPage(self._permission_revision, ("Manufacturer", "Admin", "Operator"),
+                                           self._grants, (("demo", "Manufacturer"),)))
+
+    def set_permission(self, app_id, roles, revision):
+        if revision != self._permission_revision:
+            return UserFailure(UserError("conflict"))
+        self._permission_revision += 1
+        self._grants = ((app_id, roles),)
+        return self.permissions()

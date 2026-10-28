@@ -89,7 +89,6 @@ class AppShell(QWidget):
                 break
 
         # Store the running app info
-        self.current_running_app = app_name
         self.current_app_folder = sender_folder
         # Show the appropriate app
         self.show_app(app_name)
@@ -105,6 +104,14 @@ class AppShell(QWidget):
         """Create app widget using injected factory - ONE LINE!"""
         print(f"MainWindow: Creating app widget for '{app_name}'")
         return self._widget_factory(app_name)
+
+    def set_application_access_guard(self, guard) -> None:
+        """Inject an optional access gate, evaluated before cached or lazy opening.
+
+        A gate may schedule asynchronous authorization and return False until it
+        can reenter show_app with a fresh grant. The shell owns no role policy.
+        """
+        self._application_access_guard = guard
 
 
 
@@ -133,6 +140,9 @@ class AppShell(QWidget):
         return widget
 
     def _show_app(self, app_name):
+        guard = getattr(self, "_application_access_guard", None)
+        if guard is not None and not guard(app_name):
+            return None
         if not self.can_switch_to_app(app_name):
             return None
         # Check if widget already exists
@@ -158,6 +168,7 @@ class AppShell(QWidget):
 
         self.stacked_widget.addWidget(app_widget)
         self.stacked_widget.setCurrentIndex(1)
+        self.current_running_app = app_name
         self._update_onboarding_action(app_widget)
         return app_widget
 
@@ -349,7 +360,7 @@ class AppShell(QWidget):
         self.folders_page.close_current_app_requested.connect(self.close_current_app)
 
         # Add the folders page to the stacked widget (index 0)
-        self.stacked_widget.addWidget(self.folders_page)
+        self.stacked_widget.insertWidget(0, self.folders_page)
 
     def retranslate(self):
         """Handle language change events - called automatically"""

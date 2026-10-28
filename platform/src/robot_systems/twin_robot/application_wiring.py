@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 
+def _build_user_management_application(robot_system):
+    from src.bootstrap.account_application_wiring import build_account_user_management_application
+    return build_account_user_management_application(robot_system)
+
+
 def _build_dashboard_application(robot_system):
     from src.applications.base.widget_application import WidgetApplication
     from src.robot_systems.twin_robot.applications.dashboard import TwinDashboardFactory

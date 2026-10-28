@@ -55,6 +55,9 @@ class IApplicationView(AppWidget):
             return False
         return super().can_close()
 
+    def has_active_operations(self) -> bool:
+        return bool(self._navigation_guard is not None and self._navigation_guard())
+
     def _install_jog_widget(self) -> None:
         self._drawer = DrawerToggle(
             self,

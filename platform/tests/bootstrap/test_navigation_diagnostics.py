@@ -133,7 +133,7 @@ class NavigationDiagnosticsTests(unittest.TestCase):
         can_close = MagicMock(return_value=False)
         controller = ShellSessionController(shell=shell, session=self.session, dev_skip_login=False,
             show_account_button_when_dev_skip_login=False, show_login_view=MagicMock(),
-            can_close_running_apps=can_close, actions=self.actions)
+            can_close_running_apps=can_close, can_expire_session=lambda: True, actions=self.actions)
         controller.login(SimpleNamespace(user_id='7', role='operator'))
         controller._on_logout_requested()
         self.assertTrue(self.session.is_authenticated())

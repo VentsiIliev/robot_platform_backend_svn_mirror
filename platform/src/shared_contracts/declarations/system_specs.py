@@ -46,6 +46,7 @@ class RolePolicy:
     admin_role_value: str = "Admin"
     default_permission_role_values: List[str] = field(default_factory=list)
     protected_app_role_values: Dict[str, List[str]] = field(default_factory=dict)
+    denied_folder_role_values: Dict[str, List[str]] = field(default_factory=dict)
 
     def __post_init__(self):
         role_values = [str(role) for role in self.role_values]
@@ -55,10 +56,15 @@ class RolePolicy:
             str(app_id): [str(role) for role in role_values]
             for app_id, role_values in self.protected_app_role_values.items()
         }
+        denied_folders = {
+            str(folder): [str(role) for role in roles]
+            for folder, roles in self.denied_folder_role_values.items()
+        }
         object.__setattr__(self, "role_values", role_values)
         object.__setattr__(self, "admin_role_value", admin_role_value)
         object.__setattr__(self, "default_permission_role_values", default_roles)
         object.__setattr__(self, "protected_app_role_values", protected)
+        object.__setattr__(self, "denied_folder_role_values", denied_folders)
 
         known_roles = set(role_values)
         if role_values and admin_role_value not in known_roles:
@@ -72,6 +78,8 @@ class RolePolicy:
                 raise ValueError(
                     f"RolePolicy protected_app_role_values for '{app_id}' contains unknown roles"
                 )
+        if any(role not in known_roles for roles in denied_folders.values() for role in roles):
+            raise ValueError("RolePolicy denied folders contain unknown roles")
 
 
 @dataclass(frozen=True)

@@ -830,6 +830,33 @@ Rules:
 
 ---
 
+## Optional — Protect controls with reusable access bindings
+
+Use `src/applications/base/access/AccessBinding` in the controller to bind existing
+widgets through `WidgetAdapter` or a tab page through `TabAdapter`. Declare an
+`AccessRequirement(action=...)` or `AccessRequirement(feature=...)`; keep role
+comparisons and policy out of views. This changes visibility/enabled state only,
+preserving styles, icons, and layout. User Management is the working example.
+
+Query permissions through model → application-owned service contract → trusted
+service. Translate shared typed results to application-owned DTOs in the service
+adapter. Run storage/credential work in workers. Invalidate bindings on session or
+selection changes, reject stale replies with `AccessVersion`, and use
+`set_operational_state()` for ordinary busy/selection state. Polling the same
+session/selection may use `replace_access()` without briefly hiding allowed tabs.
+Call `close()` from controller `stop()`.
+
+The mutation service must authorize again using current stored actor/target facts.
+A hidden button and a permitted tab never grant execution authority. Define
+domain action IDs beside their application/system contracts and compose grants
+through the robot system's `account_access_extensions()`; do not add one role
+flag per button. Secrets require private displays and must never enter logs/audit.
+
+Expose finite work through `has_active_operations()`; expiry uses the view's
+silent query and waits for idle. Screens must not stop robots on access loss.
+See [account services](../../../docs/engine/auth/account_services.md) and
+[shared presentation](../../../docs/applications/base/README.md#permission-aware-presentation).
+
 ## Critical Rules Summary
 
 | Rule | Why |

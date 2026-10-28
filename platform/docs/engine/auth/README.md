@@ -1,5 +1,20 @@
 # `src/engine/auth/` — Authentication, Authorization & Session
 
+The new typed account/access backend and its current rollout boundary are covered
+in [Account services and durable history](account_services.md). Existing login
+and application authorization remain on the legacy path until runtime cutover.
+Service staff should use the
+[account recovery and Manufacturer maintenance runbook](account_recovery_runbook.md)
+for the OS-authorized command, recovery hierarchy, and rollout boundary.
+The [credential/key and installation guide](credential_storage.md) documents
+Operator encryption, protected key storage, setup recovery, and shared composition.
+
+The active login/user-management providers use the new SQLite runtime with an
+explicit empty-account setup. Legacy authentication/repository APIs described
+below remain historical source references; they are not a fallback used by the
+new startup path. Live shell invalidation and production provisioning are tracked
+in the execution TODO linked by the account guides.
+
 The `auth` package provides role-based access control for the robot platform. It is composed of narrow, composable interfaces so that each layer of the application only receives the access it needs.
 
 ---

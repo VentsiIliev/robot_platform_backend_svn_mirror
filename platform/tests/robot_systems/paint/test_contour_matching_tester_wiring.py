@@ -13,7 +13,7 @@ class TestContourMatchingTesterWiring(unittest.TestCase):
 
         self.assertEqual(4, app.folder_id)
         self.assertEqual(
-            ["Admin", "Developer"],
+            ["Admin", "Manufacturer"],
             PaintRobotSystem.role_policy.protected_app_role_values[app.app_id],
         )
 

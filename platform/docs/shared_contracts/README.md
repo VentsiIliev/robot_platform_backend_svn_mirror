@@ -24,6 +24,13 @@ Shared imports reduce spelling drift. Renaming/removing a Python constant can br
 
 ## Package Contents
 
+Account/access contracts also include explicit user commands, safe summaries,
+recovery/card results, session validity, and typed business/infrastructure errors.
+`ApplicationGrant.editable_roles` describes which roles a permissions editor may
+change; protected, denied, and Manufacturer grants remain enforced by the service.
+These account/authorization packages depend only on the standard library. Fresh
+installation starts empty and has no legacy-account migration contract.
+
 | File | Status | Description |
 |------|--------|-------------|
 | `events/robot_events.py` | Implemented | `RobotTopics` — four snapshot topics plus targeting/configuration change notifications |
@@ -267,3 +274,16 @@ For user-facing notifications:
 
 [Complete source index](../SOURCE_INDEX.md).
 <!-- source-navigation:end -->
+
+## Access and account contracts
+
+`authorization/` contains stable action/feature identifiers, immutable access
+requests/decisions, `Success[T] | Failure` results, structured service errors,
+and versioned application permission snapshots. `accounts/` contains safe account
+summaries, explicit mutation commands, redacted audit events, and migration DTOs.
+Neither package imports Qt, engine implementations, or robot systems. Secrets in
+commands/results are excluded from their generated representations.
+
+Domain-specific applications may declare additional string-enum action groups
+in their own contracts package. Grant their stable IDs in system composition;
+the shared policy does not import each application's enum.

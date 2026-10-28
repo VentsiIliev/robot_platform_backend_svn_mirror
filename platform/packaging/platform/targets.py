@@ -36,6 +36,8 @@ def prepare_target(name: str, destination: Path) -> dict:
     payload = json.loads((ROOT / "config/platform.json").read_text())
     selected = load_robot_system_config(payload, name)
     payload.update(robot_system=name, supported_robot_systems=[name], robot_systems={name: selected})
+    # A developer's source-login bypass must never become an installed default.
+    payload["ui"] = {**payload.get("ui", {}), "dev_skip_login": False}
     payload["ros_backend"] = {**payload.get("ros_backend", {}), "auto_launch": True, "auto_stop": True}
     payload["ros_backend"].pop("launch_script", None)
     payload["ros_backend"].pop("stop_script", None)

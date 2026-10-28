@@ -20,41 +20,8 @@ def _build_dashboard_application(robot_system):
 
 
 def _build_user_management_application(robot_system):
-    from src.applications.user_management.domain.csv_user_repository import CsvUserRepository
-    from src.applications.user_management.service.user_management_application_service import (
-        UserManagementApplicationService,
-    )
-    from src.applications.user_management.user_management_factory import UserManagementFactory
-    from src.engine.auth.authorization_service import AuthorizationService
-    from src.engine.auth.json_permissions_repository import JsonPermissionsRepository
-    from src.robot_systems.ROBOT_SYSTEM_BLUEPRINT.domain.users import build_my_user_schema
-
-    role_policy = robot_system.__class__.role_policy
-    service = UserManagementApplicationService(
-        CsvUserRepository(
-            robot_system.users_storage_path(),
-            build_my_user_schema(role_policy.role_values),
-        )
-    )
-    permissions_service = AuthorizationService(
-        JsonPermissionsRepository(
-            robot_system.permissions_storage_path(),
-            default_role_values=role_policy.default_permission_role_values,
-        ),
-        protected_app_role_values=role_policy.protected_app_role_values,
-    )
-    known_ids = [spec.app_id for spec in robot_system.shell.applications]
-
-    return WidgetApplication(
-        widget_factory=lambda ms: UserManagementFactory().build(
-            service,
-            permissions_service,
-            known_ids,
-            role_values=role_policy.role_values,
-            default_role_values=role_policy.default_permission_role_values,
-            messaging=ms,
-        )
-    )
+    from src.bootstrap.account_application_wiring import build_account_user_management_application
+    return build_account_user_management_application(robot_system)
 
 
 def _build_robot_settings_application(robot_system):

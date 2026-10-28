@@ -818,6 +818,37 @@ existing machine-owned source settings and trust keys are preserved. See
 [per-system source configuration](../../../docs/robot_systems/update_sources.md)
 for provider URL examples, private authentication and station migration.
 
+## Account/access runtime composition
+
+Declare Manufacturer/Admin/Operator in `role_policy`. Folder restrictions use
+stable `FolderSpec.name` values: ADMIN/SERVICE deny Operator even if editable app
+grants say otherwise. Manufacturer can open every registered app. Use
+`build_account_login_view()` and `build_account_user_management_application()`
+from the shared bootstrap wiring, and `get_account_navigation()` for navigation;
+do not construct CSV/password or JSON-permissions adapters in a provider.
+
+Bootstrap prepares established storage before backend startup, then composes one
+account runtime with the shared session. New installations require explicit empty
+setup; ordinary startup must not initialize missing storage. `run_demo.py` uses
+the same async shell guard and expiry flow. See the
+[credential/setup guide](../../../docs/engine/auth/credential_storage.md).
+
+Override `account_access_extensions()` to return `AccountAccessExtensions` with
+domain `AccessRule` entries and an `IAccessResourceResolver`. Keep domain action
+enums beside their application/system contracts. Resource facts come from trusted
+services, not the view. Safety/interlocks stay in domain execution services.
+
+The shared access-change guard reserves `system_manager` through commit and calls
+`get_account_access_change_block_reason()`, defaulting to the shutdown activity
+hook. Supply `AccountAccessExtensions.activity_check` for an external runtime:
+return `None` only when idle, a reason while running/paused/stopping, and raise a
+typed unavailable error if activity cannot be established. It runs in a worker;
+it must not stop motion. External execution must share ownership/interlocks so
+it cannot start between the idle check and commit. Supply `idle_reservation` for
+an external runtime to hold its atomic idle lease through commit. Twin's transport
+now declares typed `get_activity()` and `hold_idle()` methods; its account adapter
+rejects unknown state or legacy adapters and never infers idle from stop responses.
+
 ## Common Mistakes
 
 - Hardcoding package paths inside `application_wiring.py`

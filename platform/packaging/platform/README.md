@@ -83,10 +83,24 @@ the example URLs and provision the public key before enabling remote updates.
 Existing Paint installations retain their legacy flat config and installation
 paths when detected. New installations use the product-specific paths below.
 
-Twin’s attached runtime currently exposes no idle-state contract. Its Update
-screen therefore refuses scheduling while a runtime is attached; close the
-platform and use the offline CLI. Twin packaging adds a bootstrap provider, but
-backend/runtime provisioning remains a separate phase.
+Twin's account-access integration uses an authoritative activity/idle-reservation
+contract. Legacy external adapters refuse affected changes until they implement
+it. Backend/runtime provisioning remains a separate phase. Update scheduling still
+follows its existing shutdown guard; account checks do not issue robot stops.
+
+## Account setup and Manufacturer maintenance
+
+Every new bundle carries `installation/account-maintenance/`, a stdlib-only tool
+with a fixed-path root-owned installer. It uses system Python independently of
+the GUI installation. No sudoers grant or account credentials are bundled.
+Updating this root tool requires an OS administrator.
+
+Installed launchers support `--account-locations` and explicit `--account-setup`,
+which return before hardware/backend startup. Setup starts with zero accounts;
+normal login never initializes missing storage. Release preparation always
+disables the source developer login bypass. See
+[commissioning/handover](../../docs/installation/account-handover.md) and
+[maintenance packaging](../accounts/README.md).
 
 ## First installation versus software updates
 

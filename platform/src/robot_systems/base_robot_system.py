@@ -692,6 +692,24 @@ class BaseRobotSystem(ABC):
     def users_storage_path(cls) -> str:
         return cls.storage_path("users", "users.csv")
 
+    def account_access_extensions(self):
+        """Override to compose domain action rules/resource facts after on_start.
+
+        Keep domain services in the concrete system. Safety/interlock enforcement
+        remains in those services and is independent of role permissions.
+        """
+        from src.engine.auth.access_extensions import AccountAccessExtensions
+        return AccountAccessExtensions()
+
+    def get_account_access_change_block_reason(self) -> str | None:
+        """Read domain activity before changing active credentials/grants; never stop motion.
+
+        Platform process exclusion is reserved separately through SystemManager.
+        Override this or supply AccountAccessExtensions.activity_check for external
+        runtimes whose activity is not represented by the platform process manager.
+        """
+        return self.get_shutdown_block_reason()
+
     @classmethod
     def permissions_storage_path(cls) -> str:
         return cls.storage_path("settings", "permissions.json")

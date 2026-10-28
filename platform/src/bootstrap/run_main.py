@@ -161,11 +161,15 @@ def _run_application(startup_config, diagnostics_service) -> None:
     # 1 — engine singletons
     ctx = EngineContext.build(diagnostics_service=diagnostics_service)
 
-    ros_backend = build_ros_backend_launcher_from_env(startup_config.ros_backend, startup_config.robot_system)
-    ros_backend.start()
+    from src.bootstrap.account_runtime import prepare_account_runtime, configure_account_runtime
+    prepared_accounts = None if dev_skip_login else prepare_account_runtime(bootstrap_provider.system_class)
 
     # 2 — robot app (settings loaded, services wired)
+    robot_app = None
+    ros_backend = None
     try:
+        ros_backend = build_ros_backend_launcher_from_env(startup_config.ros_backend, startup_config.robot_system)
+        ros_backend.start()
         robot_app = (
             SystemBuilder()
             .with_robot(build_configured_robot(startup_config))
@@ -173,8 +177,18 @@ def _run_application(startup_config, diagnostics_service) -> None:
             .with_development_mode(dev_skip_login)
             .build(bootstrap_provider.system_class)
         )
+        session = UserSession()
+        configure_account_runtime(robot_app, session, prepared=prepared_accounts)
     except Exception:
-        ros_backend.stop()
+        if robot_app is not None:
+            try:
+                robot_app.stop()
+            except Exception:
+                _LOGGER.exception("Failed to clean up robot system after account initialization failure")
+        if ros_backend is not None:
+            ros_backend.stop()
+        if prepared_accounts is not None:
+            prepared_accounts.close()
         raise
 
     # 3 — shell folder layout from app metadata
@@ -273,7 +287,6 @@ def _run_application(startup_config, diagnostics_service) -> None:
         shell._startup_splash = startup_splash
         shell._startup_splash_coordinator = startup_splash_coordinator
 
-    session = UserSession()
     from src.engine.diagnostics.actions import ActionRecorder
     from src.bootstrap.navigation_diagnostics import NavigationDiagnostics
     actions = ActionRecorder(session, authentication_mode='development_bypass' if dev_skip_login else 'authenticated')
@@ -340,6 +353,8 @@ def _run_application(startup_config, diagnostics_service) -> None:
     )
 
     def _show_login_view() -> None:
+        if startup_splash_coordinator is not None:
+            startup_splash_coordinator.stop()
         login_view = bootstrap_provider.build_login_view(robot_app, ctx.messaging_service)   # parent=None; stacked_widget becomes parent
         login_view.set_connection_information_guard(connection_information_access)
         active_login_view["widget"] = login_view
@@ -355,10 +370,8 @@ def _run_application(startup_config, diagnostics_service) -> None:
             active_login_view["widget"] = None
             shell.stacked_widget.removeWidget(login_view)
             login_view.deleteLater()
-            _load_apps_into_shell(shell, session, robot_app, ctx, bootstrap_provider)
-
-            if not skip_splash:
-                startup_splash_coordinator.start()
+            pending_initial_navigation["value"] = True
+            account_access.refresh()
 
         login_view.accepted.connect(_on_login_accepted)
 
@@ -368,6 +381,10 @@ def _run_application(startup_config, diagnostics_service) -> None:
                 return False
         return True
 
+    def _can_expire_session() -> bool:
+        return not any(widget.has_active_operations() for widget in shell.running_widgets.values()
+                       if widget is not None)
+
     session_controller = ShellSessionController(
         actions=actions,
         shell=shell,
@@ -376,17 +393,42 @@ def _run_application(startup_config, diagnostics_service) -> None:
         show_account_button_when_dev_skip_login=show_account_button_when_dev_skip_login,
         show_login_view=_show_login_view,
         can_close_running_apps=_can_close_running_apps,
+        can_expire_session=_can_expire_session,
     )
     session_controller.start()
+
+    from functools import partial
+    from src.bootstrap.account_operation_activity import account_operation_idle
+    from src.bootstrap.account_runtime import get_account_runtime
+    from src.bootstrap.shell_account_access import ShellAccountAccess
+    pending_initial_navigation = {"value": False}
+
+    def _replace_navigation(visible_specs):
+        initial = pending_initial_navigation["value"]
+        _load_apps_into_shell(shell, robot_app, ctx, visible_specs, account_access,
+                              show_folders=initial)
+        if initial:
+            pending_initial_navigation["value"] = False
+            if startup_splash_coordinator is not None:
+                startup_splash_coordinator.start()
+
+    account_access = ShellAccountAccess(
+        shell=shell, session=session, runtime=get_account_runtime(robot_app),
+        navigation=bootstrap_provider.build_authorization_service(robot_app),
+        specifications=robot_app.__class__.shell.applications,
+        replace_navigation=_replace_navigation, expire_session=session_controller.expire_session,
+        read_operation_idle=partial(account_operation_idle, robot_app), development_mode=dev_skip_login,
+    )
+    shell._account_access = account_access
+    account_access.start()
 
     # 4c — Login gate
     if dev_skip_login:
         from src.applications.login.stub_login_application_service import _StubUser
         session_controller.login(_StubUser())
         _LOGGER.warning("ui.dev_skip_login is enabled — bypassing authentication")
-        _load_apps_into_shell(shell, session, robot_app, ctx, bootstrap_provider)
-        if not skip_splash:
-            startup_splash_coordinator.start()
+        pending_initial_navigation["value"] = True
+        account_access.refresh()
 
     else:
         _show_login_view()
@@ -399,6 +441,7 @@ def _run_application(startup_config, diagnostics_service) -> None:
     try:
         exit_code = qt_app.exec()
     finally:
+        account_access.stop()
         if remote_support_monitor is not None:
             remote_support_monitor.stop()
         if startup_splash_coordinator is not None:
@@ -424,27 +467,15 @@ def _run_application(startup_config, diagnostics_service) -> None:
             ros_backend.stop()
         except Exception:
             _LOGGER.exception("Failed to stop ROS backend")
+        if not robot_app.is_running:
+            from src.bootstrap.account_runtime import close_account_runtime
+            close_account_runtime(robot_app)
     sys.exit(exit_code)
-def _load_apps_into_shell(shell, session, robot_app, ctx, bootstrap_provider):
-    """Load role-filtered apps and reload the shell's folder page."""
-    auth_svc = bootstrap_provider.build_authorization_service(robot_app)
-    visible_specs = auth_svc.get_visible_apps(session.current_user, robot_app.__class__.shell.applications)
-
-    loader = ApplicationLoader(ctx.messaging_service)
-    for spec in visible_specs:
-        if spec.factory is None:
-            _LOGGER.warning("ApplicationSpec '%s' has no factory — skipping", spec.name)
-            continue
-        try:
-            loader.register_spec(spec, builder=lambda spec=spec: spec.factory(robot_app))
-        except Exception:
-            _LOGGER.exception("Failed to register application '%s'", spec.name)
-
-    descriptors, widget_factory = loader.build_registry()
-    shell._app_descriptors = descriptors
-    shell._widget_factory   = widget_factory
-    shell.create_folders_page()
-    shell.stacked_widget.setCurrentIndex(0)
+def _load_apps_into_shell(shell, robot_app, ctx, visible_specs, access_guard, *, show_folders=False):
+    """Register an authorized worker snapshot without storage work on the UI thread."""
+    from src.bootstrap.shell_application_registry import replace_shell_applications
+    replace_shell_applications(shell, robot_app, ctx.messaging_service, visible_specs,
+                               access_guard, show_folders=show_folders)
 
 
 def _build_localization_service(robot_app, messaging_service) -> LocalizationService:

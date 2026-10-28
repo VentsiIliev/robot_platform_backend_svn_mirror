@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from contextlib import AbstractContextManager
 from typing import Any
+
+from .activity import TwinRuntimeActivity
 
 
 class ITwinChoreographyRuntime(ABC):
@@ -40,4 +43,25 @@ class ITwinChoreographyRuntime(ABC):
     @abstractmethod
     def stop(self):
         """Request controlled stop of both robots."""
+        ...
+
+    @abstractmethod
+    def get_activity(self) -> TwinRuntimeActivity:
+        """Return authoritative combined activity, including jog and queued starts.
+
+        IDLE means both robots have no running/paused/stopping/pending execution.
+        A stale/disconnected/unverifiable state is UNKNOWN or an exception.
+        A successful start/stop response alone is not evidence of idle activity.
+        """
+        ...
+
+    @abstractmethod
+    def hold_idle(self) -> AbstractContextManager[bool]:
+        """Atomically reserve idle execution until the context exits.
+
+        Yield True only if both robots are idle and no execution (including jog
+        or external starts) can start until release. Yield False when busy;
+        raise when readiness cannot be established. Never stop either robot.
+        get_activity() must remain callable while the caller holds this lease.
+        """
         ...

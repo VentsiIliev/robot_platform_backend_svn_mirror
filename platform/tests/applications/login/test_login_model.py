@@ -1,121 +1,71 @@
-"""
-Tests for src/applications/login/model/login_model.y_pixels
-
-LoginModel is a thin delegation layer over ILoginApplicationService
-plus input validation logic.
-"""
 import unittest
 from unittest.mock import MagicMock
 
-from src.applications.login.i_login_application_service import ILoginApplicationService
+from src.applications.login.i_login_application_service import (
+    AdminSetup, AdminRecovery, ILoginApplicationService, LoginSuccess, LoginFailure, LoginError, LoginErrorCode,
+)
 from src.applications.login.model.login_model import LoginModel
-from src.engine.auth.i_authenticated_user import IAuthenticatedUser
+from src.applications.login.stub_login_application_service import StubLoginApplicationService
 
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
-
-def _make_user() -> IAuthenticatedUser:
-    u = MagicMock(spec=IAuthenticatedUser)
-    u.user_id = "1"
-    return u
-
-
-def _svc(
-    user=None,
-    first_run: bool = False,
-    admin_result: tuple = (True, "Created"),
-) -> ILoginApplicationService:
-    svc = MagicMock(spec=ILoginApplicationService)
-    svc.authenticate.return_value      = user
-    svc.authenticate_qr.return_value   = user
-    svc.try_qr_login.return_value      = None
-    svc.is_first_run.return_value      = first_run
-    svc.create_first_admin.return_value = admin_result
-    return svc
-
-
-# ── Delegation ─────────────────────────────────────────────────────────────────
-
-class TestLoginModelDelegation(unittest.TestCase):
-
-    def test_is_first_run_delegates_to_service(self):
-        svc   = _svc(first_run=True)
-        model = LoginModel(svc)
-        self.assertTrue(model.is_first_run())
-        svc.is_first_run.assert_called_once()
-
-    def test_authenticate_delegates_to_service(self):
-        user  = _make_user()
-        svc   = _svc(user=user)
-        model = LoginModel(svc)
-        result = model.authenticate("1", "pw")
-        svc.authenticate.assert_called_once_with("1", "pw")
-        self.assertIs(result, user)
-
-    def test_authenticate_qr_delegates_to_service(self):
-        user  = _make_user()
-        svc   = _svc(user=user)
-        model = LoginModel(svc)
-        result = model.authenticate_qr("1:pw")
-        svc.authenticate_qr.assert_called_once_with("1:pw")
-        self.assertIs(result, user)
-
-    def test_try_qr_login_delegates_to_service(self):
-        svc   = _svc()
-        svc.try_qr_login.return_value = ("5", "secret")
-        model = LoginModel(svc)
-        result = model.try_qr_login()
-        svc.try_qr_login.assert_called_once()
-        self.assertEqual(result, ("5", "secret"))
-
-    def test_move_to_login_pos_delegates_to_service(self):
-        svc   = _svc()
-        model = LoginModel(svc)
-        model.move_to_login_pos()
-        svc.move_to_login_pos.assert_called_once()
-
-    def test_create_first_admin_delegates_to_service(self):
-        svc   = _svc(admin_result=(True, "Done"))
-        model = LoginModel(svc)
-        ok, msg = model.create_first_admin("1", "Alice", "Smith", "pw")
-        svc.create_first_admin.assert_called_once_with("1", "Alice", "Smith", "pw")
-        self.assertTrue(ok)
-        self.assertEqual(msg, "Done")
-
-
-# ── validate_login_input ───────────────────────────────────────────────────────
-
-class TestValidateLoginInput(unittest.TestCase):
-
+class LoginModelTests(unittest.TestCase):
     def setUp(self):
-        self.model = LoginModel(_svc())
+        self.service = MagicMock(spec=ILoginApplicationService)
+        self.model = LoginModel(self.service)
 
-    def test_valid_input_returns_none(self):
-        self.assertIsNone(self.model.validate_login_input("42", "secret"))
+    def test_password_whitespace_is_preserved_and_identifier_is_trimmed(self):
+        expected = LoginSuccess(object())
+        self.service.authenticate.return_value = expected
+        self.assertIs(self.model.authenticate(" 42 ", " secret "), expected)
+        self.service.authenticate.assert_called_once_with("42", " secret ")
 
-    def test_empty_user_id_returns_error(self):
-        error = self.model.validate_login_input("", "secret")
-        self.assertIsNotNone(error)
-        self.assertIn("id", error.lower())
+    def test_validation_rejects_empty_id_non_numeric_id_and_empty_password(self):
+        for uid, password in (("", "secret"), ("  ", "secret"), ("name", "secret"), ("42", "")):
+            self.assertIsNotNone(self.model.validate_login_input(uid, password))
+        self.assertIsNone(self.model.validate_login_input(" 42 ", " secret "))
 
-    def test_non_numeric_user_id_returns_error(self):
-        error = self.model.validate_login_input("abc", "secret")
-        self.assertIsNotNone(error)
-        self.assertIn("numeric", error.lower())
+    def test_no_card_scan_does_not_attempt_authentication(self):
+        self.service.scan_qr.return_value = LoginSuccess(None)
+        self.assertEqual(self.model.poll_qr_login(), LoginSuccess(None))
+        self.service.authenticate_qr.assert_not_called()
 
-    def test_empty_password_returns_error(self):
-        error = self.model.validate_login_input("42", "")
-        self.assertIsNotNone(error)
-        self.assertIn("password", error.lower())
+    def test_scanned_card_uses_token_authentication_without_password_parsing(self):
+        self.service.scan_qr.return_value = LoginSuccess("opaque:payload")
+        self.service.authenticate_qr.return_value = LoginSuccess(object())
+        self.model.poll_qr_login()
+        self.service.authenticate_qr.assert_called_once_with("opaque:payload")
+        self.service.authenticate.assert_not_called()
 
-    def test_whitespace_user_id_treated_as_empty(self):
-        error = self.model.validate_login_input("   ", "pw")
-        self.assertIsNotNone(error)
+    def test_scanner_failure_is_not_converted_into_a_login_attempt(self):
+        failure = LoginFailure(LoginError(LoginErrorCode.UNAVAILABLE))
+        self.service.scan_qr.return_value = failure
+        self.assertIs(self.model.poll_qr_login(), failure)
+        self.service.authenticate_qr.assert_not_called()
 
-    def test_whitespace_password_treated_as_empty(self):
-        error = self.model.validate_login_input("1", "   ")
-        self.assertIsNotNone(error)
+    def test_successful_commissioning_authenticates_through_normal_login(self):
+        command = AdminSetup("42", "First", "Admin", "secret")
+        self.service.create_first_admin.return_value = LoginSuccess(None)
+        result = LoginSuccess(object())
+        self.service.authenticate.return_value = result
+        self.assertIs(self.model.create_and_login(command), result)
+        self.service.create_first_admin.assert_called_once_with(command)
+        self.service.authenticate.assert_called_once_with("42", "secret")
 
+    def test_closed_commissioning_never_attempts_login(self):
+        failure = LoginFailure(LoginError(LoginErrorCode.SETUP_CLOSED))
+        self.service.create_first_admin.return_value = failure
+        self.assertIs(self.model.create_and_login(AdminSetup("42", "F", "L", "secret")), failure)
+        self.service.authenticate.assert_not_called()
 
-if __name__ == "__main__":
-    unittest.main()
+    def test_recovery_returns_codes_without_logging_in(self):
+        command = AdminRecovery("42", "saved-code", "replacement")
+        result = LoginSuccess(object())
+        self.service.recover_admin.return_value = result
+        self.assertIs(self.model.recover_admin(command), result)
+        self.service.authenticate.assert_not_called()
+
+    def test_stub_honours_typed_contract(self):
+        stub = StubLoginApplicationService()
+        self.assertIsInstance(stub.authenticate("1", "demo"), LoginSuccess)
+        self.assertFalse(stub.is_first_run().value)
+        self.assertIsNone(stub.scan_qr().value)

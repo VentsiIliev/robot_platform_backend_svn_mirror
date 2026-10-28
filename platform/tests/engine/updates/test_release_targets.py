@@ -21,6 +21,13 @@ spec.loader.exec_module(targets)
 
 
 class ReleaseTargetTests(unittest.TestCase):
+    def test_release_config_disables_development_login_bypass(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory)
+            targets.prepare_target("paint_tray_dry", destination)
+            configuration = json.loads((destination / "platform.json").read_text())
+            self.assertIs(configuration["ui"]["dev_skip_login"], False)
+
     def test_update_source_can_be_omitted_for_system_without_remote_updates(self):
         source = targets.load_update_source({'product': 'custom-robot'})
         self.assertFalse(source['enabled'])
@@ -244,6 +251,8 @@ with patch.object(manager, 'install_remote_support'), patch.object(manager, 'ins
             prefix = "platform/installation/updater"
             self.assertIn(prefix + "/manage.py", names)
             self.assertIn(prefix + "/src/engine/updates/updater.py", names)
+            self.assertIn("platform/installation/account-maintenance/account-maintenance.pyz", names)
+            self.assertIn("platform/installation/account-maintenance/install.py", names)
             self.assertEqual(len(names), len(set(names)), "release archive has duplicate entries")
             self.assertFalse(any("__pycache__" in name for name in names))
         # Verify independent imports under system Python.

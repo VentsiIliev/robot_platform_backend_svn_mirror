@@ -1,11 +1,10 @@
 from enum import Enum
-from typing import Optional, Tuple
+from src.applications.login.i_login_application_service import (
+    ILoginApplicationService, LoginSuccess, RecoveryCodeDisplay,
+)
 
-from src.applications.login.i_login_application_service import ILoginApplicationService
-from src.engine.auth.i_authenticated_user import IAuthenticatedUser
 
-
-class _StubUser(IAuthenticatedUser):
+class _StubUser:
     @property
     def user_id(self) -> str:
         return "0"
@@ -28,22 +27,23 @@ class StubLoginApplicationService(ILoginApplicationService):
             "rustdesk_id": "123456789",
         }
 
-    def authenticate(self, user_id: str, password: str) -> Optional[IAuthenticatedUser]:
-        return _StubUser()
+    def authenticate(self, user_id: str, password: str):
+        return LoginSuccess(_StubUser())
 
-    def authenticate_qr(self, qr_payload: str) -> Optional[IAuthenticatedUser]:
-        return _StubUser()
+    def authenticate_qr(self, qr_payload: str):
+        return LoginSuccess(_StubUser())
 
-    def try_qr_login(self) -> Optional[Tuple[str, str]]:
-        return None
+    def scan_qr(self):
+        return LoginSuccess(None)
 
     def move_to_login_pos(self) -> None:
         pass
 
-    def is_first_run(self) -> bool:
-        return False
+    def is_first_run(self):
+        return LoginSuccess(False)
 
-    def create_first_admin(
-        self, user_id: str, first_name: str, last_name: str, password: str
-    ) -> Tuple[bool, str]:
-        return True, "Stub: admin created."
+    def create_first_admin(self, command):
+        return LoginSuccess(None)
+
+    def recover_admin(self, command):
+        return LoginSuccess(RecoveryCodeDisplay(("DEMO-CODE-NOT-VALID",)))

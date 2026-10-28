@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+from contextlib import nullcontext
+from uuid import uuid4
 
 from src.robot_systems.base_robot_system import BaseRobotSystem
 from src.robot_systems.twin_robot import application_wiring
@@ -34,13 +36,15 @@ class TwinRobotSystem(BaseRobotSystem):
     work_areas = []
 
     role_policy = RolePolicy(
-        role_values=["Admin", "Operator", "Viewer", "Developer"],
+        role_values=["Manufacturer", "Admin", "Operator"],
         admin_role_value="Admin",
         default_permission_role_values=["Admin"],
         protected_app_role_values={
+            "usermanagement": ["Admin"],
             "softwareupdate": ["Admin"],
             "platformsettings": ["Admin"],
         },
+        denied_folder_role_values={"ADMIN": ["Operator"], "SERVICE": ["Operator"]},
     )
 
     shell = ShellSetup(
@@ -50,6 +54,8 @@ class TwinRobotSystem(BaseRobotSystem):
             FolderSpec(folder_id=3, name="ADMIN", display_name="Administration"),
         ],
         applications=[
+            ApplicationSpec(name="UserManagement", folder_id=3, icon="fa5s.users-cog",
+                            factory=application_wiring._build_user_management_application),
             ApplicationSpec(name="SoftwareUpdate", folder_id=3, icon="fa5s.download",
                             factory=application_wiring._build_software_update_application),
             ApplicationSpec(name="PlatformSettings", folder_id=3, icon="fa5s.desktop",
@@ -89,14 +95,41 @@ class TwinRobotSystem(BaseRobotSystem):
         self._choreography_repository = None
         self._dashboard_service = None
         self._choreography_setup_service = None
+        from .runtime.account_activity import TwinAccountActivity
+        self._account_activity = TwinAccountActivity(self._get_twin_runtime)
+
+    def _get_twin_runtime(self):
+        return self._twin_runtime
 
     def set_twin_runtime(self, runtime) -> None:
         """Attach the transport/runtime adapter used by both twin applications."""
-        self._twin_runtime = runtime
-        if self._dashboard_service is not None:
-            self._dashboard_service.set_runtime(runtime)
-        if self._choreography_setup_service is not None:
-            self._choreography_setup_service.set_runtime(runtime)
+        from src.shared_contracts.authorization.errors import AccountRuntimeInUseError
+        owner = "twin_runtime_attachment:" + uuid4().hex
+        manager = self.system_manager
+        if manager is not None and not manager.acquire(owner):
+            raise AccountRuntimeInUseError()
+        try:
+            # Replacing/detaching an adapter must not bypass its idle lease.
+            reservation = self._account_activity.hold_idle() if self._twin_runtime is not None else nullcontext(True)
+            with reservation as idle:
+                if not idle:
+                    raise AccountRuntimeInUseError()
+                self._twin_runtime = runtime
+                if self._dashboard_service is not None:
+                    self._dashboard_service.set_runtime(runtime)
+                if self._choreography_setup_service is not None:
+                    self._choreography_setup_service.set_runtime(runtime)
+        finally:
+            if manager is not None:
+                manager.release(owner)
+
+    def account_access_extensions(self):
+        from src.engine.auth.access_extensions import AccountAccessExtensions
+        return AccountAccessExtensions(activity_check=self.get_account_access_change_block_reason,
+                                       idle_reservation=self._account_activity.hold_idle)
+
+    def get_account_access_change_block_reason(self) -> str | None:
+        return self._account_activity.block_reason() or super().get_account_access_change_block_reason()
 
     def on_start(self) -> None:
         choreography_dir = self.storage_path("choreographies")

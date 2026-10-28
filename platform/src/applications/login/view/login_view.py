@@ -39,7 +39,8 @@ class _FeedOnlyCameraView(CameraView):
     def mouseReleaseEvent(self, event) -> None:
         event.ignore()
 
-from src.engine.auth.i_authenticated_user import IAuthenticatedUser
+from src.applications.login.view.admin_recovery_dialog import AdminRecoveryDialog
+from src.applications.base.widgets.private_text_dialog import PrivateTextDialog
 
 # ── Asset paths ───────────────────────────────────────────────────────────────
 _RESOURCES = Path(__file__).resolve().parents[2] / "base" / "resources"
@@ -98,6 +99,8 @@ class LoginView(QDialog):
     qr_scan_requested     = pyqtSignal()
     qr_tab_activated      = pyqtSignal()
     first_admin_submitted = pyqtSignal(str, str, str, str)
+    recovery_submitted = pyqtSignal(str, str, str)
+    language_changed = pyqtSignal()
     connection_information_requested = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -105,7 +108,9 @@ class LoginView(QDialog):
         self.setWindowTitle("Login")
         self.setMinimumSize(760, 600)
         self._allow_close = False
-        self._result_user: Optional[IAuthenticatedUser] = None
+        self._result_user = None
+        self._auth_busy = False
+        self._recovery_dialog = None
 
         self._qr_timer = QTimer(self)
         self._qr_timer.setInterval(_QR_POLL_MS)
@@ -144,17 +149,56 @@ class LoginView(QDialog):
     def show_error(self, message: str) -> None:
         self._error_label.setText(message)
         self._error_label.setVisible(True)
+        if self._recovery_dialog is not None:
+            self._recovery_dialog.set_error(message)
 
-    def accept_login(self, user: IAuthenticatedUser) -> None:
+    def clear_error(self) -> None:
+        self._error_label.clear()
+        self._error_label.hide()
+        if self._recovery_dialog is not None:
+            self._recovery_dialog.set_error("")
+
+    def accept_login(self, user) -> None:
         self._connection_dialog.reject()
         self._result_user = user
         self._allow_close = True
         self._stop_qr_scanning()
         self._error_label.setVisible(False)
+        self._pw_input.clear()
+        self._fa_pw.clear()
         self.accept()
 
-    def result_user(self) -> Optional[IAuthenticatedUser]:
+    def result_user(self):
         return self._result_user
+
+    def set_authentication_busy(self, busy: bool) -> None:
+        self._auth_busy = busy
+        for widget in (self._tabs, self._btn_sim, self._fr_btn):
+            widget.setEnabled(not busy)
+        if self._recovery_dialog is not None:
+            self._recovery_dialog.set_busy(busy)
+
+    def _on_recovery_clicked(self) -> None:
+        if self._auth_busy:
+            return
+        self._recovery_dialog = AdminRecoveryDialog(self)
+        self._recovery_dialog.submitted.connect(self._on_recovery_submitted)
+        self._recovery_dialog.exec()
+        self._recovery_dialog.deleteLater()
+        self._recovery_dialog = None
+
+    def _on_recovery_submitted(self, user_id, code, password) -> None:
+        self.recovery_submitted.emit(user_id, code, password)
+
+    def show_replacement_codes(self, codes: tuple[str, ...]) -> None:
+        if self._recovery_dialog is not None:
+            self._recovery_dialog.accept()
+        self._pw_input.clear()
+        dialog = PrivateTextDialog("Save replacement recovery codes",
+                                   "Save these codes privately now. They are shown once. All previous codes are invalid.",
+                                   "\n".join(codes), self, context="Login")
+        dialog.exec()
+        dialog.deleteLater()
 
     def start_qr_scanning(self) -> None:
         if not self._qr_timer.isActive():
@@ -537,6 +581,12 @@ class LoginView(QDialog):
         self._uid_input.returnPressed.connect(self._on_login_clicked)
         self._pw_input.returnPressed.connect(self._on_login_clicked)
         layout.addWidget(self._login_btn)
+        self._recovery_btn = QPushButton()
+        self._recovery_btn.setObjectName("ghost")
+        self._recovery_btn.setMinimumHeight(44)
+        self._recovery_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._recovery_btn.clicked.connect(self._on_recovery_clicked)
+        layout.addWidget(self._recovery_btn)
         layout.addStretch(1)
         return page
 
@@ -623,6 +673,8 @@ class LoginView(QDialog):
         self._pw_toggle.setText(self._t("Hide") if shown else self._t("Show"))
 
     def _on_login_clicked(self) -> None:
+        if self._auth_busy:
+            return
         self._error_label.setVisible(False)
         self.login_submitted.emit(
             self._uid_input.text().strip(),
@@ -630,6 +682,8 @@ class LoginView(QDialog):
         )
 
     def _on_first_admin_clicked(self) -> None:
+        if self._auth_busy:
+            return
         self._error_label.setVisible(False)
         self.first_admin_submitted.emit(
             self._fa_uid.text().strip(),
@@ -661,7 +715,7 @@ class LoginView(QDialog):
         self._btn_sim.setText(self._t("⬤  Simulate Blue Button"))
         self._btn_sim.setToolTip(self._t("Temporary — simulates the physical blue button press"))
         self._fr_title.setText(self._t("First-time setup"))
-        self._fr_subtitle.setText(self._t("No users found. Create the first admin account."))
+        self._fr_subtitle.setText(self._t("Create the first customer Admin account."))
         self._fr_label_uid.setText(self._t("User ID:"))
         self._fr_label_first.setText(self._t("First name:"))
         self._fr_label_last.setText(self._t("Last name:"))
@@ -672,6 +726,9 @@ class LoginView(QDialog):
         self._uid_label.setText(self._t("User ID:"))
         self._pw_label.setText(self._t("Password:"))
         self._login_btn.setText(self._t("Login"))
+        self._recovery_btn.setText(self._t("Recover Admin account"))
+        if self._recovery_dialog is not None:
+            self._recovery_dialog.retranslateUi()
         self._qr_info.setText(self._t("Point the camera at a user QR code to log in automatically."))
         self._tabs.setTabText(_TAB_LOGIN, self._t("Login"))
         self._tabs.setTabText(_TAB_QR,    self._t("QR Login"))
@@ -684,6 +741,7 @@ class LoginView(QDialog):
         self._fa_first.setPlaceholderText(self._t("First name"))
         self._fa_last.setPlaceholderText(self._t("Last name"))
         self._fa_pw.setPlaceholderText(self._t("Password"))
+        self.language_changed.emit()
 
     def changeEvent(self, event) -> None:
         if event.type() == QEvent.Type.LanguageChange:

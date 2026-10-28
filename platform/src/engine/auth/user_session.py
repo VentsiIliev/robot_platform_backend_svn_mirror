@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Optional
 
 from src.engine.auth.i_authenticated_user import IAuthenticatedUser
-from src.engine.auth.i_session_service import ISessionService
+from src.engine.auth.i_session_service import ISessionService, SessionSnapshot
 
 
 class UserSession(ISessionService):
@@ -16,16 +16,23 @@ class UserSession(ISessionService):
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._user: Optional[IAuthenticatedUser] = None
+        self._revision = 0
 
     # ── ISessionService ────────────────────────────────────────────────────────
+
+    def snapshot(self) -> SessionSnapshot:
+        with self._lock:
+            return SessionSnapshot(self._user, self._revision)
 
     def login(self, user: IAuthenticatedUser) -> None:
         with self._lock:
             self._user = user
+            self._revision += 1
 
     def logout(self) -> None:
         with self._lock:
             self._user = None
+            self._revision += 1
 
     @property
     def current_user(self) -> Optional[IAuthenticatedUser]:

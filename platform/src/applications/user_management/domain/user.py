@@ -6,10 +6,9 @@ from typing import Optional
 
 
 class Role(Enum):
+    MANUFACTURER = "Manufacturer"
     ADMIN     = "Admin"
     OPERATOR  = "Operator"
-    VIEWER    = "Viewer"
-    DEVELOPER = "Developer"
 
 
 

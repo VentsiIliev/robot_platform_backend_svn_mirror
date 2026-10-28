@@ -1,180 +1,108 @@
-# `src/applications/user_management/` — User Management
+# User management and application permissions
 
-Schema-driven CRUD screen for managing user accounts. The data schema (fields, types, labels) is declared by the robot system — the application itself is generic and schema-agnostic. Backed by a CSV repository.
+The application uses `IUserManagementService`, an application-owned standard-library
+contract. Its concrete adapter receives narrow account, access, token, recovery,
+history and permission services from the same account runtime/session. Production
+wiring does not use CSV repositories.
 
----
+`UserManagementFactory` uses the base factory's ownership and cleanup. The
+controller delegates through the models; views receive data and emit user actions.
 
-## MVC Structure
+## Safe data and explicit commands
 
-```
-user_management/
-├── service/
-│   ├── i_user_management_service.py              ← IUserManagementService (7 methods)
-│   ├── stub_user_management_service.py           ← In-memory stub with 3 hardcoded users
-│   └── user_management_application_service.py   ← Delegates to IUserRepository
-├── domain/
-│   ├── user_schema.py                            ← UserSchema, UserRecord, FieldDescriptor
-│   ├── i_user_repository.py                      ← IUserRepository ABC
-│   ├── csv_user_repository.py                    ← CSV-backed implementation
-│   ├── auth_user_repository_adapter.py           ← Adapts IUserRepository to engine auth
-│   ├── default_schema.py                         ← Minimal default schema
-│   └── user.py
-├── model/
-│   └── user_management_model.py
-├── view/
-│   └── user_management_view.py
-├── controller/
-│   └── user_management_controller.py
-└── user_management_factory.py
-```
+`UserEntry` contains identity, profile, role, enabled state, revision, and creation/
+edit metadata. It has no password, hash, ciphertext, code or card field.
+`DEFAULT_USER_SCHEMA` describes the safe table. Credentials are absent rather than
+retrieved for table masking.
 
----
+Commands separate creation, profile edit, password change, role change and deletion:
+`NewUser`, `EditUser`, `PasswordChange`, and `RoleChange`. Mutations use the
+technical account ID and displayed revision. Login IDs remain numeric for the
+shared login form. Reusing a deleted login ID does not reuse its audit identity.
 
-## `IUserManagementService`
+Every service operation returns `UserSuccess[T]` or `UserFailure(UserError)`.
+`UserErrorCode` describes expected refusals and safe infrastructure categories.
+The correlation reference remains available to callers. Secret commands, reveal
+results, recovery-code displays and QR image DTOs have redacted representations.
 
-```python
-class IUserManagementService(ABC):
-    def get_schema(self)                                        -> UserSchema: ...
-    def get_all_users(self)                                     -> List[UserRecord]: ...
-    def add_user(self, record: UserRecord)                      -> tuple[bool, str]: ...
-    def update_user(self, record: UserRecord)                   -> tuple[bool, str]: ...
-    def delete_user(self, user_id)                              -> tuple[bool, str]: ...
-    def generate_qr(self, record: UserRecord)                   -> tuple[bool, str, Optional[str]]: ...
-    def send_access_package(self, record: UserRecord, qr_path)  -> tuple[bool, str]: ...
-```
+## Role behavior
 
-`generate_qr` returns `(success, message, qr_image_path)`.
+| Control | Admin | Manufacturer | Operator |
+|---|---|---|---|
+| Create/edit/delete accounts | Operators; edit own profile | All supported account operations | Denied |
+| Change passwords | Own with current proof, or an Operator | Own with proof, or reset another account | Denied |
+| Show password | Operator only | Operator only | Denied |
+| Change role | Denied | Allowed; Operator boundary requires a different new password | Denied |
+| Issue card | Own or Operator | Enabled accounts | Denied |
+| Generate recovery codes | Own with current password | No personal Admin recovery issuance | Denied |
+| App Permissions/history | Denied | Allowed | Denied |
 
----
+Privileged passwords are hash-only and cannot be revealed. Last-Admin and
+operational/data constraints still apply to Manufacturer actions. Creation and
+edit metadata come from the trusted services; no-op profile saves do not rewrite
+metadata. History contains actor/time/action and allowlisted changes, with a
+password-change marker instead of credential material.
 
-## Domain Model
+## Reusable presentation gates
 
-### `UserSchema`
+The controller binds the existing widgets through `base/access/AccessBinding`,
+`WidgetAdapter` and `TabAdapter`. Action/feature requirements are declarative.
+Role denial hides controls; target denial disables them, while Operator-password
+reveal is also hidden for privileged targets. Busy/selection state remains an
+independent input and cannot be overwritten by a permission refresh.
 
-Declares the fields for a user record. Constructed by the robot system and passed to the factory.
+Access replies carry session/policy/selection versions. Changed selections and
+sessions invalidate pending grants. Same-selection policy refreshes are applied
+atomically so that an allowed App Permissions tab stays selected.
 
-```python
-@dataclass
-class FieldDescriptor:
-    key:               str
-    label:             str
-    widget:            str          # "text" | "password" | "combo" | "email" | "int"
-    required:          bool = True
-    table_display:     bool = True
-    read_only_on_edit: bool = False
-    options:           Optional[List[str]] = None
-    mask_in_table:     bool = False  # shows "****" in the table (e.g. PIN)
+The permissions page starts as an empty hidden surface. Its actual table and
+controller are constructed only after a feature grant. Programmatic activation of
+a forbidden tab redirects to an allowed page. Permission reads/writes also enforce
+Manufacturer authorization in the service.
 
-@dataclass
-class UserSchema:
-    fields:  List[FieldDescriptor]
-    id_key:  str = "id"             # primary key field name
-```
+Each `ApplicationGrant` reports `editable_roles`. The adapter derives locked cells
+from that contract, so Manufacturer, protected and denied grants are displayed
+consistently with backend policy. Updates use the displayed permission revision
+and take effect in fresh navigation queries.
 
-### `UserRecord`
+## Workers and private displays
 
-A schema-agnostic wrapper around a `dict`. Used for all read/write operations — no hard-coded field names in application code.
+Storage/crypto/QR operations run through `BackgroundWorker`. Late results from a
+different session cannot display a password, card, code set, history or user page.
+Session invalidation closes private displays. `stop()` stops timers/workers,
+closes bindings, and clears permission state before widget teardown.
 
-### `CsvUserRepository`
+Profile/password/role forms use shared `KeyboardLineEdit` widgets and scroll space
+for the shared keyboard. Cards are generated as PNG bytes in memory. There is no
+plaintext password QR or email-access-package API. Private dialogs clear their
+text/image when closed and do not write credentials to temporary files.
 
-Persists `UserRecord` objects to a CSV file at a configurable path. Schema is provided at construction time to determine column order and the ID field.
+The existing main stylesheet is preserved. New controls use that style or shared
+style constants. Filters use stable field keys, so translation does not change
+their meaning. English/Bulgarian catalogs cover initial labels, runtime changes,
+permission notices and controller status/error text.
 
-### `AuthUserRepositoryAdapter`
+## Wiring and verification
 
-Bridges the richer user-management repository contract to the thin engine auth contract.
+Robot-system factories call
+`src.bootstrap.account_application_wiring.build_account_user_management_application`.
+The same runtime is used by login, navigation and account services.
+See [account services](../../engine/auth/account_services.md) and the
+[execution TODO](../../plans/access_control_todo.md) for external Twin activity and deployment work.
 
-- input: `IUserRepository`
-- output: `IAuthUserRepository`
-- maps a `UserRecord` into `AuthUserRecord`
+Current-session credential/role/deletion changes and permission writes require
+idle operation. A busy reply leaves data unchanged; wait and retry. The shared
+shell rechecks cached and lazy navigation in workers and clears invalid sessions
+after domain and screen-owned work finish. These checks never stop robot motion.
 
-This keeps the login/authentication path reusable without forcing the CRUD-oriented user-management stack into `src/engine/`.
-
----
-
-## Glue System Schema
-
-The glue robot system now declares its role and permission policy on [glue_robot_system.py](../../../src/robot_systems/glue/glue_robot_system.py) via `role_policy`. The user schema itself is built from that declaration by [glue_user_schema.py](../../../src/robot_systems/glue/domain/users/glue_user_schema.py). The `UserManagement` application is still wired without knowing what fields or roles the glue system chose.
-
----
-
-## Wiring in `GlueRobotSystem`
-
-```python
-role_policy = robot_system.__class__.role_policy
-service = UserManagementApplicationService(
-    CsvUserRepository(
-        robot_system.users_storage_path(),
-        build_glue_user_schema(role_policy.role_values),
-    )
-)
-return WidgetApplication(widget_factory=lambda _ms: UserManagementFactory().build(service))
+```bash
+QT_QPA_PLATFORM=offscreen .venv/bin/python -m unittest discover -s tests/applications/user_management -t . -q
 ```
 
-`ApplicationSpec`: `folder_id=3` (Administration), icon `fa5s.users-cog`.
-
----
-
-## Localization
-
-Both `UserManagementView` and `PermissionsView` use `QCoreApplication.translate("UserManagement", ...)` (exposed as `_t()`).
-
-### Users table headers
-
-Column headers come from `FieldDescriptor.label` (e.g. `"ID"`, `"First Name"`, …). They are set once at widget construction via `make_table(schema.get_table_headers())` and refreshed in `retranslateUi()`:
-
-```python
-def retranslateUi(self, *_) -> None:
-    ...
-    self._table.setHorizontalHeaderLabels(
-        [self._t(h) for h in self._schema.get_table_headers()]
-    )
-```
-
-`changeEvent` calls `retranslateUi()` on `QEvent.Type.LanguageChange`, so headers update immediately when the language is switched.
-
-### Permissions table headers
-
-Column headers come from the robot system's configured role values. For the glue system those are:
-
-- `"Admin"`
-- `"Operator"`
-- `"Viewer"`
-- `"Developer"`
-
-They are translated inline inside `set_permissions()`:
-
-```python
-self._table.setHorizontalHeaderLabels([self._t(r) for r in role_values])
-```
-
-Because `PermissionsController._refresh()` repopulates the table, the role-value headers update whenever the table is refreshed. `PermissionsView` also has its own `changeEvent` retranslation hook for widget-owned static text.
-
-### Translation catalog keys (context `"UserManagement"`)
-
-Field labels and role values must exist as keys in the active catalog set. Shared keys can now live in:
-
-- `src/applications/user_management/localization/*.json`
-- optionally overridden by `src/robot_systems/<system>/storage/translations/*.json`
-
-`UserManagement` carries its default shared translations in `src/applications/user_management/localization/en.json` and `bg.json`. Robot systems may still override or extend those entries in their own catalogs.
-
-Current shared keys include:
-
-```
-"ID", "First Name", "Last Name", "Password", "Role", "Email"
-"Admin", "Operator", "Viewer", "Developer"
-```
-
----
-
-## Design Notes
-
-- **No robot/vision dependency**: `UserManagement` is wired without calling `get_service()` or `get_optional_service()`. It is purely settings + persistence.
-- **Schema injection**: the view builds its form dynamically from `UserSchema.fields`, so adding a new field requires only a schema change — no view code changes. The same field `label` is used as both the table column header and the translation key, so keep labels stable once translated.
-- **Regression coverage exists for runtime language changes**: the test suite now covers the real selector-to-embedded-view path, so a future break in `LanguageChange` propagation or shared catalog coverage should fail tests.
-- **CSV persistence**: straightforward for operator-level access management; not intended for high-security production use.
-- **Auth is now a thin adapter**: login/authentication no longer depends directly on `IUserRepository`. Instead, `AuthUserRepositoryAdapter` exposes only the minimal auth-facing data needed by the shared engine `AuthenticationService`.
-- **Roles are robot-system-defined**: the permissions tab and first-admin creation no longer rely on a fixed shared `Role` enum. The robot system supplies the available role values, the default permission role values, and any protected app-role invariants.
+Application tests use stubs. Temporary SQLite adapter integration is under
+`tests/bootstrap/test_account_application_flow.py`. `example_usage.py` provides
+the standalone stub runner. Historical CSV helpers still in the source tree are
+outside the active application path.
 
 <!-- source-navigation:start -->
 ## Source navigation

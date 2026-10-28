@@ -1,179 +1,103 @@
-import sys
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-from src.applications.user_management.domain.i_user_repository import IUserRepository
-from src.applications.user_management.domain.default_schema import DEFAULT_USER_SCHEMA
-from src.applications.user_management.domain.user_schema import UserRecord
 from src.applications.user_management.service.user_management_application_service import UserManagementApplicationService
-
-_SVC_MOD = "src.applications.user_management.service.user_management_application_service"
-
-
-def _make_repo(schema=None):
-    repo = MagicMock(spec=IUserRepository)
-    repo.get_schema.return_value = schema or DEFAULT_USER_SCHEMA
-    repo.get_all.return_value = []
-    return repo
-
-
-def _record(uid, email=""):
-    return UserRecord({"id": uid, "firstName": "A", "lastName": "B",
-                       "password": "pw", "role": "Admin", "email": email})
+from src.applications.user_management.service.i_user_management_service import (
+    NewUser, EditUser, PasswordChange, RoleChange, UserFailure,
+)
+from src.engine.auth.account_principal import AccountPrincipal
+from src.engine.auth.user_session import UserSession
+from src.shared_contracts.accounts.records import AccountSummary, AccountChange
+from src.shared_contracts.accounts.commands import CreateAccount, EditProfile, ChangePassword, ChangeRole, DeleteAccount, RevealedPassword
+from src.shared_contracts.accounts.recovery import RecoveryCodes
+from src.shared_contracts.authorization.access import AccessSnapshot, AccessDecision, DenialReason
+from src.shared_contracts.authorization.errors import StorageIntegrityError, ErrorCode, ServiceError
+from src.shared_contracts.authorization.results import Success, Failure
+from src.shared_contracts.authorization.permissions import PermissionSnapshot, ApplicationGrant, UpdateAppPermissions
 
 
-class TestAppServiceSchema(unittest.TestCase):
+class UserManagementAdapterTests(unittest.TestCase):
+    def setUp(self):
+        self.accounts, self.access = MagicMock(), MagicMock()
+        self.tokens, self.recovery, self.permissions, self.history = (MagicMock() for _ in range(4))
+        self.session = UserSession()
+        self.admin = AccountSummary("admin-id", "1", "First", "Admin", "Admin", "", True, 1, None, None, None, None)
+        self.operator = AccountSummary("operator-id", "2", "First", "Operator", "Operator", "", True, 1, None, None, None, None)
+        self.session.login(AccountPrincipal(self.admin, 1))
+        self.accounts.list_users.return_value = Success((self.admin, self.operator))
+        self.service = UserManagementApplicationService(accounts=self.accounts, access=self.access,
+            tokens=self.tokens, recovery=self.recovery, permissions=self.permissions, history=self.history,
+            session=self.session)
 
-    def test_get_schema_delegates_to_repo(self):
-        repo = _make_repo()
-        svc = UserManagementApplicationService(repo)
-        result = svc.get_schema()
-        repo.get_schema.assert_called_once()
-        self.assertIs(result, DEFAULT_USER_SCHEMA)
+    def test_user_page_contains_safe_summaries_and_trusted_actor(self):
+        page = self.service.load_users().value
+        self.assertEqual((page.actor_id, page.actor_role), ("admin-id", "Admin"))
+        self.assertEqual(page.session_revision, self.session.snapshot().revision)
+        self.assertTrue(all(not hasattr(row, "password") for row in page.users))
 
+    def test_user_page_cannot_cross_session_change(self):
+        def read_then_logout():
+            self.session.logout()
+            return Success((self.admin, self.operator))
+        self.accounts.list_users.side_effect = read_then_logout
+        self.assertEqual(self.service.load_users().error.code, "conflict")
 
-class TestAppServiceGetAll(unittest.TestCase):
+    def test_create_profile_password_role_and_delete_use_separate_commands(self):
+        self.accounts.create_user.return_value = Success(self.operator)
+        self.service.create(NewUser("2", "First", "Operator", "Operator", "secret"))
+        self.accounts.create_user.assert_called_once_with(CreateAccount("2", "First", "Operator", "Operator", "secret", ""))
+        self.accounts.edit_profile.return_value = Success(AccountChange(self.operator, True))
+        self.service.edit(EditUser("operator-id", 1, "Changed", "Operator", ""))
+        self.accounts.edit_profile.assert_called_once_with(EditProfile("operator-id", 1, "Changed", "Operator", ""))
+        self.accounts.change_password.return_value = Success(self.operator)
+        self.service.change_password(PasswordChange("operator-id", 1, "new-secret", "current"))
+        self.accounts.change_password.assert_called_once_with(ChangePassword("operator-id", 1, "new-secret", "current"))
+        self.accounts.change_role.return_value = Success(AccountChange(self.operator, True))
+        self.service.change_role(RoleChange("operator-id", 1, "Admin", "fresh-secret"))
+        self.accounts.change_role.assert_called_once_with(ChangeRole("operator-id", 1, "Admin", "fresh-secret"))
+        self.accounts.delete_user.return_value = Success(None)
+        self.service.delete("operator-id", 1)
+        self.accounts.delete_user.assert_called_once_with(DeleteAccount("operator-id", 1))
 
-    def test_get_all_users_delegates_to_repo(self):
-        repo = _make_repo()
-        repo.get_all.return_value = [_record("1")]
-        svc = UserManagementApplicationService(repo)
-        result = svc.get_all_users()
-        repo.get_all.assert_called_once()
-        self.assertEqual(len(result), 1)
+    def test_expected_failure_preserves_code_and_reference(self):
+        self.accounts.list_users.return_value = Failure(ServiceError(ErrorCode.ACCESS_DENIED, "safe", "reference"))
+        result = self.service.load_users()
+        self.assertEqual((result.error.code, result.error.reference), ("access_denied", "reference"))
 
+    def test_storage_failure_has_no_exception_details(self):
+        self.accounts.list_users.side_effect = StorageIntegrityError(correlation_id="reference")
+        result = self.service.load_users()
+        self.assertEqual((result.error.code, result.error.reference), ("integrity", "reference"))
 
-class TestAppServiceAddUser(unittest.TestCase):
+    def test_revealed_and_recovery_values_have_redacted_representations(self):
+        self.accounts.reveal_operator_password.return_value = Success(RevealedPassword("operator-secret"))
+        self.recovery.generate_codes.return_value = Success(RecoveryCodes("admin-id", ("code-one", "code-two")))
+        reveal = self.service.reveal("operator-id")
+        codes = self.service.generate_recovery_codes("current")
+        self.assertEqual(reveal.value.text, "operator-secret")
+        self.assertNotIn("operator-secret", repr(reveal))
+        self.assertEqual(codes.value.text, "code-one\ncode-two")
+        self.assertNotIn("code-one", repr(codes))
 
-    def test_add_user_success(self):
-        repo = _make_repo()
-        repo.add.return_value = True
-        svc = UserManagementApplicationService(repo)
-        ok, msg = svc.add_user(_record("5"))
-        self.assertTrue(ok)
-        self.assertIn("5", msg)
+    def test_presentation_never_offers_privileged_password_reveal_even_with_global_grant(self):
+        def allow_all(requests):
+            return Success(AccessSnapshot(self.session.snapshot().revision, 1, requests,
+                tuple(AccessDecision(True, True, DenialReason.ALLOWED) for _ in requests)))
+        self.access.evaluate.side_effect = allow_all
+        for target, allowed in (("admin-id", False), ("operator-id", True)):
+            controls = {control.key: control for control in self.service.access(target).value.controls}
+            self.assertEqual(controls["reveal"].allowed, allowed)
 
-    def test_add_user_duplicate_returns_false(self):
-        repo = _make_repo()
-        repo.add.return_value = False
-        svc = UserManagementApplicationService(repo)
-        ok, msg = svc.add_user(_record("5"))
-        self.assertFalse(ok)
-        self.assertIn("already exists", msg)
+    def test_permissions_editor_keeps_exact_revision_and_immutable_grants(self):
+        snapshot = PermissionSnapshot(7, (ApplicationGrant("demo", ("Admin", "Manufacturer"), ("Admin", "Operator")),))
+        self.permissions.read_permissions.return_value = Success(snapshot)
+        self.permissions.update_permissions.return_value = Success(snapshot)
+        page = self.service.permissions().value
+        self.assertEqual(page.locked, (("demo", "Manufacturer"),))
+        self.service.set_permission("demo", ("Manufacturer",), page.revision)
+        self.permissions.update_permissions.assert_called_once_with(UpdateAppPermissions("demo", ("Manufacturer",), 7))
 
-    def test_add_user_exception_returns_false(self):
-        repo = _make_repo()
-        repo.add.side_effect = RuntimeError("disk full")
-        svc = UserManagementApplicationService(repo)
-        ok, msg = svc.add_user(_record("5"))
-        self.assertFalse(ok)
-        self.assertIn("disk full", msg)
-
-
-class TestAppServiceUpdateUser(unittest.TestCase):
-
-    def test_update_user_success(self):
-        repo = _make_repo()
-        repo.update.return_value = True
-        svc = UserManagementApplicationService(repo)
-        ok, msg = svc.update_user(_record("1"))
-        self.assertTrue(ok)
-        self.assertIn("1", msg)
-
-    def test_update_user_not_found_returns_false(self):
-        repo = _make_repo()
-        repo.update.return_value = False
-        svc = UserManagementApplicationService(repo)
-        ok, msg = svc.update_user(_record("1"))
-        self.assertFalse(ok)
-        self.assertIn("not found", msg)
-
-    def test_update_user_exception_returns_false(self):
-        repo = _make_repo()
-        repo.update.side_effect = IOError("read error")
-        svc = UserManagementApplicationService(repo)
-        ok, msg = svc.update_user(_record("1"))
-        self.assertFalse(ok)
-        self.assertIn("read error", msg)
-
-
-class TestAppServiceDeleteUser(unittest.TestCase):
-
-    def test_delete_user_success(self):
-        repo = _make_repo()
-        repo.delete.return_value = True
-        svc = UserManagementApplicationService(repo)
-        ok, msg = svc.delete_user("1")
-        self.assertTrue(ok)
-
-    def test_delete_user_not_found_returns_false(self):
-        repo = _make_repo()
-        repo.delete.return_value = False
-        svc = UserManagementApplicationService(repo)
-        ok, msg = svc.delete_user("1")
-        self.assertFalse(ok)
-        self.assertIn("not found", msg)
-
-    def test_delete_user_exception_returns_false(self):
-        repo = _make_repo()
-        repo.delete.side_effect = RuntimeError("boom")
-        svc = UserManagementApplicationService(repo)
-        ok, msg = svc.delete_user("1")
-        self.assertFalse(ok)
-        self.assertIn("boom", msg)
-
-
-class TestAppServiceGenerateQr(unittest.TestCase):
-
-    def test_generate_qr_success_with_mocked_qrcode(self):
-        repo = _make_repo()
-        svc = UserManagementApplicationService(repo)
-        record = _record("7")
-        mock_qr = MagicMock()
-        mock_qrcode_mod = MagicMock()
-        mock_qrcode_mod.make.return_value = mock_qr
-        with patch.dict(sys.modules, {"qrcode": mock_qrcode_mod}):
-            ok, msg, path = svc.generate_qr(record)
-        self.assertTrue(ok)
-        self.assertEqual(msg, "QR generated")
-        self.assertIsNotNone(path)
-        self.assertIn("qr_user_7", path)
-
-    def test_generate_qr_exception_returns_false(self):
-        repo = _make_repo()
-        svc = UserManagementApplicationService(repo)
-        # Force ImportError by removing qrcode from sys.modules
-        with patch.dict(sys.modules, {"qrcode": None}):
-            ok, msg, path = svc.generate_qr(_record("1"))
-        self.assertFalse(ok)
-        self.assertIsNone(path)
-
-
-class TestAppServiceSendAccessPackage(unittest.TestCase):
-
-    def test_no_email_returns_false(self):
-        svc = UserManagementApplicationService(_make_repo())
-        ok, msg = svc.send_access_package(_record("1", email=""), "/tmp/qr.png")
-        self.assertFalse(ok)
-        self.assertIn("no email", msg)
-
-    def test_email_sender_missing_returns_false(self):
-        svc = UserManagementApplicationService(_make_repo())
-        # _email_sender.y_pixels doesn't exist — ImportError is caught
-        ok, msg = svc.send_access_package(_record("1", email="user@test.com"), "/tmp/qr.png")
-        self.assertFalse(ok)
-
-    def test_email_sender_success_with_mock(self):
-        svc = UserManagementApplicationService(_make_repo())
-        mock_sender = MagicMock()
-        mock_sender.send_user_access_package.return_value = (True, "Sent!")
-        module_key = "src.applications.user_management.service._email_sender"
-        with patch.dict(sys.modules, {module_key: mock_sender}):
-            ok, msg = svc.send_access_package(_record("1", email="u@t.com"), "/tmp/qr.png")
-        self.assertTrue(ok)
-        self.assertEqual(msg, "Sent!")
-
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_plaintext_package_api_is_removed(self):
+        self.assertFalse(hasattr(self.service, "send_access_package"))
+        self.assertFalse(hasattr(self.service, "generate_qr"))
 

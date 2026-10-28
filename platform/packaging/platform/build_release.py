@@ -64,6 +64,11 @@ def main():
     source = Path(__file__).resolve().parents[2]
     with tempfile.TemporaryDirectory() as temporary:
         internal = Path(temporary) / "manifest.json"
+        maintenance = bundle / "installation/account-maintenance"
+        if not (maintenance / "account-maintenance.pyz").is_file():
+            maintenance = Path(temporary) / "account-maintenance"
+            subprocess.run([sys.executable, str(source / "packaging/accounts/build_payload.py"),
+                            str(maintenance)], check=True)
         internal.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
         with tarfile.open(archive, "w:gz", dereference=True) as target:
             target.add(internal, arcname="manifest.json")
@@ -75,6 +80,8 @@ def main():
                         raise ValueError(f"Bundle contains live machine data: {member.name}")
                 return member
             target.add(bundle, arcname="platform", filter=exclude_storage)
+            if maintenance != bundle / "installation/account-maintenance":
+                target.add(maintenance, arcname="platform/installation/account-maintenance")
             if not (bundle / "installation/kiosk/setup_kiosk.sh").is_file():
                 target.add(source / "packaging/kiosk/setup_kiosk.sh",
                            arcname="platform/installation/kiosk/setup_kiosk.sh")

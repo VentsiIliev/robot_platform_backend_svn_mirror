@@ -146,12 +146,13 @@ class MyRobotSystem(BaseRobotSystem):
     default_active_work_area_id = "default"
 
     role_policy = RolePolicy(
-        role_values=["Admin"],
+        role_values=["Manufacturer", "Admin", "Operator"],
         admin_role_value="Admin",
         default_permission_role_values=["Admin"],
         protected_app_role_values={
-            "user_management": ["Admin"],
+            "usermanagement": ["Admin"],
         },
+        denied_folder_role_values={"ADMIN": ["Operator"], "SERVICE": ["Operator"]},
     )
 
     shell = ShellSetup(

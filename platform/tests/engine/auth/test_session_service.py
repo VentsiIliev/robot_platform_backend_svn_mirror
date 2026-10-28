@@ -86,6 +86,45 @@ class TestUserSessionLogout(unittest.TestCase):
         self.assertFalse(self.session.is_authenticated())
 
 
+class TestSessionSnapshots(unittest.TestCase):
+    def test_revision_distinguishes_relogin_and_logout_without_changing_old_snapshot(self):
+        session = UserSession()
+        user = _make_user()
+        self.assertEqual(session.snapshot().revision, 0)
+        session.login(user)
+        first = session.snapshot()
+        session.login(user)
+        self.assertGreater(session.snapshot().revision, first.revision)
+        session.logout()
+        self.assertIsNone(session.snapshot().user)
+        self.assertGreater(session.snapshot().revision, first.revision)
+        self.assertIs(first.user, user)
+        self.assertEqual(first.revision, 1)
+
+    def test_concurrent_snapshots_never_mix_user_and_revision(self):
+        session = UserSession()
+        user = _make_user()
+        errors = []
+
+        def mutate():
+            for _ in range(500):
+                session.login(user)
+                session.logout()
+
+        def read():
+            for _ in range(2000):
+                snapshot = session.snapshot()
+                if (snapshot.user is not None) != bool(snapshot.revision % 2):
+                    errors.append(snapshot)
+
+        threads = [threading.Thread(target=mutate), threading.Thread(target=read)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(errors, [])
+
+
 class TestUserSessionThreadSafety(unittest.TestCase):
 
     def test_concurrent_login_logout_leaves_session_consistent(self):

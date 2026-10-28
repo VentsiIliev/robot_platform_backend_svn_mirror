@@ -1,93 +1,97 @@
-from typing import List, Optional, Tuple
+from typing import Callable, TypeVar
 
 from src.applications.login.connection_information_reader import ConnectionInformationReader
-from src.applications.login.i_login_application_service import ILoginApplicationService
+from src.applications.login.i_login_application_service import (
+    AdminRecovery, AdminSetup, ILoginApplicationService, LoginError, LoginErrorCode,
+    LoginFailure, LoginResult, LoginSuccess, LoginUser, RecoveryCodeDisplay,
+)
 from src.applications.login.i_qr_scanner import IQrScanner
-from src.applications.user_management.domain.i_user_repository import IUserRepository
-from src.applications.user_management.domain.user_schema import UserRecord
-from src.engine.auth.i_authenticated_user import IAuthenticatedUser
-from src.engine.auth.i_authentication_service import IAuthenticationService
+from src.engine.auth.account_principal import AccountPrincipal
+from src.engine.auth.i_account_login_service import IAccountLoginService
+from src.engine.auth.i_admin_commissioning_service import IAdminCommissioningService
+from src.engine.auth.i_login_token_service import ILoginTokenService
+from src.engine.auth.i_recovery_service import IRecoveryService
 from src.engine.robot.interfaces.i_robot_service import IRobotService
+from src.shared_contracts.accounts.authentication import LoginCredentials
+from src.shared_contracts.accounts.commissioning import CreateFirstAdmin
+from src.shared_contracts.accounts.recovery import RecoverAdminAccount
+from src.shared_contracts.authorization.errors import ErrorCode, ServiceException
+from src.shared_contracts.authorization.results import Failure, Result
 
-_LOGIN_MOVE_TOOL = 0
-_LOGIN_MOVE_USER = 0
-_LOGIN_MOVE_VEL  = 20.0
-_LOGIN_MOVE_ACC  = 20.0
+T = TypeVar("T")
+U = TypeVar("U")
 
 
 class LoginApplicationService(ILoginApplicationService):
-    """Application service for the login flow.
-
-    Delegates auth to IAuthenticationService. Manages first-run detection,
-    admin creation, optional robot positioning, and optional QR scanning.
-    robot_service and qr_scanner are optional — features degrade gracefully
-    when absent (useful in development or non-robot configurations).
-    """
-
-    def __init__(
-        self,
-        auth_service:    IAuthenticationService,
-        user_repository: IUserRepository,
-        robot_service:   Optional[IRobotService]  = None,
-        qr_scanner:      Optional[IQrScanner]     = None,
-        login_position:  Optional[List[float]]    = None,
-        admin_role_value: str = "Admin",
-    ) -> None:
-        self._auth          = auth_service
-        self._repo          = user_repository
-        self._robot         = robot_service
-        self._scanner       = qr_scanner
-        self._login_pos     = login_position
-        self._admin_role_value = str(admin_role_value)
+    def __init__(self, *, login: IAccountLoginService, tokens: ILoginTokenService,
+                 commissioning: IAdminCommissioningService, recovery: IRecoveryService,
+                 robot_service: IRobotService | None = None, qr_scanner: IQrScanner | None = None,
+                 login_position: list[float] | None = None) -> None:
+        self._login, self._tokens = login, tokens
+        self._commissioning, self._recovery = commissioning, recovery
+        self._robot, self._scanner, self._login_pos = robot_service, qr_scanner, login_position
         self._connection_information = ConnectionInformationReader()
 
-    # ── ILoginApplicationService ───────────────────────────────────────────────
-
     def get_connection_information(self) -> dict:
-        """Read connection identifiers without accessing credentials or hardware."""
         return self._connection_information.read()
 
-    def authenticate(self, user_id: str, password: str) -> Optional[IAuthenticatedUser]:
-        return self._auth.authenticate(user_id, password)
+    def authenticate(self, user_id: str, password: str) -> LoginResult[LoginUser]:
+        return self._call(lambda: self._login.login(LoginCredentials(user_id, password)), self._principal)
 
-    def authenticate_qr(self, qr_payload: str) -> Optional[IAuthenticatedUser]:
-        return self._auth.authenticate_qr(qr_payload)
+    def authenticate_qr(self, payload: str) -> LoginResult[LoginUser]:
+        return self._call(lambda: self._tokens.authenticate(payload), self._principal)
 
-    def try_qr_login(self) -> Optional[Tuple[str, str]]:
+    def scan_qr(self) -> LoginResult[str | None]:
         if self._scanner is None:
-            return None
-        payload = self._scanner.scan()
-        if payload is None:
-            return None
-        parts = payload.split(":", 1)
-        if len(parts) != 2:
-            return None
-        return parts[0], parts[1]
+            return LoginSuccess(None)
+        try:
+            return LoginSuccess(self._scanner.scan())
+        except Exception:
+            # Camera drivers need not implement the account exception hierarchy.
+            return LoginFailure(LoginError(LoginErrorCode.UNAVAILABLE))
 
     def move_to_login_pos(self) -> None:
-        if self._robot is None or self._login_pos is None:
-            return
-        self._robot.move_ptp(
-            self._login_pos,
-            _LOGIN_MOVE_TOOL,
-            _LOGIN_MOVE_USER,
-            _LOGIN_MOVE_VEL,
-            _LOGIN_MOVE_ACC,
-        )
+        if self._robot is not None and self._login_pos is not None:
+            self._robot.move_ptp(self._login_pos, 0, 0, 20.0, 20.0)
 
-    def is_first_run(self) -> bool:
-        return len(self._repo.get_all()) == 0
+    def is_first_run(self) -> LoginResult[bool]:
+        try:
+            return LoginSuccess(self._commissioning.status().required)
+        except ServiceException as exc:
+            return self._error(exc.error)
 
-    def create_first_admin(
-        self, user_id: str, first_name: str, last_name: str, password: str
-    ) -> Tuple[bool, str]:
-        record = UserRecord.from_dict({
-            "id":        user_id,
-            "firstName": first_name,
-            "lastName":  last_name,
-            "password":  password,
-            "role":      self._admin_role_value,
-            "email":     "",
-        })
-        success = self._repo.add(record)
-        return (True, "Admin created.") if success else (False, "Failed to create admin user.")
+    def create_first_admin(self, command: AdminSetup) -> LoginResult[None]:
+        if not isinstance(command.login_id, str) or not command.login_id.isnumeric():
+            return LoginFailure(LoginError(LoginErrorCode.INVALID_INPUT))
+        return self._call(lambda: self._commissioning.create_first_admin(CreateFirstAdmin(
+            command.login_id, command.first_name, command.last_name, command.password)), lambda _account: None)
+
+    def recover_admin(self, command: AdminRecovery) -> LoginResult[RecoveryCodeDisplay]:
+        return self._call(lambda: self._recovery.recover_admin(RecoverAdminAccount(
+            command.login_id, command.code, command.new_password)), lambda codes: RecoveryCodeDisplay(codes.codes))
+
+    @staticmethod
+    def _principal(identity):
+        return AccountPrincipal(identity.account, identity.credential_version)
+
+    @classmethod
+    def _call(cls, operation: Callable[[], Result[T]], convert: Callable[[T], U]) -> LoginResult[U]:
+        try:
+            result = operation()
+            if isinstance(result, Failure):
+                return cls._error(result.error)
+            return LoginSuccess(convert(result.value))
+        except ServiceException as exc:
+            return cls._error(exc.error)
+
+    @staticmethod
+    def _error(error) -> LoginFailure:
+        codes = {
+            ErrorCode.INVALID_INPUT: LoginErrorCode.INVALID_INPUT,
+            ErrorCode.INVALID_PROOF: LoginErrorCode.INVALID_PROOF,
+            ErrorCode.RATE_LIMITED: LoginErrorCode.RATE_LIMITED,
+            ErrorCode.BUSY: LoginErrorCode.BUSY,
+            ErrorCode.POLICY_VIOLATION: LoginErrorCode.SETUP_CLOSED,
+            ErrorCode.ALREADY_EXISTS: LoginErrorCode.ALREADY_EXISTS,
+        }
+        return LoginFailure(LoginError(codes.get(error.code, LoginErrorCode.UNAVAILABLE), error.correlation_id))

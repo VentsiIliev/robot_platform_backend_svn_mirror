@@ -154,8 +154,8 @@ class TestRoleEnum(unittest.TestCase):
     def test_operator_value(self):
         self.assertEqual(Role.OPERATOR.value, "Operator")
 
-    def test_viewer_value(self):
-        self.assertEqual(Role.VIEWER.value, "Viewer")
+    def test_only_the_three_supported_roles_exist(self):
+        self.assertEqual({role.value for role in Role}, {"Manufacturer", "Admin", "Operator"})
 
 
 class TestUserFieldEnum(unittest.TestCase):

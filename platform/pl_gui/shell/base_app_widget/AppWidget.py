@@ -48,6 +48,10 @@ class AppWidget(QWidget):
         """
         return True
 
+    def has_active_operations(self) -> bool:
+        """Noninteractive activity snapshot for deferred session teardown."""
+        return False
+
 
 if __name__ == "__main__":
     from PyQt6.QtWidgets import QApplication

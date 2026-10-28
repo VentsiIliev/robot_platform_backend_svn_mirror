@@ -101,7 +101,7 @@ class TestPaintMotionRecipeWiring(unittest.TestCase):
         )
 
         self.assertEqual(4, app.folder_id)
-        self.assertEqual(["Admin", "Developer"], system_class.role_policy.protected_app_role_values[app.app_id])
+        self.assertEqual(["Admin", "Manufacturer"], system_class.role_policy.protected_app_role_values[app.app_id])
 
     def test_build_paint_motion_recipe_application_wires_mock_safe_service(self):
         robot_system = SimpleNamespace(

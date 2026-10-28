@@ -214,14 +214,15 @@ class GlueRobotSystem(BaseRobotSystem):
     default_active_work_area_id = "pickup"
 
     role_policy = RolePolicy(
-        role_values=["Admin", "Operator", "Viewer", "Developer"],
+        role_values=["Manufacturer", "Admin", "Operator"],
         admin_role_value="Admin",
         default_permission_role_values=["Admin"],
         protected_app_role_values={
-            "user_management": ["Admin"],
+            "usermanagement": ["Admin"],
             "softwareupdate": ["Admin"],
             "platformsettings": ["Admin"],
         },
+        denied_folder_role_values={"ADMIN": ["Operator"], "SERVICE": ["Operator"]},
     )
 
     shell = ShellSetup(
@@ -229,7 +230,7 @@ class GlueRobotSystem(BaseRobotSystem):
             FolderSpec(folder_id=1, name="PRODUCTION", display_name="Production"),
             FolderSpec(folder_id=2, name="SERVICE", display_name="Service"),
             FolderSpec(folder_id=3, name="ADMIN", display_name="Administration"),
-            # FolderSpec(folder_id=4, name="Tests", display_name="Tests"),
+            FolderSpec(folder_id=4, name="TESTS", display_name="Tests"),
         ],
         applications=[
             ApplicationSpec(name="GlueDashboard", folder_id=1, icon="fa5s.tachometer-alt",
