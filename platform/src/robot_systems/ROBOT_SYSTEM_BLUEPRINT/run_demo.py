@@ -51,6 +51,8 @@ def run_demo() -> None:
 
     ShellConfigurator.configure(provider.system_class)
 
+    from src.bootstrap.qt_application import prepare_qt_application
+    prepare_qt_application()
     qt_app = QApplication(sys.argv)
     localization_service = _build_localization_service(robot_system, ctx.messaging_service)
     localization_service.set_language(localization_service.get_language())

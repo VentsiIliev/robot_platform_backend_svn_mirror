@@ -1,5 +1,10 @@
 # Login and Admin recovery
 
+Bootstrap calls `prepare_qt_application()` before constructing `QApplication`.
+This enables shared OpenGL contexts so lazy login imports can load Qt WebEngine
+after Qt starts. Production startup, the blueprint runner and the frozen self-test
+use the same preparation hook; standalone views imported before Qt still work.
+
 The login application uses the shared SQLite account runtime through
 `ILoginApplicationService`. Its interface and DTOs depend only on Python's
 standard library. The concrete application service is the adapter to the engine.

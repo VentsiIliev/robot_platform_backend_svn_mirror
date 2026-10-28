@@ -135,6 +135,8 @@ def self_test():
     target = json.loads((resource_root / "config/release-target.json").read_text())
     load_factory_defaults(resource_root, target)
     check_account_backend()
+    from src.bootstrap.qt_application import prepare_qt_application
+    prepare_qt_application()
     app = QApplication([])
     check_vision_application_widgets(app)
     if "paint" in target["packages"]:

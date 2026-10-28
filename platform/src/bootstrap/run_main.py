@@ -195,6 +195,8 @@ def _run_application(startup_config, diagnostics_service) -> None:
     ShellConfigurator.configure(bootstrap_provider.system_class)
 
     # 4 — Qt app + localization
+    from src.bootstrap.qt_application import prepare_qt_application
+    prepare_qt_application()
     qt_app = QApplication(sys.argv)
     from pl_gui.theme.palette import theme_palette
     from pl_gui.theme.runtime import install_theme
