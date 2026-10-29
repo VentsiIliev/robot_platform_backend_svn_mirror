@@ -9,6 +9,8 @@ from time import perf_counter
 import time
 from typing import Any, Callable
 
+# TODO - COULD USE TYPED RESULTS, TYPE HINTS, DOCSTRINGS AND TYPED EXCEPTIONS FOR ALL OF THESE STRATEGIES, AND A COMMON BASE CLASS WITH A GENERATOR FACTORY METHOD.
+
 
 @dataclass(frozen=True)
 class OrderedTrajectoryTiming:

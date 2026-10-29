@@ -6,6 +6,8 @@ from __future__ import annotations
 import math
 from typing import Any
 
+# TODO - COULD USE TYPED RESULTS, TYPE HINTS, DOCSTRINGS AND TYPED EXCEPTIONS FOR ALL OF THESE STRATEGIES, AND A COMMON BASE CLASS WITH A GENERATOR FACTORY METHOD.
+
 
 def _seconds(duration: Any) -> float:
     return float(duration.sec) + float(duration.nanosec) * 1e-9

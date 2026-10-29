@@ -1,7 +1,7 @@
 RUNTIME_INCLUDES:
 - ../shared/sensorless_collision.yaml
 monitor:
-  confirm_duration_ms: 25.0
+  confirm_duration_ms: 10.0
   external_torque_thresholds:
   - 5.0
   - 5.0

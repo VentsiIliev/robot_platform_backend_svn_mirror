@@ -40,6 +40,8 @@ def run_paint_cycle(
     blocks still release their resources. Handler errors recorded by the state
     machine are returned alongside the typed domain result.
     """
+    # TODO explore whether we can remove the raw string machine_error and instead return a typed error from the state machine
+    # TODO continuation from above: also the raw strigs operation_id and cycle_id in the diagnostic context should be typed and validated
     operation = "magazine_transfer" if context.magazine_stage_only else (
         "adjustment_cycle" if context.adjustment_session is not None else
         "pickup_only" if context.process_config is not None
@@ -55,6 +57,7 @@ def run_paint_cycle(
             if context.execution_plan is not None:
                 publish_execution_plan(context)
         except Exception:
+            # TODO establish the reson for not catching this?
             pass
         configuration_revision = context.diagnostic_evidence.get('effective_process_settings', {}).get('sha256')
         context.diagnostic_context = {**current_context(), 'configuration_revision': configuration_revision}

@@ -21,6 +21,8 @@ from src.robot_systems.paint.processes.paint.configuration.models import Dropoff
 
 _logger = logging.getLogger(__name__)
 
+# TODO: needs attention !  a lot of raw strings returned from this executor are not actionable by the caller; they should be typed and validated, and the caller should not have to parse them to determine what happened
+
 
 def _ordered_position_command(
     label: str,

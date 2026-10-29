@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Iterable
 
 import numpy as np
-
+# TODO - IS THIS USED ANYWHERE? IF NOT, REMOVE IT
 
 @dataclass(frozen=True)
 class RegistrationResult:

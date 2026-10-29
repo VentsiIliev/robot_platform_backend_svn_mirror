@@ -3,6 +3,8 @@ from copy import deepcopy
 import math
 import re
 
+# TODO - ANOTHER FILE WITH TOO MANY RAW STRINGS AND NO TYPE HINTS OR DOCSTRINGS. THIS IS A GOOD CANDIDATE FOR REFACTORING.
+
 LIVE_MONITOR_FIELDS = frozenset({
     'detection_enabled', 'active_stop_enabled', 'diagnostics_enabled', 'dynamic_threshold_enabled',
     'collision_sensitivity_percent', 'confirm_duration_ms', 'dynamic_threshold_max_ratio',

@@ -19,6 +19,7 @@
     "stop_script": "../backend/ros2_ws/stop_zeroerr.sh"
   },
   "ui": {
+
     "dev_skip_login": true,
     "skip_splash": true,
     "show_account_button_when_dev_skip_login": false,
@@ -42,7 +43,7 @@
     "paint_tray_dry": {
       "robot_driver": "zeroerr",
       "backend": "zeroerr",
-      "backend_profile": "paint_short_links",
+      "backend_profile": "paint_tray_dry",
       "release_version": "1.0.18",
       "platform_version": "1.0.18",
       "backend_version": "1.0.1"

@@ -2,6 +2,7 @@
 """Execution ownership and queue arbitration for bridge motion commands."""
 
 from threading import Lock
+# TODO - COULD USE TYPED RESULTS, TYPE HINTS, DOCSTRINGS AND TYPED EXCEPTIONS FOR ALL OF THESE STRATEGIES, AND A COMMON BASE CLASS WITH A GENERATOR FACTORY METHOD.
 
 
 class MotionCoordinator:
@@ -48,12 +49,14 @@ class MotionCoordinator:
                 task_function=self._execute_strategy_task,
                 task_args=[strategy],
             )
+
             if isinstance(result, tuple):
                 task_id, position = result
                 self._set_last_submitted_task_id(task_id)
                 self._node.get_logger().info(
                     f'[Queue] Queued {strategy.__class__.__name__} at position {position} (task #{task_id})')
                 return position
+
             self._node.get_logger().error(
                 f'[Queue] Failed to queue {strategy.__class__.__name__}: {result}')
             return result

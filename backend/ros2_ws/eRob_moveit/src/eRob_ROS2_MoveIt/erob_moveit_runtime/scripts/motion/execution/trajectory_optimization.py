@@ -9,6 +9,7 @@ import config as cfg
 # Cache for loaded joint limits
 _joint_limits_cache = None
 
+# TODO - COULD USE TYPED RESULTS, TYPE HINTS, DOCSTRINGS AND TYPED EXCEPTIONS FOR ALL OF THESE STRATEGIES, AND A COMMON BASE CLASS WITH A GENERATOR FACTORY METHOD.
 
 def _compute_reduced_fallback_scaling(vel_scaling, acc_scaling):
     if not bool(getattr(cfg, 'RUCKIG_FALLBACK_REDUCE_SCALING', True)):

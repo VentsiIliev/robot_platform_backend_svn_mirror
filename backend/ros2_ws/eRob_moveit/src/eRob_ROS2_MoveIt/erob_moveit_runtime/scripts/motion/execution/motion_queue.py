@@ -6,6 +6,7 @@ from threading import Lock
 import time
 import config
 
+# TODO - COULD USE TYPED RESULTS, TYPE HINTS, DOCSTRINGS AND TYPED EXCEPTIONS FOR ALL OF THESE STRATEGIES, AND A COMMON BASE CLASS WITH A GENERATOR FACTORY METHOD.
 
 class MotionQueue:
     def __init__(self, max_size=config.MOTION_QUEUE_MAX_SIZE):

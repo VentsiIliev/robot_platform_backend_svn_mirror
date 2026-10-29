@@ -57,6 +57,7 @@ from src.robot_systems.paint.processes.paint.tray_dry.errors import TrayFailure,
 
 _logger = logging.getLogger(__name__)
 
+# TODO - I started flagging some things to consider but maybe in general this needs attention in relation to error handling and maybe introduce structured results ?
 
 class PaintProductionService:
     """Own the end-to-end paint production flow outside the editor UI."""
@@ -949,6 +950,7 @@ class PaintProductionService:
             pose = navigation.get_group_position(group_id) if group_id else None
         if pose is None or len(pose) < 6:
             _logger.error("[NEXT_CYCLE] Cannot resolve start movement group '%s'", group_id)
+            # TODO - consider returning a structured result instead of None to indicate a missing start target
             return None
         return NextCycleTarget(
             group_id=group_id,
@@ -987,6 +989,9 @@ class PaintProductionService:
             )
         except FreshPoseReadError as exc:
             _logger.error("[NEXT_CYCLE] %s", exc)
+            # If we cannot read the current pose, we cannot verify the prepositioned start group.
+            # TODO - consider returning a structured result instead of False to indicate a failed verification due to pose read error.
+            # TODO - continuation from above - and maybe masking it as False is not the best idea, because if we can not read the pose maybe should fail loud and clear in order to investigate and fix the cause of the pose read error.
             return False
         if expected is None or actual is None or len(expected) < 6 or len(actual) < 6:
             return False
@@ -1016,6 +1021,7 @@ class PaintProductionService:
             self._magazine_load_service._navigation.stop_motion()
         except Exception:
             _logger.exception("[MAGAZINE_LOAD] Failed to stop robot motion during pause")
+            # TODO - is simply logging this enough? Should we raise an exception or return a failure result to the caller?
 
     def _freeze_brightness_after_capture(self) -> None:
         """Freeze auto-brightness after the workpiece capture so exposure stays stable while painting.
@@ -1033,6 +1039,8 @@ class PaintProductionService:
             self._brightness_locked = True
             _logger.info("Freezing auto brightness adjustment after workpiece capture")
         except Exception:
+            # TODO - is simply logging this enough? Should we raise an exception or return a failure result to the caller?
+
             _logger.exception("Failed to freeze auto brightness adjustment after capture")
 
     def _restore_brightness(self) -> None:
@@ -1047,6 +1055,8 @@ class PaintProductionService:
             vision.unlock_auto_brightness_adjustment()
             _logger.info("Restoring adaptive auto brightness adjustment after paint cycle")
         except Exception:
+            # TODO - is simply logging this enough? Should we raise an exception or return a failure result to the caller?
+
             _logger.exception("Failed to restore auto brightness adjustment after paint cycle")
 
     def _restore_brightness_for_capture(self, reason: str) -> None:

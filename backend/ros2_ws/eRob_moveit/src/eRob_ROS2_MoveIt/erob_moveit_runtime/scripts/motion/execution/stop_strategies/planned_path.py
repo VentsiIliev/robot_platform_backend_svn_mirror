@@ -4,6 +4,7 @@ import time
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from .base import StopPlan
 
+# TODO - COULD USE TYPED RESULTS, TYPE HINTS, DOCSTRINGS AND TYPED EXCEPTIONS FOR ALL OF THESE STRATEGIES, AND A COMMON BASE CLASS WITH A GENERATOR FACTORY METHOD.
 
 class PlannedPathStop:
     name = 'planned_path'

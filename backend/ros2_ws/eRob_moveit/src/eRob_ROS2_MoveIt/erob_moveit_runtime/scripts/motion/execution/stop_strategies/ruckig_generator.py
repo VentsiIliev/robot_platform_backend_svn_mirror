@@ -5,7 +5,8 @@ from pathlib import Path
 import time
 import xml.etree.ElementTree as ET
 
-
+# TODO - COULD USE TYPED RESULTS, TYPE HINTS, DOCSTRINGS AND TYPED EXCEPTIONS FOR ALL OF THESE STRATEGIES, AND A COMMON BASE CLASS WITH A GENERATOR FACTORY METHOD.
+# TODO - AGAIN RAW STRINGS LOOKUP ABUSE AND EVEN PATH STRINGS HARDCODED
 class CollisionBrake:
     def __init__(self, library_path, names, limits, lower, upper):
         self.names = tuple(names)

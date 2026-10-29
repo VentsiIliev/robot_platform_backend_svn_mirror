@@ -11,6 +11,7 @@ from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from motion.execution.stop_strategies import (
     PlannedPathStop, collision_strategy_name, create_collision_stop_strategy,
 )
+# TODO - COULD USE TYPED RESULTS, TYPE HINTS, DOCSTRINGS AND TYPED EXCEPTIONS FOR ALL OF THESE STRATEGIES, AND A COMMON BASE CLASS WITH A GENERATOR FACTORY METHOD.
 
 
 class TrajectoryExecutor:

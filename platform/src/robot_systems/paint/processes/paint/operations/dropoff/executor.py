@@ -14,6 +14,7 @@ from src.robot_systems.paint.timing import timed_step
 
 _logger = logging.getLogger(__name__)
 
+# TODO: needs attention !  a lot of raw strings returned from this executor are not actionable by the caller; they should be typed and validated, and the caller should not have to parse them to determine what happened
 
 class DropoffWaypointExecutor:
     """Execute a waypoint plan; lifecycle strategies own preparation and release."""
@@ -36,11 +37,14 @@ class DropoffWaypointExecutor:
         """Execute the dropoff plan and release the workpiece at its release waypoint."""
         started = perf_counter()
         strategy = self._resolve_planner()
+
         if strategy is None:
             strategy_name = self._owner._paint_process_config().dropoff.strategy
             return False, f"Unknown paint dropoff strategy '{strategy_name}'"
+
         plan = strategy.build_plan(self._owner, execution_plan)
         release_count = sum(1 for waypoint in plan.waypoints if waypoint.release_here)
+
         if release_count != 1:
             if plan.strategy_name == MovementGroupDropoffPlanner.name:
                 return False, "Dropoff movement group 'Dropoff' is not configured"

@@ -13,6 +13,8 @@ _DIAG_EXECUTOR = ThreadPoolExecutor(
     thread_name_prefix="totg_path_diag",
 )
 
+# TODO - COULD USE TYPED RESULTS, TYPE HINTS, DOCSTRINGS AND TYPED EXCEPTIONS FOR ALL OF THESE STRATEGIES, AND A COMMON BASE CLASS WITH A GENERATOR FACTORY METHOD.
+
 
 def _log_joint_path_geometry(robot_controller, trajectory, *, label="TOTG"):
     """Log joint-space geometry that can make time parameterization fail.

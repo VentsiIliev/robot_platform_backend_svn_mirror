@@ -12,7 +12,7 @@ from src.bootstrap.ros_backend_launcher import (
     _clean_ros_process_env,
     build_ros_backend_launcher_from_env,
 )
-from src.bootstrap.startup_config import RosBackendConfig
+from src.bootstrap.startup_config import RosBackendConfig, load_startup_config
 
 
 class TestRosBackendLauncher(unittest.TestCase):
@@ -142,6 +142,17 @@ class TestRosBackendLauncher(unittest.TestCase):
     def test_unmapped_target_cannot_autostart(self):
         with self.assertRaisesRegex(RuntimeError, "Missing configuration: robot_systems"):
             build_ros_backend_launcher_from_env(RosBackendConfig(), "glue")
+
+    def test_tray_autostart_uses_tray_calibration_profile(self) -> None:
+        # The legacy short-links profile has independent TCP/workobject
+        # calibration, even though it describes the same robot arm.
+        with patch.dict(os.environ, {}, clear=True):
+            config = load_startup_config()
+            launcher = build_ros_backend_launcher_from_env(config.ros_backend, "paint_tray_dry")
+            env = launcher._launch_env()
+
+        self.assertEqual(env["ROBOT_RELEASE_TARGET"], "paint_tray_dry")
+        self.assertEqual(env["ZEROERR_ACTIVE_PROFILE"], "paint_tray_dry")
 
     def test_target_cannot_use_another_workspace(self):
         with self.assertRaisesRegex(RuntimeError, "must reference"):
