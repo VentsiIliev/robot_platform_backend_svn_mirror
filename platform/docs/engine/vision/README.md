@@ -233,3 +233,22 @@ This does not fix a broken MJPEG producer, but it prevents a single stream desyn
 
 [Complete source index](../../SOURCE_INDEX.md).
 <!-- source-navigation:end -->
+
+
+## Shared camera and paint-head development tools
+
+The paint-head development application and capture tool use the existing
+`implementation/plvision/PLVision/Camera.py` through their typed `CameraSession`
+adapter. The image-only detector does not import or open this camera.
+
+`Camera.read_properties()` returns an immutable `CameraProperties` snapshot;
+`get_properties()` retains its legacy dictionary result. `get_exposure()` returns
+the current absolute exposure or `None` if unavailable. `set_exposure()` reports
+the driver's acceptance as a boolean. Device-open exceptions can be inspected
+through the read-only `last_open_error` property.
+
+Optional constructor arguments configure open/restart retry delay, stream
+configuration/control/release settling delays, and automatic/manual exposure
+candidate sequences. Defaults preserve existing camera behavior. Consumers can
+bound reads with `capture(timeout=..., max_attempts=...)`; omitting `max_attempts`
+preserves the legacy timeout-based read loop.

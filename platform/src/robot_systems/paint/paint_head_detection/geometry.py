@@ -38,8 +38,8 @@ def fitted_pose(matches: tuple[FeatureMatch, ...]) -> PoseEstimate | None:
     source, target = (expected - source_mean, observed - target_mean)
     if np.sum(source**2) < 1e-06:
         return None
-    dot = np.sum(source * target)
-    cross = np.sum(source[:, 1] * target[:, 0] - source[:, 0] * target[:, 1])
+    dot: np.float64 = np.sum(source * target)
+    cross: np.float64 = np.sum(source[:, 1] * target[:, 0] - source[:, 0] * target[:, 1])
     angle = np.arctan2(cross, dot)
     rotation = np.array([[np.cos(angle), np.sin(angle)], [-np.sin(angle), np.cos(angle)]])
     origin = np.mean(

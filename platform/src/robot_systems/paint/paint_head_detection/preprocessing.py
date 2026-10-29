@@ -36,7 +36,7 @@ class ImageProcessor:
         self._calibration = calibration
         self._settings = settings
         self._sigma = edge_sigma
-        mask = np.zeros((size.height, size.width), dtype=bool)
+        mask: BoolMask = np.zeros((size.height, size.width), dtype=bool)
         mask[calibration.inspection_region.slices] = True
         for region in calibration.ignored_regions:
             mask[region.slices] = False

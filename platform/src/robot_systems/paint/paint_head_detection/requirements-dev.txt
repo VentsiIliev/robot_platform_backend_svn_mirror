@@ -1,0 +1,3 @@
+# Optional static checks; runtime dependencies use platform/requirements.txt.
+mypy==2.4.0
+ruff==0.17.3

@@ -1,8 +1,8 @@
 """Second integration: inspect saved images through the public API without a GUI.
 
-Install the checkout first: python -m pip install -e .
-Edit examples/settings.py, then run: python examples/get_status.py
-Module execution also works: python -m examples.get_status
+Edit the adjacent settings.py. Run from the platform checkout with:
+python -m src.robot_systems.paint.paint_head_detection.examples.get_status
+Direct-file execution from an IDE or another directory also works.
 
 Other components can construct HeadlessApplication with typed configuration and
 optional external calibration, then call run() with saved image paths.
@@ -16,9 +16,13 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import cast
 
-import cv2
+# Direct execution puts examples/ on sys.path; imports need the platform root.
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[5]))
 
-from paint_head_detector import (
+import cv2  # noqa: E402
+
+from src.robot_systems.paint.paint_head_detection import (  # noqa: E402
     CalibrationConfig,
     ConfigurationRepository,
     DetectionResult,
@@ -29,12 +33,7 @@ from paint_head_detector import (
     PaintHeadDetector,
     PaintHeadError,
 )
-
-# A direct file/IDE run puts examples/ on sys.path instead of its parent.
-if not __package__:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from examples.settings import SETTINGS, ExampleSettings  # noqa: E402
+from src.robot_systems.paint.paint_head_detection.examples.settings import SETTINGS, ExampleSettings  # noqa: E402
 
 
 class InputImageError(PaintHeadError):

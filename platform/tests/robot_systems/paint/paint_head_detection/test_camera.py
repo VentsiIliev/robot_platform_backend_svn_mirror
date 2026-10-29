@@ -2,27 +2,28 @@
 
 from __future__ import annotations
 
-import sys
 import tempfile
 import unittest
 from dataclasses import dataclass, field, replace
-from pathlib import Path
 from unittest.mock import patch
 
 import cv2
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-from paint_head_detector.calibration import read_image  # noqa: E402
-from paint_head_detector.configuration import ConfigurationRepository  # noqa: E402
-from paint_head_detector.development.camera_session import CameraSession  # noqa: E402
-from paint_head_detector.development.capture_application import CaptureApplication  # noqa: E402
-from paint_head_detector.development.exposure import ExposureController  # noqa: E402
-from paint_head_detector.development.options import parse_options  # noqa: E402
-from paint_head_detector.development.settings import DevelopmentSettingsRepository  # noqa: E402
-from paint_head_detector.errors import CameraError, ErrorReason  # noqa: E402
-from paint_head_detector.models import Image, ImageSize  # noqa: E402
+from src.engine.vision.implementation.plvision.PLVision.Camera import Camera as EngineCamera
+from src.robot_systems.paint.paint_head_detection.calibration import read_image  # noqa: E402
+from src.robot_systems.paint.paint_head_detection.configuration import ConfigurationRepository  # noqa: E402
+from src.robot_systems.paint.paint_head_detection.development.camera_session import CameraSession  # noqa: E402
+from src.robot_systems.paint.paint_head_detection.development.capture_application import (
+    CaptureApplication,  # noqa: E402
+)
+from src.robot_systems.paint.paint_head_detection.development.exposure import ExposureController  # noqa: E402
+from src.robot_systems.paint.paint_head_detection.development.options import parse_options  # noqa: E402
+from src.robot_systems.paint.paint_head_detection.development.settings import (
+    DevelopmentSettingsRepository,  # noqa: E402
+)
+from src.robot_systems.paint.paint_head_detection.errors import CameraError, ErrorReason  # noqa: E402
+from src.robot_systems.paint.paint_head_detection.models import Image, ImageSize  # noqa: E402
 
 
 @dataclass
@@ -34,6 +35,7 @@ class FakeDriver:
     failures: set[int] = field(default_factory=set)
     fail_reads: bool = False
     fail_open: bool = False
+    read_calls: int = 0
 
 
 class FakeCapture:
@@ -57,6 +59,7 @@ class FakeCapture:
         return "FAKE"
 
     def read(self) -> tuple[bool, Image | None]:
+        self.driver.read_calls += 1
         return (False, None) if self.driver.fail_reads else (True, self.driver.image.copy())
 
     def grab(self) -> bool:
@@ -95,7 +98,10 @@ class CameraTests(unittest.TestCase):
         self.factory = FakeCaptureFactory(self.driver)
 
     def test_configured_stream_typed_properties_and_release(self) -> None:
-        with patch("Camera.cv2.VideoCapture", side_effect=self.factory):
+        with patch(
+            "src.engine.vision.implementation.plvision.PLVision.Camera.cv2.VideoCapture",
+            side_effect=self.factory,
+        ):
             with CameraSession(self.settings, ImageSize(8, 6)) as camera:
                 self.assertEqual(8, camera.properties.width)
                 self.assertEqual(6, camera.properties.height)
@@ -107,23 +113,33 @@ class CameraTests(unittest.TestCase):
 
     def test_read_failure_is_specific_and_releases_camera(self) -> None:
         self.driver.fail_reads = True
-        with patch("Camera.cv2.VideoCapture", side_effect=self.factory):
+        with patch(
+            "src.engine.vision.implementation.plvision.PLVision.Camera.cv2.VideoCapture",
+            side_effect=self.factory,
+        ):
             with self.assertRaises(CameraError) as caught:
                 with CameraSession(self.settings, ImageSize(8, 6)) as camera:
                     camera.read()
         self.assertIs(ErrorReason.CAMERA_READ_FAILED, caught.exception.reason)
+        self.assertEqual(self.settings.retries, self.driver.read_calls)
         self.assertTrue(all(not instance.opened for instance in self.factory.instances))
 
     def test_open_failure_has_clear_reason(self) -> None:
         self.driver.fail_open = True
-        with patch("Camera.cv2.VideoCapture", side_effect=self.factory):
+        with patch(
+            "src.engine.vision.implementation.plvision.PLVision.Camera.cv2.VideoCapture",
+            side_effect=self.factory,
+        ):
             with self.assertRaises(CameraError) as caught:
                 with CameraSession(self.settings, ImageSize(8, 6)):
                     self.fail("unavailable camera opened")
         self.assertIs(ErrorReason.CAMERA_UNAVAILABLE, caught.exception.reason)
 
     def test_backend_open_exception_is_chained(self) -> None:
-        with patch("Camera.cv2.VideoCapture", side_effect=cv2.error("driver failure")):
+        with patch(
+            "src.engine.vision.implementation.plvision.PLVision.Camera.cv2.VideoCapture",
+            side_effect=cv2.error("driver failure"),
+        ):
             with self.assertRaises(CameraError) as caught:
                 with CameraSession(self.settings, ImageSize(8, 6)):
                     self.fail("unavailable camera opened")
@@ -131,7 +147,10 @@ class CameraTests(unittest.TestCase):
         self.assertIsInstance(caught.exception.__cause__, cv2.error)
 
     def test_exposure_changes_restore_original_controls(self) -> None:
-        with patch("Camera.cv2.VideoCapture", side_effect=self.factory):
+        with patch(
+            "src.engine.vision.implementation.plvision.PLVision.Camera.cv2.VideoCapture",
+            side_effect=self.factory,
+        ):
             with CameraSession(self.settings, ImageSize(8, 6)) as camera:
                 controller = ExposureController(camera, self.settings, self.development.runtime)
                 self.assertEqual(100, controller.apply(100))
@@ -143,7 +162,10 @@ class CameraTests(unittest.TestCase):
         self.assertTrue(all(not instance.opened for instance in self.factory.instances))
 
     def test_restore_reports_failure_but_still_restores_auto_mode(self) -> None:
-        with patch("Camera.cv2.VideoCapture", side_effect=self.factory):
+        with patch(
+            "src.engine.vision.implementation.plvision.PLVision.Camera.cv2.VideoCapture",
+            side_effect=self.factory,
+        ):
             with CameraSession(self.settings, ImageSize(8, 6)) as camera:
                 controller = ExposureController(camera, self.settings, self.development.runtime)
                 controller.apply(100)
@@ -166,7 +188,10 @@ class CameraTests(unittest.TestCase):
                 options, development=replace(options.development, camera=self.settings)
             )
             with (
-                patch("Camera.cv2.VideoCapture", side_effect=self.factory),
+                patch(
+                    "src.engine.vision.implementation.plvision.PLVision.Camera.cv2.VideoCapture",
+                    side_effect=self.factory,
+                ),
                 patch("cv2.namedWindow", side_effect=AssertionError("headless window")),
             ):
                 result = CaptureApplication(options).run()
@@ -174,6 +199,93 @@ class CameraTests(unittest.TestCase):
             self.assertTrue(result.restoration.restored)
             self.assertGreaterEqual(result.levels[0].frames, 1)
         self.assertTrue(all(not instance.opened for instance in self.factory.instances))
+
+    def test_property_failure_during_entry_releases_shared_camera(self) -> None:
+        with (
+            patch(
+                "src.engine.vision.implementation.plvision.PLVision.Camera.cv2.VideoCapture",
+                side_effect=self.factory,
+            ),
+            patch.object(FakeCapture, "getBackendName", side_effect=cv2.error("backend failure")),
+        ):
+            with self.assertRaises(CameraError) as caught:
+                with CameraSession(self.settings, ImageSize(8, 6)):
+                    self.fail("unreadable camera metadata accepted")
+        self.assertIs(ErrorReason.CAMERA_CONTROL_FAILED, caught.exception.reason)
+        self.assertIsInstance(caught.exception.__cause__, cv2.error)
+        self.assertTrue(all(not instance.opened for instance in self.factory.instances))
+
+    def test_automatic_exposure_rejection_is_reported(self) -> None:
+        self.driver.failures.add(cv2.CAP_PROP_AUTO_EXPOSURE)
+        with patch(
+            "src.engine.vision.implementation.plvision.PLVision.Camera.cv2.VideoCapture",
+            side_effect=self.factory,
+        ):
+            with CameraSession(self.settings, ImageSize(8, 6)) as camera:
+                with self.assertRaises(CameraError) as caught:
+                    camera.set_automatic_exposure(False)
+        self.assertIs(ErrorReason.CAMERA_CONTROL_FAILED, caught.exception.reason)
+        self.assertTrue(all(not instance.opened for instance in self.factory.instances))
+
+    def test_nonfinite_exposure_readback_is_rejected(self) -> None:
+        self.driver.properties[cv2.CAP_PROP_EXPOSURE] = float("nan")
+        with patch(
+            "src.engine.vision.implementation.plvision.PLVision.Camera.cv2.VideoCapture",
+            side_effect=self.factory,
+        ):
+            with CameraSession(self.settings, ImageSize(8, 6)) as camera:
+                with self.assertRaises(CameraError) as caught:
+                    _ = camera.exposure
+        self.assertIs(ErrorReason.CAMERA_CONTROL_FAILED, caught.exception.reason)
+
+    def test_configurable_exposure_candidates_are_passed_to_engine(self) -> None:
+        settings = replace(
+            self.settings,
+            automatic_exposure_values=(42.0,),
+            manual_exposure_values=(17.0,),
+            automatic_exposure_modes=(42.0,),
+            manual_exposure_modes=(17.0,),
+        )
+        with patch(
+            "src.engine.vision.implementation.plvision.PLVision.Camera.cv2.VideoCapture",
+            side_effect=self.factory,
+        ):
+            with CameraSession(settings, ImageSize(8, 6)) as camera:
+                self.assertEqual(17.0, camera.set_automatic_exposure(False))
+                self.assertEqual(42.0, camera.set_automatic_exposure(True))
+
+    def test_shared_camera_preserves_legacy_constructor_and_property_dictionary(self) -> None:
+        with (
+            patch(
+                "src.engine.vision.implementation.plvision.PLVision.Camera.cv2.VideoCapture",
+                side_effect=self.factory,
+            ),
+            patch("src.engine.vision.implementation.plvision.PLVision.Camera.time.sleep"),
+        ):
+            camera = EngineCamera(0, 8, 6)
+            try:
+                self.assertEqual(0.1, camera.retry_delay)
+                self.assertEqual(0.05, camera.configuration_settle_delay)
+                self.assertEqual(0.02, camera.control_settle_delay)
+                self.assertEqual(0.2, camera.stream_release_delay)
+                self.assertEqual(
+                    {
+                        "width": 8,
+                        "height": 6,
+                        "fps": 0.0,
+                        "fourcc": 1196444237,
+                        "backend_name": "FAKE",
+                    },
+                    camera.get_properties(),
+                )
+                self.assertEqual(8, camera.read_properties().width)
+                self.assertEqual(166, camera.get_exposure())
+                self.assertTrue(camera.set_exposure(100))
+                self.driver.failures.add(cv2.CAP_PROP_EXPOSURE)
+                self.assertFalse(camera.set_exposure(200))
+                self.assertEqual(100, camera.get_exposure())
+            finally:
+                camera.close()
 
 
 if __name__ == "__main__":

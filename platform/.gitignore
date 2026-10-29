@@ -65,3 +65,7 @@ src/robot_systems/glue/storage/settings/vision/data/*.npy
 /src/robot_systems/paint/processes/paint/templogs.txt
 /src/robot_systems/paint_tray_dry/storage/diagnostics/
 /src/engine/vision/implementation/plvision/*.egg-info/
+
+# Paint-head detection: bundled calibration references and local evaluation evidence.
+!src/robot_systems/paint/paint_head_detection/references/*.png
+/output/paint_head_detection/

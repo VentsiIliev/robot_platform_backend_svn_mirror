@@ -18,14 +18,30 @@ Public methods:
 import time
 import platform
 import threading
+from dataclasses import dataclass
 
 import cv2
+
+
+@dataclass(frozen=True, slots=True)
+class CameraProperties:
+    """Typed snapshot for consumers that do not use the legacy dictionary API."""
+
+    width: int
+    height: int
+    fps: float
+    fourcc: int
+    backend_name: str
 
 
 class Camera:
     def __init__(self, cameraIndex=0, width=1280, height=720, *,
                  device=None, backend=None, fourcc=None, fps=None,
-                 open_timeout=5.0, retries=3, mjpg_preferred=True, verbose_ae=False):
+                 open_timeout=5.0, retries=3, mjpg_preferred=True, verbose_ae=False,
+                 retry_delay: float = 0.1, configuration_settle_delay: float = 0.05,
+                 control_settle_delay: float = 0.02, stream_release_delay: float = 0.2,
+                 automatic_exposure_values: tuple[float, ...] = (3.0, 1.0, 0.75, 0.25),
+                 manual_exposure_values: tuple[float, ...] = (1.0, 0.25, 0.0, 0.75)):
         # Backwards-compatible behavior
         if device is None:
             self.device = cameraIndex
@@ -41,6 +57,13 @@ class Camera:
         self.mjpg_preferred = bool(mjpg_preferred)
         # If true, set_auto_exposure will print each candidate tried
         self.verbose_ae = bool(verbose_ae)
+        self.retry_delay = retry_delay
+        self.configuration_settle_delay = configuration_settle_delay
+        self.control_settle_delay = control_settle_delay
+        self.stream_release_delay = stream_release_delay
+        self.automatic_exposure_values = automatic_exposure_values
+        self.manual_exposure_values = manual_exposure_values
+        self._last_open_error: Exception | None = None
 
         # Resolve backend constant if provided as name
         self.backend = None
@@ -116,8 +139,14 @@ class Camera:
             except Exception:
                 pass
             return None
-        except Exception:
+        except Exception as error:
+            self._last_open_error = error
             return None
+
+    @property
+    def last_open_error(self) -> Exception | None:
+        """Most recent device-open exception, for typed consumer error translation."""
+        return self._last_open_error
 
     def _init_capture(self):
         api = self._resolve_backend_for_platform()
@@ -146,7 +175,7 @@ class Camera:
                         self._configure_capture()
                         self.active = True
                         return
-                    time.sleep(0.1)
+                    time.sleep(self.retry_delay)
                     if time.time() > deadline:
                         break
         # failed to open within timeout
@@ -187,7 +216,7 @@ class Camera:
             except Exception:
                 pass
 
-        time.sleep(0.05)
+        time.sleep(self.configuration_settle_delay)
 
     # Public API
     def isOpened(self):
@@ -206,25 +235,38 @@ class Camera:
             'backend_name': (self.cap.getBackendName() if hasattr(self.cap, 'getBackendName') else None)
         }
 
+    def read_properties(self) -> CameraProperties:
+        """Return a typed snapshot; retain get_properties() for legacy consumers."""
+        with self._io_lock:
+            if not self.isOpened():
+                raise RuntimeError('Camera not opened')
+            return CameraProperties(
+                width=int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+                height=int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
+                fps=float(self.cap.get(cv2.CAP_PROP_FPS)),
+                fourcc=int(self.cap.get(cv2.CAP_PROP_FOURCC)),
+                backend_name=str(self.cap.getBackendName()),
+            )
+
     def set_resolution(self, width, height):
         if not self.isOpened():
             raise RuntimeError('Camera not opened')
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, int(width))
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, int(height))
-        time.sleep(0.02)
+        time.sleep(self.control_settle_delay)
 
     def set_fps(self, fps):
         if not self.isOpened():
             raise RuntimeError('Camera not opened')
         self.cap.set(cv2.CAP_PROP_FPS, float(fps))
-        time.sleep(0.02)
+        time.sleep(self.control_settle_delay)
 
     def set_fourcc(self, fourcc_str):
         if not self.isOpened():
             raise RuntimeError('Camera not opened')
         fourcc_int = cv2.VideoWriter_fourcc(*fourcc_str)
         self.cap.set(cv2.CAP_PROP_FOURCC, fourcc_int)
-        time.sleep(0.02)
+        time.sleep(self.control_settle_delay)
 
     def set_auto_exposure(self, enabled: bool):
         """
@@ -237,11 +279,11 @@ class Camera:
 
             # Stop stream (required for many UVC cameras)
             self.stop_stream()
-            time.sleep(0.2)  # Increased wait time for device release
+            time.sleep(self.stream_release_delay)  # Increased wait time for device release
 
             # Restart stream but DO NOT read frames yet, with retries
             max_retries = 10
-            delay = 0.1
+            delay = self.retry_delay
             stream_open = False
             for attempt in range(max_retries):
                 self.start_stream()
@@ -256,9 +298,9 @@ class Camera:
 
             # Candidate values to try
             if enabled:
-                candidates = (3.0, 1.0, 0.75, 0.25)
+                candidates = self.automatic_exposure_values
             else:
-                candidates = (1.0, 0.25, 0.0, 0.75)
+                candidates = self.manual_exposure_values
 
             last_ok = None
             for v in candidates:
@@ -268,7 +310,7 @@ class Camera:
                     ok = self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, float(v))
                     if ok:
                         last_ok = v
-                        time.sleep(0.02)
+                        time.sleep(self.control_settle_delay)
                         break
                 except:
                     continue
@@ -291,30 +333,47 @@ class Camera:
         except Exception:
             return None
 
-    def set_exposure(self, exposure_value: float):
-        """Set an absolute exposure value (driver-dependent units)."""
-        if not self.isOpened():
-            raise RuntimeError('Camera not opened')
-        try:
-            self.cap.set(cv2.CAP_PROP_EXPOSURE, float(exposure_value))
-            time.sleep(0.02)
-        except Exception:
-            print(f"Camera Active: {self.active}")
-            pass
+    def get_exposure(self) -> float | None:
+        """Read the absolute exposure without exposing the capture device."""
+        with self._io_lock:
+            if not self.isOpened():
+                return None
+            try:
+                return float(self.cap.get(cv2.CAP_PROP_EXPOSURE))
+            except (cv2.error, OSError):
+                return None
 
-    def capture(self, grab_only=False, timeout=1.0):
+    def set_exposure(self, exposure_value: float) -> bool:
+        """Set absolute exposure and report whether the driver accepted the write."""
+        with self._io_lock:
+            if not self.isOpened():
+                raise RuntimeError('Camera not opened')
+            try:
+                accepted = bool(self.cap.set(cv2.CAP_PROP_EXPOSURE, float(exposure_value)))
+                time.sleep(self.control_settle_delay)
+                return accepted
+            except (cv2.error, OSError):
+                return False
+
+    def capture(self, grab_only=False, timeout=1.0, *, max_attempts: int | None = None):
         with self._io_lock:
             if not self.isOpened():
                 return None
 
+            if max_attempts is not None and max_attempts < 1:
+                raise ValueError('Camera capture attempt limit must be positive')
             start = time.time()
+            attempts = 0
             while True:
+                attempts += 1
                 if grab_only:
                     try:
                         ok = self.cap.grab()
                         if not ok and (time.time() - start) > timeout:
                             return None
                         if not ok:
+                            if max_attempts is not None and attempts >= max_attempts:
+                                return None
                             continue
                         ok, frame = self.cap.retrieve()
                     except Exception:
@@ -327,7 +386,9 @@ class Camera:
 
                 if ok:
                     return frame
-                if (time.time() - start) > timeout:
+                if (time.time() - start) > timeout or (
+                    max_attempts is not None and attempts >= max_attempts
+                ):
                     return None
 
     def close(self):
@@ -360,7 +421,7 @@ class Camera:
         with self._io_lock:
             api = self._resolve_backend_for_platform()
             max_retries = 10
-            delay = 0.1
+            delay = self.retry_delay
             for attempt in range(max_retries):
                 self.cap = cv2.VideoCapture(self.device, api)
                 if self.cap is not None and self.cap.isOpened():

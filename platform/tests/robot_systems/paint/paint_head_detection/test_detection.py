@@ -5,7 +5,6 @@ from __future__ import annotations
 import io
 import json
 import shutil
-import sys
 import tempfile
 import unittest
 from dataclasses import replace
@@ -16,9 +15,7 @@ from unittest.mock import patch
 import cv2
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-from paint_head_detector import (  # noqa: E402
+from src.robot_systems.paint.paint_head_detection import (  # noqa: E402
     CalibrationError,
     ConfigurationError,
     ConfigurationRepository,
@@ -35,17 +32,22 @@ from paint_head_detector import (  # noqa: E402
     PoseEstimate,
     ReferencePaths,
 )
-from paint_head_detector.calibration import CalibrationLoader, read_image  # noqa: E402
-from paint_head_detector.configuration import DEFAULT_CONFIG_DIRECTORY  # noqa: E402
-from paint_head_detector.decision import StatusStabilizer  # noqa: E402
-from paint_head_detector.development.artifacts import ArtifactWriter, result_json  # noqa: E402
-from paint_head_detector.development.options import parse_options  # noqa: E402
-from paint_head_detector.development.renderer import OverlayRenderer  # noqa: E402
-from paint_head_detector.development.settings import DevelopmentSettingsRepository  # noqa: E402
-from paint_head_detector.errors import ArtifactError  # noqa: E402
-from paint_head_detector.matching import FeatureMatcher
-from paint_head_detector.preprocessing import ImageProcessor  # noqa: E402
-from paint_head_detector.templates import _rotated_template  # noqa: E402
+from src.robot_systems.paint.paint_head_detection.calibration import CalibrationLoader, read_image  # noqa: E402
+from src.robot_systems.paint.paint_head_detection.configuration import DEFAULT_CONFIG_DIRECTORY  # noqa: E402
+from src.robot_systems.paint.paint_head_detection.decision import StatusStabilizer  # noqa: E402
+from src.robot_systems.paint.paint_head_detection.development.artifacts import (  # noqa: E402
+    ArtifactWriter,
+    result_json,
+)
+from src.robot_systems.paint.paint_head_detection.development.options import parse_options  # noqa: E402
+from src.robot_systems.paint.paint_head_detection.development.renderer import OverlayRenderer  # noqa: E402
+from src.robot_systems.paint.paint_head_detection.development.settings import (
+    DevelopmentSettingsRepository,  # noqa: E402
+)
+from src.robot_systems.paint.paint_head_detection.errors import ArtifactError  # noqa: E402
+from src.robot_systems.paint.paint_head_detection.matching import FeatureMatcher
+from src.robot_systems.paint.paint_head_detection.preprocessing import ImageProcessor  # noqa: E402
+from src.robot_systems.paint.paint_head_detection.templates import _rotated_template  # noqa: E402
 
 
 def test_configuration() -> DetectorConfiguration:
@@ -208,7 +210,9 @@ class DetectionRegressionTests(unittest.TestCase):
             result = self.detector.get_status(self.moved_reference(dx=7))
         self.assertIs(HeadStatus.HEAD_PRESENT, result.status)
         self.detector.reset()
-        with patch("paint_head_detector.decision.fitted_pose") as estimator:
+        with patch(
+            "src.robot_systems.paint.paint_head_detection.decision.fitted_pose"
+        ) as estimator:
             estimator.return_value = PoseEstimate(6, Point2D(0, 0))
             for _ in range(frames):
                 result = self.detector.get_status(self.references.present_reference)

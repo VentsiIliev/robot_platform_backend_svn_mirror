@@ -18,7 +18,7 @@ from .models import (
     Region,
 )
 
-DEFAULT_CONFIG_DIRECTORY = Path(__file__).resolve().parents[2] / "config"
+DEFAULT_CONFIG_DIRECTORY = Path(__file__).resolve().parent / "config"
 
 
 @dataclass(frozen=True, slots=True)

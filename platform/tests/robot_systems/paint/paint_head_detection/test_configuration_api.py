@@ -16,10 +16,8 @@ from unittest.mock import patch
 
 import cv2
 import numpy as np
-from examples.get_status import HeadlessApplication, InputImageError, main
-from examples.settings import ExampleSettings
 
-from paint_head_detector import (
+from src.robot_systems.paint.paint_head_detection import (
     CalibrationError,
     ConfigurationError,
     ConfigurationRepository,
@@ -31,15 +29,23 @@ from paint_head_detector import (
     ReferenceImages,
     Region,
 )
-from paint_head_detector.calibration import CalibrationLoader
-from paint_head_detector.configuration import DEFAULT_CONFIG_DIRECTORY
-from paint_head_detector.development.application import prepare_configuration
-from paint_head_detector.development.options import parse_options
-from paint_head_detector.development.selection import (
+from src.robot_systems.paint.paint_head_detection.calibration import CalibrationLoader
+from src.robot_systems.paint.paint_head_detection.configuration import DEFAULT_CONFIG_DIRECTORY
+from src.robot_systems.paint.paint_head_detection.development.application import (
+    prepare_configuration,
+)
+from src.robot_systems.paint.paint_head_detection.development.options import parse_options
+from src.robot_systems.paint.paint_head_detection.development.selection import (
     FeatureSelectionResult,
     FeatureSelector,
     SelectionOutcome,
 )
+from src.robot_systems.paint.paint_head_detection.examples.get_status import (
+    HeadlessApplication,
+    InputImageError,
+    main,
+)
+from src.robot_systems.paint.paint_head_detection.examples.settings import ExampleSettings
 
 
 class ExternalConfigurationTests(unittest.TestCase):
@@ -272,11 +278,27 @@ class ExternalConfigurationTests(unittest.TestCase):
             self.assertIs(HeadStatus.HEAD_PRESENT, results[-1].detection.status)
 
     def test_headless_entrypoint_supports_file_and_module_execution(self) -> None:
-        project = Path(__file__).resolve().parents[1]
+        project = Path(__file__).resolve().parents[4]
         with tempfile.TemporaryDirectory() as directory:
             modes = (
-                ((sys.executable, str(project / "examples/get_status.py")), Path(directory)),
-                ((sys.executable, "-m", "examples.get_status"), project),
+                (
+                    (
+                        sys.executable,
+                        str(
+                            project
+                            / "src/robot_systems/paint/paint_head_detection/examples/get_status.py"
+                        ),
+                    ),
+                    Path(directory),
+                ),
+                (
+                    (
+                        sys.executable,
+                        "-m",
+                        "src.robot_systems.paint.paint_head_detection.examples.get_status",
+                    ),
+                    project,
+                ),
             )
             for command, working_directory in modes:
                 with self.subTest(command=command):
@@ -315,6 +337,72 @@ class ExternalConfigurationTests(unittest.TestCase):
             configured = prepare_configuration(options)
         self.assertEqual(features, configured.calibration.present_features)
         self.assertIs(self.calibration.references, configured.calibration.references)
+
+
+class MigrationEntrypointTests(unittest.TestCase):
+    def test_core_import_does_not_load_runtime_camera_or_gui(self) -> None:
+        module = DEFAULT_CONFIG_DIRECTORY.parent
+        result = subprocess.run(
+            (
+                sys.executable,
+                "-B",
+                "-c",
+                "import sys; "
+                "from src.robot_systems.paint.paint_head_detection import PaintHeadDetector; "
+                "assert 'src.robot_systems.paint.paint_robot_system' not in sys.modules; "
+                "assert 'src.engine.vision.implementation.plvision.PLVision.Camera' "
+                "not in sys.modules; "
+                "assert not any(name.startswith(('PyQt6', 'PySide6')) for name in sys.modules)",
+            ),
+            cwd=module.parents[3],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_bundled_calibration_and_output_paths_belong_to_platform(self) -> None:
+        from src.robot_systems.paint.paint_head_detection.development.settings import (
+            DevelopmentSettingsRepository,
+        )
+
+        module = DEFAULT_CONFIG_DIRECTORY.parent
+        platform = module.parents[3]
+        calibration = ConfigurationRepository().load().calibration
+        self.assertEqual(module / "references/head_present.png", calibration.references.present)
+        self.assertEqual(module / "references/head_missing.png", calibration.references.missing)
+        self.assertTrue(calibration.references.present.is_file())
+        self.assertTrue(calibration.references.missing.is_file())
+        self.assertEqual(
+            platform / "output/paint_head_detection/captures",
+            DevelopmentSettingsRepository().load().runtime.output_directory,
+        )
+
+    def test_development_entrypoints_support_direct_and_module_help(self) -> None:
+        module = DEFAULT_CONFIG_DIRECTORY.parent
+        platform = module.parents[3]
+        with tempfile.TemporaryDirectory() as directory:
+            for relative, import_path in (
+                ("detect.py", "src.robot_systems.paint.paint_head_detection.detect"),
+                ("tools/capture.py", "src.robot_systems.paint.paint_head_detection.tools.capture"),
+            ):
+                modes = (
+                    ((sys.executable, "-B", str(module / relative), "--help"), Path(directory)),
+                    ((sys.executable, "-B", "-m", import_path, "--help"), platform),
+                )
+                for command, cwd in modes:
+                    with self.subTest(command=command):
+                        result = subprocess.run(
+                            command,
+                            cwd=cwd,
+                            capture_output=True,
+                            text=True,
+                            timeout=30,
+                            check=False,
+                        )
+                        self.assertEqual(0, result.returncode, result.stderr)
+                        self.assertIn("--config-dir", result.stdout)
 
 
 if __name__ == "__main__":

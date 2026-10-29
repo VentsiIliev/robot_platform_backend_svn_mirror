@@ -15,7 +15,7 @@ from src.engine.robot.targeting import (
     TargetFrameSettings,
     TargetingSettings,
 )
-from src.robot_systems.paint import PaintRobotSystem
+from src.robot_systems.paint.paint_robot_system import PaintRobotSystem
 from src.robot_systems.paint.applications import PaintDashboardFactory as ApplicationsDashboardFactory
 from src.robot_systems.paint.applications.dashboard import (
     PaintDashboardFactory as DashboardPackageFactory,

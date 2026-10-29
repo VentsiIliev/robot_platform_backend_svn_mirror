@@ -42,7 +42,7 @@
     "duration": 0.0,
     "capture_duration": 12.0,
     "capture_interval": 1.0,
-    "output_directory": "../output/captures",
+    "output_directory": "../../../../../output/paint_head_detection/captures",
     "benchmark_frames": 30,
     "warmup_frames": 12,
     "exposure_calibration_attempts": 6,

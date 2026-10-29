@@ -7,8 +7,13 @@
 - paint-domain process logic under `processes/paint/`
 - supporting paint-domain adapters for workpieces, DXF import, targeting, calibration, and vacuum control
 
+The paint package initializer stays lightweight so image-only consumers can import
+paint-head detection without loading runtime composition or GUI dependencies.
+Import the system class explicitly from `src.robot_systems.paint.paint_robot_system`.
+
 This document is the entry point for the paint system. Use it together with:
 
+- [Paint-head detection](paint_head_detection/README.md) — typed image API, calibration, examples, development tools, and Bulgarian pipeline manual
 - [DIAGNOSTICS.md](DIAGNOSTICS.md)
 - [applications/README.md](applications/README.md)
 - [processes/README.md](processes/README.md)

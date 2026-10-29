@@ -1,4 +1,0 @@
-{
-  "present": "../src/paint_head_dataset/references/head_present.png",
-  "missing": "../src/paint_head_dataset/references/head_missing.png"
-}

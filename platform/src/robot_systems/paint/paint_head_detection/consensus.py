@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import numpy as np
+from numpy.typing import NDArray
 
 from .configuration import MatchingConfig
 from .geometry import _pixel_shift, _point
@@ -117,7 +118,9 @@ def _consensus_present(
         scores = np.array([c.score for c in flat])
         thresholds = np.array([c.feature.threshold for c in flat], dtype=float)
         invariant = np.array([c.feature.orientation_invariant for c in flat])
-        groups = np.repeat(np.arange(len(features)), [len(options) for options in all_candidates])
+        groups: NDArray[np.intp] = np.repeat(
+            np.arange(len(features)), [len(options) for options in all_candidates]
+        )
         anchor_expected, anchor_observed = (expected, centers)
         hypothesis_angles = candidate_angles
         first, second = np.triu_indices(len(flat), 1)

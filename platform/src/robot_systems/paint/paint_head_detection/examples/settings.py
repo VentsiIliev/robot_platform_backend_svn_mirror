@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from paint_head_detector import CalibrationConfig
+from src.robot_systems.paint.paint_head_detection import CalibrationConfig
 
 
 @dataclass(frozen=True, slots=True)
@@ -14,13 +14,13 @@ class ExampleSettings:
     calibration: CalibrationConfig | None = None
 
 
-PROJECT_DIRECTORY = Path(__file__).resolve().parents[1]
+MODULE_DIRECTORY = Path(__file__).resolve().parents[1]
 
 SETTINGS = ExampleSettings(
-    config_directory=PROJECT_DIRECTORY / "config",
+    config_directory=MODULE_DIRECTORY / "config",
     image_paths=(
-        PROJECT_DIRECTORY / "src/paint_head_dataset/references/head_present.png",
-        PROJECT_DIRECTORY / "src/paint_head_dataset/references/head_missing.png",
+        MODULE_DIRECTORY / "references/head_present.png",
+        MODULE_DIRECTORY / "references/head_missing.png",
     ),
     independent_images=True,
 )
