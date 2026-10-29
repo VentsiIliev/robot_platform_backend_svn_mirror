@@ -1,0 +1,9 @@
+{
+  "max_translation_pixels": 10.0,
+  "max_rotation_degrees": 2.0,
+  "hysteresis_pixels": 2.0,
+  "hysteresis_degrees": 1.0,
+  "unknown_grace_frames": 3,
+  "unknown_grace_seconds": 0.35,
+  "stable_frames": 3
+}

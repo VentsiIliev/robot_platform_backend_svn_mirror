@@ -1,0 +1,43 @@
+{
+  "features": [
+    {
+      "name": "adjustment_knob",
+      "x": 627,
+      "y": 253,
+      "width": 124,
+      "height": 59,
+      "threshold": 0.72,
+      "max_template_rotation": 35,
+      "role": "present",
+      "required": false,
+      "orientation_invariant": false,
+      "support": "rectangle"
+    },
+    {
+      "name": "upper_bracket_fastener",
+      "x": 653,
+      "y": 334,
+      "width": 52,
+      "height": 57,
+      "threshold": 0.72,
+      "orientation_invariant": true,
+      "support": "circle",
+      "role": "present",
+      "required": false,
+      "max_template_rotation": null
+    },
+    {
+      "name": "lower_bracket_fastener",
+      "x": 667,
+      "y": 515,
+      "width": 46,
+      "height": 41,
+      "threshold": 0.72,
+      "orientation_invariant": true,
+      "support": "circle",
+      "role": "present",
+      "required": false,
+      "max_template_rotation": null
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "search_margin": 65,
+  "relative_tolerance": 15.0,
+  "plate_threshold": 0.65,
+  "min_missing_features": 2,
+  "max_rotation": 180,
+  "rotation_step": 5,
+  "consensus_tolerance": 14.0,
+  "min_present_features": 2,
+  "top_candidates": 3,
+  "invariant_candidates": 48,
+  "peak_window": 15,
+  "candidate_score_ratio": 0.65,
+  "suppression_radius": 7,
+  "angle_tolerance": 5.01,
+  "residual_weight": 0.01,
+  "minimum_pair_baseline": 1.0,
+  "pair_tolerance_multiplier": 2.0,
+  "edge_distance_sigma": 2.0,
+  "default_feature_threshold": 0.7
+}

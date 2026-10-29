@@ -1,0 +1,21 @@
+{
+    "x": 470,
+    "y": 215,
+    "width": 450,
+    "height": 505,
+    "empty_mount": {
+        "x": 517,
+        "y": 225,
+        "width": 277,
+        "height": 352
+    },
+    "ignore_regions": [
+        {
+            "name": "changeable_camera",
+            "x": 525,
+            "y": 225,
+            "width": 100,
+            "height": 90
+        }
+    ]
+}

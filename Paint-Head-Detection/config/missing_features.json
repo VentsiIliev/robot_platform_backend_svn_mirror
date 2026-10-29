@@ -1,0 +1,69 @@
+{
+  "features": [
+    {
+      "name": "paint_head_empty_spot",
+      "x": 524,
+      "y": 323,
+      "width": 268,
+      "height": 258,
+      "threshold": 0.7,
+      "role": "empty_mount",
+      "required": false,
+      "orientation_invariant": false,
+      "support": "rectangle",
+      "max_template_rotation": null
+    },
+    {
+      "name": "top_left_bolt",
+      "x": 565,
+      "y": 386,
+      "width": 31,
+      "height": 36,
+      "threshold": 0.7,
+      "role": "missing",
+      "required": false,
+      "orientation_invariant": false,
+      "support": "rectangle",
+      "max_template_rotation": null
+    },
+    {
+      "name": "top_right_bolt",
+      "x": 711,
+      "y": 388,
+      "width": 38,
+      "height": 36,
+      "threshold": 0.7,
+      "role": "missing",
+      "required": false,
+      "orientation_invariant": false,
+      "support": "rectangle",
+      "max_template_rotation": null
+    },
+    {
+      "name": "bottom_left_bolt",
+      "x": 562,
+      "y": 475,
+      "width": 41,
+      "height": 40,
+      "threshold": 0.7,
+      "role": "missing",
+      "required": false,
+      "orientation_invariant": false,
+      "support": "rectangle",
+      "max_template_rotation": null
+    },
+    {
+      "name": "bottom_right_bolt",
+      "x": 709,
+      "y": 478,
+      "width": 40,
+      "height": 37,
+      "threshold": 0.7,
+      "role": "missing",
+      "required": false,
+      "orientation_invariant": false,
+      "support": "rectangle",
+      "max_template_rotation": null
+    }
+  ]
+}

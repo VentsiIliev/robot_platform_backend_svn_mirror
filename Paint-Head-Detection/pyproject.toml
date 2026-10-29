@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paint-head-detector"
+version = "0.1.0"
+description = "Typed image API for paint-head presence and placement verification"
+requires-python = ">=3.12"
+dependencies = ["numpy>=1.26", "opencv-python>=4.8"]
+
+[project.optional-dependencies]
+dev = ["mypy>=1.10", "ruff>=0.9"]
+
+[project.scripts]
+paint-head-detect = "paint_head_detector.development.cli:main"
+paint-head-capture = "paint_head_detector.development.capture_cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+py-modules = ["Camera"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+paint_head_detector = ["py.typed"]
+
+[tool.mypy]
+strict = true
+mypy_path = "src"
+files = ["src/paint_head_detector", "src/Camera.py", "examples/get_status.py"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B", "ANN"]
