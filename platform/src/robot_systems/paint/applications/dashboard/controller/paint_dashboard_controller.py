@@ -17,6 +17,10 @@ from src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view im
     PaintDashboardView,
 )
 from src.robot_systems.paint.applications.dashboard.dashboard_state import DashboardCardState
+from src.robot_systems.paint.applications.dashboard.head_alignment_presentation import (
+    HeadAlignmentFeedback, HeadAlignmentGuideData, build_head_alignment_guide,
+    unavailable_head_alignment_guide,
+)
 from src.robot_systems.paint.processes.paint.tray_dry.errors import (
     TrayError, TrayConfirmationRequiredError,
 )
@@ -24,6 +28,13 @@ from src.robot_systems.paint.contracts.events.dashboard_events import (
     PaintDashboardLiveViewTopics,
     PaintDashboardMessageTopics,
 )
+from src.robot_systems.paint.contracts.events.paint_head_check_events import (
+    PaintHeadCheckStatusEvent, PaintHeadCheckTopics, PaintHeadFeedbackMode,
+)
+from src.robot_systems.paint.contracts.paint_head_check.errors import (
+    HeadInspectionFailure, HeadInspectionFailureCode,
+)
+from src.robot_systems.paint.contracts.paint_head_check.models import PaintHeadState
 from src.shared_contracts.events.notification_events import NotificationActionEvent, NotificationTopics
 from src.shared_contracts.events.robot_events import RobotTopics
 from src.shared_contracts.events.shell_events import ShellTopics
@@ -50,6 +61,7 @@ class _DashboardNoticeBridge(QObject):
     warning_ready = pyqtSignal(str, str)
     unknown_workpiece_ready = pyqtSignal(str, str)
     collision_ready = pyqtSignal(str, str)
+    head_check_ready = pyqtSignal(object)
 
 
 class PaintDashboardController(
@@ -91,6 +103,8 @@ class PaintDashboardController(
         self._broker = broker
         self._active = False
         self._dashboard_live_view_paused = False
+        self._head_check_status: PaintHeadCheckStatusEvent | None = None
+        self._head_check_attention = False
         self._workers: list[tuple[QThread, _Worker]] = []
         self._pending_auxiliary: dict[str, bool] = {}
         self._paint_head_pending = False
@@ -109,12 +123,17 @@ class PaintDashboardController(
         self._auxiliary_camera_topic: str | None = None
         self._camera_frame_lock = Lock()
         self._latest_camera_frame = None
+        self._last_head_alignment_guide: HeadAlignmentGuideData | None = None
+        self._head_check_popup_opened = False
+        self._head_check_status_text = ""
+        self._head_check_status_warning = False
         self._camera_display_timer = QTimer(timer_parent)
         self._camera_display_timer.setInterval(100)
         self._camera_display_timer.timeout.connect(self._show_selected_camera_frame)
         self._init_dashboard_camera_feed()
         self._init_dashboard_process_state()
         self._dashboard_notice_bridge = _DashboardNoticeBridge()
+        self._dashboard_notice_bridge.head_check_ready.connect(self._on_head_check_status)
         self._dashboard_notice_bridge.info_ready.connect(self._view.show_info)
         self._dashboard_notice_bridge.warning_ready.connect(self._view.show_warning_dialog)
         self._dashboard_notice_bridge.unknown_workpiece_ready.connect(
@@ -130,6 +149,8 @@ class PaintDashboardController(
         self._view.action_requested.connect(self._on_action)
         self._view.dashboard_shown.connect(self._refresh_workpiece_selection_indicator)
         self._view.language_changed.connect(self._retranslate)
+        self._view.language_changed.connect(self._retranslate_head_check)
+        self._view.language_changed.connect(self._refresh_head_alignment_guide)
         self._view.cable_relief_requested.connect(self._on_cable_relief)
         self._view.auxiliary_toggle_requested.connect(self._on_auxiliary_toggle)
         self._view.application_shortcut_requested.connect(self._on_application_shortcut)
@@ -153,6 +174,8 @@ class PaintDashboardController(
         self._subscribe_dashboard_robot_state()
         self._subscribe_dashboard_live_view_state()
         self._subscribe_dashboard_messages()
+        self._subscribe(PaintHeadCheckTopics.STATUS, self._on_head_check_status_raw)
+        self._broker.publish(PaintHeadCheckTopics.REQUEST_STATUS, None)
         self._view.apply_dashboard_state(self._model.load())
         self._view.set_unmatched_paint_settings(
             self._model.get_unmatched_paint_settings()
@@ -172,6 +195,8 @@ class PaintDashboardController(
         return bool(self._workers) or self._model.is_process_active()
 
     def stop(self) -> None:
+        if self._view_ok():
+            self._view.dismiss_head_alignment_popup()
         self._active = False
         # The current pause is dashboard-local. Never carry a frozen preview
         # state across dashboard exit/re-entry. When acquisition leases are
@@ -603,8 +628,133 @@ class PaintDashboardController(
             return
         self._dashboard_camera_bridge.frame_ready.emit({"image": image})
 
+    def _on_head_check_status_raw(self, event: object) -> None:
+        if isinstance(event, PaintHeadCheckStatusEvent):
+            self._dashboard_notice_bridge.head_check_ready.emit(event)
+
+    def _on_head_check_status(self, event: object) -> None:
+        if not isinstance(event, PaintHeadCheckStatusEvent) or not self._view_ok():
+            return
+        if self._head_check_status is not None and event.revision <= self._head_check_status.revision:
+            return
+        self._head_check_status = event
+        observation = event.last_observation
+        fresh_check = event.mode is PaintHeadFeedbackMode.CHECK and event.evidence is None
+        ended = event.mode is PaintHeadFeedbackMode.GUIDANCE_ENDED
+        passed = (
+            event.mode is PaintHeadFeedbackMode.CHECK
+            and observation is not None
+            and observation.state is PaintHeadState.PRESENT
+        )
+        if fresh_check or ended or passed:
+            self._view.dismiss_head_alignment_popup()
+        if fresh_check or ended:
+            self._head_check_popup_opened = False
+            self._last_head_alignment_guide = None
+        self._head_check_attention = event.mode is PaintHeadFeedbackMode.LIVE_GUIDANCE or (
+            observation is not None
+            and observation.state in (PaintHeadState.MISSING, PaintHeadState.MISALIGNED)
+        )
+        show_popup = self._head_check_attention and not self._head_check_popup_opened
+        if show_popup:
+            self._head_check_popup_opened = True
+        self._retranslate_head_check()
+        self._refresh_head_alignment_guide(show_popup=show_popup)
+
+
+    def _retranslate_head_check(self) -> None:
+        event = self._head_check_status
+        if event is None or not self._view_ok():
+            return
+        evidence = event.evidence
+        observation = event.last_observation
+        parts: list[str] = []
+        if event.mode is PaintHeadFeedbackMode.GUIDANCE_ENDED:
+            parts.append(self._t("Live alignment guidance stopped"))
+        if observation is not None:
+            labels = {
+                PaintHeadState.PRESENT: "Paint head present",
+                PaintHeadState.MISSING: "Paint head missing",
+                PaintHeadState.MISALIGNED: "Paint head misaligned",
+                PaintHeadState.UNKNOWN: "Paint head state unknown",
+            }
+            parts.append(self._t(labels[observation.state]))
+        if isinstance(evidence, HeadInspectionFailure):
+            parts.append(
+                self._t("Live alignment guidance unavailable")
+                if event.mode is PaintHeadFeedbackMode.LIVE_GUIDANCE
+                else self._t("Inspection timed out")
+                if evidence.code is HeadInspectionFailureCode.TIMEOUT
+                else self._t("Paint head check unavailable")
+            )
+        if not parts:
+            parts.append(
+                self._t("Live alignment guidance")
+                if event.mode is PaintHeadFeedbackMode.LIVE_GUIDANCE
+                else self._t("Checking paint head…")
+            )
+        warning = self._head_check_attention and not (
+            observation is not None
+            and observation.state is PaintHeadState.PRESENT
+            and observation.observed_state is PaintHeadState.PRESENT
+            and not isinstance(evidence, HeadInspectionFailure)
+        )
+        self._head_check_status_text = " · ".join(parts)
+        self._head_check_status_warning = warning
+
+
+    def _refresh_head_alignment_guide(self, *, show_popup: bool = False) -> None:
+        event = self._head_check_status
+        if event is None or not self._view_ok():
+            return
+        observation = event.last_observation
+        live = event.mode is PaintHeadFeedbackMode.LIVE_GUIDANCE
+        guide = None
+        if observation is not None and observation.correction is not None:
+            guide = (
+                build_head_alignment_guide(
+                    observation.correction,
+                    confirmed_present=(
+                        observation.state is PaintHeadState.PRESENT
+                        and observation.observed_state is PaintHeadState.PRESENT
+                    ),
+                )
+                if observation.state in (PaintHeadState.PRESENT, PaintHeadState.MISALIGNED)
+                else None
+            )
+        if observation is not None and observation.state is PaintHeadState.MISSING:
+            self._last_head_alignment_guide = None
+            guide = unavailable_head_alignment_guide(None, show_head_reference=False)
+            notice = self._t("Fit the paint head, then press Start to check again.")
+        elif guide is not None:
+            self._last_head_alignment_guide = guide
+            if live:
+                notice = (
+                    self._t("Aligned — press Start to check and continue")
+                    if guide.aligned
+                    else self._t("Live alignment guidance")
+                )
+            else:
+                notice = (
+                    self._t("Last check: aligned")
+                    if guide.aligned
+                    else self._t("Last check — press Start to refresh")
+                )
+        else:
+            guide = unavailable_head_alignment_guide(self._last_head_alignment_guide if live else None)
+            notice = self._t("Waiting for reliable feedback") if live else ""
+        self._view.set_head_alignment_feedback(
+            HeadAlignmentFeedback(
+                guide, self._head_check_status_text, notice, self._head_check_status_warning
+            ),
+            show_popup=show_popup,
+        )
+
     def _dashboard_camera_feed_updates_enabled(self) -> bool:
-        return not self._dashboard_live_view_paused and self._selected_camera == "primary_vision"
+        return (
+            not self._dashboard_live_view_paused
+            and self._selected_camera == "primary_vision"
+        )
 
     def _on_dashboard_camera_frame(self, image: object) -> None:
         if self._selected_camera == "primary_vision":
@@ -619,15 +769,20 @@ class PaintDashboardController(
         self._update_camera_feed_subscription()
 
     def _update_camera_feed_subscription(self) -> None:
+        topic = (
+            CameraTopics.frame(self._selected_camera)
+            if self._active
+            and self._selected_camera != "primary_vision"
+            and self._camera_feed_visible
+            else None
+        )
+        if topic is not None and topic == self._auxiliary_camera_topic:
+            return
         self._unsubscribe_auxiliary_camera()
         with self._camera_frame_lock:
             self._latest_camera_frame = None
-        if (
-            self._active
-            and self._selected_camera != "primary_vision"
-            and self._camera_feed_visible
-        ):
-            self._auxiliary_camera_topic = CameraTopics.frame(self._selected_camera)
+        if topic is not None:
+            self._auxiliary_camera_topic = topic
             self._broker.subscribe(self._auxiliary_camera_topic, self._on_auxiliary_camera_frame)
             self._camera_display_timer.start()
         else:

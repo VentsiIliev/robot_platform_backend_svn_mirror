@@ -7,6 +7,7 @@ from typing import Generic, TypeVar
 
 
 class PaintFailureCode(StrEnum):
+    HEAD_CHECK = "head_check"
     UNAVAILABLE = "unavailable"
     INVALID_CONFIGURATION = "invalid_configuration"
     PLANNING = "planning"
@@ -67,6 +68,7 @@ class PaintOutcome(StrEnum):
     NOT_APPLICABLE = "not_applicable"
     TRAY_FULL = "tray_full"
     WORK_AREA_FULL = "work_area_full"
+    HEAD_CHECK_STOPPED = "head_check_stopped"
     FAILED = "failed"
 
 
@@ -104,6 +106,7 @@ class PaintOperationResult:
         return self.outcome in {
             PaintOutcome.NO_WORKPIECE, PaintOutcome.UNMATCHED,
             PaintOutcome.TRAY_FULL, PaintOutcome.WORK_AREA_FULL,
+            PaintOutcome.HEAD_CHECK_STOPPED,
         }
 
     @property

@@ -1,4 +1,5 @@
 from PyQt6.QtCore import QCoreApplication
+from src.robot_systems.paint.contracts.paint_head_check.errors import PaintHeadConfigurationError
 
 from src.applications.base.background_worker import BackgroundWorker
 from src.applications.base.i_application_controller import IApplicationController
@@ -113,7 +114,12 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
         if not self._dropoff_safe_travel_is_allowed(flat):
             self._reject_dropoff_safe_travel_pose()
             return
-        updated = PaintProcessSettingsMapper.from_flat_dict(flat, self._model.current_settings)
+        try:
+            updated = PaintProcessSettingsMapper.from_flat_dict(flat, self._model.current_settings)
+        except PaintHeadConfigurationError as error:
+            self._view.set_status(str(error))
+            show_warning(self._view, self._t("Invalid Paint Head Check Settings"), str(error))
+            return
         self._model.save(updated)
         self._view.set_status(self._t("Saved. Changes will be used by the next Paint cycle."))
 

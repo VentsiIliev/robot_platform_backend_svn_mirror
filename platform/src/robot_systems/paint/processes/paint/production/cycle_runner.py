@@ -46,6 +46,13 @@ def run_paint_cycle(
         "adjustment_cycle" if context.adjustment_session is not None else
         "pickup_only" if context.process_config is not None
         and context.process_config.stop_after_calibration_pickup else "cycle")
+    if (
+        context.head_check_run is not None
+        and context.head_check_run.check_before_cycle_due()
+        and initial_state is not PaintExecutionState.STARTING
+    ):
+        context.head_check_next_state = initial_state
+        initial_state = PaintExecutionState.BEFORE_CYCLE_HEAD_CHECK
     started = monotonic()
     token = {**current_context(), **context.diagnostic_context}
     if not token.get('operation_id'):

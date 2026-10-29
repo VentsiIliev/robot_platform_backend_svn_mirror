@@ -15,6 +15,7 @@ class FrameSnapshot:
     frame: object
     timestamp_s: float
     sequence: int
+    captured_at_monotonic: float | None = None
 
 
 class FrameGrabber:
@@ -91,6 +92,7 @@ class FrameGrabber:
                     continue
                 self._consecutive_failures = 0
                 self._restart_cooldown_s = self._base_restart_cooldown_s
+                captured_at_monotonic = time.monotonic()
                 captured_at = time.time()
                 with self.lock:
                     frame = apply_orientation(
@@ -105,6 +107,7 @@ class FrameGrabber:
                             frame=frame,
                             timestamp_s=captured_at,
                             sequence=self._frame_sequence,
+                            captured_at_monotonic=captured_at_monotonic,
                         )
                     )
                     self._last_frame_at = captured_at

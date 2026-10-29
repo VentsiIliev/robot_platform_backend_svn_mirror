@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 from src.robot_systems.paint.contracts.dropoff import DropoffResult
 from src.robot_systems.paint.processes.paint.configuration.models import DropoffStrategy
+from src.robot_systems.paint.contracts.paint_head_check.models import HeadCheckOperatingMode
 if TYPE_CHECKING:
     from .execution_runtime import PaintExecutionRuntime
 
@@ -66,6 +67,14 @@ def run_prepared_paint_cycle(
         magazine_config=None,
     )
     context.execution_plan = prepared_workpiece
+    if raw_config.head_check.enabled and not raw_config.stop_after_calibration_pickup:
+        mode = (
+            HeadCheckOperatingMode.DRY_RUN if raw_config.enable_dry_run_mode
+            else HeadCheckOperatingMode.PRODUCTION
+        )
+        context.head_check_run = runtime.create_head_check_run(raw_config.head_check, mode)
+        context.head_check_return = runtime.return_from_head_check
+        context.head_check_pause_request = control.request_pause
 
     execution = run_paint_cycle(
         context,
@@ -73,4 +82,6 @@ def run_prepared_paint_cycle(
     )
     if execution.machine_error is not None:
         return False, execution.machine_error
+    if execution.result.completed and context.head_check_run is not None:
+        context.head_check_run.record_completed_cycle()
     return execution.result.as_legacy_pair()

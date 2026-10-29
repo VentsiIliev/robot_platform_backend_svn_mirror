@@ -7,6 +7,7 @@ class PaintExecutionState(Enum):
     """Business-level states for one paint production cycle."""
 
     STARTING = auto()
+    BEFORE_CYCLE_HEAD_CHECK = auto()
     MAGAZINE_MOVE_TO_MAGAZINE = auto()
     MAGAZINE_WAIT_CAMERA_SETTLE = auto()
     MAGAZINE_CAPTURE = auto()
@@ -49,6 +50,7 @@ class PaintExecutionTransitions:
             S.CALIBRATION_WAIT_CAMERA_SETTLE,
         }
         paint_states = {
+            S.BEFORE_CYCLE_HEAD_CHECK,
             S.CAPTURE_WORKPIECE,
             S.PREPARE_WORKPIECE,
             S.BUILD_EXECUTION_PLAN,
@@ -62,6 +64,7 @@ class PaintExecutionTransitions:
         }
         return {
             S.STARTING: {*magazine_states, *paint_states, S.STOPPED, S.ERROR},
+            S.BEFORE_CYCLE_HEAD_CHECK: {*magazine_states, *paint_states, *active},
             S.MAGAZINE_MOVE_TO_MAGAZINE: {
                 S.MAGAZINE_WAIT_CAMERA_SETTLE,
                 S.MAGAZINE_CAPTURE,

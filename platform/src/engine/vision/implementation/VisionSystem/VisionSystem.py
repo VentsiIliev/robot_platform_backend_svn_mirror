@@ -20,6 +20,7 @@ from src.engine.vision.implementation.VisionSystem.services import (
 )
 from src.engine.vision.i_vision_service import VisionFrameUnavailableError
 from src.engine.work_areas.i_work_area_service import IWorkAreaService
+from src.shared_contracts.events.vision_events import CameraFrameMetadata
 
 
 _logger = logging.getLogger(__name__)
@@ -304,7 +305,13 @@ class VisionSystem:
 
         self.rawImage = self.image.copy()
         if self.message_publisher:
-            self.message_publisher.publish_camera_frame(self.rawImage)
+            metadata = (
+                None if snapshot.captured_at_monotonic is None else CameraFrameMetadata(
+                    sequence=snapshot.sequence,
+                    captured_at_monotonic=snapshot.captured_at_monotonic,
+                )
+            )
+            self.message_publisher.publish_camera_frame(self.rawImage, metadata=metadata)
 
         if self.rawMode:
             if self.message_publisher:

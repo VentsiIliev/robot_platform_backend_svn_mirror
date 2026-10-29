@@ -2,6 +2,16 @@
 
 This is the shared production implementation used by the paint family. System classes own storage, profile restrictions and runtime wiring; this package owns paint orchestration and its collaborators.
 
+Optional [paint-head checks](../../paint_head_check/README.md) run at
+`BEFORE_CYCLE_HEAD_CHECK`, routed by startup and handled in
+`workflow/handlers/workflow/head_check_handler.py`. Scheduling and reactions use
+detector-independent run ports. Checks are disabled by default, apply to dry-run
+and adjustment, and bypass pickup-only. They run before due cycles only, with no
+drop-off/return-path check. New Start resets scheduling; pause/resume retains it.
+An inspection STOP permits Start to retry without Reset, with verified position
+reuse when the robot remains within 0.5 mm / 0.2 degrees. REJECT remains an ERROR.
+Stopped-position live guidance never completes the next production checkpoint.
+
 | Package/module | Responsibility |
 |---|---|
 | `paint_process.py` | Platform lifecycle and background execution entry point |

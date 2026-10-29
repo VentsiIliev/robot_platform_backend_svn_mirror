@@ -1,5 +1,10 @@
 import logging
 from time import perf_counter
+from collections.abc import Callable
+from src.robot_systems.paint.contracts.paint_head_check.interfaces import (
+    IHeadInspectionControl, IPaintHeadCheckRunFactory,
+)
+from src.robot_systems.paint.contracts.paint_head_check.results import HeadInspectionMoveResult
 
 from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
 from src.engine.common_service_ids import CommonServiceID
@@ -361,7 +366,11 @@ def _build_dryer_release_coordinator(robot_system):
     return DryerReleaseCoordinator(dryer) if dryer is not None else None
 
 
-def _build_paint_path_executor(robot_system, *, plate_layout_service=None):
+def _build_paint_path_executor(
+    robot_system, *, plate_layout_service=None,
+    head_check_run_factory: IPaintHeadCheckRunFactory | None = None,
+    head_check_return: Callable[[IHeadInspectionControl], HeadInspectionMoveResult] | None = None,
+):
     from copy import deepcopy
 
     from src.robot_systems.paint.processes.paint.production.execution_runtime import (
@@ -398,6 +407,8 @@ def _build_paint_path_executor(robot_system, *, plate_layout_service=None):
     from src.robot_systems.paint.processes.paint.operations.dropoff.strategies.configured import ConfiguredDropoffStrategy
 
     dependencies = PaintExecutorDependencies(
+        head_check_run_factory=head_check_run_factory,
+        head_check_return=head_check_return,
         dropoff_strategy_factory=ConfiguredDropoffStrategy,
         plate_layout_service=plate_layout_service,
         robot_service=robot_service,

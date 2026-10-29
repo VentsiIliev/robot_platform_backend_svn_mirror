@@ -3,6 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Optional, TYPE_CHECKING
 from src.robot_systems.paint.contracts.dropoff import IDropoffStrategy
+from src.robot_systems.paint.contracts.paint_head_check.interfaces import (
+    IHeadInspectionControl, IPaintHeadCheckRunFactory,
+)
+from src.robot_systems.paint.contracts.paint_head_check.results import HeadInspectionMoveResult
 
 if TYPE_CHECKING:
     from .execution_runtime import PaintExecutionRuntime
@@ -34,6 +38,8 @@ class PaintExecutorDependencies:
     paint_process_config_service: object | None = None
     dropoff_motion_corridor_id: str | None = None
     plate_layout_service: PlateLayoutService | None = None
+    head_check_run_factory: IPaintHeadCheckRunFactory | None = None
+    head_check_return: Callable[[IHeadInspectionControl], HeadInspectionMoveResult] | None = None
 
 
 @dataclass(frozen=True)

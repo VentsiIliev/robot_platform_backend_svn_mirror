@@ -2,6 +2,26 @@
 
 This package contains all topic-string namespaces and payload dataclasses used across the platform's publish-subscribe bus. Both publishers (engine layer) and subscribers (application/dashboard controllers) import from here.
 
+## `vision_events.py` — Raw camera capture metadata
+
+`CameraTopics.frame(role)` names a raw stream (`camera/<role>/frame`). The existing
+primary-camera owner publishes a dictionary with `image`, `camera` and, when
+capture identity is available, `metadata: CameraFrameMetadata`. The frozen,
+slotted metadata contains `sequence: int` and `captured_at_monotonic: float`.
+Capture identity belongs to the camera owner, not the consumer or publisher loop;
+reading the same buffered frame again must not make it a new capture.
+
+The metadata addition preserves existing image/camera consumers. Freshness-aware
+consumers must explicitly reject missing/invalid metadata, duplicate/out-of-order
+sequences and captures outside their inspection window. Monotonic timestamps are
+process-local clock values, not wall-clock dates or a cross-host time protocol.
+`MessagePublisher.publish_camera_frame()` accepts optional metadata; legacy calls
+can omit it, but then cannot satisfy consumers requiring fresh capture evidence.
+Other camera-role publishers are not automatically upgraded by this change.
+
+Paint-head domain state/reaction events remain under the paint system's contracts,
+not this shared vision contract.
+
 ---
 
 ## `robot_events.py` — Robot State

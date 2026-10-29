@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 from PyQt6.QtCore import QCoreApplication, QEvent, Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QDialog,
@@ -16,6 +18,7 @@ from PyQt6.QtWidgets import (
 )
 
 from pl_gui.settings.settings_view import widget_factory
+from pl_gui.settings.settings_view.schema import SettingField
 from pl_gui.settings.settings_view.styles import (
     ACTION_BTN_STYLE,
     BG_COLOR,
@@ -32,6 +35,17 @@ from src.applications.base.i_application_view import IApplicationView
 from src.applications.base.keyboard_settings_view import KeyboardSettingsView
 from src.applications.base.styled_message_box import show_warning
 from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEdit
+from src.applications.base.widgets.keyboard_number_field import KeyboardNumberField
+from .head_check_choices import (
+    HEAD_CHECK_INTERVAL_WIDGET_TYPE,
+    HeadCheckChoiceCombo,
+    HeadCheckChoiceType,
+    get_head_check_choice,
+    set_head_check_choice,
+    get_head_check_interval,
+    set_head_check_interval,
+)
+from src.robot_systems.paint.paint_head_check.policy_registry import build_head_check_policy_registry
 from src.robot_systems.paint.applications.paint_process_settings.view.paint_process_settings_schema import (
     build_paint_process_settings_tabs,
 )
@@ -1075,6 +1089,8 @@ class PaintProcessSettingsView(IApplicationView):
         self._current_values: dict = {}
         self._magazine_order_table: _MagazineOrderTable | None = None
         self._custom_widget_original_handlers: dict[str, WidgetHandler | None] | None = None
+        self._owned_widget_handlers: dict[str, WidgetHandler] = {}
+        self._head_check_interval_field: KeyboardNumberField | None = None
         super().__init__("PaintProcessSettings", parent)
 
     def setup_ui(self) -> None:
@@ -1104,6 +1120,7 @@ class PaintProcessSettingsView(IApplicationView):
             )
             self._update_sensor_controlled_fast_lin_visibility(values)
             self._update_dropoff_strategy_visibility(values.get(_DROPOFF_STRATEGY_KEY, "movement_group"))
+            self._update_head_check_interval_visibility(values.get("head_check_policy_id"))
 
     def add_fixed_magazine_position(self, position: list[float]) -> None:
         if self._magazine_order_table is not None:
@@ -1179,6 +1196,8 @@ class PaintProcessSettingsView(IApplicationView):
             "paint_motion_profile_table",
             "paint_plate_corner_table",
             "paint_magazine_order_table",
+            *(kind.value for kind in HeadCheckChoiceType),
+            HEAD_CHECK_INTERVAL_WIDGET_TYPE,
         )
         if self._custom_widget_original_handlers is None:
             self._custom_widget_original_handlers = {
@@ -1221,18 +1240,61 @@ class PaintProcessSettingsView(IApplicationView):
             set_value=lambda widget, value: widget.set_sources(value),
             full_width=True,
         )
+        for kind in HeadCheckChoiceType:
+            widget_factory._REGISTRY[kind.value] = WidgetHandler(
+                create=self._make_head_check_choice,
+                get_value=get_head_check_choice,
+                set_value=set_head_check_choice,
+            )
+        widget_factory._REGISTRY[HEAD_CHECK_INTERVAL_WIDGET_TYPE] = WidgetHandler(
+            create=self._make_head_check_interval,
+            get_value=get_head_check_interval,
+            set_value=set_head_check_interval,
+        )
+        self._owned_widget_handlers = {
+            key: widget_factory._REGISTRY[key] for key in custom_types
+        }
 
     def _restore_custom_widget_handlers(self) -> None:
         if self._custom_widget_original_handlers is None:
             return
         for widget_type, handler in self._custom_widget_original_handlers.items():
             current = widget_factory._REGISTRY.get(widget_type)
-            if current is not None and getattr(current.create, "__self__", None) is self:
+            if current is not None and current is self._owned_widget_handlers.get(widget_type):
                 if handler is None:
                     widget_factory._REGISTRY.pop(widget_type, None)
                 else:
                     widget_factory._REGISTRY[widget_type] = handler
         self._custom_widget_original_handlers = None
+        self._owned_widget_handlers.clear()
+
+    def _make_head_check_choice(
+        self, field: SettingField, emit: Callable[[str], None],
+    ) -> HeadCheckChoiceCombo:
+        return HeadCheckChoiceCombo(field, emit)
+
+    def _make_head_check_interval(
+        self, field: SettingField, emit: Callable[[int | float], None],
+    ) -> KeyboardNumberField:
+        widget = KeyboardNumberField()
+        widget.setObjectName(field.key)
+        widget.setRange(int(field.min_val), int(field.max_val))
+        widget.setSingleStep(int(field.step))
+        widget.setValue(int(field.default))
+        widget.valueChanged.connect(emit)
+        self._head_check_interval_field = widget
+        return widget
+
+    def _update_head_check_interval_visibility(self, policy_id: object) -> None:
+        uses_interval = any(
+            description.policy_id.value == policy_id and description.uses_interval
+            for description in build_head_check_policy_registry(1).descriptions()
+        )
+        widget = self._head_check_interval_field
+        if widget is not None:
+            cell = widget.parentWidget()
+            if cell is not None:
+                cell.setVisible(uses_interval)
 
     def _make_action_button(self, field, emit):
         button = _ActionButton(str(field.default or field.label), emit)
@@ -1300,6 +1362,8 @@ class PaintProcessSettingsView(IApplicationView):
         self.save_requested.emit(values)
 
     def _on_value_changed(self, key: str, value: object, _component_name: str) -> None:
+        if key == "head_check_policy_id":
+            self._update_head_check_interval_visibility(value)
         if key in {
             _MAGAZINE_RECAPTURE_AFTER_PILE_KEY,
             _MAGAZINE_RECAPTURE_EVERY_CYCLE_KEY,

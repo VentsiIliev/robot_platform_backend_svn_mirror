@@ -1378,6 +1378,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
                 )
             )
         )
+        service._navigation_service = service._magazine_load_service._navigation
         config = PaintMagazineLoadConfig(
             enabled=True,
             pickup_mode="auto_discovery_sensor_controlled_fast_lin",
@@ -1409,6 +1410,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
                 list(approach) if contour is pile else None
             ),
         )
+        service._navigation_service = service._magazine_load_service._navigation
         config = PaintMagazineLoadConfig(
             enabled=True,
             pickup_mode="auto_discovery_sensor_controlled_fast_lin",

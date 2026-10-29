@@ -12,6 +12,20 @@ import math
 import threading
 from time import monotonic, perf_counter, sleep
 from typing import Callable, Optional
+from functools import partial
+from src.robot_systems.paint.contracts.paint_head_check.interfaces import (
+    IHeadInspectionControl, IPaintHeadCheckRun, IPaintHeadCheckRunFactory,
+)
+from src.robot_systems.paint.contracts.paint_head_check.models import HeadCheckOperatingMode
+from src.robot_systems.paint.contracts.paint_head_check.errors import (
+    HeadInspectionFailure, HeadInspectionFailureCode, PaintHeadCheckError,
+)
+from src.robot_systems.paint.contracts.paint_head_check.results import (
+    HeadInspectionMoveFailed, HeadInspectionMoveResult,
+)
+from src.robot_systems.paint.processes.paint.head_check_support import (
+    PaintHeadReturnRoute, head_check_failed,
+)
 
 from src.robot_systems.paint.processes.paint.results import (
     PaintFailure, PaintFailureCode, PaintOperationResult, PaintOutcome,
@@ -78,6 +92,7 @@ class PaintProductionService:
         dry_run_snapshot_source=None,
         failure_artifact_root=None,
         start_recovery_service: StartRecoveryService | None = None,
+        head_check_run_factory: IPaintHeadCheckRunFactory | None = None,
     ) -> None:
         """Store the services needed to capture, prepare, plan, and execute one paint cycle."""
         self._workpiece_preparation = workpiece_preparation_service
@@ -110,6 +125,25 @@ class PaintProductionService:
         self._failure_register_observation = {}
         self._failure_register_streak: int | None = None
         self._failure_bundle_path = None
+        self._head_check_run_factory = head_check_run_factory
+        self._head_check_run: IPaintHeadCheckRun | None = None
+        self._head_check_pause_handler: Callable[[], None] | None = None
+
+    def bind_head_check_pause_handler(self, handler: Callable[[], None]) -> None:
+        """Bind the owning process pause operation without exposing process internals."""
+        self._head_check_pause_handler = handler
+
+    def return_from_head_check(
+        self, context: PaintExecutionContext, control: IHeadInspectionControl,
+    ) -> HeadInspectionMoveResult:
+        if self._navigation_service is None:
+            return HeadInspectionMoveFailed(HeadInspectionFailure(
+                HeadInspectionFailureCode.RETURN_TARGET_INVALID,
+                "Paint-head inspection requires the paint navigation service for return",
+            ))
+        return PaintHeadReturnRoute(
+            self._navigation_service, partial(self._production_start_target, context),
+        ).move(control)
 
     def prepare_failure_record(
         self, *, message: str, failure: TrayFailure | PaintFailure | None = None,
@@ -278,6 +312,26 @@ class PaintProductionService:
             return PaintOperationResult.failed(PaintFailureCode.INVALID_CONFIGURATION, 'process_settings', process_config_result[1])
 
         process_config = process_config_result[2]
+        self._head_check_run = None
+        if process_config is not None and process_config.head_check.enabled:
+            mode = (
+                HeadCheckOperatingMode.PICKUP_ONLY if process_config.stop_after_calibration_pickup else
+                HeadCheckOperatingMode.ADJUSTMENT if adjustment_session is not None else
+                HeadCheckOperatingMode.DRY_RUN if process_config.enable_dry_run_mode else
+                HeadCheckOperatingMode.PRODUCTION
+            )
+            if mode is not HeadCheckOperatingMode.PICKUP_ONLY:
+                if self._head_check_run_factory is None:
+                    return head_check_failed(HeadInspectionFailure(
+                        HeadInspectionFailureCode.SERVICE_UNAVAILABLE,
+                        "Paint-head checks are enabled, but their inspection service is not configured",
+                    ))
+                try:
+                    self._head_check_run = self._head_check_run_factory.create_run(
+                        process_config.head_check, mode,
+                    )
+                except PaintHeadCheckError as error:
+                    return head_check_failed(error.failure)
         if process_config is not None and process_config.enable_dry_run_mode:
             if self._dry_run_snapshot_source is None:
                 return PaintOperationResult.failed(
@@ -798,6 +852,8 @@ class PaintProductionService:
             magazine_group=str(magazine_group or "").strip(),
             magazine_index=int(magazine_index),
             cycle_index=cycle_index,
+            head_check_run=self._head_check_run,
+            head_check_pause_request=self._head_check_pause_handler,
             repeats_after_success=repeats_after_success,
             total_started_at=perf_counter(),
             magazine_discovery_contours=list(magazine_discovery_contours or ()),
@@ -811,6 +867,8 @@ class PaintProductionService:
             diagnostic_cycle_id=current_context()['cycle_id'],
             diagnostic_context=current_context(),
         )
+        if context.head_check_run is not None:
+            context.head_check_return = partial(self.return_from_head_check, context)
         if isinstance(magazine_source, dict) and "position" in magazine_source:
             context.magazine_fixed_pickup_pose = [
                 float(value) for value in list(magazine_source["position"])[:6]
@@ -862,6 +920,11 @@ class PaintProductionService:
             self._clear_prepositioned_start_group()
             self._restore_brightness()
             self._set_dashboard_live_view_paused(False, reason="paint cycle finished")
+        if (
+            completed_cycle and not has_failure and not self._paint_control.should_stop()
+            and context.head_check_run is not None
+        ):
+            context.head_check_run.record_completed_cycle()
         return execution.result
 
     def _store_failure_bundle(self, context, raised_exception=None) -> None:
@@ -944,7 +1007,10 @@ class PaintProductionService:
             acceleration = float(nav.calibration_move_acc_percent)
             motion_type = nav.calibration_move_motion_type
         group_id = str(group_id or "").strip()
-        navigation = self._magazine_load_service._navigation
+        navigation = self._navigation_service
+        if navigation is None:
+            _logger.error("[NEXT_CYCLE] Paint navigation service is unavailable")
+            return None
         pose = ctx.magazine_fixed_pickup_pose
         if pose is None:
             pose = navigation.get_group_position(group_id) if group_id else None
@@ -1100,6 +1166,14 @@ class PaintProductionService:
         *,
         process_config: PaintProcessConfig | None = None,
     ) -> PaintOperationResult:
+        if should_stop():
+            return PaintOperationResult(PaintOutcome.CANCELLED, "Paint process stopped")
+        if self._head_check_run is not None:
+            try:
+                if self._head_check_run.prepare_retry_in_place():
+                    return PaintOperationResult(PaintOutcome.COMPLETED, "Inspection retry position verified")
+            except PaintHeadCheckError as error:
+                return head_check_failed(error.failure)
         recovery_context = PaintExecutionContext(
             production_service=self, stop_requested=should_stop, control=self._paint_control,
             process_config=process_config or PAINT_PROCESS_CONFIG,

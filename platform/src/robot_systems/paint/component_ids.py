@@ -1,6 +1,14 @@
 from enum import Enum
 
 
+class MovementGroupID(str, Enum):
+    VERTICAL_SHAFT_ALIGNMENT = "Vertical Shaft Alignment"
+
+
+class CameraRoleID(str, Enum):
+    PRIMARY_VISION = "primary_vision"
+
+
 class ServiceID(str, Enum):
     CUSTOM_DEVICE = "custom_device"
     VACUUM_PUMP = "vacuum_pump"

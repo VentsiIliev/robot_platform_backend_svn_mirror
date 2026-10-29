@@ -93,6 +93,9 @@ from src.robot_systems.paint.processes.paint.workflow.state import (
 )
 from src.robot_systems.paint.processes.paint.workflow.handlers.lifecycle.finished_handler import handle_finished
 from src.robot_systems.paint.timing import TimingRecorder
+from src.robot_systems.paint.processes.paint.workflow.handlers.workflow.head_check_handler import (
+    handle_before_cycle_head_check,
+)
 
 
 _logger = logging.getLogger(__name__)
@@ -114,6 +117,7 @@ class PaintExecutionMachineFactory:
             context.state_timing_recorder = TimingRecorder(f"paint_execution_cycle_{context.cycle_index}")
 
         _register(registry, context, S.STARTING, handle_starting)
+        _register(registry, context, S.BEFORE_CYCLE_HEAD_CHECK, handle_before_cycle_head_check)
         _register(registry, context, S.MAGAZINE_MOVE_TO_MAGAZINE, handle_magazine_move_to_magazine)
         _register(registry, context, S.MAGAZINE_WAIT_CAMERA_SETTLE, handle_magazine_wait_camera_settle)
         _register(registry, context, S.MAGAZINE_CAPTURE, handle_magazine_capture)

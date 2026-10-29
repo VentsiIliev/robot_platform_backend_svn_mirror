@@ -5,12 +5,16 @@ from src.engine.robot.path_preparation import (
     PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR,
     PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL,
 )
+from src.robot_systems.paint.contracts.paint_head_check.models import PaintHeadAction
+from src.robot_systems.paint.paint_head_check.policy_registry import EVERY_CYCLE_POLICY
 from src.robot_systems.paint.processes.paint.configuration.models import (
     MAGAZINE_PROCESSING_STRATEGIES,
     MAGAZINE_PICKUP_MODES,
     PICKUP_CONTACT_MODES,
     PICKUP_SENSOR_EXECUTION_MODES,
 )
+
+from .head_check_choices import HEAD_CHECK_INTERVAL_WIDGET_TYPE, HeadCheckChoiceType
 
 _CTX = "PaintProcessSettings"
 
@@ -150,6 +154,36 @@ def build_process_groups(
             _toggle("pause_dashboard_live_view_after_capture", "Pause Dashboard Live View After Capture", True),
             _toggle("apply_camera_to_tcp_for_pickup", "Apply Camera-to-TCP Pickup Offset", True),
             _toggle("enable_z_shift_pixel_compensation", "Enable Z-Shift Pixel Compensation"),
+        ]),
+        SettingGroup(_t("Paint Head Checks (applied on Start)"), [
+            _toggle("head_check_enabled", "Enable Paint Head Checks", False),
+            SettingField(
+                "head_check_policy_id", _t("Check frequency"), HeadCheckChoiceType.POLICY.value,
+                default=EVERY_CYCLE_POLICY.value,
+            ),
+            SettingField(
+                "head_check_interval_cycles", _t("Check every N cycles after the first"),
+                HEAD_CHECK_INTERVAL_WIDGET_TYPE, default=1, min_val=1, max_val=2147483647, step=1,
+            ),
+            SettingField(
+                "head_check_timeout_seconds", _t("Inspection timeout"), "double_spinbox",
+                default=1.0, min_val=0.01, max_val=3600.0,
+                step=0.1, decimals=2, suffix=" s",
+            ),
+            SettingField("head_check_present_action", _t("Head present"),
+                         HeadCheckChoiceType.ACTION.value, default=PaintHeadAction.CONTINUE.value),
+            SettingField("head_check_missing_action", _t("Head missing"),
+                         HeadCheckChoiceType.ACTION.value, default=PaintHeadAction.STOP.value),
+            SettingField("head_check_misaligned_action", _t("Head misaligned"),
+                         HeadCheckChoiceType.ACTION.value, default=PaintHeadAction.STOP.value),
+            SettingField("head_check_unknown_action", _t("Head state unknown"),
+                         HeadCheckChoiceType.ACTION.value, default=PaintHeadAction.REPORT_ONLY.value),
+            SettingField("head_check_failure_action", _t("Camera or processing error"),
+                         HeadCheckChoiceType.ACTION.value, default=PaintHeadAction.REPORT_ONLY.value),
+            SettingField("head_check_timeout_action", _t("Inspection timeout response"),
+                         HeadCheckChoiceType.TIMEOUT_ACTION.value,
+                         default=PaintHeadAction.REPORT_ONLY.value),
+            _toggle("head_check_report_until_confirmed", "Wait for confirmation when reporting", True),
         ]),
         SettingGroup(_t("Execution Mode"), [
             SettingField("pivot_motion_plane", _t("Paint Motion Plane"), "combo",

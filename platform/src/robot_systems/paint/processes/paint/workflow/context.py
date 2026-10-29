@@ -5,6 +5,10 @@ from uuid import uuid4
 from dataclasses import dataclass, field
 from time import perf_counter
 from typing import Callable
+from src.robot_systems.paint.contracts.paint_head_check.interfaces import (
+    IHeadInspectionControl, IPaintHeadCheckRun,
+)
+from src.robot_systems.paint.contracts.paint_head_check.results import HeadInspectionMoveResult
 
 from src.robot_systems.paint.processes.paint.tray_dry.errors import TrayFailure
 from src.robot_systems.paint.processes.paint.results import (
@@ -29,6 +33,11 @@ class PaintExecutionContext:
     magazine_group: str = ""
     magazine_index: int = 0
     cycle_index: int = 1
+    head_check_run: IPaintHeadCheckRun | None = None
+    head_check_return: Callable[[IHeadInspectionControl], HeadInspectionMoveResult] | None = None
+    head_check_pause_request: Callable[[], None] | None = None
+    head_check_next_state: PaintExecutionState | None = None
+    head_check_return_pending: bool = False
     repeats_after_success: bool = False
     stop_event: threading.Event = field(default_factory=threading.Event)
     run_allowed: threading.Event = field(default_factory=threading.Event)

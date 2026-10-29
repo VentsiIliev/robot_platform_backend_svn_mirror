@@ -18,6 +18,7 @@ from src.engine.process.process_requirements import ProcessRequirements
 from src.shared_contracts.events.process_events import ProcessState
 from src.engine.system.i_system_manager import ISystemManager
 from src.robot_systems.paint.component_ids import ProcessID
+from src.robot_systems.paint.contracts.paint_head_check.interfaces import IPaintHeadAlignmentGuidance
 from src.robot_systems.paint.processes.paint.configuration.models import PAINT_PROCESS_CONFIG
 from src.robot_systems.paint.processes.paint.adjustment.session import (
     AdjustmentStep,
@@ -31,6 +32,7 @@ from src.robot_systems.paint.processes.paint.results import (
 
 class PaintProcess(BaseProcess):
     """Run one paint production cycle in the background and report process state changes."""
+    _head_guidance: IPaintHeadAlignmentGuidance | None = None
     def __init__(
         self,
         production_service,
@@ -41,6 +43,7 @@ class PaintProcess(BaseProcess):
         system_manager: Optional[ISystemManager] = None,
         requirements: Optional[ProcessRequirements] = None,
         service_checker: Optional[Callable[[str], bool]] = None,
+        head_guidance: IPaintHeadAlignmentGuidance | None = None,
     ) -> None:
         """Store the production service and process dependencies for a single-run paint process."""
         super().__init__(
@@ -51,6 +54,7 @@ class PaintProcess(BaseProcess):
             service_checker=service_checker,
         )
         self._production_service = production_service
+        self._head_guidance = head_guidance
         self._robot_service = robot_service
         self._vacuum_pump = vacuum_pump
         self._paint_process_config_service = paint_process_config_service
@@ -219,6 +223,8 @@ class PaintProcess(BaseProcess):
 
     def _on_start(self) -> None:
         """Start the background worker thread that performs one production cycle."""
+        if self._head_guidance is not None:
+            self._head_guidance.cancel()
         self._stopping = False
         self._preserve_vacuum.clear()
         self._diagnostic_run_id = uuid4().hex

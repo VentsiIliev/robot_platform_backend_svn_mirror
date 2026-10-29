@@ -2,6 +2,23 @@
 
 Camera-based alignment and detection system. Defines `IVisionService` and hosts the full `VisionSystem` implementation backed by OpenCV and the `PLVision` library.
 
+## Raw frames and capture identity
+
+The existing `VisionSystem` camera owner publishes raw primary-camera frames on
+`CameraTopics.frame("primary_vision")`. The dictionary retains `image` and `camera`
+and adds `metadata: CameraFrameMetadata` when capture identity is available.
+`FrameGrabber` snapshots pair the image with its capture sequence and monotonic
+capture time, so a repeatedly read buffered image retains its original identity.
+The implementation publishes this raw stream before contour-processing changes.
+
+Display consumers can continue using the image fields. Consumers that need
+freshness, such as the paint system's inspection adapter, must validate metadata
+and reject missing, stale, duplicate or out-of-order captures rather than stamping
+receipt time as capture time. Evaluation belongs on consumer workers, not broker
+callbacks. No consumer needs to open a second handle to the same camera. See the
+[shared event contract](../../shared_contracts/events/README.md) and
+[paint integration](../../robot_systems/paint/paint_head_check/README.md).
+
 The engine vision layer also declares [ICaptureSnapshotService](../../../src/engine/vision/i_capture_snapshot_service.py), the interface used by higher-level robot-system code to pair:
 - latest frame
 - latest contours

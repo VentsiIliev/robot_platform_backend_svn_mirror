@@ -3,6 +3,10 @@ from copy import deepcopy
 from typing import Any, Dict, Type, TypeVar
 
 from src.engine.repositories.interfaces import ISettingsSerializer
+from src.robot_systems.paint.paint_head_check.configuration import (
+    head_check_from_dict,
+    head_check_to_dict,
+)
 from src.robot_systems.paint.processes.paint.configuration.models import (
     PAINT_PROCESS_CONFIG,
     PaintDropoffConfig,
@@ -50,7 +54,9 @@ class PaintProcessConfigSerializer(ISettingsSerializer[PaintProcessConfig]):
         return deepcopy(self._default_config)
 
     def to_dict(self, settings: PaintProcessConfig) -> Dict[str, Any]:
-        return asdict(settings)
+        values = asdict(settings)
+        values["head_check"] = head_check_to_dict(settings.head_check)
+        return values
 
     def from_dict(self, data: Dict[str, Any]) -> PaintProcessConfig:
         default = self.get_default()
@@ -74,6 +80,7 @@ class PaintProcessConfigSerializer(ISettingsSerializer[PaintProcessConfig]):
                 "dropoff_safe_travel",
                 "navigation_return",
                 "unmatched_second_pass",
+                "head_check",
             }
         })
         raw_pickup_motion = dict(_section(raw, "pickup_motion"))
@@ -141,6 +148,9 @@ class PaintProcessConfigSerializer(ISettingsSerializer[PaintProcessConfig]):
             UnmatchedSecondPassConfig,
             _section(raw, "unmatched_second_pass"),
             default.unmatched_second_pass,
+        )
+        values["head_check"] = head_check_from_dict(
+            raw.get("head_check", {}), default=default.head_check,
         )
         return PaintProcessConfig(**values)
 

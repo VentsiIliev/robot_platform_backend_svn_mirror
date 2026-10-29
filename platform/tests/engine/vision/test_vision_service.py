@@ -8,6 +8,7 @@ import numpy as np
 
 from src.engine.vision.implementation.VisionSystem.VisionSystem import VisionSystem
 from src.engine.vision.vision_service import VisionService
+from src.shared_contracts.events.vision_events import CameraFrameMetadata
 
 
 class _ServiceState(Enum):
@@ -201,6 +202,7 @@ class TestVisionSystemRun(unittest.TestCase):
             frame=raw,
             sequence=7,
             timestamp_s=12.0,
+            captured_at_monotonic=8.0,
         )
         system._last_processed_frame_sequence = 0
         system._latest_frame_timestamp_s = 0.0
@@ -225,6 +227,10 @@ class TestVisionSystemRun(unittest.TestCase):
         self.assertIs(display_image, corrected)
         self.assertIsNone(extra)
         system.message_publisher.publish_latest_image.assert_called_once_with(corrected)
+        system.message_publisher.publish_camera_frame.assert_called_once_with(
+            system.rawImage,
+            metadata=CameraFrameMetadata(sequence=7, captured_at_monotonic=8.0),
+        )
         self.assertEqual(system._latest_contours, [])
 
 

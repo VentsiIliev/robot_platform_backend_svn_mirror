@@ -1,6 +1,9 @@
 from dataclasses import dataclass, field, fields, is_dataclass, replace
 from enum import StrEnum
 
+from src.robot_systems.paint.contracts.paint_head_check.models import PaintHeadCheckConfiguration
+from src.robot_systems.paint.paint_head_check.configuration import default_head_check_configuration
+
 from src.engine.robot.path_preparation import PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL, PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR
 from src.engine.robot.motion_sequence import OrderedMotionType
 
@@ -593,6 +596,7 @@ class PaintProcessConfig:
     enable_vacuum_pump: bool = True
     # Execute the normal Paint workflow from the reusable synthetic dataset.
     enable_dry_run_mode: bool = False  # [LIVE SETTINGS]
+    head_check: PaintHeadCheckConfiguration = field(default_factory=default_head_check_configuration)
     # Persist collision-model training samples during a dry-run process.
     collect_collision_calibration_data: bool = False  # [LIVE SETTINGS]
     # Test mode: finish the cycle immediately after calibration pickup/retract.

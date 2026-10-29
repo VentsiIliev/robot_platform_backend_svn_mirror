@@ -1,3 +1,14 @@
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True, slots=True)
+class CameraFrameMetadata:
+    """Capture identity and monotonic exposure time from the single camera owner."""
+
+    sequence: int
+    captured_at_monotonic: float
+
+
 class VisionTopics:
     """Vision vision_service and camera topics"""
 

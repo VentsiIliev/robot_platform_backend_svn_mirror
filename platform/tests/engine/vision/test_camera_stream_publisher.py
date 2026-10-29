@@ -9,7 +9,7 @@ from src.engine.vision.camera_stream_publisher import CameraStreamPublisher
 from src.engine.vision.implementation.VisionSystem.core.external_communication.system_state_management import (
     MessagePublisher,
 )
-from src.shared_contracts.events.vision_events import CameraTopics
+from src.shared_contracts.events.vision_events import CameraFrameMetadata, CameraTopics
 
 
 class CameraStreamPublisherTests(unittest.TestCase):
@@ -177,6 +177,18 @@ class CameraStreamPublisherTests(unittest.TestCase):
         messaging.publish.assert_any_call(
             CameraTopics.frame("primary_vision"),
             message,
+        )
+
+    def test_primary_capture_metadata_is_published_without_changing_the_image_field(self) -> None:
+        messaging = MagicMock()
+        publisher = MessagePublisher(messaging)
+        metadata = CameraFrameMetadata(sequence=42, captured_at_monotonic=15.0)
+
+        publisher.publish_camera_frame("primary-frame", metadata=metadata)
+
+        messaging.publish.assert_called_once_with(
+            CameraTopics.frame("primary_vision"),
+            {"image": "primary-frame", "camera": "primary_vision", "metadata": metadata},
         )
 
     @patch("src.engine.vision.camera_stream_publisher.cv2.VideoCapture")

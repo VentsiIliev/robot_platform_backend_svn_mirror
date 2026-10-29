@@ -9,6 +9,19 @@ import logging
 import math
 from dataclasses import replace
 from typing import Callable, Optional
+from src.robot_systems.paint.contracts.paint_head_check.interfaces import (
+    IHeadInspectionControl, IPaintHeadCheckRun,
+)
+from src.robot_systems.paint.contracts.paint_head_check.models import (
+    HeadCheckOperatingMode, PaintHeadCheckConfiguration,
+)
+from src.robot_systems.paint.contracts.paint_head_check.errors import (
+    HeadInspectionFailure, HeadInspectionFailureCode, PaintHeadCheckError,
+)
+from src.robot_systems.paint.contracts.paint_head_check.results import (
+    HeadInspectionMoveFailed, HeadInspectionMoveResult,
+)
+from src.robot_systems.paint.processes.paint.head_check_support import head_check_error
 
 import numpy as np
 
@@ -84,6 +97,8 @@ class PaintExecutionRuntime:
 
         # Dependencies.
         self._robot_service = dependencies.robot_service
+        self._head_check_run_factory = dependencies.head_check_run_factory
+        self._head_check_return = dependencies.head_check_return
         self._path_preparation_service = dependencies.path_preparation_service
         self._base_position_provider = dependencies.base_position_provider
         self._pickup_base_position_provider = dependencies.pickup_base_position_provider or dependencies.base_position_provider
@@ -179,6 +194,29 @@ class PaintExecutionRuntime:
         self._cycle_dropoff_strategy: str | None = None
         self._active_execution_control = None
         self._dropoff_strategy = dependencies.dropoff_strategy_factory(self)
+
+    def create_head_check_run(
+        self, configuration: PaintHeadCheckConfiguration, mode: HeadCheckOperatingMode,
+    ) -> IPaintHeadCheckRun | None:
+        if not configuration.enabled or mode is HeadCheckOperatingMode.PICKUP_ONLY:
+            return None
+        if self._head_check_run_factory is None:
+            raise head_check_error(HeadInspectionFailure(
+                HeadInspectionFailureCode.SERVICE_UNAVAILABLE,
+                "Paint-head checks are enabled, but their inspection service is not configured",
+            ))
+        try:
+            return self._head_check_run_factory.create_run(configuration, mode)
+        except PaintHeadCheckError as error:
+            raise head_check_error(error.failure) from error
+
+    def return_from_head_check(self, control: IHeadInspectionControl) -> HeadInspectionMoveResult:
+        if self._head_check_return is None:
+            return HeadInspectionMoveFailed(HeadInspectionFailure(
+                HeadInspectionFailureCode.RETURN_TARGET_INVALID,
+                "Prepared paint execution has no configured return route after head inspection",
+            ))
+        return self._head_check_return(control)
 
     def prepare_dropoff(self) -> tuple[bool, str]:
         """Delegate destination preparation to the injected strategy."""

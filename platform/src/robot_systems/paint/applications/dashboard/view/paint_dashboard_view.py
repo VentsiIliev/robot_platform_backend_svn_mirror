@@ -59,6 +59,8 @@ from src.robot_systems.paint.applications.dashboard.ui.paint_quick_access_panel 
     PaintQuickAccessPanel,
 )
 from src.robot_systems.paint.applications.dashboard.config import PaintDashboardUiConfig
+from src.robot_systems.paint.applications.dashboard.head_alignment_presentation import HeadAlignmentFeedback
+from src.robot_systems.paint.applications.dashboard.ui.head_alignment_popup import PaintHeadAlignmentPopup
 from src.robot_systems.paint.applications.dashboard.onboarding import (
     build_paint_dashboard_tour,
 )
@@ -244,6 +246,7 @@ class PaintDashboardView(IApplicationView):
         self._camera_selector: QPushButton | None = None
         self._camera_menu: QMenu | None = None
         self._camera_page: QWidget | None = None
+        self._head_alignment_popup: PaintHeadAlignmentPopup | None = None
         self.SHOW_JOG_WIDGET = self._ui_config.show_jog_widget
         self._config = config
         self._action_buttons = action_buttons
@@ -438,6 +441,19 @@ class PaintDashboardView(IApplicationView):
         self._retranslate_camera_selector()
         return page
 
+    def set_head_alignment_feedback(self, feedback: HeadAlignmentFeedback, *, show_popup: bool = False) -> None:
+        if self._head_alignment_popup is None:
+            if not show_popup:
+                return
+            self._head_alignment_popup = PaintHeadAlignmentPopup(self)
+        self._head_alignment_popup.set_feedback(feedback)
+        if show_popup and not self._head_alignment_popup.isVisible():
+            self._head_alignment_popup.open()
+
+    def dismiss_head_alignment_popup(self) -> None:
+        if self._head_alignment_popup is not None:
+            self._head_alignment_popup.reject()
+
     def _on_camera_menu_triggered(self, action) -> None:
         role = str(action.data() or "")
         if role and role != self._selected_camera:
@@ -447,10 +463,7 @@ class PaintDashboardView(IApplicationView):
             self.camera_selected.emit(role)
 
     def _on_expanded_tab_changed(self, _index: int) -> None:
-        self.camera_feed_visible.emit(
-            self._camera_page is not None
-            and self._expanded_tabs.currentWidget() is self._camera_page
-        )
+        self.camera_feed_visible.emit(self.is_camera_feed_visible())
 
     def _retranslate_camera_selector(self) -> None:
         if self._camera_selector is None or self._camera_menu is None:
@@ -511,6 +524,7 @@ class PaintDashboardView(IApplicationView):
         return targets.get(target_id)
 
     def hideEvent(self, event) -> None:
+        self.dismiss_head_alignment_popup()
         if self._onboarding_tour is not None:
             self._onboarding_tour.stop()
         self.camera_feed_visible.emit(False)
@@ -1794,6 +1808,7 @@ class PaintDashboardView(IApplicationView):
         return translated.format(**values)
 
     def clean_up(self) -> None:
+        self.dismiss_head_alignment_popup()
         if self._onboarding_tour is not None:
             self._onboarding_tour.stop()
             self._onboarding_tour.deleteLater()

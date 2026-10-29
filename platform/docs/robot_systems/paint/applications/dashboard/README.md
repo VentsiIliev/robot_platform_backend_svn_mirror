@@ -25,6 +25,30 @@ The dashboard keeps the existing process-state display and disables Start while 
 
 Process Status details show "Waiting for paint stopping to finish." during cleanup and "Stopping is taking longer than expected." after ten seconds. English and Bulgarian translations are provided. A delayed stop keeps Start disabled; there is no automatic restart or timeout bypass. See the [production guide](../../processes/paint/README.md) for cancellation and worker-lifetime behavior.
 
+## Paint-head feedback
+
+The optional [paint-head check](../../paint_head_check/README.md) reports through
+a separate frameless modal popup. `ui/head_alignment_popup.py` composes the
+reusable `PaintHeadAlignmentGuide` from `ui/head_alignment_guide.py`; the immutable
+presentation DTOs and state mapping live in `head_alignment_presentation.py`.
+The popup has one Close button and no native title bar or window controls.
+Asynchronous modal opening keeps live feedback delivery active.
+
+The card owns status and acquisition notices. MISALIGNED shows the schematic
+target and correction cues; UNKNOWN greys the retained guide and disables cues;
+MISSING additionally hides the head illustration. Fresh confirmed alignment turns
+the guide green. No detector regions, landmarks, scores or numeric adjustment
+measurements are shown. Closing dismisses only the message and does not start,
+resume or cancel stopped-position guidance. Live updates do not reopen it until
+a new failed check/session. Start, guidance end, dashboard exit and cleanup clear
+stale popups.
+
+The Camera tab keeps its ordinary feed and role selector. Head feedback neither
+switches tabs/cameras nor changes camera rendering eligibility. A normal successful
+check does not open a popup. The controller bridges typed CHECK, LIVE_GUIDANCE and
+GUIDANCE_ENDED status events to the GUI, requests latest-status replay on load and
+unsubscribes during stop. Paint and paint_tray_dry include English/Bulgarian strings.
+
 <!-- source-navigation:start -->
 ## Source navigation
 

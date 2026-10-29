@@ -3,7 +3,7 @@ import threading
 from dataclasses import dataclass
 from enum import Enum
 
-from src.shared_contracts.events.vision_events import CameraTopics, VisionTopics
+from src.shared_contracts.events.vision_events import CameraFrameMetadata, CameraTopics, VisionTopics
 
 _logger = logging.getLogger(__name__)
 
@@ -59,10 +59,13 @@ class MessagePublisher:
     def publish_latest_image(self,image):
         self.messaging_service.publish(self.latest_image_topic, {"image": image})
 
-    def publish_camera_frame(self, image):
+    def publish_camera_frame(self, image, *, metadata: CameraFrameMetadata | None = None):
+        payload = {"image": image, "camera": "primary_vision"}
+        if metadata is not None:
+            payload["metadata"] = metadata
         self.messaging_service.publish(
             CameraTopics.frame("primary_vision"),
-            {"image": image, "camera": "primary_vision"},
+            payload,
         )
 
     def publish_calibration_image_captured(self,calibration_images):

@@ -1,5 +1,7 @@
 from dataclasses import replace
 
+from .head_check_fields import head_check_from_flat, head_check_to_flat
+
 from src.robot_systems.paint.processes.paint.configuration.models import (
     PaintDropoffConfig,
     PaintEdgeCleanupConfig,
@@ -285,6 +287,7 @@ class PaintProcessSettingsMapper:
         dropoff_safe_travel = settings.dropoff_safe_travel
         nav = settings.navigation_return
         return {
+            **head_check_to_flat(settings.head_check),
             "enable_vacuum_pump": settings.enable_vacuum_pump,
             "enable_dry_run_mode": settings.enable_dry_run_mode,
             "collect_collision_calibration_data": settings.collect_collision_calibration_data,
@@ -1019,6 +1022,7 @@ class PaintProcessSettingsMapper:
         )
         return replace(
             base,
+            head_check=head_check_from_flat(flat, base.head_check),
             enable_z_shift_pixel_compensation=bool(
                 flat.get("enable_z_shift_pixel_compensation", base.enable_z_shift_pixel_compensation)
             ),

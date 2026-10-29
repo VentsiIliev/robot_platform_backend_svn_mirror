@@ -14,6 +14,7 @@ Import the system class explicitly from `src.robot_systems.paint.paint_robot_sys
 This document is the entry point for the paint system. Use it together with:
 
 - [Paint-head detection](paint_head_detection/README.md) — typed image API, calibration, examples, development tools, and Bulgarian pipeline manual
+- [Paint-head checks](paint_head_check/README.md) — before-cycle policies, state reactions, retry positioning and live operator guidance
 - [DIAGNOSTICS.md](DIAGNOSTICS.md)
 - [applications/README.md](applications/README.md)
 - [processes/README.md](processes/README.md)
@@ -32,6 +33,8 @@ src/robot_systems/paint/
 ├── navigation.py                     # paint-specific navigation facade
 ├── calibration/                      # calibration provider + coordinator adapter
 ├── targeting/                        # targeting provider + frame/point builders
+├── paint_head_check/                 # policies, runtime and hardware adapters
+├── contracts/paint_head_check/       # detector-independent values, results and ports
 ├── domain/                           # paint-specific schemas, adapters, repositories
 ├── processes/
 │   └── paint/                        # paint production process package

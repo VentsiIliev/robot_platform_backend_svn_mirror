@@ -28,10 +28,12 @@ or detector virtual environment is required.
 - Local captures and historical evaluation evidence: `output/paint_head_detection/` (ignored).
 
 The bundled calibration is the existing camera installation's development
-snapshot. Production consumers must supply their station calibration through
-the typed API or an explicit configuration directory. Registration with platform
-settings, camera streams, dashboard, and production checks is a subsequent
-integration task; moving the code does not enable production gating.
+snapshot. The optional [paint-head check integration](../paint_head_check/README.md)
+connects the detector through typed adapters to process settings, primary-camera
+frames, before-cycle checks and operator guidance. Checks remain off by default.
+Runtime composition currently uses the bundled calibration; verify it against the
+station before enabling checks. Image-only consumers can supply calibration
+through the typed API or an explicit configuration directory.
 
 The Bulgarian manual is preserved unchanged as the algorithm walkthrough. Its
 original project paths and dependency versions describe the documented snapshot;
