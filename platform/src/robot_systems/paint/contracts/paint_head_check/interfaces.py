@@ -92,6 +92,9 @@ class IPaintHeadAlignmentGuidance(ABC):
 
 
 class IPaintHeadCheckRun(ABC):
+    def close(self) -> None:
+        """Release run-scoped resources; pure scheduling implementations have none."""
+
     @abstractmethod
     def prepare_retry_in_place(self) -> bool:
         """Verify whether the previous inspection stop still satisfies startup positioning."""

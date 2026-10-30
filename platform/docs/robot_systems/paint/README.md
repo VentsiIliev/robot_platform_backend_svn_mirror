@@ -14,6 +14,8 @@ Import the system class explicitly from `src.robot_systems.paint.paint_robot_sys
 This document is the entry point for the paint system. Use it together with:
 
 - [Paint-head detection](paint_head_detection/README.md) — typed image API, calibration, examples, development tools, and Bulgarian pipeline manual
+- [Detector setup application](applications/paint_head_detector_setup/README.md) — developer calibration editor and live tests
+- [Calibration storage/runtime ownership](paint_head_calibration/README.md) — per-system revisions, selection and asset retention
 - [Paint-head checks](paint_head_check/README.md) — before-cycle policies, state reactions, retry positioning and live operator guidance
 - [DIAGNOSTICS.md](DIAGNOSTICS.md)
 - [applications/README.md](applications/README.md)

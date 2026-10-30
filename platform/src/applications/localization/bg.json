@@ -6,7 +6,8 @@
     "folder.production": "Производство",
     "folder.service": "Сервиз",
     "folder.admin": "Администрация",
-    "folder.tests": "Тестове"
+    "folder.tests": "Тестове",
+    "folder.development": "Разработка"
   },
   "Header": {
     "Turn Off Platform": "Изключване на платформата",

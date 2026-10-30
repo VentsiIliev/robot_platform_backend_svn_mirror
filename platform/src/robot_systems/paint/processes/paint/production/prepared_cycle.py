@@ -76,12 +76,16 @@ def run_prepared_paint_cycle(
         context.head_check_return = runtime.return_from_head_check
         context.head_check_pause_request = control.request_pause
 
-    execution = run_paint_cycle(
-        context,
-        initial_state=PaintExecutionState.PICKUP,
-    )
-    if execution.machine_error is not None:
-        return False, execution.machine_error
-    if execution.result.completed and context.head_check_run is not None:
-        context.head_check_run.record_completed_cycle()
-    return execution.result.as_legacy_pair()
+    try:
+        execution = run_paint_cycle(
+            context,
+            initial_state=PaintExecutionState.PICKUP,
+        )
+        if execution.machine_error is not None:
+            return False, execution.machine_error
+        if execution.result.completed and context.head_check_run is not None:
+            context.head_check_run.record_completed_cycle()
+        return execution.result.as_legacy_pair()
+    finally:
+        if context.head_check_run is not None:
+            context.head_check_run.close()

@@ -127,3 +127,6 @@ PAINT_MOTION_RECIPE_APP = False
 
 # Test application for marker-based shaft alignment and robot-pose compensation.
 SHAFT_ALIGNMENT_APP = False
+
+# Manufacturer-only developer tool for detector calibration and revision selection.
+PAINT_HEAD_DETECTOR_SETUP_APP = True

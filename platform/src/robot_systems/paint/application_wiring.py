@@ -1643,3 +1643,11 @@ def _build_image_capture_application(robot_system):
         contour_sampler=resample_contour_xy,
         work_area_getter=lambda: _get_active_work_area_id(robot_system),
     ))
+
+
+def _build_paint_head_detector_setup_application(robot_system):
+    from src.robot_systems.paint.applications.paint_head_detector_setup import (
+        PaintHeadDetectorSetupApplication,
+    )
+
+    return PaintHeadDetectorSetupApplication(robot_system.create_head_detector_setup_service())

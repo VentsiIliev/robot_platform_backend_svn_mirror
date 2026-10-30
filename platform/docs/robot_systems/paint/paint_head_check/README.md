@@ -91,10 +91,17 @@ evaluation runs on its worker rather than the broker callback. Subscriptions and
 buffers are released on every exit.
 
 `PaintHeadDetectorAdapter` maps the [image-only detector](../paint_head_detection/README.md)
-into typed observations, failures and schematic correction directions. Composition
-currently creates `PaintHeadDetector()` with bundled calibration/configuration.
-Verify it against the station camera and inspection pose before enabling checks;
-process settings do not teach detector calibration.
+into typed observations, failures and schematic correction directions. The
+[developer setup application](../applications/paint_head_detector_setup/README.md)
+creates persisted drafts and saved revisions. Runtime reads one exact selected
+revision from the [system-owned calibration library](../paint_head_calibration/README.md)
+per accepted Start. The run and its associated stopped-position guidance keep
+that snapshot; selection changes are admitted only while stopped after cleanup.
+Selection publication reserves the process manager so it cannot overlap Start.
+The approved first-use import preserves bundled calibration in each system's
+managed store; existing catalogs are never overwritten or silently reseeded.
+Verify the selected calibration against the station camera and inspection pose
+before enabling checks. Process settings retain scheduling/reactions only.
 
 ## Live adjustment and dashboard
 

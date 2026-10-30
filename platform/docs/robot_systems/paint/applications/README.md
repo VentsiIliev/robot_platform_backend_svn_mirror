@@ -20,11 +20,19 @@ At startup the paint shell receives only app metadata from those declarations. T
 | Production | `PaintDashboard`, `PaintAdjustment`, `WorkpieceLibrary`, `WorkpieceEditor` |
 | Service | Robot/tool/Modbus/device/work-area/camera/calibration/process settings, calibration and network settings; EtherCAT diagnostics is declared but currently disabled by a switch |
 | Administration | `UserManagement`, `SoftwareUpdate` |
+| Development | `PaintHeadDetectorSetup` (Manufacturer-only) |
 | Tests | Broker debug, contour matching, intrinsic capture, hand-eye, target probing, motion-plane setup, motion recipe and shaft alignment (subject to app switches) |
 
 ---
 
 ## Paint-Owned MVC Package
+
+### `paint_head_detector_setup/`
+
+[Detector setup guide](paint_head_detector_setup/README.md): references, visual
+regions/landmarks, persisted drafts, immutable revisions, live tests and explicit
+runtime selection. It uses the standard MVC service/model/view/controller/factory
+pattern and the system-owned calibration library, without starting production.
 
 ### `dashboard/`
 

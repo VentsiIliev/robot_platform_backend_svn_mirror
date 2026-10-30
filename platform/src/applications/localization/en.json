@@ -6,7 +6,8 @@
     "folder.production": "Production",
     "folder.service": "Service",
     "folder.admin": "Administration",
-    "folder.tests": "Tests"
+    "folder.tests": "Tests",
+    "folder.development": "Development"
   },
   "Header": {
     "Turn Off Platform": "Turn Off Platform",

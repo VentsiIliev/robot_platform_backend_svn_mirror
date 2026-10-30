@@ -21,6 +21,7 @@ class ServiceID(str, Enum):
 
 class SettingsID(str, Enum):
     CAMERAS = "cameras"
+    PAINT_HEAD_CALIBRATION = "paint_head_calibration"
     PAINT_PROCESS_CONFIG = "paint_process_config"
     PAINT_ADJUSTMENT_SETTINGS = "paint_adjustment_settings"
     DRYER_CONFIG = "dryer_config"
@@ -30,3 +31,4 @@ class SettingsID(str, Enum):
 class ProcessID(str, Enum):
     MAIN_PROCESS = "main_process"
     ROBOT_CALIBRATION = "robot_calibration"
+    HEAD_CALIBRATION_SELECTION = "paint_head_calibration_selection"

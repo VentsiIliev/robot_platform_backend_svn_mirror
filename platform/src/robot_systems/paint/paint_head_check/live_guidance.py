@@ -11,6 +11,7 @@ from src.robot_systems.paint.contracts.paint_head_check.errors import (
     HeadInspectionFailure,
     HeadInspectionFailureCode,
     PaintHeadCheckError,
+    PaintHeadConfigurationError,
     PaintHeadProcessingError,
 )
 from src.robot_systems.paint.contracts.paint_head_check.interfaces import (
@@ -49,6 +50,8 @@ class _GuidanceRequest:
     target: HeadInspectionTarget
     max_frame_age_seconds: float
     cancelled: Event
+    inspector_factory: Callable[[], IPaintHeadInspector]
+    on_finished: Callable[[], None] | None
 
 
 class _GuidanceControl(IHeadInspectionControl):
@@ -72,7 +75,7 @@ class PaintHeadLiveGuidance(IPaintHeadAlignmentGuidance):
 
     def __init__(
         self,
-        inspector_factory: Callable[[], IPaintHeadInspector],
+        inspector_factory: Callable[[], IPaintHeadInspector] | None,
         position_guard: IHeadGuidancePositionGuard,
         observer: IHeadGuidanceObserver,
         ready: Callable[[], bool],
@@ -93,12 +96,28 @@ class PaintHeadLiveGuidance(IPaintHeadAlignmentGuidance):
         self._closed = False
 
     def offer(self, target: HeadInspectionTarget, max_frame_age_seconds: float) -> None:
+        if self._inspector_factory is None:
+            raise PaintHeadConfigurationError("Live guidance requires a calibration-bound inspector")
+        self.offer_with_inspector(target, max_frame_age_seconds, self._inspector_factory)
+
+    def offer_with_inspector(
+        self,
+        target: HeadInspectionTarget,
+        max_frame_age_seconds: float,
+        inspector_factory: Callable[[], IPaintHeadInspector],
+        on_finished: Callable[[], None] | None = None,
+    ) -> None:
+        """Bind immutable session resources when offered, before the owning run ends."""
         # Reuse the validated timing contract without inventing a guidance timeout.
         HeadInspectionWindow(0.0, max_frame_age_seconds, max_frame_age_seconds)
         with self._lock:
             self.cancel()
             if not self._closed:
-                self._pending = _GuidanceRequest(target, max_frame_age_seconds, Event())
+                self._pending = _GuidanceRequest(
+                    target, max_frame_age_seconds, Event(), inspector_factory, on_finished
+                )
+            elif on_finished is not None:
+                on_finished()
 
     def start_pending(self) -> None:
         """Non-blocking process lifecycle callback; camera work stays on the worker."""
@@ -118,6 +137,8 @@ class PaintHeadLiveGuidance(IPaintHeadAlignmentGuidance):
         with self._lock:
             if self._pending is not None:
                 self._pending.cancelled.set()
+                if self._pending.on_finished is not None:
+                    self._pending.on_finished()
                 self._pending = None
             if self._active is not None:
                 self._active.cancelled.set()
@@ -151,7 +172,7 @@ class PaintHeadLiveGuidance(IPaintHeadAlignmentGuidance):
             terminal_failure = self._guard.check(request.target)
             if terminal_failure is not None:
                 return
-            inspector = self._inspector_factory()
+            inspector = request.inspector_factory()
             inspector.begin_inspection()
             started = self._clock()
             control = _GuidanceControl(request.cancelled)
@@ -215,8 +236,12 @@ class PaintHeadLiveGuidance(IPaintHeadAlignmentGuidance):
                 if inspector is not None:
                     inspector.end_inspection()
             finally:
-                with self._lock:
-                    if self._active is request:
-                        self._active = None
-                        self._observer.guidance_ended(terminal_failure)
-                    self._workers.discard(current_thread())
+                try:
+                    if request.on_finished is not None:
+                        request.on_finished()
+                finally:
+                    with self._lock:
+                        if self._active is request:
+                            self._active = None
+                            self._observer.guidance_ended(terminal_failure)
+                        self._workers.discard(current_thread())

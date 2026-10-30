@@ -1,0 +1,500 @@
+<div id="paint-detector-designs">
+  <div class="viz-carousel" aria-label="Paint-head setup layouts">
+    <section data-variant="Workspace" aria-label="Workspace layout"><div class="ph-stage" data-layout="workspace"></div></section>
+    <section data-variant="Guided" aria-label="Guided layout" hidden><div class="ph-stage" data-layout="guided"></div></section>
+  </div>
+</div>
+<style>
+#paint-detector-designs .ph-stage {
+  --ph-bg: light-dark(#f8f9fa,#202027);
+  --ph-paper: light-dark(#ffffff,#292930);
+  --ph-ink: light-dark(#252130,#f0ecf5);
+  --ph-muted: light-dark(#686172,#bab2c6);
+  --ph-line: light-dark(#e0dce5,#49424f);
+  --ph-accent: light-dark(#905ba9,#ba89d2);
+  --ph-on: light-dark(#ffffff,#21152a);
+  --ph-soft: light-dark(#f0e9f5,#3d2d49);
+  --ph-green: light-dark(#276b43,#8bd8a6);
+  --ph-green-bg: light-dark(#eef7f0,#233b2b);
+  --ph-amber: light-dark(#89540b,#f0c06f);
+  --ph-amber-bg: light-dark(#fff5e5,#423421);
+  --ph-red: light-dark(#b43540,#ffa2a9);
+  --ph-red-bg: light-dark(#fff0f0,#44272d);
+  --ph-scene: light-dark(#d6d8d8,#44474a);
+  --ph-metal: light-dark(#9b9e9f,#707779);
+  --ph-head: light-dark(#3d4144,#34383b);
+  --ph-gap: 12px;
+  color:var(--ph-ink);font:14px/1.45 "Segoe UI",Arial,sans-serif;
+  min-height:var(--ph-shared-stage-height,850px);
+}
+#paint-detector-designs * {box-sizing:border-box}
+#paint-detector-designs [hidden] {display:none!important}
+#paint-detector-designs .ph-window {background:var(--ph-bg);border:1px solid var(--ph-line);border-radius:12px;position:relative;overflow:clip;min-width:0}
+#paint-detector-designs .ph-shell {display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 22px;background:var(--ph-paper);border-bottom:1px solid var(--ph-line);flex-wrap:wrap;padding-right:104px}
+#paint-detector-designs .ph-brand {display:flex;align-items:center;gap:10px;font-weight:600;flex-wrap:wrap;min-width:0}
+#paint-detector-designs .ph-logo {color:var(--ph-accent);display:flex;align-items:center}
+#paint-detector-designs .ph-row {display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#paint-detector-designs .ph-between {justify-content:space-between}
+#paint-detector-designs .ph-muted {color:var(--ph-muted)}
+#paint-detector-designs .ph-small {font-size:12px}
+#paint-detector-designs .ph-heading {padding:18px 22px 14px}
+#paint-detector-designs h2 {font-size:23px;font-weight:600;line-height:1.25;margin:4px 0 7px}
+#paint-detector-designs h3 {font-size:15px;font-weight:600;margin:0 0 12px}
+#paint-detector-designs p {margin:0}
+#paint-detector-designs button,#paint-detector-designs input,#paint-detector-designs select {font:inherit}
+#paint-detector-designs button {min-height:40px;border:1px solid var(--ph-line);border-radius:8px;padding:8px 12px;background:var(--ph-paper);color:var(--ph-ink);display:inline-flex;align-items:center;justify-content:center;gap:7px}
+#paint-detector-designs button:hover:not(:disabled) {border-color:var(--ph-accent);background:var(--ph-soft)}
+#paint-detector-designs button:disabled {opacity:.5;cursor:not-allowed}
+#paint-detector-designs .ph-primary {background:var(--ph-accent);color:var(--ph-on);border-color:var(--ph-accent)}
+#paint-detector-designs .ph-primary:hover:not(:disabled) {background:var(--ph-accent);filter:brightness(.95)}
+#paint-detector-designs .ph-ghost {border-color:transparent;background:transparent}
+#paint-detector-designs .ph-danger {color:var(--ph-red)}
+#paint-detector-designs button[aria-pressed=true],#paint-detector-designs .ph-tabs button[aria-selected=true] {background:var(--ph-soft);color:var(--ph-accent);border-color:var(--ph-accent)}
+#paint-detector-designs svg[data-lucide] {width:17px;height:17px;flex-shrink:0}
+#paint-detector-designs .ph-badge {display:inline-flex;align-items:center;gap:6px;border-radius:6px;background:var(--ph-soft);color:var(--ph-accent);font-size:12px;padding:4px 8px;white-space:normal}
+#paint-detector-designs .ph-good {background:var(--ph-green-bg);color:var(--ph-green)}
+#paint-detector-designs .ph-warn {background:var(--ph-amber-bg);color:var(--ph-amber)}
+#paint-detector-designs .ph-runtime {margin:0 22px 16px;padding:10px 12px;border:1px solid var(--ph-line);border-radius:8px;background:var(--ph-paper);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+#paint-detector-designs .ph-body {display:grid;grid-template-columns:165px minmax(0,1fr);gap:var(--ph-gap);padding:0 22px 16px}
+#paint-detector-designs .ph-library {border-right:1px solid var(--ph-line);padding-right:12px;min-width:0}
+#paint-detector-designs .ph-library button {width:100%;justify-content:flex-start;text-align:left;margin:0 0 6px}
+#paint-detector-designs .ph-library .ph-add {margin-top:14px;justify-content:center}
+#paint-detector-designs .ph-profile-name {font-weight:600}
+#paint-detector-designs .ph-tabs {display:flex;align-items:center;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--ph-line);padding-bottom:12px;margin-bottom:14px}
+#paint-detector-designs .ph-work {display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:var(--ph-gap);align-items:start}
+#paint-detector-designs .ph-content,#paint-detector-designs .ph-camera,#paint-detector-designs .ph-inspector {min-width:0}
+#paint-detector-designs .ph-preview {border:1px solid var(--ph-line);border-radius:10px;overflow:clip;background:var(--ph-paper)}
+#paint-detector-designs .ph-camera-top {padding:10px 12px;border-bottom:1px solid var(--ph-line);display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+#paint-detector-designs .ph-scene {position:relative;aspect-ratio:1.38;background:var(--ph-scene);isolation:isolate;touch-action:none}
+#paint-detector-designs .ph-machine {display:block;width:100%;height:100%}
+#paint-detector-designs .ph-overlay {position:absolute;border:2px solid var(--ph-accent);background:color-mix(in srgb,var(--ph-accent) 7%,transparent)}
+#paint-detector-designs .ph-zone {left:33%;top:12%;width:40%;height:78%}
+#paint-detector-designs .ph-exclude {left:35%;top:15%;width:13%;height:17%;border-color:var(--ph-amber);background:repeating-linear-gradient(135deg,transparent,transparent 6px,color-mix(in srgb,var(--ph-amber) 25%,transparent) 6px,color-mix(in srgb,var(--ph-amber) 25%,transparent) 8px)}
+#paint-detector-designs .ph-landmark {left:56%;top:35%;width:9%;height:11%;border-color:var(--ph-green);border-radius:50%;background:color-mix(in srgb,var(--ph-green) 10%,transparent)}
+#paint-detector-designs .ph-overlay::before,#paint-detector-designs .ph-overlay::after {content:"";position:absolute;width:7px;height:7px;background:var(--ph-paper);border:1px solid currentColor}
+#paint-detector-designs .ph-overlay::before {left:-4px;top:-4px}
+#paint-detector-designs .ph-overlay::after {right:-4px;bottom:-4px}
+#paint-detector-designs .ph-frame-note {position:absolute;left:10px;bottom:10px;color:var(--ph-ink);background:var(--ph-paper);padding:5px 8px;border-radius:5px;font-size:11px;max-width:calc(100% - 20px)}
+#paint-detector-designs .ph-frame-footer {display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:9px 12px;color:var(--ph-muted);font-size:12px}
+#paint-detector-designs .ph-tools {display:flex;flex-wrap:wrap;gap:7px;margin:10px 0}
+#paint-detector-designs .ph-tools button {padding:7px 9px;font-size:12px}
+#paint-detector-designs .ph-inspector {background:var(--ph-paper);border:1px solid var(--ph-line);border-radius:10px;padding:14px}
+#paint-detector-designs .ph-field {display:flex;flex-direction:column;gap:5px;margin:10px 0;font-size:12px}
+#paint-detector-designs input,#paint-detector-designs select {background:var(--ph-paper);color:var(--ph-ink);border:1px solid var(--ph-line);border-radius:7px;padding:9px;width:100%;min-width:0}
+#paint-detector-designs input[type=checkbox] {width:17px;height:17px;accent-color:var(--ph-accent)}
+#paint-detector-designs .ph-check {display:flex;align-items:center;gap:7px;font-size:12px;margin-top:10px}
+#paint-detector-designs .ph-dual {display:grid;grid-template-columns:1fr 1fr;gap:8px}
+#paint-detector-designs .ph-item {border-bottom:1px solid var(--ph-line);padding:9px 0;display:flex;align-items:center;justify-content:space-between;gap:6px}
+#paint-detector-designs .ph-item:last-child {border-bottom:0}
+#paint-detector-designs .ph-item button {min-height:32px;padding:5px 7px}
+#paint-detector-designs .ph-section-gap {margin-top:18px}
+#paint-detector-designs .ph-reference {border:1px solid var(--ph-line);border-radius:8px;padding:10px;margin:10px 0}
+#paint-detector-designs .ph-reference button {width:100%;margin-top:9px}
+#paint-detector-designs .ph-result {border-left:3px solid var(--ph-amber);padding:10px 12px;background:var(--ph-amber-bg);border-radius:0 7px 7px 0;margin-bottom:12px}
+#paint-detector-designs .ph-result[data-status=present] {border-color:var(--ph-green);background:var(--ph-green-bg)}
+#paint-detector-designs .ph-result[data-status=missing],#paint-detector-designs .ph-result[data-status=invalid] {border-color:var(--ph-red);background:var(--ph-red-bg)}
+#paint-detector-designs .ph-result strong {display:block;font-size:18px;font-weight:600}
+#paint-detector-designs dl {margin:0}
+#paint-detector-designs dl>div {display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--ph-line);padding:9px 0;font-size:12px;flex-wrap:wrap}
+#paint-detector-designs dt {color:var(--ph-muted)}
+#paint-detector-designs dd {margin:0;font-variant-numeric:tabular-nums}
+#paint-detector-designs .ph-tuning {margin-top:12px}
+#paint-detector-designs summary {color:var(--ph-accent);padding:8px 0}
+#paint-detector-designs .ph-foot {padding:12px 22px;border-top:1px solid var(--ph-line);background:var(--ph-paper);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+#paint-detector-designs .ph-notice {min-height:20px;margin:8px 0 0;font-size:12px;color:var(--ph-muted)}
+#paint-detector-designs .ph-notice[data-kind=error] {color:var(--ph-red)}
+#paint-detector-designs .ph-table {width:100%;border-collapse:collapse}
+#paint-detector-designs .ph-table th {font-weight:600;color:var(--ph-muted);text-align:left;font-size:12px}
+#paint-detector-designs .ph-table th,#paint-detector-designs .ph-table td {padding:12px 8px;border-bottom:1px solid var(--ph-line);vertical-align:middle}
+#paint-detector-designs .ph-table td:first-child {font-weight:600}
+#paint-detector-designs .ph-table td:last-child {text-align:right}
+#paint-detector-designs .ph-table button {font-size:12px;min-height:34px;padding:6px 8px}
+#paint-detector-designs .ph-warning-note {padding:12px;background:var(--ph-soft);border-radius:8px;margin:16px 0;font-size:12px}
+#paint-detector-designs .ph-guided-picker {display:none}
+#paint-detector-designs [data-layout=guided] .ph-library {display:none}
+#paint-detector-designs [data-layout=guided] .ph-body {grid-template-columns:1fr}
+#paint-detector-designs [data-layout=guided] .ph-guided-picker {display:flex;align-items:center;gap:10px}
+#paint-detector-designs [data-layout=guided] .ph-work {grid-template-columns:minmax(0,1fr) 265px}
+#paint-detector-designs [data-layout=guided] .ph-tabs button {flex:1;justify-content:flex-start;padding:12px}
+#paint-detector-designs [data-layout=guided] .ph-step {width:24px;height:24px;display:inline-grid;place-items:center;border-radius:50%;background:var(--ph-soft);flex-shrink:0}
+#paint-detector-designs [data-layout=workspace] .ph-step {display:none}
+#paint-detector-designs .ph-modal {position:absolute;inset:0;z-index:20;display:grid;place-items:center;background:color-mix(in srgb,var(--ph-ink) 30%,transparent);padding:20px}
+#paint-detector-designs .ph-dialog {background:var(--ph-paper);border:1px solid var(--ph-line);border-radius:12px;padding:22px;width:min(100%,480px);box-shadow:0 14px 40px color-mix(in srgb,var(--ph-ink) 20%,transparent)}
+#paint-detector-designs .ph-dialog h3 {font-size:20px}
+#paint-detector-designs .ph-dialog .ph-scene {max-height:250px;aspect-ratio:1.6;margin:14px 0}
+#paint-detector-designs .ph-dialog-actions {display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:18px}
+#paint-detector-designs .ph-checkpoint {display:flex;gap:8px;align-items:center;padding:10px 0;color:var(--ph-green)}
+#paint-detector-designs .ph-draw {border:2px dashed var(--ph-accent);background:color-mix(in srgb,var(--ph-accent) 10%,transparent)}
+#paint-detector-designs .ph-cursor-cross {cursor:crosshair}
+#paint-detector-designs .ph-empty-box {padding:12px;border:1px solid var(--ph-line);border-radius:8px;margin-top:10px}
+@media(max-width:850px) {
+  #paint-detector-designs .ph-body {grid-template-columns:1fr}
+  #paint-detector-designs .ph-library {display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-right:0;border-bottom:1px solid var(--ph-line);padding:0 0 10px}
+  #paint-detector-designs .ph-library h3 {margin:0}
+  #paint-detector-designs .ph-library button {width:auto;margin:0}
+  #paint-detector-designs .ph-library .ph-add {margin:0}
+  #paint-detector-designs .ph-library .ph-revision-shortcuts {display:none}
+  #paint-detector-designs .ph-work,#paint-detector-designs [data-layout=guided] .ph-work {grid-template-columns:minmax(0,1fr) 220px}
+}
+@media(max-width:620px) {
+  #paint-detector-designs .ph-shell {padding:10px 12px;padding-right:90px}
+  #paint-detector-designs .ph-heading {padding:14px 12px}
+  #paint-detector-designs h2 {font-size:21px}
+  #paint-detector-designs .ph-runtime {margin:0 12px 12px}
+  #paint-detector-designs .ph-body {padding:0 12px 12px}
+  #paint-detector-designs .ph-work,#paint-detector-designs [data-layout=guided] .ph-work {grid-template-columns:1fr}
+  #paint-detector-designs .ph-inspector {display:block}
+  #paint-detector-designs .ph-tabs button {flex:1 1 calc(50% - 8px);font-size:12px}
+  #paint-detector-designs .ph-foot {padding:12px}
+  #paint-detector-designs .ph-stage {min-height:var(--ph-shared-stage-height,1350px)}
+  #paint-detector-designs .ph-table th,#paint-detector-designs .ph-table td {padding:9px 4px;font-size:12px;overflow-wrap:anywhere}
+  #paint-detector-designs .ph-table td:last-child .ph-row {justify-content:flex-end}
+}
+@media(pointer:coarse) {
+  #paint-detector-designs button {min-height:44px}
+  #paint-detector-designs input,#paint-detector-designs select {font-size:16px;min-height:44px}
+}
+</style>
+<template id="ph-app-template">
+  <div class="ph-window" aria-label="Paint-head detector setup">
+    <header class="ph-shell">
+      <div class="ph-brand"><span class="ph-logo"><i data-lucide="panels-top-left" aria-hidden="true"></i></span> Paint System <span class="ph-muted">/</span> <span data-i18n="development"></span></div>
+      <div class="ph-row ph-small ph-muted"><i data-lucide="user-round" aria-hidden="true"></i> Manufacturer</div>
+    </header>
+    <div class="ph-heading">
+      <div class="ph-row ph-between">
+        <div><h2 data-i18n="title"></h2><p class="ph-muted ph-small"><span data-i18n="camera"></span> · Vertical Shaft Alignment</p></div>
+        <span class="ph-badge ph-warn" data-role="draft-badge"></span>
+      </div>
+    </div>
+    <div class="ph-runtime">
+      <div class="ph-row"><i data-lucide="shield-check" aria-hidden="true"></i><span class="ph-small" data-i18n="runtime"></span><strong class="ph-small" data-role="runtime-label"></strong></div>
+      <div class="ph-row"><span class="ph-badge ph-good" data-i18n="stopped"></span><button class="ph-ghost cursor-interaction" data-action="revisions"><span data-i18n="manage"></span><i data-lucide="arrow-right" aria-hidden="true"></i></button></div>
+    </div>
+    <div class="ph-body">
+      <aside class="ph-library">
+        <h3 data-i18n="profiles"></h3>
+        <button class="cursor-interaction" data-action="profile" data-profile="standard" aria-pressed="true"><span><span class="ph-profile-name">Standard</span><br><span class="ph-small ph-muted" data-i18n="mainProfile"></span></span></button>
+        <button class="cursor-interaction" data-action="profile" data-profile="spare" aria-pressed="false"><span><span class="ph-profile-name">Spare head</span><br><span class="ph-small ph-muted" data-i18n="spareProfile"></span></span></button>
+        <button class="ph-add cursor-interaction" data-action="new-profile"><i data-lucide="plus" aria-hidden="true"></i><span data-i18n="newProfile"></span></button>
+        <div class="ph-revision-shortcuts ph-section-gap"><p class="ph-small ph-muted" data-i18n="editing"></p><p class="ph-profile-name" data-role="editing-label"></p><p class="ph-small ph-muted ph-section-gap" data-i18n="draftPrivate"></p></div>
+      </aside>
+      <main class="ph-content">
+        <div class="ph-guided-picker ph-field"><label data-i18n="profile"></label><select data-action="profile-picker" aria-label="Profile"><option value="standard">Standard</option><option value="spare">Spare head</option></select></div>
+        <nav class="ph-tabs" role="tablist" aria-label="Calibration workflow">
+          <button class="cursor-interaction" role="tab" data-page="references"><span class="ph-step">1</span><i data-lucide="camera" aria-hidden="true"></i><span data-i18n="references"></span></button>
+          <button class="cursor-interaction" role="tab" data-page="regions"><span class="ph-step">2</span><i data-lucide="scan" aria-hidden="true"></i><span data-i18n="regions"></span></button>
+          <button class="cursor-interaction" role="tab" data-page="test"><span class="ph-step">3</span><i data-lucide="play" aria-hidden="true"></i><span data-i18n="test"></span></button>
+          <button class="cursor-interaction" role="tab" data-page="revisions"><span class="ph-step">4</span><i data-lucide="history" aria-hidden="true"></i><span data-i18n="revisions"></span></button>
+        </nav>
+        <section data-panel="editor" role="tabpanel">
+          <div class="ph-work">
+            <div class="ph-camera">
+              <div class="ph-preview">
+                <div class="ph-camera-top"><div class="ph-row ph-small"><i data-lucide="video" aria-hidden="true"></i><strong data-role="frame-source"></strong></div><button class="ph-ghost cursor-interaction" data-action="freeze"><i data-lucide="pause" aria-hidden="true"></i><span data-role="freeze-label"></span></button></div>
+                <div class="ph-scene" data-role="scene">
+                  <svg class="ph-machine" viewBox="0 0 680 450" role="img" aria-label="Illustrative camera frame of paint-head mount and head">
+                    <defs><pattern id="ph-grid-lines" width="60" height="60" patternUnits="userSpaceOnUse"><path d="M60 0H0V60" fill="none" stroke="var(--ph-metal)" stroke-width="1" opacity=".25"/></pattern></defs>
+                    <rect width="680" height="450" fill="var(--ph-scene)"/><rect width="680" height="450" fill="url(#ph-grid-lines)"/>
+                    <path d="M0 264H208V450H0ZM540 102H680V450H540Z" fill="var(--ph-metal)" opacity=".7"/>
+                    <path d="M96 0V207H240M114 0V189H240" fill="none" stroke="var(--ph-head)" stroke-width="9"/>
+                    <path d="M510 0V60L564 92V250" fill="none" stroke="var(--ph-head)" stroke-width="11"/>
+                    <rect x="260" y="45" width="220" height="320" rx="8" fill="var(--ph-head)" opacity=".88"/>
+                    <g data-role="head-shape">
+                      <rect x="332" y="69" width="75" height="45" rx="8" fill="var(--ph-metal)"/>
+                      <rect x="351" y="43" width="37" height="33" rx="4" fill="var(--ph-head)"/>
+                      <circle cx="370" cy="255" r="120" fill="var(--ph-head)" stroke="var(--ph-metal)" stroke-width="8"/>
+                      <circle cx="370" cy="255" r="98" fill="none" stroke="var(--ph-scene)" stroke-width="2" opacity=".6"/>
+                      <path d="M312 172L434 335M308 337L435 169" stroke="var(--ph-metal)" stroke-width="15" opacity=".4"/>
+                      <rect x="349" y="127" width="43" height="230" rx="16" fill="var(--ph-head)" stroke="var(--ph-metal)" stroke-width="3"/>
+                      <circle cx="370" cy="172" r="17" fill="var(--ph-scene)" stroke="var(--ph-metal)" stroke-width="5"/>
+                      <circle cx="370" cy="313" r="11" fill="var(--ph-metal)"/>
+                    </g>
+                    <g fill="var(--ph-scene)" stroke="var(--ph-metal)" stroke-width="5"><circle cx="280" cy="65" r="7"/><circle cx="460" cy="65" r="7"/><circle cx="280" cy="345" r="7"/><circle cx="460" cy="345" r="7"/></g>
+                  </svg>
+                  <div class="ph-overlay ph-zone" data-role="inspection-zone" aria-label="Inspection region"></div>
+                  <div class="ph-overlay ph-exclude" data-role="excluded-zone" aria-label="Excluded region"></div>
+                  <div class="ph-overlay ph-landmark" data-role="landmark-zone" aria-label="Selected landmark"></div>
+                  <span class="ph-frame-note" data-i18n="sampleFrame"></span>
+                </div>
+                <div class="ph-frame-footer"><span>1280 × 1024 <span data-i18n="pixels"></span></span><span data-role="frame-meta"></span></div>
+              </div>
+              <div class="ph-tools" data-role="region-tools">
+                <button class="cursor-interaction" data-action="tool" data-tool="select" aria-pressed="true"><i data-lucide="mouse-pointer-2" aria-hidden="true"></i><span data-i18n="select"></span></button>
+                <button class="cursor-interaction" data-action="tool" data-tool="inspection"><i data-lucide="scan" aria-hidden="true"></i><span data-i18n="inspection"></span></button>
+                <button class="cursor-interaction" data-action="tool" data-tool="exclude"><i data-lucide="square-dashed" aria-hidden="true"></i><span data-i18n="exclude"></span></button>
+                <button class="cursor-interaction" data-action="tool" data-tool="landmark"><i data-lucide="crosshair" aria-hidden="true"></i><span data-i18n="landmark"></span></button>
+              </div>
+              <p class="ph-notice" data-role="tool-hint"></p>
+              <div class="ph-row ph-section-gap" data-role="test-actions" hidden>
+                <button class="ph-primary cursor-interaction" data-action="test"><i data-lucide="play" aria-hidden="true"></i><span data-i18n="testFrame"></span></button>
+                <button class="cursor-interaction" data-action="live"><i data-lucide="radio" aria-hidden="true"></i><span data-role="live-label"></span></button>
+                <span class="ph-badge" data-i18n="testingDraft"></span>
+              </div>
+            </div>
+            <aside class="ph-inspector">
+              <div data-inspector="references">
+                <h3 data-i18n="referenceImages"></h3>
+                <div class="ph-reference"><div class="ph-row ph-between"><strong data-i18n="headPresent"></strong><i data-lucide="check" aria-hidden="true"></i></div><p class="ph-muted ph-small" data-i18n="referenceSaved"></p><button class="cursor-interaction" data-action="capture" data-kind="present"><i data-lucide="camera" aria-hidden="true"></i><span data-i18n="captureReplace"></span></button></div>
+                <div class="ph-reference"><div class="ph-row ph-between"><strong data-i18n="headMissing"></strong><i data-lucide="check" aria-hidden="true"></i></div><p class="ph-muted ph-small" data-i18n="referenceSaved"></p><button class="cursor-interaction" data-action="capture" data-kind="missing"><i data-lucide="camera" aria-hidden="true"></i><span data-i18n="captureReplace"></span></button></div>
+                <p class="ph-small ph-muted" data-i18n="referenceHint"></p>
+              </div>
+              <div data-inspector="regions">
+                <h3 data-i18n="objects"></h3>
+                <div class="ph-item"><span class="ph-small" data-i18n="inspectionRegion"></span><button class="ph-ghost cursor-interaction" data-action="pick-object" data-tool="inspection" aria-label="Select inspection region"><i data-lucide="scan" aria-hidden="true"></i></button></div>
+                <div class="ph-item"><span class="ph-small" data-i18n="emptyMount"></span><button class="ph-ghost cursor-interaction" data-action="pick-object" data-tool="empty" aria-label="Select empty mount region"><i data-lucide="scan" aria-hidden="true"></i></button></div>
+                <div class="ph-item"><span class="ph-small" data-i18n="excludedCamera"></span><button class="ph-ghost cursor-interaction" data-action="pick-object" data-tool="exclude" aria-label="Select excluded region"><i data-lucide="square-dashed" aria-hidden="true"></i></button></div>
+                <div class="ph-item"><span class="ph-small" data-i18n="fastener"></span><span class="ph-badge" data-i18n="selected"></span></div>
+                <div class="ph-section-gap"><h3 data-i18n="properties"></h3>
+                  <label class="ph-field"><span data-i18n="name"></span><input value="Upper fastener" data-edit="name"></label>
+                  <div class="ph-dual"><label class="ph-field"><span data-i18n="shape"></span><select data-edit="shape"><option value="circle" data-i18n="circle"></option><option value="rectangle" data-i18n="rectangle"></option></select></label><label class="ph-field"><span data-i18n="threshold"></span><input type="number" min="0" max="1" step=".01" value=".72" data-edit="threshold"></label></div>
+                  <label class="ph-check"><input type="checkbox" checked data-edit="orientation"><span data-i18n="orientationInvariant"></span></label>
+                  <button class="ph-ghost ph-danger cursor-interaction ph-section-gap" data-action="remove-object"><i data-lucide="trash-2" aria-hidden="true"></i><span data-i18n="removeLandmark"></span></button>
+                </div>
+              </div>
+              <div data-inspector="test">
+                <h3 data-i18n="result"></h3><div class="ph-result" data-role="result"><strong data-role="status"></strong><span class="ph-small" data-role="reason"></span></div>
+                <dl><div><dt data-i18n="observed"></dt><dd data-role="observed"></dd></div><div><dt data-i18n="translation"></dt><dd data-role="translation"></dd></div><div><dt data-i18n="rotation"></dt><dd data-role="rotation"></dd></div><div><dt data-i18n="featureScore"></dt><dd data-role="score"></dd></div><div><dt data-i18n="source"></dt><dd data-i18n="currentDraft"></dd></div></dl>
+                <details class="ph-tuning"><summary class="cursor-interaction" data-i18n="alignmentSettings"></summary>
+                  <label class="ph-field"><span data-i18n="translationLimit"></span><input type="number" value="10" min="0" data-edit="translation-limit"></label>
+                  <label class="ph-field"><span data-i18n="rotationLimit"></span><input type="number" value="2" min="0" data-edit="rotation-limit"></label>
+                  <label class="ph-field"><span data-i18n="stableFrames"></span><input type="number" value="3" min="1" data-edit="stable-frames"></label>
+                </details>
+              </div>
+            </aside>
+          </div>
+        </section>
+        <section data-panel="revisions" role="tabpanel" hidden>
+          <div class="ph-row ph-between"><h3 data-i18n="savedRevisions"></h3><span class="ph-badge" data-role="profile-label"></span></div>
+          <table class="ph-table"><thead><tr><th data-i18n="revision"></th><th data-i18n="state"></th><th data-i18n="actions"></th></tr></thead><tbody data-role="revision-rows"></tbody></table>
+          <div class="ph-warning-note" data-i18n="selectionNote"></div>
+          <button class="ph-ghost ph-danger cursor-interaction" data-action="delete-profile"><i data-lucide="trash-2" aria-hidden="true"></i><span data-i18n="deleteProfile"></span></button>
+        </section>
+        <p class="ph-notice" data-role="notice" aria-live="polite"></p>
+      </main>
+    </div>
+    <footer class="ph-foot"><div class="ph-small"><span data-role="editing-foot"></span><br><span class="ph-muted" data-i18n="saveNotApply"></span></div><div class="ph-row"><button class="cursor-interaction" data-action="save-draft"><i data-lucide="save" aria-hidden="true"></i><span data-i18n="saveDraft"></span></button><button class="ph-primary cursor-interaction" data-action="save-revision"><i data-lucide="check" aria-hidden="true"></i><span data-i18n="saveCalibration"></span></button></div></footer>
+    <div class="ph-modal" data-role="modal" hidden></div>
+  </div>
+</template>
+<script>
+(function(){
+  const root=document.getElementById('paint-detector-designs');
+  const words={
+    en:{
+      development:'Development',title:'Paint-head detector setup',camera:'Camera: Primary vision',runtime:'Runtime calibration',stopped:'Process stopped',manage:'Manage',profiles:'Profiles',profile:'Calibration profile',mainProfile:'Primary inspection',spareProfile:'Alternative calibration',newProfile:'New profile',editing:'Editing',draftPrivate:'Draft changes do not affect production.',references:'References',regions:'Regions & landmarks',test:'Test & tune',revisions:'Revisions',sampleFrame:'Illustrative frame · sample data',pixels:'pixels',select:'Select',inspection:'Inspection',exclude:'Exclude',landmark:'Landmark',testFrame:'Test frame',testingDraft:'Testing draft',referenceImages:'Reference images',headPresent:'Head present',headMissing:'Head missing',referenceSaved:'1280 × 1024 · available',captureReplace:'Capture / replace',referenceHint:'Capture, review, then confirm the reference for this draft.',objects:'Regions & landmarks',inspectionRegion:'Inspection region',emptyMount:'Empty-mount region',excludedCamera:'Excluded · camera',fastener:'Upper fastener',selected:'Selected',properties:'Landmark properties',name:'Name',shape:'Shape',circle:'Circle',rectangle:'Rectangle',threshold:'Match threshold',orientationInvariant:'Orientation invariant',removeLandmark:'Remove landmark',result:'Detection result',observed:'Observed state',translation:'Translation',rotation:'Rotation',featureScore:'Landmark match score',source:'Evaluation source',currentDraft:'Current draft',alignmentSettings:'Alignment & confirmation',translationLimit:'Translation limit (px)',rotationLimit:'Rotation limit (°)',stableFrames:'Stable frames',savedRevisions:'Saved revisions',revision:'Revision',state:'State',actions:'Actions',selectionNote:'Saving creates a revision. “Use for runtime” is a separate choice. Selected or in-use revisions cannot be deleted.',deleteProfile:'Delete profile',saveNotApply:'Saving does not change runtime selection.',saveDraft:'Save draft',saveCalibration:'Save calibration',dirty:'Draft · unsaved changes',clean:'Draft saved',based:'Draft based on',saved:'Saved',runtimeState:'Selected for runtime',apply:'Use for runtime',delete:'Delete',edit:'Edit as draft',freeze:'Freeze',resume:'Resume preview',live:'Live evaluation',stopLive:'Stop live evaluation',frozen:'Frozen frame',preview:'Live preview',fresh:'Frame 1842 · fresh',drawHint:'Choose a tool, then drag on the frame to add a region.',readyHint:'Select a region to view its properties.',present:'Head present',misaligned:'Head misaligned',missing:'Head missing',unknown:'Unknown',invalid:'Unusable frame',alignedReason:'Aligned · confirmed',misalignedReason:'Outside alignment limits',missingReason:'Empty mount detected',unknownReason:'Confirming · insufficient evidence',invalidReason:'Frame is stale · evaluation withheld',savedDraftNotice:'Draft saved. Runtime selection is unchanged.',savedRevisionNotice:'Validated revision saved. Select it under Revisions to use it for runtime.',capturedNotice:'Reference confirmed in the draft. Runtime selection is unchanged.',drawnNotice:'Region added to draft.',removedNotice:'Landmark removed from draft.',testedNotice:'Sample detection completed on the current draft.',liveNotice:'Live evaluation enabled for this preview.',liveStopped:'Live evaluation stopped.',applyNotice:'Runtime selection updated to',blocked:'Deletion blocked: select another runtime revision first.',confirmDelete:'Delete revision?',deleteDetail:'This revision will be removed. Shared reference images remain while other drafts or revisions use them.',confirmProfile:'Delete profile?',profileBlocked:'This profile contains the selected runtime revision. Select a different profile first.',deletedNotice:'Revision deleted. Runtime selection is unchanged.',profileDeleted:'Profile deleted.',cancel:'Cancel',confirm:'Delete revision',captureTitle:'Review captured reference',referenceRole:'Reference role',captureConfirm:'Use in draft',captureDetail:'Confirm the captured image before replacing this draft’s reference.',newTitle:'New calibration profile',profileName:'Profile name',create:'Create draft',newName:'New calibration',created:'New profile draft created.',needProfile:'A profile name is required.',emptyRevisions:'No saved revisions yet.',editNotice:'Draft opened from',deleteWhole:'Delete profile',runtimeShort:'Runtime',draftWord:'Draft',revisionWord:'Revision',mockNote:'Preview only'
+    },
+    bg:{
+      development:'Разработка',title:'Настройка на детектора за глава',camera:'Камера: Основна визия',runtime:'Калибрация за процеса',stopped:'Процесът е спрян',manage:'Управление',profiles:'Профили',profile:'Калибрационен профил',mainProfile:'Основна инспекция',spareProfile:'Алтернативна калибрация',newProfile:'Нов профил',editing:'Редактиране',draftPrivate:'Промените в черновата не засягат производството.',references:'Еталони',regions:'Зони и ориентири',test:'Проверка и настройка',revisions:'Ревизии',sampleFrame:'Илюстративен кадър · примерни данни',pixels:'пиксела',select:'Избор',inspection:'Инспекция',exclude:'Изключване',landmark:'Ориентир',testFrame:'Провери кадъра',testingDraft:'Проверка на чернова',referenceImages:'Еталонни изображения',headPresent:'Налична глава',headMissing:'Липсваща глава',referenceSaved:'1280 × 1024 · наличен',captureReplace:'Заснеми / замени',referenceHint:'Заснемете, прегледайте и потвърдете еталона за черновата.',objects:'Зони и ориентири',inspectionRegion:'Инспекционна зона',emptyMount:'Зона на празния монтаж',excludedCamera:'Изключена · камера',fastener:'Горен крепеж',selected:'Избран',properties:'Свойства на ориентира',name:'Име',shape:'Форма',circle:'Кръг',rectangle:'Правоъгълник',threshold:'Праг на съвпадение',orientationInvariant:'Независим от ориентацията',removeLandmark:'Премахни ориентира',result:'Резултат от проверката',observed:'Наблюдавано състояние',translation:'Отместване',rotation:'Завъртане',featureScore:'Оценка на ориентира',source:'Източник на настройките',currentDraft:'Текуща чернова',alignmentSettings:'Подравняване и потвърждение',translationLimit:'Допустимо отместване (px)',rotationLimit:'Допустимо завъртане (°)',stableFrames:'Стабилни кадри',savedRevisions:'Записани ревизии',revision:'Ревизия',state:'Състояние',actions:'Действия',selectionNote:'Записът създава ревизия. „Използвай в процеса“ е отделен избор. Избрани или използвани ревизии не могат да се изтриват.',deleteProfile:'Изтрий профила',saveNotApply:'Записът не променя избора за процеса.',saveDraft:'Запиши чернова',saveCalibration:'Запиши калибрация',dirty:'Чернова · незаписани промени',clean:'Черновата е записана',based:'Чернова от',saved:'Записана',runtimeState:'Избрана за процеса',apply:'Използвай в процеса',delete:'Изтрий',edit:'Редактирай като чернова',freeze:'Замрази',resume:'Продължи прегледа',live:'Проверка на живо',stopLive:'Спри проверката на живо',frozen:'Замразен кадър',preview:'Преглед на живо',fresh:'Кадър 1842 · актуален',drawHint:'Изберете инструмент и очертайте зона върху кадъра.',readyHint:'Изберете зона, за да видите свойствата ѝ.',present:'Главата е налична',misaligned:'Главата е разместена',missing:'Главата липсва',unknown:'Неизвестно',invalid:'Неизползваем кадър',alignedReason:'Подравнена · потвърдено',misalignedReason:'Извън допустимото подравняване',missingReason:'Открит празен монтаж',unknownReason:'Потвърждаване · недостатъчни данни',invalidReason:'Остарял кадър · проверката е спряна',savedDraftNotice:'Черновата е записана. Изборът за процеса е непроменен.',savedRevisionNotice:'Валидирана ревизия е записана. Изберете я от „Ревизии“, за да я използвате в процеса.',capturedNotice:'Еталонът е потвърден в черновата. Изборът за процеса е непроменен.',drawnNotice:'Зоната е добавена в черновата.',removedNotice:'Ориентирът е премахнат от черновата.',testedNotice:'Примерната проверка на черновата приключи.',liveNotice:'Проверката на живо е включена в този преглед.',liveStopped:'Проверката на живо е спряна.',applyNotice:'Изборът за процеса е променен на',blocked:'Изтриването е блокирано: първо изберете друга ревизия за процеса.',confirmDelete:'Изтриване на ревизия?',deleteDetail:'Ревизията ще бъде премахната. Общите еталони се запазват, докато друга чернова или ревизия ги използва.',confirmProfile:'Изтриване на профил?',profileBlocked:'Профилът съдържа избраната ревизия за процеса. Първо изберете друг профил.',deletedNotice:'Ревизията е изтрита. Изборът за процеса е непроменен.',profileDeleted:'Профилът е изтрит.',cancel:'Отказ',confirm:'Изтрий ревизията',captureTitle:'Преглед на заснетия еталон',referenceRole:'Вид на еталона',captureConfirm:'Използвай в черновата',captureDetail:'Потвърдете кадъра преди замяна на еталона в черновата.',newTitle:'Нов калибрационен профил',profileName:'Име на профила',create:'Създай чернова',newName:'Нова калибрация',created:'Създадена е чернова на нов профил.',needProfile:'Въведете име на профила.',emptyRevisions:'Все още няма записани ревизии.',editNotice:'Отворена е чернова от',deleteWhole:'Изтрий профила',runtimeShort:'За процеса',draftWord:'Чернова',revisionWord:'Ревизия',mockNote:'Само преглед'
+    }
+  };
+  const design={language:'bg',scenario:'misaligned',showRegions:true,spacing:12};
+  const saved=window.openai&&window.openai.widgetState;
+  if(saved&&saved.privateContent&&['bg','en'].includes(saved.privateContent.language))design.language=saved.privateContent.language;
+  const instances=[];
+  function t(key){return words[design.language][key]||key}
+  function el(tag,cls,txt){const e=document.createElement(tag);if(cls)e.className=cls;if(txt!==undefined)e.textContent=txt;return e}
+  function persist(){
+    if(window.openai&&window.openai.setWidgetState)window.openai.setWidgetState({modelContent:{layoutChoices:['Workspace','Guided'],language:design.language,scenario:design.scenario,profiles:instances.map(x=>({layout:x.layout,editing:x.state.profiles[x.state.profile].name,runtime:x.state.runtime}))},privateContent:{language:design.language}}).catch(function(){});
+  }
+  function icons(){if(globalThis.lucide)lucide.createIcons({attrs:{width:17,height:17}})}
+  function button(label,action,extra){const b=el('button','cursor-interaction '+(extra||''),label);b.type='button';b.dataset.action=action;return b}
+  function notice(x,key,error){x.state.notice=key;x.state.noticeError=!!error;const n=x.stage.querySelector('[data-role=notice]');n.textContent=key;n.dataset.kind=error?'error':'info'}
+  function selectedProfile(x){return x.state.profiles[x.state.profile]}
+  function update(x){
+    const s=x.state,p=selectedProfile(x),q=function(sel){return x.stage.querySelector(sel)};
+    x.stage.style.setProperty('--ph-gap',design.spacing+'px');
+    x.stage.querySelectorAll('[data-i18n]').forEach(function(e){e.textContent=t(e.dataset.i18n)});
+    q('[data-role=runtime-label]').textContent=s.runtime.name+' · r'+s.runtime.rev;
+    q('[data-role=draft-badge]').textContent=t(s.dirty?'dirty':'clean');
+    q('[data-role=draft-badge]').className='ph-badge '+(s.dirty?'ph-warn':'ph-good');
+    q('[data-role=editing-label]').textContent=p.name+' · '+t('draftWord');
+    q('[data-role=editing-foot]').textContent=p.name+' · '+(s.base>0?t('based')+' r'+s.base:t('draftWord'));
+    q('[data-role=profile-label]').textContent=p.name;
+    q('[data-role=frame-source]').textContent=t(s.frozen?'frozen':'preview');
+    q('[data-role=freeze-label]').textContent=t(s.frozen?'resume':'freeze');
+    q('[data-role=frame-meta]').textContent=t('fresh');
+    q('[data-role=live-label]').textContent=t(s.live?'stopLive':'live');
+    q('[data-action=live]').setAttribute('aria-pressed',String(s.live));
+    q('[data-role=tool-hint]').textContent=t(s.tool==='select'?'readyHint':'drawHint');
+    q('[data-role=scene]').classList.toggle('ph-cursor-cross',s.tool!=='select'&&s.page==='regions');
+    x.stage.querySelectorAll('[data-page]').forEach(function(b){const active=b.dataset.page===s.page;b.setAttribute('aria-selected',String(active));b.id='ph-'+x.layout+'-tab-'+b.dataset.page;b.setAttribute('aria-controls','ph-'+x.layout+'-panel-'+(b.dataset.page==='revisions'?'revisions':'editor'))});
+    ['editor','revisions'].forEach(function(panel){const section=q('[data-panel='+panel+']');section.hidden=(s.page==='revisions')!==(panel==='revisions');section.id='ph-'+x.layout+'-panel-'+panel;section.setAttribute('aria-labelledby','ph-'+x.layout+'-tab-'+s.page)});
+    x.stage.querySelectorAll('[data-inspector]').forEach(function(e){e.hidden=e.dataset.inspector!==s.page});
+    q('[data-role=region-tools]').hidden=s.page!=='regions';
+    q('[data-role=tool-hint]').hidden=s.page!=='regions';
+    q('[data-role=test-actions]').hidden=s.page!=='test';
+    x.stage.querySelectorAll('[data-action=tool]').forEach(function(e){e.setAttribute('aria-pressed',String(e.dataset.tool===s.tool))});
+    q('[data-role=inspection-zone]').hidden=!design.showRegions||s.page==='references'||design.scenario==='invalid';
+    q('[data-role=excluded-zone]').hidden=!design.showRegions||s.page==='references'||design.scenario==='invalid';
+    q('[data-role=landmark-zone]').hidden=s.removed||!design.showRegions||s.page==='references'||design.scenario==='invalid'||design.scenario==='missing';
+    q('[data-role=head-shape]').style.visibility=design.scenario==='missing'?'hidden':'visible';
+    q('[data-action=profile-picker]').value=s.profile;
+    x.stage.querySelectorAll('[data-action=profile]').forEach(function(e){e.setAttribute('aria-pressed',String(e.dataset.profile===s.profile))});
+    const result=q('[data-role=result]');result.dataset.status=design.scenario;
+    q('[data-role=status]').textContent=t(design.scenario);
+    q('[data-role=reason]').textContent=t({present:'alignedReason',misaligned:'misalignedReason',missing:'missingReason',unknown:'unknownReason',invalid:'invalidReason'}[design.scenario]);
+    q('[data-role=observed]').textContent=design.scenario==='invalid'?'—':t(design.scenario);
+    const measured=['present','misaligned'].includes(design.scenario);
+    q('[data-role=translation]').textContent=measured?(design.scenario==='present'?'1.8 px':'16.4 px'):'—';
+    q('[data-role=rotation]').textContent=measured?(design.scenario==='present'?'0.3°':'3.6°'):'—';
+    q('[data-role=score]').textContent=measured?'0.87':'—';
+    const tbody=q('[data-role=revision-rows]');tbody.replaceChildren();
+    p.revisions.forEach(function(rev){
+      const tr=el('tr'),a=el('td',null,'r'+rev),b=el('td'),c=el('td'),row=el('div','ph-row');
+      const active=s.runtime.profile===s.profile&&s.runtime.rev===rev;
+      b.append(el('span','ph-badge '+(active?'ph-good':''),t(active?'runtimeState':'saved')));
+      const edit=button(t('edit'),'edit-revision');edit.dataset.rev=rev;row.append(edit);
+      if(!active){const use=button(t('apply'),'apply');use.dataset.rev=rev;row.append(use)}
+      const del=button(t('delete'),'delete-revision','ph-ghost ph-danger');del.dataset.rev=rev;
+      if(active){del.setAttribute('aria-disabled','true');del.dataset.blocked='true'}
+      row.append(del);c.append(row);tr.append(a,b,c);tbody.append(tr);
+    });
+    if(!p.revisions.length){const tr=el('tr'),td=el('td','ph-muted',t('emptyRevisions'));td.colSpan=3;tr.append(td);tbody.append(tr)}
+    if(s.notice)q('[data-role=notice]').textContent=s.notice;
+    icons();
+    scheduleStageSizing();
+  }
+  let stageSizingPending=false;
+  function scheduleStageSizing(){
+    if(stageSizingPending)return;
+    stageSizingPending=true;
+    requestAnimationFrame(function(){
+      stageSizingPending=false;
+      let tallest=0;
+      instances.forEach(function(x){
+        const probe=x.stage.cloneNode(true);
+        probe.style.cssText='position:absolute;visibility:hidden;pointer-events:none;left:0;top:0;min-height:0;width:'+root.clientWidth+'px';
+        probe.querySelectorAll('[id]').forEach(function(e){e.removeAttribute('id')});
+        root.append(probe);tallest=Math.max(tallest,probe.querySelector('.ph-window').getBoundingClientRect().height);probe.remove();
+      });
+      root.style.setProperty('--ph-shared-stage-height',Math.ceil(tallest)+'px');
+    });
+  }
+  function closeModal(x){x.stage.querySelector('[data-role=modal]').hidden=true;if(x.state.returnFocus&&x.state.returnFocus.isConnected)x.state.returnFocus.focus()}
+  function modal(x,title,detail,onConfirm,label){
+    const overlay=x.stage.querySelector('[data-role=modal]');overlay.replaceChildren();overlay.hidden=false;
+    const d=el('div','ph-dialog');d.setAttribute('role','dialog');d.setAttribute('aria-modal','true');d.setAttribute('aria-label',title);
+    d.append(el('h3',null,title),el('p','ph-muted ph-small',detail));
+    const actions=el('div','ph-dialog-actions'),cancel=button(t('cancel'),'cancel'),confirm=button(label||t('confirm'),'confirm','ph-primary');
+    cancel.addEventListener('click',function(){closeModal(x)});
+    confirm.addEventListener('click',onConfirm);
+    actions.append(cancel,confirm);d.append(actions);overlay.append(d);cancel.focus();return {dialog:d,actions:actions,confirm:confirm};
+  }
+  function changeProfile(x,id){
+    if(id===x.state.profile)return;
+    function openProfile(){x.state.profile=id;x.state.base=selectedProfile(x).revisions[0]||0;x.state.dirty=false;x.state.removed=false;x.state.notice='';update(x);persist()}
+    if(x.state.dirty){
+      const bg=design.language==='bg';
+      const m=modal(x,bg?'Незаписани промени':'Unsaved changes',bg?'Запишете или отхвърлете промените преди смяна на профила.':'Save or discard this draft before switching profiles.',function(){closeModal(x);openProfile()},t('saveDraft'));
+      const discard=button(bg?'Отхвърли':'Discard','discard');
+      discard.addEventListener('click',function(){closeModal(x);openProfile()});
+      m.actions.insertBefore(discard,m.confirm);
+      x.stage.querySelector('[data-action=profile-picker]').value=x.state.profile;
+      return;
+    }
+    openProfile();
+  }
+  root.querySelectorAll('.ph-stage').forEach(function(stage){
+    stage.append(document.getElementById('ph-app-template').content.cloneNode(true));
+    const x={stage:stage,layout:stage.dataset.layout,state:{profile:'standard',profiles:{standard:{name:'Standard',revisions:[4,3,2]},spare:{name:'Spare head',revisions:[2,1]}},runtime:{profile:'standard',name:'Standard',rev:3},base:4,dirty:true,page:stage.dataset.layout==='guided'?'references':'regions',tool:'select',frozen:false,live:false,removed:false,notice:'',noticeError:false}};
+    instances.push(x);update(x);
+    stage.addEventListener('click',function(event){
+      const b=event.target.closest('button');if(!b||b.closest('.ph-dialog'))return;
+      const s=x.state,p=selectedProfile(x),action=b.dataset.action;
+      s.returnFocus=b;
+      if(b.dataset.page){s.page=b.dataset.page;s.live=false;update(x);persist();return}
+      if(action==='revisions'){s.page='revisions';s.live=false;update(x)}
+      if(action==='profile'){changeProfile(x,b.dataset.profile);return}
+      if(action==='freeze'){s.frozen=!s.frozen;if(s.frozen)s.live=false;update(x)}
+      if(action==='tool'||action==='pick-object'){s.tool=b.dataset.tool;s.frozen=true;update(x)}
+      if(action==='save-draft'){s.dirty=false;update(x);notice(x,t('savedDraftNotice'))}
+      if(action==='save-revision'){const rev=Math.max.apply(null,p.revisions.concat([s.base]))+1;p.revisions.unshift(rev);s.base=rev;s.dirty=false;s.page='revisions';update(x);notice(x,t('savedRevisionNotice'))}
+      if(action==='remove-object'){s.removed=true;s.dirty=true;update(x);notice(x,t('removedNotice'))}
+      if(action==='test'){s.frozen=true;update(x);notice(x,t('testedNotice'))}
+      if(action==='live'){s.live=!s.live;s.frozen=!s.live;update(x);notice(x,t(s.live?'liveNotice':'liveStopped'))}
+      if(action==='edit-revision'){s.base=Number(b.dataset.rev);s.page='regions';s.dirty=false;update(x);notice(x,t('editNotice')+' r'+s.base)}
+      if(action==='apply'){s.runtime={profile:s.profile,name:p.name,rev:Number(b.dataset.rev)};update(x);notice(x,t('applyNotice')+' '+p.name+' · r'+s.runtime.rev)}
+      if(action==='delete-revision'){
+        if(b.dataset.blocked){notice(x,t('blocked'),true)}
+        else{const rev=Number(b.dataset.rev);modal(x,t('confirmDelete')+' '+p.name+' · r'+rev,t('deleteDetail'),function(){p.revisions=p.revisions.filter(function(r){return r!==rev});closeModal(x);update(x);notice(x,t('deletedNotice'));persist()})}
+      }
+      if(action==='delete-profile'){
+        if(s.runtime.profile===s.profile){notice(x,t('profileBlocked'),true)}
+        else{modal(x,t('confirmProfile')+' '+p.name,t('deleteDetail'),function(){
+          const removed=s.profile;
+          delete s.profiles[removed];
+          stage.querySelectorAll('[data-action=profile]').forEach(function(item){if(item.dataset.profile===removed)item.remove()});
+          const picker=stage.querySelector('[data-action=profile-picker]');
+          Array.from(picker.options).forEach(function(option){if(option.value===removed)option.remove()});
+          s.profile=s.runtime.profile;s.base=selectedProfile(x).revisions[0]||0;s.dirty=false;
+          closeModal(x);update(x);notice(x,t('profileDeleted'));persist();
+        },t('deleteWhole'))}
+      }
+      if(action==='capture'){
+        s.frozen=true;update(x);
+        const m=modal(x,t('captureTitle'),t('captureDetail'),function(){s.dirty=true;closeModal(x);update(x);notice(x,t('capturedNotice'));persist()},t('captureConfirm'));
+        const preview=stage.querySelector('[data-role=scene]').cloneNode(true);preview.querySelectorAll('.ph-overlay').forEach(function(e){e.remove()});
+        preview.querySelector('[data-role=head-shape]').style.visibility=b.dataset.kind==='missing'?'hidden':'visible';
+        const field=el('label','ph-field'),role=el('select');role.setAttribute('aria-label',t('referenceRole'));
+        [['present','headPresent'],['missing','headMissing']].forEach(function(item){const option=el('option',null,t(item[1]));option.value=item[0];role.append(option)});
+        role.value=b.dataset.kind;
+        role.addEventListener('change',function(){preview.querySelector('[data-role=head-shape]').style.visibility=role.value==='missing'?'hidden':'visible'});
+        field.append(el('span',null,t('referenceRole')),role);m.dialog.insertBefore(preview,m.actions);m.dialog.insertBefore(field,m.actions);
+      }
+      if(action==='new-profile'){
+        const m=modal(x,t('newTitle'),t('draftPrivate'),function(){
+          const name=input.value.trim();if(!name){input.focus();return}
+          const id='profile'+Object.keys(s.profiles).length;s.profiles[id]={name:name,revisions:[]};
+          const pick=stage.querySelector('[data-action=profile-picker]'),option=el('option',null,name);option.value=id;pick.append(option);
+          const item=button(name,'profile');item.dataset.profile=id;stage.querySelector('.ph-library').insertBefore(item,stage.querySelector('.ph-add'));
+          s.profile=id;s.base=0;s.dirty=true;s.page='references';closeModal(x);update(x);notice(x,t('created'));persist();
+        },t('create'));
+        const field=el('label','ph-field'),input=el('input');input.value=t('newName');field.append(el('span',null,t('profileName')),input);m.dialog.insertBefore(field,m.actions);input.focus();input.select();
+      }
+      persist();
+    });
+    stage.addEventListener('change',function(event){
+      if(event.target.dataset.action==='profile-picker'){changeProfile(x,event.target.value);return}
+      if(event.target.dataset.edit){x.state.dirty=true;update(x);persist()}
+    });
+    stage.addEventListener('keydown',function(e){
+      const overlay=stage.querySelector('[data-role=modal]');
+      if(overlay.hidden)return;
+      if(e.key==='Escape'){closeModal(x);return}
+      if(e.key==='Tab'){
+        const nodes=Array.from(overlay.querySelectorAll('button,input,select')).filter(function(item){return !item.disabled});
+        const first=nodes[0],last=nodes[nodes.length-1];
+        if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}
+        else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}
+      }
+    });
+    const scene=stage.querySelector('[data-role=scene]');
+    let drawing=null;
+    scene.addEventListener('pointerdown',function(e){
+      if(x.state.page!=='regions'||x.state.tool==='select')return;
+      const bounds=scene.getBoundingClientRect(),start={x:Math.max(0,(e.clientX-bounds.left)/bounds.width*100),y:Math.max(0,(e.clientY-bounds.top)/bounds.height*100)};
+      const mark=el('div','ph-overlay ph-draw');mark.style.left=start.x+'%';mark.style.top=start.y+'%';scene.append(mark);drawing={start:start,mark:mark,bounds:bounds};scene.setPointerCapture(e.pointerId);
+    });
+    scene.addEventListener('pointermove',function(e){
+      if(!drawing)return;
+      const endX=Math.min(100,Math.max(0,(e.clientX-drawing.bounds.left)/drawing.bounds.width*100)),endY=Math.min(100,Math.max(0,(e.clientY-drawing.bounds.top)/drawing.bounds.height*100));
+      drawing.mark.style.left=Math.min(endX,drawing.start.x)+'%';drawing.mark.style.top=Math.min(endY,drawing.start.y)+'%';drawing.mark.style.width=Math.abs(endX-drawing.start.x)+'%';drawing.mark.style.height=Math.abs(endY-drawing.start.y)+'%';
+    });
+    scene.addEventListener('pointerup',function(){if(!drawing)return;drawing.mark.classList.remove('ph-draw');drawing=null;x.state.dirty=true;update(x);notice(x,t('drawnNotice'));persist()});
+  });
+  let lastMeasuredWidth=0;
+  new ResizeObserver(function(){if(root.clientWidth!==lastMeasuredWidth){lastMeasuredWidth=root.clientWidth;scheduleStageSizing()}}).observe(root);
+  if(globalThis.Tweak){
+    const tweak=new Tweak({container:root,onChange:function(){instances.forEach(update)}});
+    tweak.addSelect(design,'language',{label:'Language',options:[{label:'Български',value:'bg'},{label:'English',value:'en'}]});
+    tweak.addSelect(design,'scenario',{label:'Detection state',options:[{label:'Misaligned',value:'misaligned'},{label:'Present',value:'present'},{label:'Missing',value:'missing'},{label:'Unknown',value:'unknown'},{label:'Stale frame',value:'invalid'}]});
+    tweak.addToggle(design,'showRegions',{label:'Show region overlays'});
+    tweak.addSlider(design,'spacing',{label:'Panel spacing',min:8,max:18,step:2,unit:'px'});
+  }
+  window.addEventListener('openai:set_globals',function(e){
+    const state=e.detail&&e.detail.globals&&e.detail.globals.widgetState;
+    if(state&&state.privateContent&&['bg','en'].includes(state.privateContent.language)){design.language=state.privateContent.language;instances.forEach(update)}
+  });
+})();
+</script>

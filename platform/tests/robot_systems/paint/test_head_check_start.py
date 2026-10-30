@@ -54,7 +54,7 @@ class HeadCheckStartTests(unittest.TestCase):
         return PaintOperationResult(PaintOutcome.COMPLETED, "Completed")
 
     def test_each_start_creates_one_run_from_its_settings_snapshot(self) -> None:
-        first_run, second_run = object(), object()
+        first_run, second_run = MagicMock(spec=IPaintHeadCheckRun), MagicMock(spec=IPaintHeadCheckRun)
         self.factory.create_run.side_effect = [first_run, second_run]
         self.service.run_once_result()
         original = self.config.head_check
@@ -66,6 +66,27 @@ class HeadCheckStartTests(unittest.TestCase):
         self.assertIs(first.args[0], original)
         self.assertEqual(1.0, first.args[0].timeout_seconds)
         self.assertEqual(2.5, second.args[0].timeout_seconds)
+        first_run.close.assert_called_once_with()
+        second_run.close.assert_called_once_with()
+        self.assertIsNone(self.service._head_check_run)
+
+    def test_workflow_exception_releases_the_run_snapshot(self) -> None:
+        run = MagicMock(spec=IPaintHeadCheckRun)
+        self.factory.create_run.return_value = run
+        self.service.run_cycle_result.side_effect = RuntimeError("Workflow failed")
+        with self.assertRaisesRegex(RuntimeError, "Workflow failed"):
+            self.service.run_once_result()
+        run.close.assert_called_once_with()
+        self.assertIsNone(self.service._head_check_run)
+
+    def test_early_dry_run_configuration_failure_releases_the_run_snapshot(self) -> None:
+        run = MagicMock(spec=IPaintHeadCheckRun)
+        self.factory.create_run.return_value = run
+        self.config = replace(self.config, enable_dry_run_mode=True)
+        self.service._dry_run_snapshot_source = None
+        self.assertFalse(self.service.run_once_result().completed)
+        run.close.assert_called_once_with()
+        self.service.run_cycle_result.assert_not_called()
 
     def test_disabled_start_does_not_require_or_create_inspection_service(self) -> None:
         self.config = replace(

@@ -2,6 +2,9 @@ import logging
 from src.engine.diagnostics.events import observe
 import os
 from dataclasses import replace
+from functools import partial
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.hardware.dryer.models.dryer_config import DryerConfigSerializer
@@ -33,13 +36,12 @@ from src.engine.work_areas import IWorkAreaService, WorkAreaSettingsSerializer
 from src.robot_systems.base_robot_system import BaseRobotSystem
 from src.robot_systems.paint import application_wiring, paint_system_config
 from src.robot_systems.paint.calibration.provider import PaintRobotSystemCalibrationProvider
-from src.robot_systems.paint.component_ids import ServiceID, SettingsID
+from src.robot_systems.paint.component_ids import CameraRoleID, MovementGroupID, ServiceID, SettingsID
 from src.robot_systems.paint.contracts.paint_head_check.interfaces import (
     IHeadInspectionControl, IPaintHeadCheckRunFactory, IPaintHeadInspector,
 )
 from src.robot_systems.paint.contracts.paint_head_check.results import HeadInspectionMoveResult
 from src.robot_systems.paint.contracts.next_cycle_target import NextCycleTarget
-from src.robot_systems.paint.paint_head_check.adapters.frames import IHeadFrameEvaluator
 from src.robot_systems.paint.paint_head_check.adapters.dashboard import DashboardPaintHeadCheckObserver
 from src.robot_systems.paint.paint_head_check.live_guidance import PaintHeadLiveGuidance
 from src.robot_systems.paint.paint_head_check.adapters.guidance_lifecycle import PaintHeadGuidanceLifecycle
@@ -47,6 +49,7 @@ from src.engine.robot.configuration.movement_group_settings import MovementGroup
 from src.robot_systems.paint.processes.paint.configuration.serializer import (
     PaintProcessConfigSerializer,
 )
+from src.robot_systems.paint.paint_head_calibration.serializer import CalibrationCatalogSerializer
 from src.robot_systems.paint.processes.paint.adjustment.settings_serializer import (
     PaintAdjustmentSettingsSerializer,
 )
@@ -109,6 +112,13 @@ def _build_sub_zero_dropoff_corridor(corridor_id, dropoff_pose, dropoff_config):
             0.1, float(dropoff_config.corridor_maximum_acceleration_percent)
         ),
     )
+
+
+
+if TYPE_CHECKING:
+    from src.robot_systems.paint.applications.paint_head_detector_setup.service.i_paint_head_detector_setup_service import IPaintHeadDetectorSetupService
+    from src.robot_systems.paint.contracts.paint_head_calibration.models import CalibrationDefinition, InspectionBinding
+    from src.robot_systems.paint.paint_head_calibration.composition import CalibrationServices
 
 
 def _build_application_specs(config=paint_system_config):
@@ -195,6 +205,10 @@ def _build_application_specs(config=paint_system_config):
         (config.SHAFT_ALIGNMENT_APP,
          ApplicationSpec(name="ShaftAlignment", folder_id=4, icon="fa5s.bullseye",
                          factory=application_wiring._build_shaft_alignment_application)),
+        (config.PAINT_HEAD_DETECTOR_SETUP_APP,
+         ApplicationSpec(name="PaintHeadDetectorSetup", folder_id=5, icon="fa5s.camera",
+                         factory=application_wiring._build_paint_head_detector_setup_application)),
+
     ]
     return [spec for enabled, spec in configured_specs if enabled]
 
@@ -237,6 +251,7 @@ def _build_dashboard_ui_config(config, base=None):
 
 
 class PaintRobotSystem(BaseRobotSystem):
+    _paint_head_calibration_services: "CalibrationServices | None" = None
     _paint_head_inspector: IPaintHeadInspector | None = None
     _paint_head_status_observer: DashboardPaintHeadCheckObserver | None = None
     _paint_head_live_guidance: PaintHeadLiveGuidance | None = None
@@ -433,8 +448,12 @@ class PaintRobotSystem(BaseRobotSystem):
             "platformsettings": ["Admin"],
             "paintmotionrecipe": ["Admin", "Manufacturer"],
             "contourmatchingtester": ["Manufacturer"],
+            "paintheaddetectorsetup": ["Manufacturer"],
         },
-        denied_folder_role_values={"ADMIN": ["Operator"], "SERVICE": ["Operator"]},
+        denied_folder_role_values={
+            "ADMIN": ["Operator"], "SERVICE": ["Operator"],
+            "DEVELOPMENT": ["Admin", "Operator"],
+        },
     )
 
     shell = ShellSetup(
@@ -443,6 +462,7 @@ class PaintRobotSystem(BaseRobotSystem):
             FolderSpec(folder_id=2, name="SERVICE", display_name="Service"),
             FolderSpec(folder_id=3, name="ADMIN", display_name="Administration"),
             FolderSpec(folder_id=4, name="Tests", display_name="Tests"),
+            FolderSpec(folder_id=5, name="DEVELOPMENT", display_name="Development"),
         ],
         applications=_build_application_specs(),
     )
@@ -487,6 +507,12 @@ class PaintRobotSystem(BaseRobotSystem):
         SettingsSpec(SettingsID.PERIPHERALS, PeripheralConfigSerializer(), "hardware/peripherals.json"),
         SettingsSpec(SettingsID.DRYER_CONFIG, DryerConfigSerializer(), "dryer/settings.json"),
         SettingsSpec(SettingsID.PAINT_PROCESS_CONFIG, PaintProcessConfigSerializer(), "paint/process.json"),
+        SettingsSpec(
+            SettingsID.PAINT_HEAD_CALIBRATION,
+            CalibrationCatalogSerializer(),
+            "paint/head_detector.json",
+            required=False,
+        ),
         SettingsSpec(SettingsID.PAINT_ADJUSTMENT_SETTINGS, PaintAdjustmentSettingsSerializer(), "paint/adjustment.json"),
     ]
 
@@ -924,37 +950,75 @@ class PaintRobotSystem(BaseRobotSystem):
             raise PaintHeadConfigurationError("Paint-head inspection requires movement-group settings")
         return settings
 
+    @staticmethod
+    def head_detector_inspection_binding() -> "InspectionBinding":
+        from src.robot_systems.paint.contracts.paint_head_calibration.models import InspectionBinding
+
+        return InspectionBinding(CameraRoleID.PRIMARY_VISION, MovementGroupID.VERTICAL_SHAFT_ALIGNMENT)
+
+    def _head_calibrations(self) -> "CalibrationServices":
+        from src.robot_systems.paint.paint_head_calibration.composition import build_calibration_services
+
+        if self._paint_head_calibration_services is None:
+            services = build_calibration_services(
+                self._settings_service,
+                reference_root=Path(self.storage_path("calibration", "paint_head", "references")),
+                transaction_path=Path(self.storage_path("settings", "paint", "head_detector.transaction")),
+                binding=self.head_detector_inspection_binding(),
+                selection_allowed=self._head_calibration_selection_allowed,
+                system_manager=self._system_manager,
+            )
+            self._paint_head_calibration_services = services
+            self.register_managed_resource(services, cleanup=services.close)
+        return self._paint_head_calibration_services
+
+    def _head_calibration_selection_allowed(self) -> bool:
+        from src.shared_contracts.events.process_events import ProcessState
+
+        return self._main_process.state in (ProcessState.IDLE, ProcessState.STOPPED) and not self._main_process.is_stopping
+
+    def create_head_detector_setup_service(self) -> "IPaintHeadDetectorSetupService":
+        from src.robot_systems.paint.applications.paint_head_detector_setup.service.paint_head_detector_setup_application_service import PaintHeadDetectorSetupApplicationService
+        from src.robot_systems.paint.paint_head_calibration.detector_adapter import CalibrationEditorEvaluator
+        from src.robot_systems.paint.paint_head_calibration.frame_source import PrimaryVisionSetupFrameSource
+
+        services = self._head_calibrations()
+        frames = PrimaryVisionSetupFrameSource(
+            self._messaging_service, self._resume_head_check_frames, max_age_seconds=1.0,
+        )
+        return PaintHeadDetectorSetupApplicationService(
+            services.library, CalibrationEditorEvaluator(services.detector),
+            frames, self.head_detector_inspection_binding(),
+        )
+
+    def _create_calibrated_head_inspector(self, definition: "CalibrationDefinition") -> IPaintHeadInspector:
+        from src.robot_systems.paint.paint_head_check.adapters.primary_vision import PrimaryVisionPaintHeadInspector
+        from src.robot_systems.paint.paint_head_check.adapters.detector import PaintHeadDetectorAdapter
+
+        detector = self._head_calibrations().detector.create_detector(definition)
+        return PrimaryVisionPaintHeadInspector(
+            self._messaging_service, partial(PaintHeadDetectorAdapter, detector),
+            activate_frames=self._resume_head_check_frames,
+        )
+
     def _build_head_check_run_factory(self) -> IPaintHeadCheckRunFactory:
         from src.robot_systems.paint.contracts.paint_head_check.models import HeadInspectionPositionTolerance
         from src.robot_systems.paint.paint_head_check.adapters.retry_position import VerifiedInspectionRetryPosition
-        from src.robot_systems.paint.paint_head_check.adapters.inspection_target import (
-            ShaftAlignmentInspectionTargetProvider,
-        )
-        from src.robot_systems.paint.paint_head_check.adapters.navigation import (
-            PaintHeadInspectionNavigationAdapter,
-        )
-        from src.robot_systems.paint.paint_head_check.adapters.primary_vision import (
-            PrimaryVisionPaintHeadInspector,
-        )
-        from src.robot_systems.paint.paint_head_check.reporting import (
-            CompositePaintHeadCheckObserver, LoggingPaintHeadCheckObserver,
-        )
-        from src.robot_systems.paint.paint_head_check.run import PaintHeadCheckRunFactory
+        from src.robot_systems.paint.paint_head_check.adapters.inspection_target import ShaftAlignmentInspectionTargetProvider
+        from src.robot_systems.paint.paint_head_check.adapters.navigation import PaintHeadInspectionNavigationAdapter
+        from src.robot_systems.paint.paint_head_check.reporting import CompositePaintHeadCheckObserver, LoggingPaintHeadCheckObserver
         from src.robot_systems.paint.paint_head_check.adapters.guidance_position import PaintHeadGuidancePositionGuard
+        from src.robot_systems.paint.paint_head_calibration.runtime import CalibratedHeadCheckRunFactory
 
-        inspector = PrimaryVisionPaintHeadInspector(
-            self._messaging_service,
-            self._create_head_check_evaluator,
-            activate_frames=self._resume_head_check_frames,
-        )
-        self._paint_head_inspector = inspector
+        services = self._head_calibrations()
         dashboard_observer = DashboardPaintHeadCheckObserver(self._messaging_service)
         self._paint_head_status_observer = dashboard_observer
         dashboard_observer.start()
         target_provider = ShaftAlignmentInspectionTargetProvider(self.get_head_check_movement_groups)
         tolerance = HeadInspectionPositionTolerance(0.5, 0.2)
+        # Every guidance offer supplies its run-bound inspector and revision lease.
         guidance = PaintHeadLiveGuidance(
-            self._create_live_head_inspector,
+            None,
             PaintHeadGuidancePositionGuard(
                 self._navigation, self._robot, target_provider,
                 self._head_guidance_permitted, tolerance,
@@ -964,10 +1028,9 @@ class PaintRobotSystem(BaseRobotSystem):
         self._paint_head_live_guidance = guidance
         self._paint_head_guidance_lifecycle = PaintHeadGuidanceLifecycle(self._messaging_service, guidance)
         self._paint_head_guidance_lifecycle.start()
-        return PaintHeadCheckRunFactory(
-            inspector,
-            target_provider,
-            PaintHeadInspectionNavigationAdapter(self._navigation),
+        return CalibratedHeadCheckRunFactory(
+            services.library, self._create_calibrated_head_inspector,
+            target_provider, PaintHeadInspectionNavigationAdapter(self._navigation),
             CompositePaintHeadCheckObserver((
                 LoggingPaintHeadCheckObserver(_logger), dashboard_observer,
             )),
@@ -976,14 +1039,6 @@ class PaintRobotSystem(BaseRobotSystem):
                 tolerance, _logger,
             ),
             guidance=guidance,
-        )
-
-    def _create_live_head_inspector(self) -> IPaintHeadInspector:
-        from src.robot_systems.paint.paint_head_check.adapters.primary_vision import PrimaryVisionPaintHeadInspector
-
-        return PrimaryVisionPaintHeadInspector(
-            self._messaging_service, self._create_head_check_evaluator,
-            activate_frames=self._resume_head_check_frames,
         )
 
     def _head_guidance_ready(self) -> bool:
@@ -1002,25 +1057,6 @@ class PaintRobotSystem(BaseRobotSystem):
         if not isinstance(config, RobotSettings):
             raise PaintHeadConfigurationError("Inspection retry requires valid robot reference-frame settings")
         return config.robot_tool, config.robot_user
-
-    def _create_head_check_evaluator(self) -> IHeadFrameEvaluator:
-        from src.robot_systems.paint.paint_head_check.adapters.detector import PaintHeadDetectorAdapter
-        from src.robot_systems.paint.paint_head_detection import (
-            PaintHeadDetector,
-            CalibrationError as DetectorCalibrationError,
-            ConfigurationError as DetectorConfigurationError,
-        )
-        from src.robot_systems.paint.contracts.paint_head_check.errors import (
-            PaintHeadCalibrationError, PaintHeadConfigurationError,
-        )
-
-        try:
-            detector = PaintHeadDetector()
-        except DetectorConfigurationError as error:
-            raise PaintHeadConfigurationError(error.message) from error
-        except DetectorCalibrationError as error:
-            raise PaintHeadCalibrationError(error.message) from error
-        return PaintHeadDetectorAdapter(detector)
 
     def _resume_head_check_frames(self) -> None:
         from src.robot_systems.paint.contracts.paint_head_check.errors import (

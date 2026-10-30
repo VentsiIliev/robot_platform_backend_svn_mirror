@@ -295,6 +295,28 @@ class PaintProductionService:
         adjustment_session=None,
         retry_unmatched_workpiece: bool = False,
     ) -> PaintOperationResult:
+        """One accepted production run owns and finally releases its calibration snapshot."""
+        self._head_check_run = None
+        try:
+            return self._run_once_result_impl(
+                stop_requested,
+                manual_single_cycle=manual_single_cycle,
+                adjustment_session=adjustment_session,
+                retry_unmatched_workpiece=retry_unmatched_workpiece,
+            )
+        finally:
+            run, self._head_check_run = self._head_check_run, None
+            if run is not None:
+                run.close()
+
+    def _run_once_result_impl(
+        self,
+        stop_requested: Optional[Callable[[], bool]] = None,
+        *,
+        manual_single_cycle: bool = False,
+        adjustment_session=None,
+        retry_unmatched_workpiece: bool = False,
+    ) -> PaintOperationResult:
         """Run production, optionally forcing one calibration-table cycle without magazine load."""
         self.last_failure = None
         with self._active_context_lock:

@@ -391,6 +391,11 @@ class GuidanceSystemWiringTests(unittest.TestCase):
     def test_system_composes_separate_live_inspectors_and_closes_guidance_before_dependencies(self):
         from src.engine.core.i_messaging_service import IMessagingService
         from src.robot_systems.paint.paint_robot_system import PaintRobotSystem
+        from src.robot_systems.paint.paint_head_calibration.composition import CalibrationServices
+        from src.robot_systems.paint.paint_head_calibration.detector_adapter import CalibrationDetectorAdapter
+        from src.robot_systems.paint.paint_head_calibration.library import PaintHeadCalibrationLibrary
+        from src.robot_systems.paint.paint_head_calibration.runtime import CalibratedHeadCheckRunFactory
+        from src.robot_systems.paint.applications.paint_head_detector_setup.service.stub_data import sample_definition
         from src.shared_contracts.events.process_events import ProcessState
 
         system = PaintRobotSystem.__new__(PaintRobotSystem)
@@ -401,15 +406,18 @@ class GuidanceSystemWiringTests(unittest.TestCase):
         system._main_process.state = ProcessState.STOPPED
         system._main_process.is_stopping = False
         system._paint_process_config_service = MagicMock()
+        system._paint_head_calibration_services = CalibrationServices(
+            MagicMock(spec=PaintHeadCalibrationLibrary), MagicMock(spec=CalibrationDetectorAdapter)
+        )
         config = MagicMock()
         config.head_check.enabled = True
         config.stop_after_calibration_pickup = False
         system._paint_process_config_service.get_snapshot.return_value = config
         system.unregister_managed_resource = MagicMock()
         factory = system._build_head_check_run_factory()
-        self.assertIsInstance(factory, PaintHeadCheckRunFactory)
-        first = system._create_live_head_inspector()
-        second = system._create_live_head_inspector()
+        self.assertIsInstance(factory, CalibratedHeadCheckRunFactory)
+        first = system._create_calibrated_head_inspector(sample_definition())
+        second = system._create_calibrated_head_inspector(sample_definition())
         self.assertIsNot(first, second)
         self.assertIsNot(first, system._paint_head_inspector)
         self.assertTrue(system._head_guidance_permitted())
