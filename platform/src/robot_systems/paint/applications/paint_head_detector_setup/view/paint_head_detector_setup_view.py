@@ -2,14 +2,17 @@
 
 from collections.abc import Mapping
 
-from PyQt6.QtCore import Qt, pyqtSignal
+import qtawesome as qta
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QHideEvent, QShowEvent
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
     QComboBox,
     QDialog,
+    QFrame,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -25,18 +28,17 @@ from PyQt6.QtWidgets import (
 
 from pl_gui.settings.settings_view.styles import (
     APP_PAGE_TITLE_STYLE,
-    BG_COLOR,
-    BORDER,
     ERROR_COLOR,
     PRIMARY,
-    SECONDARY_BG,
-    STATUS_OK,
     TEXT_COLOR,
     TOUCH_SCROLL_AREA_STYLE,
 )
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.base.styled_message_box import ask_yes_no, show_critical
-from src.robot_systems.paint.contracts.paint_head_calibration.errors import CalibrationFailure
+from src.robot_systems.paint.contracts.paint_head_calibration.errors import (
+    CalibrationFailure,
+    CalibrationFailureCode,
+)
 from src.robot_systems.paint.contracts.paint_head_calibration.models import (
     CalibrationEvaluation,
     ImageFrame,
@@ -48,21 +50,20 @@ from src.robot_systems.paint.contracts.paint_head_calibration.models import (
     ReferenceRole,
     RevisionRef,
 )
-from src.robot_systems.paint.contracts.paint_head_check.models import (
-    PaintHeadObservationReason,
-    PaintHeadState,
-)
 
 from ..editor_contracts import EditorObject, EditorTarget, EditorTool, SetupPage, UnsavedDecision
 from ..presentation import SetupSnapshot
 from ..tuning_fields import TUNING_PARAMETERS, TuningParameterId, TuningSection
+from .styles import CAPTION_STYLE, CARD_STYLE, PAGE_STYLE, SECTION_TITLE_STYLE
 from .widgets.calibration_canvas import CalibrationCanvas
 from .widgets.forms import (
     EditorToolButton,
+    IconActionButton,
     ProfileDialog,
     ReferenceDialog,
     RuntimePicker,
     SaveRevisionDialog,
+    SettingsSection,
     SetupDialog,
     TuningField,
     UnsavedDialog,
@@ -70,6 +71,7 @@ from .widgets.forms import (
     translate,
 )
 from .widgets.object_properties import ObjectPropertiesPanel
+from .widgets.result_panel import CalibrationResultPanel, result_color, state_text
 
 _PAGES = (
     (SetupPage.PROFILES, "Profiles"),
@@ -78,6 +80,13 @@ _PAGES = (
     (SetupPage.TEST, "Test & results"),
     (SetupPage.SETTINGS, "Settings"),
 )
+_PAGE_ICONS = {
+    SetupPage.PROFILES: "mdi.folder-outline",
+    SetupPage.CAMERA: "mdi.camera-outline",
+    SetupPage.REGIONS: "mdi.vector-square",
+    SetupPage.TEST: "mdi.flask-outline",
+    SetupPage.SETTINGS: "mdi.tune",
+}
 _TOOLS = (
     (EditorTool.SELECT, "Select / move"),
     (EditorTool.PAN, "Pan"),
@@ -86,28 +95,6 @@ _TOOLS = (
     (EditorTool.EXCLUDED, "Excluded region"),
     (EditorTool.RECTANGLE_LANDMARK, "Rectangle landmark"),
     (EditorTool.CIRCLE_LANDMARK, "Circle landmark"),
-)
-_STATES = {
-    PaintHeadState.PRESENT: "Head present",
-    PaintHeadState.MISSING: "Head missing",
-    PaintHeadState.MISALIGNED: "Head misaligned",
-    PaintHeadState.UNKNOWN: "Unknown",
-}
-_REASONS = {
-    PaintHeadObservationReason.ALIGNED: "Aligned",
-    PaintHeadObservationReason.MISALIGNED: "Misaligned",
-    PaintHeadObservationReason.EMPTY_MOUNT: "Empty mount",
-    PaintHeadObservationReason.INSUFFICIENT_EVIDENCE: "Insufficient evidence",
-    PaintHeadObservationReason.CONFLICTING_EVIDENCE: "Conflicting evidence",
-    PaintHeadObservationReason.POSE_UNDETERMINED: "Pose undetermined",
-    PaintHeadObservationReason.TOO_DARK: "Too dark",
-    PaintHeadObservationReason.OVEREXPOSED: "Overexposed",
-    PaintHeadObservationReason.LOW_CONTRAST: "Low contrast",
-    PaintHeadObservationReason.CONFIRMING_STATUS: "Confirming status",
-    PaintHeadObservationReason.RECHECKING_POSITION: "Rechecking position",
-}
-_CARD_STYLE = (
-    f"QFrame#setupCard {{background: {BG_COLOR}; border: 1px solid {BORDER}; border-radius: 8px;}}"
 )
 
 
@@ -127,6 +114,7 @@ class PaintHeadDetectorSetupView(IApplicationView):
     reference_preview_requested = pyqtSignal(object)
     freeze_requested = pyqtSignal(bool)
     live_requested = pyqtSignal(bool)
+    page_selected = pyqtSignal(object)
     test_requested = pyqtSignal()
     geometry_edited = pyqtSignal(object)
     object_selected = pyqtSignal(object)
@@ -149,6 +137,7 @@ class PaintHeadDetectorSetupView(IApplicationView):
         self._canvases: dict[SetupPage, CalibrationCanvas] = {}
         self._camera_labels: dict[SetupPage, QLabel] = {}
         self._tuning_fields: dict[TuningParameterId, TuningField] = {}
+        self._result_panels: list[CalibrationResultPanel] = []
         self._fullscreen: SetupDialog | None = None
         self._fullscreen_canvas: CalibrationCanvas | None = None
         self._last_frame: ImageFrame | None = None
@@ -164,23 +153,37 @@ class PaintHeadDetectorSetupView(IApplicationView):
         self._static_labels.append((label, source))
         return label
 
+    @property
+    def current_page(self) -> SetupPage:
+        return self._page
+
     def _button(self, source: str, *, primary: bool = False) -> QPushButton:
         button = action_button(source, primary=primary)
         self._static_buttons.append((button, source))
         return button
 
     def setup_ui(self) -> None:
-        self.setStyleSheet(f"background-color: {BG_COLOR}; color: {TEXT_COLOR};")
+        self.setObjectName("paintHeadSetup")
+        self.setStyleSheet(PAGE_STYLE)
         outer = QVBoxLayout(self)
         outer.setContentsMargins(16, 14, 16, 14)
-        outer.setSpacing(12)
+        outer.setSpacing(10)
         self._title = self._label("Paint-head detector setup")
         self._title.setStyleSheet(APP_PAGE_TITLE_STYLE)
         outer.addWidget(self._title)
-        outer.addWidget(self._label("Primary vision · Vertical Shaft Alignment"))
+        subtitle = self._label("Primary vision · Vertical Shaft Alignment")
+        subtitle.setStyleSheet(CAPTION_STYLE)
+        outer.addWidget(subtitle)
+        profile_card, profile_layout = self._card()
         header = QHBoxLayout()
+        editing = QVBoxLayout()
+        editing.setSpacing(4)
+        caption = self._label("Editing profile")
+        caption.setStyleSheet(CAPTION_STYLE)
+        editing.addWidget(caption)
         self._profile_picker = QComboBox()
-        self._profile_picker.setMinimumHeight(44)
+        self._profile_picker.setMinimumWidth(260)
+        self._profile_picker.setMaximumWidth(340)
         self._profile_picker.setObjectName("calibrationProfilePicker")
         self._profile_picker.currentIndexChanged.connect(self._on_profile_picker)
         self._runtime_label = QLabel()
@@ -188,22 +191,25 @@ class PaintHeadDetectorSetupView(IApplicationView):
         self._runtime_label.setWordWrap(True)
         self._runtime_button = self._button("Select for runtime")
         self._runtime_button.clicked.connect(self._pick_runtime)
-        header.addWidget(self._label("Editing profile"))
-        header.addWidget(self._profile_picker, 1)
+        editing.addWidget(self._profile_picker)
+        header.addLayout(editing, 1)
         header.addWidget(self._runtime_label, 2)
         header.addWidget(self._runtime_button)
-        outer.addLayout(header)
+        profile_layout.addLayout(header)
+        outer.addWidget(profile_card)
         body = QHBoxLayout()
+        body.setSpacing(14)
         self._navigation = QListWidget()
         self._navigation.setObjectName("calibrationNavigation")
-        self._navigation.setFixedWidth(205)
-        self._navigation.setStyleSheet(
-            f"QListWidget {{border: none; background: {BG_COLOR};}}"
-            f"QListWidget::item {{padding: 14px 10px; border-radius: 6px;}}"
-            f"QListWidget::item:selected {{background: {SECONDARY_BG}; color: {PRIMARY};}}"
-        )
-        for _ in _PAGES:
-            self._navigation.addItem(QListWidgetItem())
+        self._navigation.setFixedWidth(224)
+        self._navigation.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._navigation.setWordWrap(True)
+        self._navigation.setIconSize(QSize(20, 20))
+        self._navigation.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        for page, _ in _PAGES:
+            item = QListWidgetItem()
+            item.setIcon(qta.icon(_PAGE_ICONS[page], color=PRIMARY))
+            self._navigation.addItem(item)
         self._navigation.currentRowChanged.connect(self._on_page_changed)
         body.addWidget(self._navigation)
         self._pages = QStackedWidget()
@@ -217,11 +223,15 @@ class PaintHeadDetectorSetupView(IApplicationView):
         self._notice = QLabel()
         self._notice.setWordWrap(True)
         self._notice.setObjectName("calibrationNotice")
+        self._notice.hide()
         outer.addWidget(self._notice)
+        footer_card, footer_layout = self._card()
+        footer_layout.setContentsMargins(14, 10, 14, 10)
         footer = QHBoxLayout()
         self._draft_label = QLabel()
         self._draft_label.setObjectName("calibrationDraftStatus")
         self._draft_label.setWordWrap(True)
+        self._draft_label.setStyleSheet(CAPTION_STYLE)
         footer.addWidget(self._draft_label, 1)
         self._save_draft = self._button("Save draft")
         self._save_draft.setObjectName("saveCalibrationDraft")
@@ -231,175 +241,253 @@ class PaintHeadDetectorSetupView(IApplicationView):
         self._save_revision.clicked.connect(self._on_save_revision)
         footer.addWidget(self._save_draft)
         footer.addWidget(self._save_revision)
-        outer.addLayout(footer)
+        footer_layout.addLayout(footer)
+        outer.addWidget(footer_card)
         self._navigation.setCurrentRow(1)
+
+    def _card(self, source: str | None = None) -> tuple[QFrame, QVBoxLayout]:
+        card = QFrame()
+        card.setObjectName("settingsCard")
+        card.setStyleSheet(CARD_STYLE)
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(10)
+        if source is not None:
+            heading = self._label(source)
+            heading.setStyleSheet(SECTION_TITLE_STYLE)
+            layout.addWidget(heading)
+        return card, layout
 
     def _table(self, columns: int) -> QTableWidget:
         table = QTableWidget(0, columns)
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        table.horizontalHeader().setStretchLastSection(True)
+        header = table.horizontalHeader()
+        header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        table.verticalHeader().setDefaultSectionSize(44)
+        table.setShowGrid(False)
+        table.setAlternatingRowColors(True)
         table.verticalHeader().hide()
         return table
 
     def _build_profiles(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+        profiles, profile_layout = self._card()
         actions = QHBoxLayout()
+        heading = self._label("Profiles")
+        heading.setStyleSheet(SECTION_TITLE_STYLE)
+        actions.addWidget(heading, 1)
         new = self._button("New profile", primary=True)
         new.clicked.connect(self._new_profile)
         importing = self._button("Import factory calibration")
         importing.clicked.connect(self._import_profile)
         actions.addWidget(new)
         actions.addWidget(importing)
-        actions.addStretch()
-        layout.addLayout(actions)
+        profile_layout.addLayout(actions)
         self._profile_table = self._table(4)
+        self._profile_table.setObjectName("calibrationProfilesTable")
         self._profile_table.itemSelectionChanged.connect(self._on_profile_table)
-        layout.addWidget(self._profile_table, 1)
-        layout.addWidget(self._label("Saved revisions"))
+        profile_layout.addWidget(self._profile_table, 1)
+        layout.addWidget(profiles, 2)
+        revisions, revision_layout = self._card("Saved revisions")
         self._revision_table = self._table(3)
+        self._revision_table.setObjectName("calibrationRevisionsTable")
+        self._revision_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.ResizeToContents
+        )
+        self._revision_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
         self._revision_table.itemSelectionChanged.connect(self._on_revision_selection)
-        layout.addWidget(self._revision_table, 1)
+        revision_layout.addWidget(self._revision_table, 1)
         row = QHBoxLayout()
         self._edit_revision = self._button("Edit as draft")
-        self._use_revision = self._button("Use selected revision")
+        self._use_revision = self._button("Use selected revision", primary=True)
         self._delete_revision = self._button("Delete revision")
         self._delete_profile = self._button("Delete profile")
         self._edit_revision.clicked.connect(self._on_edit_revision)
         self._use_revision.clicked.connect(self._on_use_revision)
         self._delete_revision.clicked.connect(self._on_delete_revision)
         self._delete_profile.clicked.connect(self._on_delete_profile)
-        for button in (
-            self._edit_revision,
-            self._use_revision,
-            self._delete_revision,
-            self._delete_profile,
-        ):
-            row.addWidget(button)
-        layout.addLayout(row)
+        row.addWidget(self._edit_revision)
+        row.addWidget(self._use_revision)
+        row.addStretch()
+        row.addWidget(self._delete_revision)
+        row.addWidget(self._delete_profile)
+        revision_layout.addLayout(row)
+        layout.addWidget(revisions, 3)
         return page
 
     def _camera(self, page: SetupPage) -> tuple[QWidget, CalibrationCanvas]:
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(0, 0, 0, 0)
+        panel, layout = self._card()
+        header = QHBoxLayout()
+        heading = self._label("Live camera")
+        heading.setStyleSheet(SECTION_TITLE_STYLE)
+        header.addWidget(heading)
         status = QLabel()
         status.setWordWrap(True)
+        status.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        status.setStyleSheet(CAPTION_STYLE)
         self._camera_labels[page] = status
-        layout.addWidget(status)
+        header.addWidget(status, 1)
+        layout.addLayout(header)
         canvas = CalibrationCanvas()
         canvas.geometry_edited.connect(self._on_geometry_edit)
         canvas.object_selected.connect(self._on_object_selected)
         self._canvases[page] = canvas
         layout.addWidget(canvas, 1)
         row = QHBoxLayout()
-        fit, plus, minus = (
-            self._button("Fit image"),
-            self._button("Zoom in"),
-            self._button("Zoom out"),
-        )
+        fit = self._button("Fit image")
+        plus = IconActionButton("mdi.magnify-plus-outline", "Zoom in")
+        minus = IconActionButton("mdi.magnify-minus-outline", "Zoom out")
         fit.clicked.connect(canvas.fit_image)
         plus.clicked.connect(canvas.zoom_in)
         minus.clicked.connect(canvas.zoom_out)
         row.addWidget(fit)
+        row.addStretch()
         row.addWidget(minus)
         row.addWidget(plus)
-        row.addStretch()
+        if page is SetupPage.SETTINGS:
+            fullscreen = IconActionButton("mdi.fullscreen", "Open fullscreen")
+            fullscreen.clicked.connect(self._open_fullscreen)
+            row.addWidget(fullscreen)
         layout.addLayout(row)
         return panel, canvas
 
     def _build_camera(self) -> QWidget:
         page = QWidget()
         layout = QHBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
         camera, canvas = self._camera(SetupPage.CAMERA)
         canvas.setInteractive(False)
-        layout.addWidget(camera, 3)
-        side = QVBoxLayout()
-        side.addWidget(self._label("Reference images"))
-        self._present_reference, self._missing_reference = QLabel(), QLabel()
-        side.addWidget(self._label("Head present"))
-        side.addWidget(self._present_reference)
-        capture_present = self._button("Capture present reference", primary=True)
-        preview_present = self._button("Preview present reference")
+        layout.addWidget(camera, 1)
+        inspector = QWidget()
+        inspector.setFixedWidth(300)
+        side = QVBoxLayout(inspector)
+        side.setContentsMargins(0, 0, 0, 0)
+        side.setSpacing(12)
+        present, present_layout = self._card("Head present")
+        self._present_reference = QLabel()
+        self._present_reference.setStyleSheet(CAPTION_STYLE)
+        present_layout.addWidget(self._present_reference)
+        capture_present = self._button("Capture", primary=True)
+        preview_present = self._button("Preview")
         capture_present.clicked.connect(self._capture_present)
         preview_present.clicked.connect(self._preview_present)
-        side.addWidget(capture_present)
-        side.addWidget(preview_present)
-        side.addSpacing(12)
-        side.addWidget(self._label("Head missing"))
-        side.addWidget(self._missing_reference)
-        capture_missing = self._button("Capture missing reference")
-        preview_missing = self._button("Preview missing reference")
+        present_layout.addWidget(capture_present)
+        present_layout.addWidget(preview_present)
+        side.addWidget(present)
+        missing, missing_layout = self._card("Head missing")
+        self._missing_reference = QLabel()
+        self._missing_reference.setStyleSheet(CAPTION_STYLE)
+        missing_layout.addWidget(self._missing_reference)
+        capture_missing = self._button("Capture")
+        preview_missing = self._button("Preview")
         capture_missing.clicked.connect(self._capture_missing)
         preview_missing.clicked.connect(self._preview_missing)
-        side.addWidget(capture_missing)
-        side.addWidget(preview_missing)
+        missing_layout.addWidget(capture_missing)
+        missing_layout.addWidget(preview_missing)
+        side.addWidget(missing)
+        controls, controls_layout = self._card("Preview controls")
         self._freeze = self._button("Freeze frame")
         self._freeze.clicked.connect(self._on_freeze)
-        side.addWidget(self._freeze)
+        controls_layout.addWidget(self._freeze)
         fullscreen = self._button("Open fullscreen")
         fullscreen.clicked.connect(self._open_fullscreen)
-        side.addWidget(fullscreen)
-        side.addStretch()
-        side.addWidget(
-            self._label("Confirm captured references before adding them to the draft.", wrap=True)
+        controls_layout.addWidget(fullscreen)
+        side.addWidget(controls)
+        hint = self._label(
+            "Confirm captured references before adding them to the draft.", wrap=True
         )
-        layout.addLayout(side, 1)
+        hint.setStyleSheet(CAPTION_STYLE)
+        side.addWidget(hint)
+        side.addStretch()
+        layout.addWidget(inspector)
         return page
 
     def _build_regions(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+        toolbar, toolbar_layout = self._card()
+        toolbar_layout.setContentsMargins(12, 8, 12, 8)
         tools = QHBoxLayout()
+        tools.setSpacing(6)
         self._tool_group = QButtonGroup(self)
         self._tool_group.setExclusive(True)
         self._tool_buttons: list[EditorToolButton] = []
         for tool, source in _TOOLS:
+            if tool in (EditorTool.INSPECTION, EditorTool.RECTANGLE_LANDMARK):
+                tools.addSpacing(8)
             button = EditorToolButton(tool, source, self)
             button.chosen.connect(self._on_tool_selected)
             self._tool_group.addButton(button)
             self._tool_buttons.append(button)
             tools.addWidget(button)
         self._tool_buttons[0].setChecked(True)
-        layout.addLayout(tools)
-        row = QHBoxLayout()
-        row.addWidget(self._label("New landmark role"))
+        tools.addStretch()
         self._new_landmark_role = QComboBox()
         for role in LandmarkRole:
             self._new_landmark_role.addItem("", role)
+        self._new_landmark_role.setMinimumWidth(200)
         self._new_landmark_role.currentIndexChanged.connect(self._on_new_role)
-        row.addWidget(self._new_landmark_role)
-        row.addStretch()
-        layout.addLayout(row)
+        tools.addWidget(self._label("New landmark role"))
+        tools.addWidget(self._new_landmark_role)
+        toolbar_layout.addLayout(tools)
+        layout.addWidget(toolbar)
         splitter = QSplitter()
+        splitter.setChildrenCollapsible(False)
         camera, _ = self._camera(SetupPage.REGIONS)
         splitter.addWidget(camera)
         inspector = QWidget()
-        inspector.setMinimumWidth(340)
+        inspector.setMinimumWidth(350)
         side = QVBoxLayout(inspector)
+        side.setContentsMargins(0, 0, 0, 0)
+        side.setSpacing(12)
+        objects, objects_layout = self._card("Objects")
         self._object_list = QListWidget()
-        self._object_list.setMaximumHeight(190)
+        self._object_list.setObjectName("calibrationObjects")
+        self._object_list.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self._object_list.setMinimumHeight(100)
+        self._object_list.setMaximumHeight(170)
         self._object_list.currentRowChanged.connect(self._on_object_list)
-        side.addWidget(self._object_list)
+        objects_layout.addWidget(self._object_list)
+        side.addWidget(objects)
+        properties, property_layout = self._card()
+        property_layout.setContentsMargins(4, 4, 4, 4)
         self._properties = ObjectPropertiesPanel()
         self._properties.apply_requested.connect(self._on_properties_edit)
         self._properties.remove_requested.connect(self._on_object_removed)
         scrolling = QScrollArea()
+        scrolling.setObjectName("calibrationPropertiesScroll")
         scrolling.setWidgetResizable(True)
         scrolling.setStyleSheet(TOUCH_SCROLL_AREA_STYLE)
         scrolling.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scrolling.setWidget(self._properties)
-        side.addWidget(scrolling, 1)
+        property_layout.addWidget(scrolling)
+        side.addWidget(properties, 1)
         splitter.addWidget(inspector)
-        splitter.setSizes([650, 360])
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 0)
+        splitter.setSizes([700, 350])
         layout.addWidget(splitter, 1)
         return page
 
     def _build_test(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+        actions, action_layout = self._card()
+        action_layout.setContentsMargins(12, 8, 12, 8)
         row = QHBoxLayout()
         self._run = self._button("Test current draft", primary=True)
         self._live = self._button("Continuous evaluation")
@@ -408,58 +496,89 @@ class PaintHeadDetectorSetupView(IApplicationView):
         self._live.clicked.connect(self._on_live)
         row.addWidget(self._run)
         row.addWidget(self._live)
-        row.addWidget(
-            self._label("Evaluation uses the current draft, including unsaved edits.", wrap=True), 1
-        )
-        layout.addLayout(row)
+        hint = self._label("Evaluation uses the current draft, including unsaved edits.", wrap=True)
+        hint.setStyleSheet(CAPTION_STYLE)
+        row.addWidget(hint, 1)
+        action_layout.addLayout(row)
+        layout.addWidget(actions)
         body = QHBoxLayout()
+        body.setSpacing(12)
         camera, canvas = self._camera(SetupPage.TEST)
         canvas.setInteractive(False)
-        body.addWidget(camera, 3)
-        results = QVBoxLayout()
-        self._result_status = QLabel()
-        self._result_status.setObjectName("calibrationResultStatus")
-        self._result_status.setWordWrap(True)
-        results.addWidget(self._result_status)
-        self._result_details = QLabel()
-        self._result_details.setWordWrap(True)
-        results.addWidget(self._result_details)
-        results.addWidget(self._label("Matching evidence"))
-        self._evidence = self._table(3)
-        results.addWidget(self._evidence, 1)
-        body.addLayout(results, 2)
+        body.addWidget(camera, 1)
+        result_card = CalibrationResultPanel()
+        result_card.setMinimumWidth(390)
+        result_card.setMaximumWidth(430)
+        self._result_panels.append(result_card)
+        body.addWidget(result_card)
         layout.addLayout(body, 1)
         return page
 
     def _build_settings(self) -> QWidget:
         container = QWidget()
         outer = QVBoxLayout(container)
-        outer.addWidget(self._label("Detector settings belong to the editing draft.", wrap=True))
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(12)
+        row = QHBoxLayout()
+        hint = self._label("Detector settings belong to the editing draft.", wrap=True)
+        hint.setStyleSheet(CAPTION_STYLE)
+        row.addWidget(hint, 1)
+        self._settings_live = self._button("Live preview")
+        self._settings_live.setObjectName("calibrationSettingsLivePreview")
+        self._settings_live.setCheckable(True)
+        self._settings_live.clicked.connect(self._on_live)
+        row.addWidget(self._settings_live)
         self._discard_draft = self._button("Discard saved draft")
         self._discard_draft.clicked.connect(self._on_discard_saved_draft)
-        outer.addWidget(self._discard_draft)
+        row.addWidget(self._discard_draft)
+        outer.addLayout(row)
+        split = QSplitter()
+        split.setChildrenCollapsible(False)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet(TOUCH_SCROLL_AREA_STYLE)
         content = QWidget()
+        content.setObjectName("calibrationSettingsContent")
         layout = QVBoxLayout(content)
+        layout.setContentsMargins(0, 0, 8, 0)
+        layout.setSpacing(12)
         for section, source in (
             (TuningSection.ALIGNMENT, "Alignment and confirmation"),
             (TuningSection.MATCHING, "Advanced matching"),
             (TuningSection.PREPROCESSING, "Advanced preprocessing"),
         ):
-            label = self._label(source)
-            label.setStyleSheet(f"color: {PRIMARY}; font-size: 13pt; font-weight: bold;")
-            layout.addWidget(label)
+            group = SettingsSection(source, expanded=section is TuningSection.ALIGNMENT)
+            group.fields.setColumnStretch(1, 0)
+            index = 0
             for parameter in TUNING_PARAMETERS:
                 if parameter.section is section:
                     field = TuningField(parameter)
                     field.edited.connect(self._on_tuning_edited)
                     self._tuning_fields[parameter.identity] = field
-                    layout.addWidget(field)
+                    group.fields.addWidget(field, index, 0)
+                    index += 1
+            layout.addWidget(group)
         layout.addStretch()
         scroll.setWidget(content)
-        outer.addWidget(scroll, 1)
+        scroll.setMinimumWidth(380)
+        split.addWidget(scroll)
+        preview = QWidget()
+        preview_layout = QVBoxLayout(preview)
+        preview_layout.setContentsMargins(0, 0, 0, 0)
+        preview_layout.setSpacing(10)
+        camera, canvas = self._camera(SetupPage.SETTINGS)
+        canvas.setInteractive(False)
+        canvas.setMinimumHeight(140)
+        preview_layout.addWidget(camera, 1)
+        result = CalibrationResultPanel(compact=True)
+        self._result_panels.append(result)
+        preview_layout.addWidget(result)
+        preview.setMinimumWidth(390)
+        split.addWidget(preview)
+        split.setStretchFactor(0, 0)
+        split.setStretchFactor(1, 1)
+        split.setSizes([440, 550])
+        outer.addWidget(split, 1)
         return container
 
     def set_snapshot(
@@ -475,9 +594,12 @@ class PaintHeadDetectorSetupView(IApplicationView):
         picker.clear()
         catalog = snapshot.catalog
         if catalog is not None:
-            for profile in catalog.profiles:
+            selected_index = -1
+            for index, profile in enumerate(catalog.profiles):
                 picker.addItem(profile.name, profile.profile_id)
-            picker.setCurrentIndex(picker.findData(snapshot.profile_id))
+                if profile.profile_id == snapshot.profile_id:
+                    selected_index = index
+            picker.setCurrentIndex(selected_index)
         picker.blockSignals(blocked)
         runtime = translate("Runtime: no calibration selected")
         if catalog is not None and catalog.selected is not None:
@@ -524,6 +646,7 @@ class PaintHeadDetectorSetupView(IApplicationView):
         )
         self._freeze.setText(translate("Resume preview" if snapshot.frozen else "Freeze frame"))
         self._live.setChecked(snapshot.live)
+        self._settings_live.setChecked(snapshot.live)
         self._render_frame_labels()
         self.set_busy(self._busy)
 
@@ -560,6 +683,7 @@ class PaintHeadDetectorSetupView(IApplicationView):
             )
             for column, value in enumerate(values):
                 item = QTableWidgetItem(value)
+                item.setToolTip(value)
                 item.setData(Qt.ItemDataRole.UserRole, profile.profile_id)
                 self._profile_table.setItem(row, column, item)
             if profile.profile_id == snapshot.profile_id:
@@ -581,6 +705,7 @@ class PaintHeadDetectorSetupView(IApplicationView):
             )
             for column, value in enumerate(values):
                 item = QTableWidgetItem(value)
+                item.setToolTip(value)
                 item.setData(Qt.ItemDataRole.UserRole, ref)
                 self._revision_table.setItem(row, column, item)
         if revisions:
@@ -642,70 +767,49 @@ class PaintHeadDetectorSetupView(IApplicationView):
     def set_preview_failure(self, failure: CalibrationFailure) -> None:
         self._preview_failed = True
         self._preview_failure = failure
+        frame_failure = failure.code in (
+            CalibrationFailureCode.CAMERA_UNAVAILABLE,
+            CalibrationFailureCode.FRAME_INVALID,
+            CalibrationFailureCode.FRAME_STALE,
+            CalibrationFailureCode.CANCELLED,
+        )
+        title = translate("Camera frame unavailable" if frame_failure else "Evaluation unavailable")
         for label in self._camera_labels.values():
-            label.setText(translate("Camera frame unavailable") + " · " + failure.detail)
+            label.setText(title + " · " + failure.detail)
             label.setStyleSheet(f"color: {ERROR_COLOR};")
         self.clear_evaluation()
+        for panel in self._result_panels:
+            panel.show_unavailable(title, failure.detail)
         for canvas in self._canvases.values():
-            canvas.set_result_overlay(translate("Camera frame unavailable"), ERROR_COLOR)
+            canvas.set_result_overlay(title, ERROR_COLOR)
+        if self._fullscreen_canvas is not None:
+            self._fullscreen_canvas.set_result_overlay(title, ERROR_COLOR)
         self.set_notice(translate("Live result unavailable") + ": " + failure.detail, error=True)
 
     def set_evaluation(self, report: CalibrationEvaluation) -> None:
         self._evaluation = report
-        self._result_status.setText(translate(_STATES[report.state]))
-        color = (
-            STATUS_OK
-            if report.state is PaintHeadState.PRESENT and report.image_usable
-            else ERROR_COLOR
-        )
-        self._result_status.setStyleSheet(f"color: {color}; font-size: 17pt; font-weight: bold;")
-        overlay_text = translate(_STATES[report.state])
+        for panel in self._result_panels:
+            panel.set_evaluation(report)
+        color = result_color(report)
+        overlay_text = state_text(report.state)
         if not report.image_usable:
             overlay_text += " · " + translate("Image unusable")
-        self._canvases[SetupPage.TEST].set_result_overlay(
-            overlay_text, color, report.evidence if report.image_usable else ()
-        )
-        if self._fullscreen_canvas is not None and self._page is SetupPage.TEST:
+        for page in (SetupPage.TEST, SetupPage.SETTINGS):
+            self._canvases[page].set_result_overlay(
+                overlay_text, color, report.evidence if report.image_usable else ()
+            )
+        if self._fullscreen_canvas is not None and self._page in (
+            SetupPage.TEST,
+            SetupPage.SETTINGS,
+        ):
             self._fullscreen_canvas.set_result_overlay(
                 overlay_text, color, report.evidence if report.image_usable else ()
             )
 
-        def number(value: float | None, unit: str) -> str:
-            return translate("Unavailable") if value is None else f"{value:.2f} {unit}"
-
-        self._result_details.setText(
-            "\n".join(
-                (
-                    translate("Observed state") + ": " + translate(_STATES[report.observed_state]),
-                    translate("Reason") + ": " + translate(_REASONS[report.reason]),
-                    translate("Translation") + ": " + number(report.translation_pixels, "px"),
-                    translate("X / Y offset")
-                    + ": "
-                    + number(report.offset_x_pixels, "px")
-                    + " / "
-                    + number(report.offset_y_pixels, "px"),
-                    translate("Rotation") + ": " + number(report.rotation_degrees, "°"),
-                    translate("Held warning")
-                    + ": "
-                    + translate("Yes" if report.held_warning else "No"),
-                    translate("Image usable")
-                    + ": "
-                    + translate("Yes" if report.image_usable else "No"),
-                )
-            )
-        )
-        self._evidence.setRowCount(len(report.evidence))
-        for row, item in enumerate(report.evidence):
-            values = (item.name, f"{item.score:.3f}", translate("Pass" if item.passed else "Fail"))
-            for column, value in enumerate(values):
-                self._evidence.setItem(row, column, QTableWidgetItem(value))
-
     def clear_evaluation(self) -> None:
         self._evaluation = None
-        self._result_status.setText(translate("No current result"))
-        self._result_status.setStyleSheet(f"color: {TEXT_COLOR};")
-        self._result_details.clear()
-        self._evidence.setRowCount(0)
+        for panel in self._result_panels:
+            panel.clear_evaluation()
         for canvas in self._canvases.values():
             canvas.clear_result_overlay()
         if self._fullscreen_canvas is not None:
@@ -713,6 +817,7 @@ class PaintHeadDetectorSetupView(IApplicationView):
 
     def set_notice(self, text: str, *, error: bool = False) -> None:
         self._notice.setText(text)
+        self._notice.setVisible(bool(text))
         self._notice.setStyleSheet(f"color: {ERROR_COLOR if error else TEXT_COLOR};")
 
     def set_busy(self, busy: bool) -> None:
@@ -867,6 +972,7 @@ class PaintHeadDetectorSetupView(IApplicationView):
                 self._objects, self._selection, editable=self._page is SetupPage.REGIONS
             )
             canvas.fit_image()
+        self.page_selected.emit(self._page)
 
     def _on_tool_selected(self, tool: EditorTool) -> None:
         self._canvases[SetupPage.REGIONS].set_tool(tool)
@@ -975,6 +1081,7 @@ class PaintHeadDetectorSetupView(IApplicationView):
             button.setText(translate(source))
         for index, (_, source) in enumerate(_PAGES):
             self._navigation.item(index).setText(translate(source))
+            self._navigation.item(index).setToolTip(translate(source))
         for index, source in enumerate(
             ("Present landmark", "Missing landmark", "Empty-mount landmark")
         ):
@@ -986,9 +1093,6 @@ class PaintHeadDetectorSetupView(IApplicationView):
         )
         self._revision_table.setHorizontalHeaderLabels(
             [translate(source) for source in ("Revision", "Created", "State")]
-        )
-        self._evidence.setHorizontalHeaderLabels(
-            [translate(source) for source in ("Landmark", "Score", "Result")]
         )
         if self._evaluation is not None:
             self.set_evaluation(self._evaluation)

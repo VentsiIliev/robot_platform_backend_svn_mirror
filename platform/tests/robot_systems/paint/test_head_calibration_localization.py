@@ -48,8 +48,10 @@ def source_strings():
         for node in ast.walk(ast.parse(path.read_text())):
             if isinstance(node, ast.Call):
                 name = node.func.attr if isinstance(node.func, ast.Attribute) else node.func.id if isinstance(node.func, ast.Name) else ""
-                if name in {"translate", "_label", "_button", "action_button", "SetupDialog", "finish_layout", "__init__"} and node.args:
+                if name in {"translate", "_label", "_button", "_card", "_field", "action_button", "SetupDialog", "finish_layout", "__init__"} and node.args:
                     values.update(_strings(node.args[0]))
+                if name == "IconActionButton" and len(node.args) > 1:
+                    values.update(_strings(node.args[1]))
                 if name == "TuningParameter" and len(node.args) > 1:
                     values.update(_strings(node.args[1]))
             if isinstance(node, ast.Tuple) and len(node.elts) > 1:

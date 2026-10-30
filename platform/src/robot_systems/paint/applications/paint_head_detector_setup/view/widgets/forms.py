@@ -1,15 +1,18 @@
 """Reusable pieces within the setup view; all operations remain presentation-only."""
 
 import qtawesome as qta
-from PyQt6.QtCore import QCoreApplication, QEvent, Qt, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QEvent, QSize, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -34,6 +37,7 @@ from src.robot_systems.paint.contracts.paint_head_calibration.models import (
 
 from ...editor_contracts import EditorTool
 from ...tuning_fields import TuningParameter
+from ..styles import CARD_STYLE, ICON_BUTTON_STYLE, SECONDARY_BUTTON_STYLE
 from .calibration_canvas import CalibrationCanvas
 
 
@@ -43,9 +47,73 @@ def translate(source: str) -> str:
 
 def action_button(source: str, *, primary: bool = False) -> QPushButton:
     button = QPushButton(translate(source))
-    button.setStyleSheet(ACTION_BTN_STYLE if primary else GHOST_BTN_STYLE)
+    button.setStyleSheet(ACTION_BTN_STYLE if primary else SECONDARY_BUTTON_STYLE)
     button.setCursor(Qt.CursorShape.PointingHandCursor)
     return button
+
+
+class IconActionButton(QPushButton):
+    def __init__(self, icon: str, source: str) -> None:
+        super().__init__()
+        self._source = source
+        self.setIcon(qta.icon(icon, color=PRIMARY))
+        self.setIconSize(QSize(22, 22))
+        self.setFixedSize(46, 46)
+        self.setStyleSheet(ICON_BUTTON_STYLE)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.retranslateUi()
+
+    def retranslateUi(self) -> None:
+        self.setToolTip(translate(self._source))
+        self.setAccessibleName(translate(self._source))
+
+    def changeEvent(self, event: QEvent) -> None:
+        if event.type() == QEvent.Type.LanguageChange:
+            self.retranslateUi()
+        super().changeEvent(event)
+
+
+class SettingsSection(QFrame):
+    """Collapsible presentation group; every field remains owned by the view."""
+
+    def __init__(self, source: str, *, expanded: bool) -> None:
+        super().__init__()
+        self._source = source
+        self.setObjectName("settingsCard")
+        self.setStyleSheet(CARD_STYLE)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 10, 16, 16)
+        self._toggle = QToolButton()
+        self._toggle.setObjectName("calibrationSettingsSection")
+        self._toggle.setCheckable(True)
+        self._toggle.setChecked(expanded)
+        self._toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self._toggle.setMinimumHeight(44)
+        self._toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._body = QWidget()
+        self.fields = QGridLayout(self._body)
+        self.fields.setContentsMargins(0, 8, 0, 0)
+        self.fields.setHorizontalSpacing(20)
+        self.fields.setVerticalSpacing(16)
+        self.fields.setColumnStretch(0, 1)
+        self.fields.setColumnStretch(1, 1)
+        layout.addWidget(self._toggle)
+        layout.addWidget(self._body)
+        self._toggle.toggled.connect(self._on_toggled)
+        self._on_toggled(expanded)
+        self.retranslateUi()
+
+    def _on_toggled(self, expanded: bool) -> None:
+        self._body.setVisible(expanded)
+        self._toggle.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
+
+    def retranslateUi(self) -> None:
+        self._toggle.setText(translate(self._source))
+
+    def changeEvent(self, event: QEvent) -> None:
+        if event.type() == QEvent.Type.LanguageChange:
+            self.retranslateUi()
+        super().changeEvent(event)
 
 
 class TuningField(QWidget):
@@ -57,6 +125,7 @@ class TuningField(QWidget):
         self.setObjectName("calibrationTuning_" + parameter.identity.value)
         self._label = QLabel()
         self._label.setWordWrap(True)
+        self._label.setMinimumHeight(32)
         self._number = KeyboardNumberField(decimal=not parameter.integer, button_width=36)
         self._number.setRange(0, 1_000_000_000)
         self._number.setSingleStep(1 if parameter.integer else 0.1)
@@ -357,8 +426,9 @@ class EditorToolButton(QPushButton):
             EditorTool.CIRCLE_LANDMARK: "mdi.circle-outline",
         }
         self.setIcon(qta.icon(names[tool], color=PRIMARY))
-        self.setFixedWidth(48)
-        self.setStyleSheet(GHOST_BTN_STYLE)
+        self.setIconSize(QSize(22, 22))
+        self.setFixedSize(46, 46)
+        self.setStyleSheet(ICON_BUTTON_STYLE)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.clicked.connect(self._on_clicked)
         self.retranslateUi()

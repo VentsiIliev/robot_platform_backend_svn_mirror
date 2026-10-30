@@ -687,6 +687,14 @@
     "Replace saved draft": "Замени записаната чернова",
     "Editing this revision will replace the profile's saved draft. Continue?": "Редактирането на тази ревизия ще замени записаната чернова на профила. Продължаване?",
     "Image unusable": "Изображението е неизползваемо",
-    "Primary vision · Vertical Shaft Alignment": "Основно зрение · Подравняване на вертикалния вал"
+    "Primary vision · Vertical Shaft Alignment": "Основно зрение · Подравняване на вертикалния вал",
+    "Capture": "Заснеми",
+    "Preview": "Преглед",
+    "Preview controls": "Управление на прегледа",
+    "Objects": "Обекти",
+    "Inspection result": "Резултат от проверката",
+    "Select a region or landmark to edit its properties.": "Изберете зона или ориентир, за да редактирате свойствата му.",
+    "Live preview": "Преглед на живо",
+    "Evaluation unavailable": "Проверката е недостъпна"
   }
 }

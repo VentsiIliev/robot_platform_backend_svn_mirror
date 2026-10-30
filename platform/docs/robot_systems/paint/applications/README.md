@@ -33,6 +33,11 @@ At startup the paint shell receives only app metadata from those declarations. T
 regions/landmarks, persisted drafts, immutable revisions, live tests and explicit
 runtime selection. It uses the standard MVC service/model/view/controller/factory
 pattern and the system-owned calibration library, without starting production.
+The Settings page starts live evaluation automatically and places its camera and
+current result beside the draft controls. Its Live preview control pauses/resumes
+the shared test mode; unsaved tuning edits are evaluated without selecting a new
+runtime revision. The view uses shared-style cards, grouped editor tools and
+collapsible advanced settings.
 
 ### `dashboard/`
 

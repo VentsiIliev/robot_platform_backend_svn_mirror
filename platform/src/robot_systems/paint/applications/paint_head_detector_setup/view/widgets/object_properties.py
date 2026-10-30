@@ -1,7 +1,15 @@
 """Presentation-only editor fields using the platform's shared input widgets."""
 
 from PyQt6.QtCore import QEvent, pyqtSignal
-from PyQt6.QtWidgets import QCheckBox, QComboBox, QFormLayout, QLabel, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QFormLayout,
+    QGridLayout,
+    QLabel,
+    QVBoxLayout,
+    QWidget,
+)
 
 from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEdit
 from src.applications.base.widgets.keyboard_number_field import KeyboardNumberField
@@ -12,6 +20,7 @@ from src.robot_systems.paint.contracts.paint_head_calibration.models import (
 )
 
 from ...editor_contracts import EditorKind, EditorObject, ObjectPropertiesEdit
+from ..styles import CAPTION_STYLE, SECTION_TITLE_STYLE
 from .forms import action_button, translate
 
 
@@ -21,13 +30,26 @@ class ObjectPropertiesPanel(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setObjectName("calibrationObjectProperties")
         self._object: EditorObject | None = None
         self._labels: list[tuple[QLabel, str]] = []
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
         self._heading = QLabel()
+        self._heading.setStyleSheet(SECTION_TITLE_STYLE)
         layout.addWidget(self._heading)
+        self._hint = QLabel()
+        self._hint.setWordWrap(True)
+        self._hint.setStyleSheet(CAPTION_STYLE)
+        layout.addWidget(self._hint)
+        self._editor = QWidget()
+        editor_layout = QVBoxLayout(self._editor)
+        editor_layout.setContentsMargins(0, 0, 0, 0)
+        editor_layout.setSpacing(12)
         form = QFormLayout()
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
+        form.setSpacing(8)
         self._name = KeyboardLineEdit()
         self._x, self._y, self._width, self._height = (
             KeyboardNumberField(button_width=32) for _ in range(4)
@@ -53,12 +75,21 @@ class ObjectPropertiesPanel(QWidget):
         self._invariant = QCheckBox()
         self._limit_rotation = QCheckBox()
         self._limit_rotation.toggled.connect(self._on_rotation_limit_changed)
+        editor_layout.addWidget(self._field("Name", self._name))
+        coordinates = QGridLayout()
+        coordinates.setHorizontalSpacing(10)
+        coordinates.setVerticalSpacing(8)
+        for index, (source, field) in enumerate(
+            (
+                ("X (px)", self._x),
+                ("Y (px)", self._y),
+                ("Width (px)", self._width),
+                ("Height (px)", self._height),
+            )
+        ):
+            coordinates.addWidget(self._field(source, field), index // 2, index % 2)
+        editor_layout.addLayout(coordinates)
         for source, field in (
-            ("Name", self._name),
-            ("X (px)", self._x),
-            ("Y (px)", self._y),
-            ("Width (px)", self._width),
-            ("Height (px)", self._height),
             ("Landmark role", self._roles),
             ("Support shape", self._supports),
             ("Match threshold", self._threshold),
@@ -71,20 +102,34 @@ class ObjectPropertiesPanel(QWidget):
             label.setWordWrap(True)
             self._labels.append((label, source))
             form.addRow(label, field)
-        layout.addLayout(form)
+        editor_layout.addLayout(form)
         self._apply = action_button("Apply changes", primary=True)
         self._remove = action_button("Remove object")
         self._apply.clicked.connect(self._on_apply)
         self._remove.clicked.connect(self._on_remove)
-        layout.addWidget(self._apply)
-        layout.addWidget(self._remove)
+        editor_layout.addWidget(self._apply)
+        editor_layout.addWidget(self._remove)
+        layout.addWidget(self._editor)
         layout.addStretch()
         self.set_object(None, None)
         self.retranslateUi()
 
+    def _field(self, source: str, widget: QWidget) -> QWidget:
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        label = QLabel()
+        label.setWordWrap(True)
+        self._labels.append((label, source))
+        layout.addWidget(label)
+        layout.addWidget(widget)
+        return container
+
     def set_object(self, value: EditorObject | None, landmark: Landmark | None) -> None:
         self._object = value
-        self.setEnabled(value is not None)
+        self._editor.setVisible(value is not None)
+        self._hint.setVisible(value is None)
         if value is None:
             self._name.clear()
             return
@@ -149,6 +194,7 @@ class ObjectPropertiesPanel(QWidget):
 
     def retranslateUi(self) -> None:
         self._heading.setText(translate("Object properties"))
+        self._hint.setText(translate("Select a region or landmark to edit its properties."))
         for label, source in self._labels:
             label.setText(translate(source))
         for index, source in enumerate(

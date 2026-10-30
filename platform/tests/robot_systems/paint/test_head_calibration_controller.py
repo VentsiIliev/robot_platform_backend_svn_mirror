@@ -7,17 +7,20 @@ from unittest import TestCase
 
 from PyQt6.QtCore import QEvent, QPoint, Qt
 from PyQt6.QtTest import QTest
-from PyQt6.QtWidgets import QApplication, QLabel
+from PyQt6.QtWidgets import QApplication, QComboBox, QLabel, QListWidget, QPushButton
 
 from src.applications.base.config.virtual_keyboard_config import (
     is_custom_virtual_keyboard_enabled, set_custom_virtual_keyboard_enabled,
 )
+from src.applications.base.widgets.keyboard_number_field import KeyboardNumberField
 from src.robot_systems.paint.applications.paint_head_detector_setup.controller.paint_head_detector_setup_controller import (
     PaintHeadDetectorSetupController,
 )
 from src.robot_systems.paint.applications.paint_head_detector_setup.editor_contracts import (
-    EditorKind, EditorTarget, EditorTool, GeometryEdit, UnsavedDecision,
+    EditorKind, EditorTarget, EditorTool, GeometryEdit, SetupPage, UnsavedDecision,
 )
+from src.robot_systems.paint.applications.paint_head_detector_setup.tuning_fields import TuningParameterId
+from src.robot_systems.paint.applications.paint_head_detector_setup.view.widgets.forms import TuningField
 from src.robot_systems.paint.applications.paint_head_detector_setup.model.paint_head_detector_setup_model import (
     PaintHeadDetectorSetupModel,
 )
@@ -33,7 +36,7 @@ from src.robot_systems.paint.contracts.paint_head_calibration.errors import (
     CalibrationFailed, CalibrationFailure, CalibrationFailureCode,
 )
 from src.robot_systems.paint.contracts.paint_head_calibration.models import (
-    LandmarkRole, LandmarkSupport, ReferenceRole, Region, RevisionRef,
+    LandmarkRole, LandmarkSupport, ProfileId, ReferenceRole, Region, RevisionRef,
 )
 
 _APP = QApplication.instance() or QApplication(["paint-head-controller-tests"])
@@ -46,8 +49,13 @@ class _Stub(StubPaintHeadDetectorSetupService):
         self.evaluation_release = Event()
         self.delay_evaluation = False
         self.save_failure = None
+        self.evaluation_failure = None
+        self.evaluated_definitions = []
 
     def evaluate(self, definition, frame, generation):
+        self.evaluated_definitions.append(definition)
+        if self.evaluation_failure is not None:
+            return CalibrationFailed(self.evaluation_failure)
         if self.delay_evaluation:
             self.delay_evaluation = False
             self.evaluation_entered.set()
@@ -139,6 +147,79 @@ class CalibrationControllerTests(TestCase):
         self.assertFalse(self.controller.has_running_workers())
         self.assertTrue(self.view.can_close())
 
+    def test_profile_picker_matches_persisted_id_by_value_not_qt_object_identity(self):
+        identity = ProfileId(PROFILE_ID.value)
+        self.assertEqual(identity, PROFILE_ID)
+        self.assertIsNot(identity, PROFILE_ID)
+        self.view.set_snapshot(replace(self.model.snapshot, profile_id=identity), ())
+        picker = self.view.findChild(QComboBox, 'calibrationProfilePicker')
+        self.assertEqual(picker.currentText(), 'Standard')
+        self.assertEqual(picker.currentData(), PROFILE_ID)
+
+    def open_settings_preview(self):
+        navigation = self.view.findChild(QListWidget, 'calibrationNavigation')
+        navigation.setCurrentRow(4)
+        button = self.view.findChild(QPushButton, 'calibrationSettingsLivePreview')
+        self.assertTrue(button.isChecked(), 'Opening Settings must start live evaluation')
+        return navigation, button
+
+    def test_settings_selected_before_async_load_still_starts_live_evaluation(self):
+        model = PaintHeadDetectorSetupModel(_Stub())
+        view = _View()
+        view.findChild(QListWidget, 'calibrationNavigation').setCurrentRow(4)
+        controller = PaintHeadDetectorSetupController(model, view)
+        self.addCleanup(view.close)
+        self.addCleanup(controller.stop)
+        controller.load()
+        self.wait_for(lambda: model.snapshot.live)
+        self.assertTrue(view.findChild(QPushButton, 'calibrationSettingsLivePreview').isChecked())
+
+    def test_settings_edits_update_visible_live_result_from_unsaved_draft(self):
+        catalog = self.model.snapshot.catalog
+        navigation, button = self.open_settings_preview()
+        self.wait_for(lambda: bool(self.view.reports))
+        before = self.view.reports[-1].generation
+        field = self.view.findChild(TuningField, 'calibrationTuning_' + TuningParameterId.ALIGNMENT_MAX_TRANSLATION_PIXELS.value)
+        field.findChild(KeyboardNumberField).setValue(12.3)
+        self.wait_for(lambda: self.view.reports[-1].generation > before)
+        self.assertEqual(navigation.currentRow(), 4)
+        self.assertTrue(button.isChecked())
+        self.assertTrue(self.model.snapshot.live)
+        self.assertTrue(self.model.snapshot.dirty)
+        self.assertEqual(self.model.snapshot.catalog, catalog)
+        self.assertEqual(self.service.evaluated_definitions[-1].tuning.alignment.max_translation_pixels, 12.3)
+        status = self.view.findChild(QLabel, 'calibrationSettingsResultStatus')
+        self.assertEqual(status.text(), 'Head present')
+        self.assertTrue(status.isVisible())
+        canvas = self.view._canvases[SetupPage.SETTINGS]
+        self.assertTrue(canvas.isVisible())
+        self.assertFalse(canvas.findChild(QLabel, 'calibrationImageResult').isHidden())
+
+    def test_settings_invalid_draft_shows_evaluation_error_and_recovers_live(self):
+        self.service.evaluation_failure = CalibrationFailure(CalibrationFailureCode.INVALID_CALIBRATION, 'Search rotation step must be positive')
+        self.open_settings_preview()
+        status = self.view.findChild(QLabel, 'calibrationSettingsResultStatus')
+        self.wait_for(lambda: status.text() == 'Evaluation unavailable')
+        self.assertIsNotNone(self.model.current_frame)
+        self.assertNotEqual(status.text(), 'Camera frame unavailable')
+        self.service.evaluation_failure = None
+        self.wait_for(lambda: status.text() == 'Head present')
+        details = self.view.findChild(QLabel, 'calibrationSettingsResultDetails')
+        self.assertIn('Translation', details.text())
+        self.assertEqual(details.textFormat(), Qt.TextFormat.RichText)
+
+    def test_settings_pause_and_test_tab_use_the_same_evaluation_mode(self):
+        navigation, button = self.open_settings_preview()
+        self.wait_for(lambda: bool(self.view.reports))
+        button.click()
+        self.assertFalse(self.model.snapshot.live)
+        self.assertFalse(button.isChecked())
+        navigation.setCurrentRow(3)
+        self.assertFalse(self.view._live.isChecked())
+        navigation.setCurrentRow(4)
+        self.assertTrue(button.isChecked())
+        self.assertTrue(self.model.snapshot.live)
+
     def test_save_signal_persists_draft_without_changing_runtime_or_revision(self):
         original = self.model.snapshot.catalog.profile(PROFILE_ID).revision(1)
         self.edit()
@@ -223,7 +304,7 @@ class CalibrationControllerTests(TestCase):
 
     def test_live_evaluation_ignores_late_results_after_an_edit(self):
         self.service.delay_evaluation = True
-        self.view.live_requested.emit(True)
+        self.open_settings_preview()
         self.wait_for(self.service.evaluation_entered.is_set)
         old_generation = self.model.snapshot.generation
         self.edit()

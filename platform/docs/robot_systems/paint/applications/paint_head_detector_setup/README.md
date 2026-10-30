@@ -24,8 +24,13 @@ It is separate from `paint_head_settings`, which configures the peripheral.
    Unavailable/stale frames clear the previous result. There is no invented
    overall confidence percentage; translation is measured in pixels, not mm.
 5. **Settings** edits alignment/confirmation, matching and preprocessing settings
-   in the draft. Existing detector validation is applied when testing or saving a
-   revision. Recognition algorithms are unchanged.
+   in the draft, with the camera and current result alongside the controls.
+   Opening Settings automatically starts live evaluation; **Live preview** pauses
+   or resumes it. Each edit is evaluated from the unsaved draft on fresh frames,
+   resetting confirmation for the new settings. Invalid settings show an evaluation
+   error and recover after correction. Saving and runtime selection stay separate.
+   Existing detector validation is applied when testing or saving a revision;
+   recognition algorithms are unchanged.
 
 **Save draft** persists incomplete work. **Save calibration** validates and
 creates an immutable numbered revision. **Select for runtime** explicitly selects
@@ -36,6 +41,21 @@ Unsaved navigation offers Save draft / Discard / Cancel. Choosing Save persists
 before navigation is retried. Editing a saved revision asks before replacing a
 different persisted draft. Deleting a profile or revision requires confirmation;
 selected or in-use revisions are protected. Revision numbers are never reused.
+
+The screen groups profiles, references, editor tools and inspection results in
+shared-style cards. Tables reserve room for profile/landmark names and show full
+values in tooltips. The editor places coordinates in two columns and shows an
+instruction until an object is selected. Settings use a scrollable control column
+beside a persistent camera/result column, with zoom and fullscreen preview.
+Advanced matching and Advanced preprocessing expand on demand. Numeric precision
+and detector behavior are preserved.
+
+Live preview uses the same evaluation mode as **Test & results**. Pausing it on
+Settings is reflected on the test page; opening Settings again starts it again.
+Scrolling, typing or using the touch steppers keeps the preview beside the
+controls. Editing resets the evaluation generation, so a result from the previous
+settings cannot replace the new draft's feedback. Camera errors and invalid draft
+settings have distinct unavailable messages.
 
 All text and numeric inputs use the shared virtual keyboard controls. The view
 supports English/Bulgarian initial translation and language changes. User names,
@@ -53,6 +73,8 @@ Source: `src/robot_systems/paint/applications/paint_head_detector_setup/`.
 | `model/editing.py` | Immutable geometry/landmark edits |
 | `controller/paint_head_detector_setup_controller.py` | Signal wiring, serialized background work, latest-only live polling and late-result rejection |
 | `view/` | Shared-style widgets, image coordinate editing and presentation |
+| `view/styles.py` | Application styling composed from shared platform style constants |
+| `view/widgets/result_panel.py` | Shared full/compact result display for Test and Settings |
 | `paint_head_detector_setup_application_factory.py` | Standard platform MVC construction |
 
 Camera activation, PNG encoding/writes, catalog I/O and evaluation run off the
@@ -86,5 +108,8 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -B -m unittest discover \
 Tests cover model/controller behavior with a stub, temporary real repositories,
 capture/save/reopen, bundled import, typed failures, reference retention, camera
 metadata, runtime/guidance ownership, registration and both translation paths.
+UI regressions also cover persisted profile-ID selection, automatic Settings
+preview before/after asynchronous load, unsaved tuning changes, pause/re-entry,
+evaluation-error recovery and rejection of late results after an edit.
 Live station camera, lighting and physical adjustment still require acceptance
 on the target robot.

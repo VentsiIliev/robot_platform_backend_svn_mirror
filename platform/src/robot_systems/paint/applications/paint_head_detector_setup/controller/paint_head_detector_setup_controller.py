@@ -32,6 +32,7 @@ from ..editor_contracts import (
     EditorTarget,
     GeometryEdit,
     ObjectPropertiesEdit,
+    SetupPage,
     UnsavedDecision,
 )
 from ..model import editing
@@ -89,6 +90,7 @@ class PaintHeadDetectorSetupController(IApplicationController, BackgroundWorker)
             (view.reference_preview_requested, self._on_reference_preview),
             (view.freeze_requested, self._on_freeze),
             (view.live_requested, self._on_live),
+            (view.page_selected, self._on_page),
             (view.test_requested, self._on_test),
             (view.geometry_edited, self._on_geometry),
             (view.object_selected, self._on_selection),
@@ -198,6 +200,7 @@ class PaintHeadDetectorSetupController(IApplicationController, BackgroundWorker)
     def _on_loaded(self, _: object) -> None:
         self._loaded = True
         self._refresh()
+        self._on_page(self._view.current_page)
         if self._visible:
             self._preview_needed = True
             self._ensure_preview()
@@ -219,6 +222,7 @@ class PaintHeadDetectorSetupController(IApplicationController, BackgroundWorker)
             self._loaded = True
         if self._loaded:
             self._refresh()
+            self._on_page(self._view.current_page)
             self._preview_needed = True
             self._ensure_preview()
 
@@ -424,6 +428,10 @@ class PaintHeadDetectorSetupController(IApplicationController, BackgroundWorker)
     def _on_live(self, enabled: bool) -> None:
         self._model.set_live(enabled)
         self._refresh()
+
+    def _on_page(self, page: object) -> None:
+        if page is SetupPage.SETTINGS and self._visible and not self._stopped and self._loaded:
+            self._on_live(True)
 
     def _on_test(self) -> None:
         self._submit(self._model.evaluate_once, self._on_evaluated)

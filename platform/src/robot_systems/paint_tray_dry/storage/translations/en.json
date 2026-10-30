@@ -762,6 +762,14 @@
     "Replace saved draft": "Replace saved draft",
     "Editing this revision will replace the profile's saved draft. Continue?": "Editing this revision will replace the profile's saved draft. Continue?",
     "Image unusable": "Image unusable",
-    "Primary vision · Vertical Shaft Alignment": "Primary vision · Vertical Shaft Alignment"
+    "Primary vision · Vertical Shaft Alignment": "Primary vision · Vertical Shaft Alignment",
+    "Capture": "Capture",
+    "Preview": "Preview",
+    "Preview controls": "Preview controls",
+    "Objects": "Objects",
+    "Inspection result": "Inspection result",
+    "Select a region or landmark to edit its properties.": "Select a region or landmark to edit its properties.",
+    "Live preview": "Live preview",
+    "Evaluation unavailable": "Evaluation unavailable"
   }
 }

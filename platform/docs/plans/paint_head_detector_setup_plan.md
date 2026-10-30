@@ -363,8 +363,9 @@ production. Automatic hardware motion is not part of that application workflow.
 
 ## 10. Work boundaries
 
-The user subsequently authorized implementation and confirmed section 4.
-OpenProject changes, source publication and release builds remain outside this task.
+The user subsequently authorized implementation, confirmed section 4 and requested
+source publication through SVN and the GitHub mirror. OpenProject changes and
+release builds remain outside this task.
 Keep the existing local `.gitignore` change and unrelated artwork outside this
 task's source changes.
 
@@ -380,8 +381,30 @@ task's source changes.
 - English and Bulgarian pages were rendered and inspected at 1280 × 900.
   Shared keyboard checks exercised typing, cursor movement and top/bottom field
   visibility above the popup.
-- Verification: 241 focused calibration/head-check tests pass; strict typing
+- Initial implementation verification: 241 focused calibration/head-check tests pass; strict typing
   passes across 57 source modules; 58 touched Python modules compile; all eight
   changed JSON catalogs validate. Ruff and whitespace checks pass.
-- Physical station camera, image quality and production acceptance remain
-  outstanding. No OpenProject changes, commit or publication were performed.
+- The initial implementation was subsequently published as SVN r113 and its
+  GitHub mirror projection. Physical station camera, image quality and production
+  acceptance remain outstanding. No OpenProject changes were made.
+
+### UI refinements and live tuning — 2026-10-30
+
+- Grouped profiles, references, results and editor controls into shared-style
+  cards; sized table columns for names/dates; enlarged tool icons and retained
+  numeric precision and shared touch controls.
+- Corrected the profile picker to compare persisted typed identities by value.
+- Added a Settings camera/result pane beside the scrollable controls, using the
+  same result widget in compact form. Advanced sections expand on demand.
+- The user confirmed automatic live evaluation on opening Settings, with pause
+  and resume through Live preview. The evaluation mode is shared with Test &
+  results; tuning edits use the unsaved draft and never activate a runtime revision.
+- Edits reset confirmation for their evaluation generation. Late results are
+  rejected, and invalid draft settings show an evaluation error that can recover
+  after correction. Camera failures remain distinct.
+- Verification: 246 focused calibration/head-check tests pass, including Settings
+  entry before asynchronous load, unsaved edits, pause/re-entry and recovery.
+  English/Bulgarian layouts were rendered with bundled 1280 × 720 reference pixels
+  at 1280 × 920. Top/bottom touch-keyboard typing and cursor placement were checked.
+  Touched UI/controller modules compile; six changed translation catalogs validate;
+  Ruff and whitespace checks pass.
